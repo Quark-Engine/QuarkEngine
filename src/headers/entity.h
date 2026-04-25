@@ -52,6 +52,7 @@ struct Entity {
     bool texture_stretch = true; 
 
     Model model = {0};
+    bool owns_model_instance = false;
     ModelAsset* asset;
     std::string asset_name;
 

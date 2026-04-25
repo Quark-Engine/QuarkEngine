@@ -1,4 +1,5 @@
 #include "headers/tex.h"
+#include <algorithm>
 #include <unordered_map>
 #include <unordered_set>
 
@@ -6,6 +7,47 @@ namespace fs = std::filesystem;
 
 std::vector<TextureOption> texture_options;
 std::vector<AssetEntry> asset_entries;
+
+static std::vector<fs::directory_entry> collect_resource_entries(const fs::path& resource_dir) {
+    std::vector<fs::directory_entry> result;
+    std::error_code ec;
+    fs::recursive_directory_iterator it(resource_dir, fs::directory_options::skip_permission_denied, ec);
+    if (ec) return result;
+
+    for (const auto& entry : it) {
+        result.push_back(entry);
+    }
+
+    std::sort(
+        result.begin(),
+        result.end(),
+        [](const fs::directory_entry& lhs, const fs::directory_entry& rhs) {
+            std::error_code lhs_ec;
+            std::error_code rhs_ec;
+            const bool lhs_is_dir = lhs.is_directory(lhs_ec) && !lhs_ec;
+            const bool rhs_is_dir = rhs.is_directory(rhs_ec) && !rhs_ec;
+
+            if (lhs_is_dir != rhs_is_dir) return lhs_is_dir > rhs_is_dir;
+            return lhs.path().generic_string() < rhs.path().generic_string();
+        }
+    );
+
+    return result;
+}
+
+static std::vector<fs::path> collect_resource_files(const fs::path& resource_dir) {
+    std::vector<fs::path> result;
+    for (const auto& entry : collect_resource_entries(resource_dir)) {
+        std::error_code ec;
+        if (!entry.is_regular_file(ec) || ec) {
+            continue;
+        }
+
+        result.push_back(entry.path());
+    }
+
+    return result;
+}
 
 bool is_image_file(const fs::path& p) {
     std::string ext = p.extension().string();
@@ -21,12 +63,11 @@ void load_textures(std::string project_path) {
     texture_options.clear();
     texture_options.push_back({ "None", {0} });
 
-    for (const auto& entry : fs::directory_iterator(resource_dir)) {
-        if (!entry.is_regular_file()) continue;
-        if (!is_image_file(entry.path())) continue;
+    for (const auto& path : collect_resource_files(resource_dir)) {
+        if (!is_image_file(path)) continue;
 
-        Texture2D tex = LoadTexture(entry.path().string().c_str());
-        texture_options.push_back({ entry.path().filename().string(), tex });
+        Texture2D tex = LoadTexture(path.string().c_str());
+        texture_options.push_back({ fs::relative(path, resource_dir).generic_string(), tex });
     }
 }
 
@@ -174,8 +215,10 @@ void draw_entity_with_texture(Entity& e) {
     rlRotatef(e.rotation.z, 0, 0, 1);
     
     rlScalef(e.scale.x, e.scale.y, e.scale.z);
+
     DrawModel(e.model, {0,0,0}, 1.0f, e.color);
     DrawModelWires(e.model, {0,0,0}, 1.0f, e.outline_color);
+
     rlPopMatrix();
 }
 
@@ -193,13 +236,10 @@ void refresh_textures(Scene* scene, const std::string& project_path) {
     std::vector<TextureOption> next_options;
     next_options.push_back({ "None", {0} });
 
-    for (auto& entry : fs::directory_iterator(resource_dir)) {
-        if (!entry.is_regular_file()) continue;
-
-        fs::path path = entry.path();
+    for (const auto& path : collect_resource_files(resource_dir)) {
         if (!is_image_file(path)) continue;
 
-        const std::string texture_name = path.filename().string();
+        const std::string texture_name = fs::relative(path, resource_dir).generic_string();
         auto old_it = old_by_name.find(texture_name);
         if (old_it != old_by_name.end()) {
             next_options.push_back({ texture_name, old_it->second });
@@ -237,15 +277,15 @@ void load_assets(std::string project_path) {
     fs::path resource_dir = fs::path(project_path) / "resources";
     if (!fs::exists(resource_dir)) fs::create_directories(resource_dir);
 
-    for (auto& entry : fs::directory_iterator(resource_dir)) {
-        fs::path path = entry.path();
-
+    for (const auto& entry : collect_resource_entries(resource_dir)) {
+        std::error_code ec;
         AssetEntry asset_entry;
-        asset_entry.filename = path.filename().string();
-        asset_entry.is_image = is_image_file(path.string());
+        asset_entry.filename = fs::relative(entry.path(), resource_dir).generic_string();
+        asset_entry.is_directory = entry.is_directory(ec) && !ec;
+        asset_entry.is_image = !asset_entry.is_directory && is_image_file(entry.path());
 
         if (asset_entry.is_image) {
-            asset_entry.texture = LoadTexture(path.string().c_str());
+            asset_entry.texture = LoadTexture(entry.path().string().c_str());
         }
 
         asset_entries.push_back(asset_entry);
@@ -263,16 +303,17 @@ void refresh_assets(std::string project_path) {
     fs::path resource_dir = fs::path(project_path) / "resources";
     if (!fs::exists(resource_dir)) fs::create_directories(resource_dir);
 
-    for (auto& entry : fs::directory_iterator(resource_dir)) {
+    for (const auto& entry : collect_resource_entries(resource_dir)) {
+        std::error_code ec;
         AssetEntry a;
-        a.filename = entry.path().filename().string();
-        a.is_image = is_image_file(entry.path().string());
+        a.filename = fs::relative(entry.path(), resource_dir).generic_string();
+        a.is_directory = entry.is_directory(ec) && !ec;
+        a.is_image = !a.is_directory && is_image_file(entry.path());
 
         if (a.is_image) a.texture = LoadTexture(entry.path().string().c_str());
         asset_entries.push_back(a);
     }
 }
-
 void clone_model_materials(Entity* e) {
     if (e->model.materialCount <= 0) return;
 

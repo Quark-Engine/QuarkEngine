@@ -12,6 +12,8 @@ namespace fs = std::filesystem;
 static ImGuizmo::OPERATION gizmo_mode = ImGuizmo::TRANSLATE;
 static int renaming_index = -1;
 static char rename_buf[128] = "";
+static bool scene_asset_dragging = false;
+static std::string dragged_scene_asset_name;
 
 const float icon_size = 64.0f;
 const float padding = 10.0f;
@@ -20,6 +22,156 @@ const float cell_size = icon_size + padding;
 static void assign_entity_name(Entity& entity, const char* new_name) {
     if (!new_name || new_name[0] == '\0') return;
     entity.name = new_name;
+}
+
+static ModelAsset* find_asset_by_name(const std::string& asset_name) {
+    for (auto& asset : assets) {
+        if (asset.name == asset_name) return &asset;
+    }
+    return nullptr;
+}
+
+static bool has_valid_model_data(const Model& model) {
+    return model.meshCount > 0 && model.meshes != nullptr;
+}
+
+static Entity make_entity_from_asset(Scene& scene, ModelAsset& asset) {
+    Entity entity;
+    entity.id = static_cast<int>(scene.entities.size());
+    entity.type = asset.type;
+    entity.asset = &asset;
+    entity.asset_name = asset.name;
+    entity.segments = 16;
+    const std::string base_name = asset.is_procedural ? object_type_name(asset.type) : fs::path(asset.name).stem().string();
+    entity.name = scene.make_unique_name(base_name.empty() ? "Model" : base_name);
+
+    if (asset.is_procedural) {
+        entity.model = asset.generator(entity.segments);
+        entity.owns_model_instance = true;
+        store_uv(&entity);
+        store_material_textures(&entity);
+        entity.texture_source = TEXTURE_NONE;
+        entity.texture_name.clear();
+    } else {
+        if (!load_model_instance(asset, entity.model)) {
+            entity.asset = nullptr;
+            entity.asset_name.clear();
+            entity.model = {0};
+            return entity;
+        }
+
+        entity.owns_model_instance = true;
+        store_uv(&entity);
+        store_material_textures(&entity);
+
+        bool has_embedded = false;
+        for (int i = 0; i < entity.model.materialCount; i++) {
+            if (entity.model.materials[i].maps[MATERIAL_MAP_DIFFUSE].texture.id != 0) {
+                has_embedded = true;
+                break;
+            }
+        }
+
+        if (has_embedded) entity.texture_source = TEXTURE_MODEL;
+        else entity.texture_source = TEXTURE_NONE;
+    }
+
+    entity.texture = {0};
+    return entity;
+}
+
+static Vector3 get_scene_drop_position(Camera3D camera) {
+    Ray ray = GetScreenToWorldRay(GetMousePosition(), camera);
+    const float epsilon = 0.0001f;
+
+    if (fabsf(ray.direction.y) > epsilon) {
+        const float t = -ray.position.y / ray.direction.y;
+        if (t >= 0.0f) {
+            return {
+                ray.position.x + ray.direction.x * t,
+                0.0f,
+                ray.position.z + ray.direction.z * t
+            };
+        }
+    }
+
+    return {
+        camera.position.x + camera.target.x,
+        0.0f,
+        camera.position.z + camera.target.z
+    };
+}
+
+static bool import_path_to_resources(const fs::path& src, const fs::path& resource_dir) {
+    std::error_code ec;
+
+    if (!fs::exists(src, ec) || ec) {
+        TraceLog(LOG_WARNING, "Dropped path does not exist: %s", src.string().c_str());
+        return false;
+    }
+
+    if (fs::is_regular_file(src, ec)) {
+        fs::path dst = resource_dir / src.filename();
+        fs::copy_file(src, dst, fs::copy_options::overwrite_existing, ec);
+        if (ec) {
+            TraceLog(LOG_WARNING, "Failed to import file: %s", src.string().c_str());
+            return false;
+        }
+        return true;
+    }
+
+    if (fs::is_directory(src, ec)) {
+        bool imported_any = false;
+        const fs::path dst_root = resource_dir / src.filename();
+        fs::create_directories(dst_root, ec);
+        ec.clear();
+
+        fs::recursive_directory_iterator it(
+            src,
+            fs::directory_options::skip_permission_denied,
+            ec
+        );
+        if (ec) {
+            TraceLog(LOG_WARNING, "Failed to open dropped directory: %s", src.string().c_str());
+            return false;
+        }
+
+        for (const auto& entry : it) {
+            if (!entry.is_regular_file(ec) || ec) {
+                ec.clear();
+                continue;
+            }
+
+            fs::path relative = fs::relative(entry.path(), src, ec);
+            if (ec) {
+                TraceLog(LOG_WARNING, "Failed to compute relative path: %s", entry.path().string().c_str());
+                ec.clear();
+                continue;
+            }
+
+            fs::path dst = dst_root / relative;
+            fs::create_directories(dst.parent_path(), ec);
+            if (ec) {
+                TraceLog(LOG_WARNING, "Failed to create directory for import: %s", dst.parent_path().string().c_str());
+                ec.clear();
+                continue;
+            }
+
+            fs::copy_file(entry.path(), dst, fs::copy_options::overwrite_existing, ec);
+            if (ec) {
+                TraceLog(LOG_WARNING, "Failed to import file from directory: %s", entry.path().string().c_str());
+                ec.clear();
+                continue;
+            }
+
+            imported_any = true;
+        }
+
+        return imported_any;
+    }
+
+    TraceLog(LOG_WARNING, "Unsupported dropped path: %s", src.string().c_str());
+    return false;
 }
 
 void Editor::save_state() {
@@ -61,13 +213,22 @@ void Editor::undo() {
 
         if (e.asset->is_procedural) {
             e.model = e.asset->generator(e.segments);
+            e.owns_model_instance = true;
             store_uv(&e);
+            store_material_textures(&e);
         } 
         
         else {
-            e.model = e.asset->loaded_model;
-            clone_model_materials(&e);
+            if (!load_model_instance(*e.asset, e.model)) {
+                e.asset = nullptr;
+                e.asset_name.clear();
+                e.model = {0};
+                e.owns_model_instance = false;
+                continue;
+            }
+            e.owns_model_instance = true;
             store_uv(&e);
+            store_material_textures(&e);
         }
 
         e.shader_assigned = false;
@@ -97,13 +258,22 @@ void Editor::redo() {
         if (!e.asset) continue;
         if (e.asset->is_procedural) {
             e.model = e.asset->generator(e.segments);
+            e.owns_model_instance = true;
             store_uv(&e);
+            store_material_textures(&e);
         } 
         
         else {
-            e.model = e.asset->loaded_model;
-            clone_model_materials(&e);
+            if (!load_model_instance(*e.asset, e.model)) {
+                e.asset = nullptr;
+                e.asset_name.clear();
+                e.model = {0};
+                e.owns_model_instance = false;
+                continue;
+            }
+            e.owns_model_instance = true;
             store_uv(&e);
+            store_material_textures(&e);
         }
         e.shader_assigned = false;
     }
@@ -118,21 +288,25 @@ void Editor::handle_input() {
     if (IsKeyPressed(KEY_S)) gizmo_mode = ImGuizmo::SCALE;
 
     if (IsFileDropped()) {
-        save_state();
-        
         FilePathList dropped = LoadDroppedFiles();
-
         fs::path resource_dir = fs::path(project_path) / "resources";
+        std::error_code ec;
+        fs::create_directories(resource_dir, ec);
+
+        bool imported_any = false;
         for (unsigned int i = 0; i < dropped.count; i++) {
             fs::path src(dropped.paths[i]);
-            fs::path dst = resource_dir / src.filename();
-            fs::copy_file(src, dst, fs::copy_options::overwrite_existing);
+            imported_any = import_path_to_resources(src, resource_dir) || imported_any;
         }
 
         UnloadDroppedFiles(dropped);
-        refresh_textures(&scene, project_path);
-        refresh_assets(project_path);
-        refresh_models(project_path, scene);
+
+        if (imported_any) {
+            save_state();
+            refresh_textures(&scene, project_path);
+            refresh_assets(project_path);
+            refresh_models(project_path, scene);
+        }
     }
 
     ImGuiIO& io = ImGui::GetIO();
@@ -231,6 +405,31 @@ void Editor::draw_gizmo(Camera3D camera) {
     was_using = ImGuizmo::IsUsing();
 }
 
+void Editor::handle_scene_asset_drop(Camera3D camera) {
+    if (!scene_asset_dragging) return;
+
+    if (!IsMouseButtonReleased(MOUSE_BUTTON_LEFT)) return;
+
+    const std::string asset_name = dragged_scene_asset_name;
+    scene_asset_dragging = false;
+    dragged_scene_asset_name.clear();
+
+    if (ImGuizmo::IsUsing()) return;
+    if (ImGui::IsWindowHovered(ImGuiHoveredFlags_AnyWindow)) return;
+
+    ModelAsset* asset = find_asset_by_name(asset_name);
+    if (!asset) return;
+
+    Entity entity = make_entity_from_asset(scene, *asset);
+    if (!has_valid_model_data(entity.model)) return;
+
+    save_state();
+    entity.position = get_scene_drop_position(camera);
+
+    scene.entities.push_back(entity);
+    scene.selected = static_cast<int>(scene.entities.size()) - 1;
+}
+
 void Editor::draw_ui(Shader shader) {
     if (ImGui::BeginMainMenuBar()) {
         if (ImGui::BeginMenu("File")) {
@@ -324,42 +523,12 @@ void Editor::draw_ui(Shader shader) {
         if (ImGui::BeginMenu("Create")) {
             save_state();
 
-            for (auto& a : assets) {
-                if (!a.is_procedural) continue;
-                if (ImGui::MenuItem(a.name.c_str())) {
-                    Entity e;
-                    e.id = static_cast<int>(scene.entities.size());
-                    e.type = a.type;
-                    e.asset = &a;
-                    e.asset_name = a.name;
-                    e.segments = 16;
-                    e.name = scene.make_default_name_for(e);
-
-                    if (a.is_procedural) {
-                        e.model = a.generator(e.segments);
-                        store_uv(&e);
-                        store_material_textures(&e);
-                    }
-
-                    else {
-                        e.model = a.loaded_model;
-                        clone_model_materials(&e);
-                        store_uv(&e);
-                        store_material_textures(&e);
-
-                        bool has_embedded = false;
-                        for (int i = 0; i < e.model.materialCount; i++) {
-                            if (e.model.materials[i].maps[MATERIAL_MAP_DIFFUSE].texture.id != 0) {
-                                has_embedded = true;
-                                break;
-                            }
-                        }
-                        if (has_embedded) {
-                            e.texture_source = TEXTURE_MODEL;
-                        }
-                    }
-
-                    e.texture = {0};
+            for (int asset_index = 0; asset_index < static_cast<int>(assets.size()); asset_index++) {
+                auto& a = assets[asset_index];
+                const std::string menu_label = a.name + "##create_" + std::to_string(asset_index);
+                if (ImGui::MenuItem(menu_label.c_str())) {
+                    Entity e = make_entity_from_asset(scene, a);
+                    if (!has_valid_model_data(e.model)) continue;
                     scene.entities.push_back(e);
                 }
             }
@@ -483,60 +652,66 @@ void Editor::draw_ui(Shader shader) {
         }
 
         static int last_model_index = -1;
-        static int last_selected = -1;
-
-        if (scene.selected != last_selected) {
-            last_selected = scene.selected;
-            last_model_index = -1;
-        }
-
         if (!model_names.empty() && ImGui::Combo("Model", &current_model_index, model_names.data(), static_cast<int>(model_names.size()))) {
-            save_state();
-            
-            e->asset = &assets[current_model_index];
-            e->asset_name = e->asset->name;
-            e->type = e->asset->type;
+            if (last_model_index != current_model_index) {
+                save_state();
+                last_model_index = current_model_index;
 
-            if (e->model.meshCount > 0) {
-                if (e->asset->is_procedural)
+                const bool owns_current_model = entity_owns_model(*e);
+                if (owns_current_model && e->model.meshCount > 0) {
                     UnloadModel(e->model);
+                }
                 e->model = {0};
-            }
 
-            e->shader_assigned = false;
-
-            if (e->asset->is_procedural) {
-                e->segments = 16;
-                update_model(e);
-                store_uv(e);
-                store_material_textures(e);
-                e->texture_source = TEXTURE_NONE;
-                e->texture_name.clear();
-            }
-            else {
-                e->model = e->asset->loaded_model;
-                clone_model_materials(e);
-                store_uv(e);
-
+                e->original_texcoords.clear();
                 e->original_material_textures.clear();
-                bool has_embedded = false;
-                for (int i = 0; i < e->asset->loaded_model.materialCount; i++) {
-                    Texture2D t = e->asset->loaded_model.materials[i].maps[MATERIAL_MAP_DIFFUSE].texture;
-                    e->original_material_textures.push_back(t);
-                    if (t.id != 0 && t.id != 1)
-                        has_embedded = true;
-                }
 
-                if (has_embedded) {
-                    e->texture_source = TEXTURE_MODEL;
-                    e->texture_name.clear();
-                }
-                else {
+                e->asset = &assets[current_model_index];
+                e->asset_name = e->asset->name;
+                e->type  = e->asset->type;
+
+                e->shader_assigned = false;
+
+                if (e->asset->is_procedural) { 
+                    e->segments = 16; 
+                    update_model(e); 
+                    e->owns_model_instance = true;
+                    store_uv(e);
+                    store_material_textures(e);
                     e->texture_source = TEXTURE_NONE;
                     e->texture_name.clear();
-                    e->texture = {0};
-                    for (int i = 0; i < e->model.materialCount; i++)
-                        e->model.materials[i].maps[MATERIAL_MAP_DIFFUSE].texture = {0};
+                } 
+                
+                else {
+                    if (!load_model_instance(*e->asset, e->model)) {
+                        e->asset = nullptr;
+                        e->asset_name.clear();
+                        e->model = {0};
+                        e->owns_model_instance = false;
+                        e->texture_source = TEXTURE_NONE;
+                        e->texture_name.clear();
+                        return;
+                    }
+
+                    e->owns_model_instance = true;
+                    store_uv(e);
+                    store_material_textures(e);
+
+                    bool has_embedded = false;
+                    for (int i = 0; i < e->model.materialCount; i++) {
+                        if (e->model.materials[i].maps[MATERIAL_MAP_DIFFUSE].texture.id != 0) {
+                            has_embedded = true;
+                            break;
+                        }
+                    }
+
+                    if (has_embedded) {
+                        e->texture_source = TEXTURE_MODEL;
+                        e->texture_name.clear();
+                    } else {
+                        e->texture_source = TEXTURE_NONE;
+                        e->texture_name.clear();
+                    }
                 }
             }
         }
@@ -846,19 +1021,25 @@ void Editor::draw_assets_ui() {
             ImVec2 size(icon_size, icon_size + 20.0f);
 
             ImGui::InvisibleButton("asset_btn", size);
+            const bool asset_item_active = ImGui::IsItemActive();
+            const bool asset_item_hovered = ImGui::IsItemHovered();
 
-            if (ImGui::IsItemHovered()) ImGui::SetTooltip("%s", asset_entries[i].filename.c_str());
+            if (asset_item_hovered) ImGui::SetTooltip("%s", asset_entries[i].filename.c_str());
             if (ImGui::IsItemClicked() && !ImGui::IsMouseDragging(0)) selected_asset_index = i;
 
             if (ImGui::BeginPopupContextItem("AssetContext")) {
                 if (ImGui::MenuItem("Delete")) {
                     save_state();
 
-                    fs::remove(fs::path(project_path) / "resources" / asset_entries[i].filename);
+                    fs::path target = fs::path(project_path) / "resources" / asset_entries[i].filename;
+                    std::error_code ec;
+                    if (asset_entries[i].is_directory) fs::remove_all(target, ec);
+                    else fs::remove(target, ec);
 
-                    asset_entries.erase(asset_entries.begin() + i);
-
-                    if (selected_asset_index == i) selected_asset_index = -1;
+                    refresh_textures(&scene, project_path);
+                    refresh_assets(project_path);
+                    refresh_models(project_path, scene);
+                    selected_asset_index = -1;
 
                     ImGui::EndPopup();
                     ImGui::EndGroup();
@@ -893,7 +1074,19 @@ void Editor::draw_assets_ui() {
 
             ImGui::SetCursorScreenPos(pos);
             if (asset_entries[i].is_image) ImGui::Image((void*)(intptr_t)asset_entries[i].texture.id, ImVec2(icon_size, icon_size));
+            else if (asset_entries[i].is_directory) ImGui::Button("Folder", ImVec2(icon_size, icon_size));
             else ImGui::Button("File", ImVec2(icon_size, icon_size));
+
+            if (!asset_entries[i].is_directory && is_model_file(fs::path(asset_entries[i].filename))) {
+                if (asset_item_active && ImGui::IsMouseDragging(ImGuiMouseButton_Left)) {
+                    scene_asset_dragging = true;
+                    dragged_scene_asset_name = asset_entries[i].filename;
+                }
+
+                if (scene_asset_dragging && dragged_scene_asset_name == asset_entries[i].filename) {
+                    ImGui::SetTooltip("Spawn %s", dragged_scene_asset_name.c_str());
+                }
+            }
 
             ImGui::SetCursorScreenPos(ImVec2(pos.x, pos.y + icon_size));
             std::string label = asset_entries[i].filename;
@@ -940,7 +1133,10 @@ void Editor::draw_assets_ui() {
                         if (rename_buf[0] != '\0' && old_path != new_path && fs::exists(old_path)) {
                             try {
                                 fs::rename(old_path, new_path);
-                                asset_entries[selected_asset_index].filename = rename_buf;
+                                refresh_textures(&scene, project_path);
+                                refresh_assets(project_path);
+                                refresh_models(project_path, scene);
+                                selected_asset_index = -1;
                             } 
                             
                             catch (...) {}

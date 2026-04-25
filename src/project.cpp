@@ -103,10 +103,10 @@ bool project_load(const std::string& folder_path, Scene& scene, Shader shader) {
     std::string json_path = folder_path + "/scene.json";
     if (!fs::exists(json_path)) return false;
 
+    scene.release_resources();
     refresh_textures(nullptr, folder_path);
     refresh_assets(folder_path);
-    load_external_models(folder_path);
-    scene.release_resources();
+    refresh_models(folder_path, scene);
 
     std::ifstream f(json_path);
     json j;
@@ -157,16 +157,28 @@ bool project_load(const std::string& folder_path, Scene& scene, Shader shader) {
 
                 if (a.is_procedural) {
                     e.model = a.generator(e.segments);
+                    e.owns_model_instance = true;
                 } 
                 
                 else {
-                    e.model = a.loaded_model;
+                    if (!load_model_instance(a, e.model)) {
+                        e.asset = nullptr;
+                        e.asset_name.clear();
+                        e.model = {0};
+                        e.owns_model_instance = false;
+                        break;
+                    }
+                    e.owns_model_instance = true;
                 }
 
                 store_uv(&e);
                 store_material_textures(&e);
                 break;
             }
+        }
+
+        if (!e.asset || (e.asset_name.size() > 0 && (e.model.meshCount <= 0 || e.model.meshes == nullptr))) {
+            continue;
         }
 
         std::string tex_name = "None";

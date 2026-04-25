@@ -1,4 +1,5 @@
 #include "headers/scene.h"
+#include "headers/models.h"
 #include <unordered_set>
 
 Entity* Scene::get_selected() {
@@ -31,19 +32,27 @@ void Scene::release_resources() {
     std::unordered_set<void*> released_meshes;
 
     for (auto& entity : entities) {
-        if (entity.model.materialCount > 0 && entity.model.materials) {
-            if (entity.owns_materials && entity.model.materialCount > 0 && entity.model.materials) {
+        const bool owns_model = entity_owns_model(entity);
+        if (entity.owns_materials) {
+            if (entity.model.materials) {
                 RL_FREE(entity.model.materials);
                 entity.model.materials = nullptr;
             }
-            
-            if (entity.owns_materials && entity.model.meshMaterial) {
+
+            if (entity.model.meshMaterial) {
                 RL_FREE(entity.model.meshMaterial);
                 entity.model.meshMaterial = nullptr;
             }
+
+            entity.owns_materials = false;
         }
-        if (entity.asset && entity.asset->is_procedural && entity.model.meshCount > 0)
-            UnloadModel(entity.model);
+
+        if (owns_model && entity.model.meshCount > 0 && entity.model.meshes) {
+            void* mesh_ptr = static_cast<void*>(entity.model.meshes);
+            if (released_meshes.insert(mesh_ptr).second) {
+                UnloadModel(entity.model);
+            }
+        }
         entity.model = {0};
         entity.texture = {0};
     }

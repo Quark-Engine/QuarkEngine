@@ -15,6 +15,7 @@ struct TextureOption {
 
 struct AssetEntry {
     std::string filename;
+    bool is_directory = false;
     bool is_image;
     Texture2D texture = {0};
 };

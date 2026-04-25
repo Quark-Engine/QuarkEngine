@@ -146,6 +146,8 @@ int main(int argc, char* argv[]) {
 
     load_models();
     load_textures(project_path);
+    refresh_assets(project_path);
+    refresh_models(project_path, editor.scene);
 
     if (std::filesystem::exists(project_path + "/scene.json"))
         project_load(project_path, editor.scene, shader);
@@ -223,6 +225,7 @@ int main(int argc, char* argv[]) {
         EndMode3D();
 
         editor.draw_ui(shader);
+        editor.handle_scene_asset_drop(camera.get_camera());
 
         rlImGuiEnd();
         EndDrawing();
