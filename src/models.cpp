@@ -67,6 +67,12 @@ struct ObjVertexKey {
     int vn = -1;
 };
 
+struct ObjTriangle {
+    ObjVertexKey a;
+    ObjVertexKey b;
+    ObjVertexKey c;
+};
+
 static bool parse_obj_vertex_token(const std::string& token, ObjVertexKey& out) {
     std::string parts[3];
     int part_index = 0;
@@ -107,7 +113,7 @@ static Vector3 safe_normalize(Vector3 value) {
 
 static bool append_obj_vertex(
     const ObjVertexKey& key,
-    const Vector3& fallback_normal,
+    const std::vector<Vector3>& generated_normals,
     const std::vector<Vector3>& positions,
     const std::vector<Vector2>& texcoords,
     const std::vector<Vector3>& normals,
@@ -131,10 +137,12 @@ static bool append_obj_vertex(
     out_texcoords.push_back(uv.x);
     out_texcoords.push_back(uv.y);
 
-    Vector3 normal = fallback_normal;
+    Vector3 normal = { 0.0f, 1.0f, 0.0f };
     const int vn_index = resolve_obj_index(key.vn, static_cast<int>(normals.size()));
     if (vn_index >= 0 && vn_index < static_cast<int>(normals.size())) {
         normal = normals[vn_index];
+    } else if (v_index < static_cast<int>(generated_normals.size())) {
+        normal = generated_normals[v_index];
     }
     out_normals.push_back(normal.x);
     out_normals.push_back(normal.y);
@@ -155,6 +163,8 @@ static Model load_obj_model_fallback(const std::string& filepath, bool& ok) {
     std::vector<Vector3> positions;
     std::vector<Vector2> texcoords;
     std::vector<Vector3> normals;
+    std::vector<Vector3> generated_normals;
+    std::vector<ObjTriangle> triangles;
     std::vector<float> out_vertices;
     std::vector<float> out_texcoords;
     std::vector<float> out_normals;
@@ -171,6 +181,7 @@ static Model load_obj_model_fallback(const std::string& filepath, bool& ok) {
             Vector3 v = {0};
             iss >> v.x >> v.y >> v.z;
             positions.push_back(v);
+            generated_normals.push_back({ 0.0f, 0.0f, 0.0f });
         } else if (type == "vt") {
             Vector2 vt = {0};
             iss >> vt.x >> vt.y;
@@ -211,11 +222,29 @@ static Model load_obj_model_fallback(const std::string& filepath, bool& ok) {
                 const Vector3 ac = { c.x - a.x, c.y - a.y, c.z - a.z };
                 const Vector3 face_normal = safe_normalize(Vector3CrossProduct(ab, ac));
 
-                if (!append_obj_vertex(face[0], face_normal, positions, texcoords, normals, out_vertices, out_texcoords, out_normals)) continue;
-                if (!append_obj_vertex(face[i], face_normal, positions, texcoords, normals, out_vertices, out_texcoords, out_normals)) continue;
-                if (!append_obj_vertex(face[i + 1], face_normal, positions, texcoords, normals, out_vertices, out_texcoords, out_normals)) continue;
+                if (face[0].vn == -1) {
+                    generated_normals[ia] = Vector3Add(generated_normals[ia], face_normal);
+                }
+                if (face[i].vn == -1) {
+                    generated_normals[ib] = Vector3Add(generated_normals[ib], face_normal);
+                }
+                if (face[i + 1].vn == -1) {
+                    generated_normals[ic] = Vector3Add(generated_normals[ic], face_normal);
+                }
+
+                triangles.push_back({ face[0], face[i], face[i + 1] });
             }
         }
+    }
+
+    for (Vector3& normal : generated_normals) {
+        normal = safe_normalize(normal);
+    }
+
+    for (const ObjTriangle& triangle : triangles) {
+        if (!append_obj_vertex(triangle.a, generated_normals, positions, texcoords, normals, out_vertices, out_texcoords, out_normals)) continue;
+        if (!append_obj_vertex(triangle.b, generated_normals, positions, texcoords, normals, out_vertices, out_texcoords, out_normals)) continue;
+        if (!append_obj_vertex(triangle.c, generated_normals, positions, texcoords, normals, out_vertices, out_texcoords, out_normals)) continue;
     }
 
     if (out_vertices.empty()) {
