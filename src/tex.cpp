@@ -217,7 +217,7 @@ void draw_entity_with_texture(Entity& e) {
     rlScalef(e.scale.x, e.scale.y, e.scale.z);
 
     DrawModel(e.model, {0,0,0}, 1.0f, e.color);
-    DrawModelWires(e.model, {0,0,0}, 1.0f, e.outline_color);
+    if (e.outline_color.a > 0) DrawModelWires(e.model, {0,0,0}, 1.0f, e.outline_color);
 
     rlPopMatrix();
 }
