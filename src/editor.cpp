@@ -52,7 +52,9 @@ static Entity make_entity_from_asset(Scene& scene, ModelAsset& asset) {
         store_material_textures(&entity);
         entity.texture_source = TEXTURE_NONE;
         entity.texture_name.clear();
-    } else {
+    } 
+    
+    else {
         if (!load_model_instance(asset, entity.model)) {
             entity.asset = nullptr;
             entity.asset_name.clear();
@@ -330,13 +332,17 @@ void Editor::handle_input() {
             undo_key_was_pressed = true;
             undo_hold_start = current_time;
             last_undo_time = current_time;
-        } else if (current_time - undo_hold_start > 0.5f) {
+        } 
+        
+        else if (current_time - undo_hold_start > 0.5f) {
             if (current_time - last_undo_time > 0.15f) {
                 undo();
                 last_undo_time = current_time;
             }
         }
-    } else {
+    } 
+    
+    else {
         undo_key_was_pressed = false;
         undo_hold_start = 0;
     }
@@ -347,18 +353,47 @@ void Editor::handle_input() {
             redo_key_was_pressed = true;
             redo_hold_start = current_time;
             last_redo_time = current_time;
-        } else if (current_time - redo_hold_start > 0.5f) {
+        } 
+        
+        else if (current_time - redo_hold_start > 0.5f) {
             if (current_time - last_redo_time > 0.15f) {
                 redo();
                 last_redo_time = current_time;
             }
         }
-    } else {
+    } 
+    
+    else {
         redo_key_was_pressed = false;
         redo_hold_start = 0;
     }
 
     if (IsKeyDown(KEY_LEFT_CONTROL) && IsKeyPressed(KEY_S)) project_save(project_path, scene);
+
+    static double last_asset_poll = 0;
+    double current_time_d = GetTime();
+
+    if (current_time_d - last_asset_poll > 2.0) {
+        last_asset_poll = current_time_d;
+
+        fs::path resource_dir = fs::path(project_path) / "resources";
+        if (fs::exists(resource_dir)) {
+            static int last_file_count = -1;
+            int current_count = 0;
+
+            std::error_code ec;
+
+            for (auto& entry : fs::directory_iterator(resource_dir, ec)) 
+                current_count++;
+
+            if (current_count != last_file_count) {
+                last_file_count = current_count;
+                refresh_textures(&scene, project_path);
+                refresh_assets(project_path);
+                refresh_models(project_path, scene);
+            }
+        }
+    }
 }
 
 void Editor::draw_gizmo(Camera3D camera) {

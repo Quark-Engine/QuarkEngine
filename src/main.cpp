@@ -197,7 +197,9 @@ int main(int argc, char* argv[]) {
                 float power = 2.0f;
                 SetShaderValue(shader, emission_color_loc, &emission, SHADER_UNIFORM_VEC3);
                 SetShaderValue(shader, emission_power_loc, &power,    SHADER_UNIFORM_FLOAT);
-            } else {
+            } 
+            
+            else {
                 Vector3 zero = {0, 0, 0};
                 float power = 0.0f;
                 SetShaderValue(shader, emission_color_loc, &zero,  SHADER_UNIFORM_VEC3);
@@ -208,7 +210,9 @@ int main(int argc, char* argv[]) {
             int use = 0;
             if (e.texture.id != 0) {
                 use = 1;
-            } else {
+            } 
+            
+            else {
                 for (int i = 0; i < e.model.materialCount; i++) {
                     if (e.model.materials[i].maps[MATERIAL_MAP_DIFFUSE].texture.id != 0) {
                         use = 1;
