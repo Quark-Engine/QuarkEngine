@@ -159,8 +159,6 @@ std::string run_hub() {
             hub_projects.push_back(p);
         }
     }
-
-    hub_save_registry();
     hub_refresh();
     strncpy(hub_create_path, HUB_PROJECTS_ROOT, sizeof(hub_create_path) - 1);
 
