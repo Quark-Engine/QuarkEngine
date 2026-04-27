@@ -34,6 +34,7 @@ namespace fs = std::filesystem;
 using json = nlohmann::json;
 
 static const char* HUB_PROJECTS_ROOT = "projects";
+static const char* HUB_REGISTRY_FILE = "projects.json";
 
 struct HubProject {
     std::string name;
@@ -50,18 +51,34 @@ static char hub_create_name[256] = "";
 static char hub_create_path[512] = "";
 static char hub_rename_buf[256]  = "";
 
+static void hub_save_registry() {
+    json j = json::array();
+
+    for (auto& p : hub_projects)
+        j.push_back( { {"name", p.name}, {"path", p.path} } );
+    
+    std::ofstream f(HUB_REGISTRY_FILE);
+    f << j.dump(4);
+}
+
 static void hub_refresh() {
     hub_projects.clear();
-    if (!fs::exists(HUB_PROJECTS_ROOT)) return;
 
-    for (auto& entry : fs::directory_iterator(HUB_PROJECTS_ROOT)) {
-        if (!entry.is_directory()) continue;
-        if (!fs::exists(entry.path() / "scene.json")) continue;
-
-        HubProject p;
-        p.name = entry.path().filename().string();
-        p.path = fs::absolute(entry.path()).string();
-        hub_projects.push_back(p);
+    if (fs::exists(HUB_REGISTRY_FILE)) {
+        std::ifstream f(HUB_REGISTRY_FILE);
+        json j;
+        try {
+            f >> j;
+            for (auto& entry : j) {
+                std::string path = entry["path"];
+                if (fs::exists(fs::path(path) / "scene.json")) {
+                    HubProject p;
+                    p.name = entry["name"];
+                    p.path = path;
+                    hub_projects.push_back(p);
+                }
+            }
+        } catch (...) {}
     }
 
     std::sort(hub_projects.begin(), hub_projects.end(),
@@ -73,15 +90,34 @@ static void hub_create_project(const std::string& name, const std::string& base)
     fs::create_directories(proj / "resources");
     std::ofstream f(proj / "scene.json");
     f << "{\n    \"entities\": []\n}\n";
+
+    HubProject p;
+    p.name = name;
+    p.path = fs::absolute(proj).string();
+    hub_projects.push_back(p);
+    hub_save_registry();
 }
 
 static void hub_delete_project(const std::string& path) {
     fs::remove_all(path);
+    hub_projects.erase(std::remove_if(hub_projects.begin(), hub_projects.end(),
+        [&](const HubProject& p) { return p.path == path; }), hub_projects.end());
+    hub_save_registry();
 }
 
 static void hub_rename_project(const std::string& old_path, const std::string& new_name) {
     fs::path p(old_path);
-    fs::rename(p, p.parent_path() / new_name);
+    fs::path new_path = p.parent_path() / new_name;
+    fs::rename(p, new_path);
+
+    for (auto& proj : hub_projects) {
+        if (proj.path == old_path) {
+            proj.name = new_name;
+            proj.path = fs::absolute(new_path).string();
+            break;
+        }
+    }
+    hub_save_registry();
 }
 
 static std::string hub_browse_folder() {
@@ -112,6 +148,19 @@ static std::string hub_browse_folder() {
 
 std::string run_hub() {
     fs::create_directories(HUB_PROJECTS_ROOT);
+    if (!fs::exists(HUB_REGISTRY_FILE)) {
+        for (auto& entry : fs::directory_iterator(HUB_PROJECTS_ROOT)) {
+            if (!entry.is_directory()) continue;
+            if (!fs::exists(entry.path() / "scene.json")) continue;
+
+            HubProject p;
+            p.name = entry.path().filename().string();
+            p.path = fs::absolute(entry.path()).string();
+            hub_projects.push_back(p);
+        }
+    }
+
+    hub_save_registry();
     hub_refresh();
     strncpy(hub_create_path, HUB_PROJECTS_ROOT, sizeof(hub_create_path) - 1);
 
