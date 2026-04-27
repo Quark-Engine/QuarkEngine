@@ -111,6 +111,245 @@ static Vector3 safe_normalize(Vector3 value) {
     return { value.x / length, value.y / length, value.z / length };
 }
 
+bool get_mesh_triangle_vertex_indices(const Mesh& mesh, int triangle_index, int out_indices[3]) {
+    if (!out_indices || triangle_index < 0 || triangle_index >= mesh.triangleCount) return false;
+
+    if (mesh.indices) {
+        const int base = triangle_index * 3;
+        out_indices[0] = static_cast<int>(mesh.indices[base + 0]);
+        out_indices[1] = static_cast<int>(mesh.indices[base + 1]);
+        out_indices[2] = static_cast<int>(mesh.indices[base + 2]);
+    } else {
+        const int base = triangle_index * 3;
+        out_indices[0] = base + 0;
+        out_indices[1] = base + 1;
+        out_indices[2] = base + 2;
+    }
+
+    for (int i = 0; i < 3; i++) {
+        if (out_indices[i] < 0 || out_indices[i] >= mesh.vertexCount) return false;
+    }
+
+    return true;
+}
+
+static void rebuild_mesh_normals(Mesh& mesh) {
+    if (!mesh.vertices || !mesh.normals || mesh.vertexCount <= 0) return;
+
+    for (int i = 0; i < mesh.vertexCount * 3; i++) {
+        mesh.normals[i] = 0.0f;
+    }
+
+    for (int triangle_index = 0; triangle_index < mesh.triangleCount; triangle_index++) {
+        int indices[3] = {};
+        if (!get_mesh_triangle_vertex_indices(mesh, triangle_index, indices)) continue;
+
+        const Vector3 a = {
+            mesh.vertices[indices[0] * 3 + 0],
+            mesh.vertices[indices[0] * 3 + 1],
+            mesh.vertices[indices[0] * 3 + 2]
+        };
+        const Vector3 b = {
+            mesh.vertices[indices[1] * 3 + 0],
+            mesh.vertices[indices[1] * 3 + 1],
+            mesh.vertices[indices[1] * 3 + 2]
+        };
+        const Vector3 c = {
+            mesh.vertices[indices[2] * 3 + 0],
+            mesh.vertices[indices[2] * 3 + 1],
+            mesh.vertices[indices[2] * 3 + 2]
+        };
+
+        const Vector3 ab = Vector3Subtract(b, a);
+        const Vector3 ac = Vector3Subtract(c, a);
+        const Vector3 normal = safe_normalize(Vector3CrossProduct(ab, ac));
+
+        for (int i = 0; i < 3; i++) {
+            mesh.normals[indices[i] * 3 + 0] += normal.x;
+            mesh.normals[indices[i] * 3 + 1] += normal.y;
+            mesh.normals[indices[i] * 3 + 2] += normal.z;
+        }
+    }
+
+    for (int vertex_index = 0; vertex_index < mesh.vertexCount; vertex_index++) {
+        const Vector3 accumulated = {
+            mesh.normals[vertex_index * 3 + 0],
+            mesh.normals[vertex_index * 3 + 1],
+            mesh.normals[vertex_index * 3 + 2]
+        };
+        const Vector3 normalized = safe_normalize(accumulated);
+        mesh.normals[vertex_index * 3 + 0] = normalized.x;
+        mesh.normals[vertex_index * 3 + 1] = normalized.y;
+        mesh.normals[vertex_index * 3 + 2] = normalized.z;
+    }
+}
+
+void clear_mesh_overrides(Entity& entity) {
+    entity.mesh_vertex_overrides.clear();
+    entity.mesh_triangles_detached = false;
+}
+
+bool entity_has_mesh_overrides(const Entity& entity) {
+    return !entity.mesh_vertex_overrides.empty();
+}
+
+void capture_mesh_overrides_from_model(Entity& entity) {
+    const bool triangles_detached = entity.mesh_triangles_detached;
+    entity.mesh_vertex_overrides.clear();
+    entity.mesh_triangles_detached = triangles_detached;
+    if (entity.model.meshCount <= 0 || !entity.model.meshes) return;
+
+    entity.mesh_vertex_overrides.reserve(entity.model.meshCount);
+    for (int mesh_index = 0; mesh_index < entity.model.meshCount; mesh_index++) {
+        const Mesh& mesh = entity.model.meshes[mesh_index];
+        if (!mesh.vertices || mesh.vertexCount <= 0) {
+            entity.mesh_vertex_overrides.emplace_back();
+            continue;
+        }
+
+        const float* begin = mesh.vertices;
+        const float* end = mesh.vertices + mesh.vertexCount * 3;
+        entity.mesh_vertex_overrides.emplace_back(begin, end);
+    }
+}
+
+bool apply_mesh_overrides(Entity& entity) {
+    if (!entity_has_mesh_overrides(entity)) return false;
+    if (entity.model.meshCount <= 0 || !entity.model.meshes) return false;
+
+    if (entity.mesh_triangles_detached) {
+        detach_mesh_triangles(entity);
+    }
+
+    bool applied_any = false;
+
+    for (int mesh_index = 0; mesh_index < entity.model.meshCount; mesh_index++) {
+        if (mesh_index >= static_cast<int>(entity.mesh_vertex_overrides.size())) break;
+
+        Mesh& mesh = entity.model.meshes[mesh_index];
+        std::vector<float>& override_vertices = entity.mesh_vertex_overrides[mesh_index];
+        if (!mesh.vertices || mesh.vertexCount <= 0) continue;
+        if (override_vertices.size() != static_cast<size_t>(mesh.vertexCount * 3)) continue;
+
+        memcpy(mesh.vertices, override_vertices.data(), override_vertices.size() * sizeof(float));
+        UpdateMeshBuffer(mesh, 0, mesh.vertices, mesh.vertexCount * 3 * sizeof(float), 0);
+
+        if (mesh.normals) {
+            rebuild_mesh_normals(mesh);
+            UpdateMeshBuffer(mesh, 2, mesh.normals, mesh.vertexCount * 3 * sizeof(float), 0);
+        }
+
+        applied_any = true;
+    }
+
+    return applied_any;
+}
+
+static bool detach_single_mesh_triangles(Mesh& mesh) {
+    if (!mesh.vertices || mesh.vertexCount <= 0 || mesh.triangleCount <= 0) return false;
+    if (!mesh.indices) return true;
+
+    const int detached_vertex_count = mesh.triangleCount * 3;
+    std::vector<float> vertices(detached_vertex_count * 3);
+    std::vector<float> texcoords;
+    std::vector<float> normals;
+    std::vector<unsigned char> colors;
+
+    if (mesh.texcoords) texcoords.resize(detached_vertex_count * 2);
+    if (mesh.normals) normals.resize(detached_vertex_count * 3);
+    if (mesh.colors) colors.resize(detached_vertex_count * 4);
+
+    for (int triangle_index = 0; triangle_index < mesh.triangleCount; triangle_index++) {
+        int source_indices[3] = {};
+        if (!get_mesh_triangle_vertex_indices(mesh, triangle_index, source_indices)) return false;
+
+        for (int corner = 0; corner < 3; corner++) {
+            const int src = source_indices[corner];
+            const int dst = triangle_index * 3 + corner;
+
+            vertices[dst * 3 + 0] = mesh.vertices[src * 3 + 0];
+            vertices[dst * 3 + 1] = mesh.vertices[src * 3 + 1];
+            vertices[dst * 3 + 2] = mesh.vertices[src * 3 + 2];
+
+            if (mesh.texcoords) {
+                texcoords[dst * 2 + 0] = mesh.texcoords[src * 2 + 0];
+                texcoords[dst * 2 + 1] = mesh.texcoords[src * 2 + 1];
+            }
+
+            if (mesh.normals) {
+                normals[dst * 3 + 0] = mesh.normals[src * 3 + 0];
+                normals[dst * 3 + 1] = mesh.normals[src * 3 + 1];
+                normals[dst * 3 + 2] = mesh.normals[src * 3 + 2];
+            }
+
+            if (mesh.colors) {
+                colors[dst * 4 + 0] = mesh.colors[src * 4 + 0];
+                colors[dst * 4 + 1] = mesh.colors[src * 4 + 1];
+                colors[dst * 4 + 2] = mesh.colors[src * 4 + 2];
+                colors[dst * 4 + 3] = mesh.colors[src * 4 + 3];
+            }
+        }
+    }
+
+    Mesh detached = mesh;
+    detached.vertexCount = detached_vertex_count;
+    detached.vertices = static_cast<float*>(MemAlloc(vertices.size() * sizeof(float)));
+    detached.texcoords = mesh.texcoords ? static_cast<float*>(MemAlloc(texcoords.size() * sizeof(float))) : nullptr;
+    detached.normals = mesh.normals ? static_cast<float*>(MemAlloc(normals.size() * sizeof(float))) : nullptr;
+    detached.colors = mesh.colors ? static_cast<unsigned char*>(MemAlloc(colors.size() * sizeof(unsigned char))) : nullptr;
+    detached.indices = nullptr;
+    detached.animVertices = nullptr;
+    detached.animNormals = nullptr;
+    detached.boneIds = nullptr;
+    detached.boneWeights = nullptr;
+    detached.boneMatrices = nullptr;
+    detached.boneCount = 0;
+    detached.vaoId = 0;
+    detached.vboId = nullptr;
+
+    if (!detached.vertices ||
+        (mesh.texcoords && !detached.texcoords) ||
+        (mesh.normals && !detached.normals) ||
+        (mesh.colors && !detached.colors)) {
+        if (detached.vertices) MemFree(detached.vertices);
+        if (detached.texcoords) MemFree(detached.texcoords);
+        if (detached.normals) MemFree(detached.normals);
+        if (detached.colors) MemFree(detached.colors);
+        return false;
+    }
+
+    memcpy(detached.vertices, vertices.data(), vertices.size() * sizeof(float));
+    if (detached.texcoords) memcpy(detached.texcoords, texcoords.data(), texcoords.size() * sizeof(float));
+    if (detached.normals) memcpy(detached.normals, normals.data(), normals.size() * sizeof(float));
+    if (detached.colors) memcpy(detached.colors, colors.data(), colors.size() * sizeof(unsigned char));
+
+    rebuild_mesh_normals(detached);
+    UploadMesh(&detached, false);
+    UnloadMesh(mesh);
+    mesh = detached;
+    return true;
+}
+
+bool detach_mesh_triangles(Entity& entity) {
+    if (entity.model.meshCount <= 0 || !entity.model.meshes) return false;
+
+    bool detached_any = false;
+    for (int mesh_index = 0; mesh_index < entity.model.meshCount; mesh_index++) {
+        Mesh& mesh = entity.model.meshes[mesh_index];
+        if (!mesh.indices) continue;
+        if (!detach_single_mesh_triangles(mesh)) continue;
+        detached_any = true;
+    }
+
+    if (detached_any) {
+        entity.mesh_triangles_detached = true;
+    } else if (!entity.mesh_triangles_detached) {
+        entity.mesh_triangles_detached = true;
+    }
+
+    return detached_any;
+}
+
 static bool append_obj_vertex(
     const ObjVertexKey& key,
     const std::vector<Vector3>& generated_normals,

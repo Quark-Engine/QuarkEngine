@@ -105,6 +105,7 @@ static Entity make_entity_from_asset(Scene& scene, ModelAsset& asset) {
     if (asset.is_procedural) {
         entity.model = asset.generator(entity.segments);
         entity.owns_model_instance = true;
+        clear_mesh_overrides(entity);
         store_uv(&entity);
         store_material_textures(&entity);
         entity.texture_source = TEXTURE_NONE;
@@ -120,6 +121,7 @@ static Entity make_entity_from_asset(Scene& scene, ModelAsset& asset) {
         }
 
         entity.owns_model_instance = true;
+        clear_mesh_overrides(entity);
         store_uv(&entity);
         store_material_textures(&entity);
 
@@ -275,6 +277,7 @@ void Editor::undo() {
             e.owns_model_instance = true;
             store_uv(&e);
             store_material_textures(&e);
+            apply_mesh_overrides(e);
         } 
         
         else {
@@ -288,6 +291,7 @@ void Editor::undo() {
             e.owns_model_instance = true;
             store_uv(&e);
             store_material_textures(&e);
+            apply_mesh_overrides(e);
         }
 
         e.shader_assigned = false;
@@ -320,6 +324,7 @@ void Editor::redo() {
             e.owns_model_instance = true;
             store_uv(&e);
             store_material_textures(&e);
+            apply_mesh_overrides(e);
         } 
         
         else {
@@ -333,6 +338,7 @@ void Editor::redo() {
             e.owns_model_instance = true;
             store_uv(&e);
             store_material_textures(&e);
+            apply_mesh_overrides(e);
         }
         e.shader_assigned = false;
     }
@@ -725,6 +731,7 @@ void Editor::draw_ui(Shader shader) {
                     save_state();
                     last_segments = e->segments;
                     
+                    clear_mesh_overrides(*e);
                     update_model(e);
                     store_uv(e);
                     e->shader_assigned = false;
@@ -756,6 +763,7 @@ void Editor::draw_ui(Shader shader) {
 
                 e->original_texcoords.clear();
                 e->original_material_textures.clear();
+                clear_mesh_overrides(*e);
 
                 e->asset = &assets[current_model_index];
                 e->asset_name = e->asset->name;
@@ -802,6 +810,95 @@ void Editor::draw_ui(Shader shader) {
                     } else {
                         e->texture_source = TEXTURE_NONE;
                         e->texture_name.clear();
+                    }
+                }
+            }
+        }
+
+        if (has_valid_model_data(e->model)) {
+            static int selected_mesh_index = 0;
+            static int selected_triangle_index = 0;
+
+            if (selected_mesh_index >= e->model.meshCount) selected_mesh_index = 0;
+            if (selected_mesh_index < 0) selected_mesh_index = 0;
+
+            if (e->model.meshCount > 1) {
+                ImGui::SliderInt("Editable Mesh", &selected_mesh_index, 0, e->model.meshCount - 1);
+            } else {
+                ImGui::Text("Editable Mesh: 0");
+            }
+
+            Mesh& editable_mesh = e->model.meshes[selected_mesh_index];
+            if (editable_mesh.triangleCount > 0) {
+                if (selected_triangle_index >= editable_mesh.triangleCount) selected_triangle_index = editable_mesh.triangleCount - 1;
+                if (selected_triangle_index < 0) selected_triangle_index = 0;
+
+                ImGui::SliderInt("Triangle", &selected_triangle_index, 0, editable_mesh.triangleCount - 1);
+                ImGui::Text("Vertices: %d  Triangles: %d", editable_mesh.vertexCount, editable_mesh.triangleCount);
+
+                int triangle_vertices[3] = {};
+                if (get_mesh_triangle_vertex_indices(editable_mesh, selected_triangle_index, triangle_vertices)) {
+                    auto edit_triangle_vertex = [&](const char* label, int vertex_index) {
+                        float vertex[3] = {
+                            editable_mesh.vertices[vertex_index * 3 + 0],
+                            editable_mesh.vertices[vertex_index * 3 + 1],
+                            editable_mesh.vertices[vertex_index * 3 + 2]
+                        };
+
+                        if (ImGui::DragFloat3(label, vertex, 0.01f)) {
+                            save_state();
+                            if (!entity_has_mesh_overrides(*e)) {
+                                if (!e->mesh_triangles_detached) {
+                                    detach_mesh_triangles(*e);
+                                }
+                                capture_mesh_overrides_from_model(*e);
+                            }
+
+                            std::vector<float>& mesh_override = e->mesh_vertex_overrides[selected_mesh_index];
+                            mesh_override[vertex_index * 3 + 0] = vertex[0];
+                            mesh_override[vertex_index * 3 + 1] = vertex[1];
+                            mesh_override[vertex_index * 3 + 2] = vertex[2];
+                            apply_mesh_overrides(*e);
+                        }
+                    };
+
+                    edit_triangle_vertex("Vertex A", triangle_vertices[0]);
+                    edit_triangle_vertex("Vertex B", triangle_vertices[1]);
+                    edit_triangle_vertex("Vertex C", triangle_vertices[2]);
+
+                    if (!e->mesh_triangles_detached) {
+                        ImGui::Text("Triangles are still shared until first edit.");
+                    } else {
+                        ImGui::Text("Triangle sculpt mode is active.");
+                    }
+
+                    if (entity_has_mesh_overrides(*e) && ImGui::Button("Reset Mesh Edits")) {
+                        save_state();
+                        clear_mesh_overrides(*e);
+
+                        if (e->asset && e->asset->is_procedural) {
+                            update_model(e);
+                        } else if (e->asset) {
+                            const bool owns_current_model = entity_owns_model(*e);
+                            if (owns_current_model && e->model.meshCount > 0) {
+                                UnloadModel(e->model);
+                            }
+
+                            e->model = {0};
+                            if (!load_model_instance(*e->asset, e->model)) {
+                                e->asset = nullptr;
+                                e->asset_name.clear();
+                                e->owns_model_instance = false;
+                            } else {
+                                e->owns_model_instance = true;
+                            }
+                        }
+
+                        if (e->asset) {
+                            store_uv(e);
+                            store_material_textures(e);
+                            e->shader_assigned = false;
+                        }
                     }
                 }
             }

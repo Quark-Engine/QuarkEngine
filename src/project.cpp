@@ -78,6 +78,11 @@ void project_save(const std::string& folder_path, const Scene& scene) {
         ej["uv_scale_x"]       = e.uv_scale_vec.x;
         ej["uv_scale_y"]       = e.uv_scale_vec.y;
         ej["segments"]         = e.segments;
+        ej["mesh_triangles_detached"] = e.mesh_triangles_detached;
+        ej["mesh_vertex_overrides"] = json::array();
+        for (const auto& mesh_vertices : e.mesh_vertex_overrides) {
+            ej["mesh_vertex_overrides"].push_back(mesh_vertices);
+        }
 
         ej["has_light"]        = e.has_light;
         ej["light_color"]      = color_to_hex(e.light.color);
@@ -146,6 +151,7 @@ bool project_load(const std::string& folder_path, Scene& scene, Shader shader) {
         e.uv_scale_vec.x   = ej["uv_scale_x"].get<float>();
         e.uv_scale_vec.y   = ej["uv_scale_y"].get<float>();
         e.segments         = ej["segments"].get<int>();
+        e.mesh_triangles_detached = ej.value("mesh_triangles_detached", false);
 
         std::string asset_name = ej["asset_name"].get<std::string>();
         e.asset_name = asset_name;
@@ -173,6 +179,23 @@ bool project_load(const std::string& folder_path, Scene& scene, Shader shader) {
 
                 store_uv(&e);
                 store_material_textures(&e);
+                if (ej.contains("mesh_vertex_overrides") && ej["mesh_vertex_overrides"].is_array()) {
+                    e.mesh_vertex_overrides.clear();
+                    for (const auto& mesh_json : ej["mesh_vertex_overrides"]) {
+                        if (!mesh_json.is_array()) {
+                            e.mesh_vertex_overrides.emplace_back();
+                            continue;
+                        }
+
+                        std::vector<float> vertices;
+                        vertices.reserve(mesh_json.size());
+                        for (const auto& value : mesh_json) {
+                            vertices.push_back(value.get<float>());
+                        }
+                        e.mesh_vertex_overrides.push_back(std::move(vertices));
+                    }
+                }
+                apply_mesh_overrides(e);
                 break;
             }
         }

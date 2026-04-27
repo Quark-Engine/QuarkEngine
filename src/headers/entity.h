@@ -4,6 +4,7 @@
 #include "lighting.h"
 #include <string>
 #include <functional>
+#include <vector>
 
 enum ObjectType { CUBE, SPHERE, CONE, CYLINDER, HEMISPHERE, TORUS };
 
@@ -55,6 +56,8 @@ struct Entity {
     bool owns_model_instance = false;
     ModelAsset* asset;
     std::string asset_name;
+    bool mesh_triangles_detached = false;
+    std::vector<std::vector<float>> mesh_vertex_overrides;
 
     float texture_repeat_u;
     float texture_repeat_v;
