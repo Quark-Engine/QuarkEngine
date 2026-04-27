@@ -4,6 +4,7 @@
 #include "tex.h"
 #include "models.h"
 #include <stack>
+#include <filesystem>
 
 struct SceneState {
     std::vector<Entity> entities;
@@ -17,6 +18,8 @@ struct Editor {
 
     std::stack<SceneState> undo_stack;
     std::stack<SceneState> redo_stack;
+
+    std::filesystem::path current_asset_path;
     
     void draw_ui(Shader shader);
     void draw_assets_ui();

@@ -14,10 +14,18 @@ static int renaming_index = -1;
 static char rename_buf[128] = "";
 static bool scene_asset_dragging = false;
 static std::string dragged_scene_asset_name;
+static std::unordered_map<std::string, Texture> tex_cache;
 
 const float icon_size = 64.0f;
 const float padding = 10.0f;
 const float cell_size = icon_size + padding;
+
+struct LocalEntry {
+    std::string filename;
+    bool is_directory;
+    bool is_image;
+    Texture texture;
+};
 
 static void assign_entity_name(Entity& entity, const char* new_name) {
     if (!new_name || new_name[0] == '\0') return;
@@ -292,13 +300,17 @@ void Editor::handle_input() {
     if (IsFileDropped()) {
         FilePathList dropped = LoadDroppedFiles();
         fs::path resource_dir = fs::path(project_path) / "resources";
-        std::error_code ec;
-        fs::create_directories(resource_dir, ec);
-
         bool imported_any = false;
+
+        if (current_asset_path.empty())
+            current_asset_path = fs::path(project_path);
+
+        std::error_code ec;
+        fs::create_directories(current_asset_path, ec);
+
         for (unsigned int i = 0; i < dropped.count; i++) {
             fs::path src(dropped.paths[i]);
-            imported_any = import_path_to_resources(src, resource_dir) || imported_any;
+            imported_any = import_path_to_resources(src, current_asset_path) || imported_any;
         }
 
         UnloadDroppedFiles(dropped);
@@ -1021,17 +1033,86 @@ void Editor::draw_assets_ui() {
     static bool selecting = false;
     static int rename_target = -1;
 
+    if (current_asset_path.empty())
+        current_asset_path = fs::path(project_path);
+
     ImVec2 window_size = ImGui::GetWindowSize();
 
-    if (asset_entries.empty()) {
-        const char* text = "Drag files here";
+    // breadcrumb bar
+    fs::path project_root = fs::path(project_path);
+    fs::path relative_path = fs::relative(current_asset_path, project_root.parent_path());
+
+    std::vector<fs::path> crumbs;
+    for (auto& part : relative_path) {
+        crumbs.push_back(part);
+    }
+
+    fs::path rebuilt = project_root.parent_path();
+
+    for (int c = 0; c < (int)crumbs.size(); c++) {
+        rebuilt /= crumbs[c];
+        std::string label = crumbs[c].string() + "/";
+
+        if (ImGui::SmallButton(label.c_str())) {
+            current_asset_path = rebuilt;
+            selected_asset_index = -1;
+            tex_cache.clear();
+        }
+
+        ImGui::SameLine();
+    }
+
+    ImGui::NewLine();
+    ImGui::Separator();
+
+    // current asset path entries
+    std::vector<LocalEntry> dirs_list;
+    std::vector<LocalEntry> files_list;
+
+    std::error_code ec_dir;
+
+    for (auto& p : fs::directory_iterator(current_asset_path, ec_dir)) {
+        LocalEntry e;
+        e.filename = p.path().filename().string();
+        e.is_directory = p.is_directory();
+        e.is_image = is_image_file(p.path());
+
+        if (e.is_directory) {
+            dirs_list.push_back(e);
+        } 
+        
+        else {
+            fs::path fp = p.path();
+            std::string ext = fp.extension().string();
+            std::transform(ext.begin(), ext.end(), ext.begin(), ::tolower);
+
+            if (e.is_image) {
+                for (auto& ae : asset_entries) {
+                    if (ae.filename == e.filename && ae.is_image) {
+                        e.texture = ae.texture;
+                        break;
+                    }
+                }
+            }
+
+            files_list.push_back(e);
+        }
+    }
+
+    // directory content
+    std::vector<LocalEntry> entries;
+    entries.insert(entries.end(), dirs_list.begin(), dirs_list.end());
+    entries.insert(entries.end(), files_list.begin(), files_list.end());
+
+    if (entries.empty()) {
+        const char* text = "Empty folder";
         ImVec2 text_size = ImGui::CalcTextSize(text);
 
         ImGui::SetCursorPosX((window_size.x - text_size.x) * 0.5f);
         ImGui::SetCursorPosY((window_size.y - text_size.y) * 0.5f);
         ImGui::Text("%s", text);
-    } 
-    
+    }
+
     else {
         ImGui::BeginChild("AssetScroll", ImVec2(0, 0), false, ImGuiWindowFlags_AlwaysVerticalScrollbar);
 
@@ -1048,32 +1129,52 @@ void Editor::draw_assets_ui() {
 
         float window_visible_x2 = ImGui::GetWindowPos().x + ImGui::GetWindowContentRegionMax().x;
 
-        for (int i = 0; i < asset_entries.size(); i++) {
+        for (int i = 0; i < (int)entries.size(); i++) {
+            auto& entry = entries[i];
+
             ImGui::PushID(i);
             ImGui::BeginGroup();
 
             ImVec2 pos = ImGui::GetCursorScreenPos();
-            ImVec2 size(icon_size, icon_size + 20.0f);
+            ImVec2 size(icon_size, icon_size + 20);
 
             ImGui::InvisibleButton("asset_btn", size);
-            const bool asset_item_active = ImGui::IsItemActive();
-            const bool asset_item_hovered = ImGui::IsItemHovered();
+            
+            const bool item_active = ImGui::IsItemActive();
+            const bool item_hovered = ImGui::IsItemHovered();
 
-            if (asset_item_hovered) ImGui::SetTooltip("%s", asset_entries[i].filename.c_str());
-            if (ImGui::IsItemClicked() && !ImGui::IsMouseDragging(0)) selected_asset_index = i;
+            if (item_hovered) {
+                ImGui::SetTooltip("%s", entry.filename.c_str());
+            }
+
+            if (ImGui::IsItemClicked() && !ImGui::IsMouseDragging(0)) {
+                selected_asset_index = i;
+            }
+
+            if (entry.is_directory && ImGui::IsItemHovered() && ImGui::IsMouseDoubleClicked(0)) {
+                current_asset_path /= entry.filename;
+                selected_asset_index = -1;
+
+                tex_cache.clear();
+                ImGui::EndGroup();
+                ImGui::PopID();
+                break;
+            }
 
             if (ImGui::BeginPopupContextItem("AssetContext")) {
                 if (ImGui::MenuItem("Delete")) {
                     save_state();
 
-                    fs::path target = fs::path(project_path) / "resources" / asset_entries[i].filename;
+                    fs::path target = current_asset_path / entry.filename;
                     std::error_code ec;
-                    if (asset_entries[i].is_directory) fs::remove_all(target, ec);
+
+                    if (entry.is_directory) fs::remove_all(target, ec);
                     else fs::remove(target, ec);
 
                     refresh_textures(&scene, project_path);
                     refresh_assets(project_path);
                     refresh_models(project_path, scene);
+
                     selected_asset_index = -1;
 
                     ImGui::EndPopup();
@@ -1084,9 +1185,9 @@ void Editor::draw_assets_ui() {
 
                 if (ImGui::MenuItem("Rename")) {
                     rename_target = i;
-                    size_t copied = asset_entries[i].filename.copy(rename_buf, sizeof(rename_buf) - 1);
+                    size_t copied = entry.filename.copy(rename_buf, sizeof(rename_buf) - 1);
                     rename_buf[copied] = '\0';
-
+                    
                     ImGui::OpenPopup("RenameAsset");
                 }
 
@@ -1096,52 +1197,67 @@ void Editor::draw_assets_ui() {
             bool selected = (selected_asset_index == i);
 
             if (selecting && (fabs(selection_start.x - selection_end.x) > 5.0f || fabs(selection_start.y - selection_end.y) > 5.0f)) {
-                ImVec2 min = ImVec2(std::min(selection_start.x, selection_end.x), std::min(selection_start.y, selection_end.y));
-                ImVec2 max = ImVec2(std::max(selection_start.x, selection_end.x), std::max(selection_start.y, selection_end.y));
+                ImVec2 min(std::min(selection_start.x, selection_end.x), std::min(selection_start.y, selection_end.y));
+                ImVec2 max(std::max(selection_start.x, selection_end.x), std::max(selection_start.y, selection_end.y));
 
-                if (!(pos.x + size.x < min.x || pos.x > max.x || pos.y + size.y < min.y || pos.y > max.y)) selected = true;
+                if (!(pos.x + size.x < min.x || pos.x > max.x || pos.y + size.y < min.y || pos.y > max.y)) {
+                    selected = true;
+                }
             }
 
             if (selected) {
-                ImVec2 frame_max = ImVec2(pos.x + size.x, pos.y + size.y);
-                ImGui::GetWindowDrawList()->AddRectFilled(pos, frame_max, IM_COL32(80, 140, 255, 150));
+                ImGui::GetWindowDrawList()->AddRectFilled(pos, ImVec2(pos.x + size.x, pos.y + size.y), IM_COL32(80, 140, 255, 100));
             }
 
             ImGui::SetCursorScreenPos(pos);
-            if (asset_entries[i].is_image) ImGui::Image((void*)(intptr_t)asset_entries[i].texture.id, ImVec2(icon_size, icon_size));
-            else if (asset_entries[i].is_directory) ImGui::Button("Folder", ImVec2(icon_size, icon_size));
-            else ImGui::Button("File", ImVec2(icon_size, icon_size));
+            if (entry.is_directory) ImGui::Button("Folder", ImVec2(icon_size, icon_size));
+            else if (entry.is_image) {
+                std::string full = (current_asset_path / entry.filename).string();
 
-            if (!asset_entries[i].is_directory && is_model_file(fs::path(asset_entries[i].filename))) {
-                if (asset_item_active && ImGui::IsMouseDragging(ImGuiMouseButton_Left)) {
+                if (tex_cache.find(full) == tex_cache.end())
+                    tex_cache[full] = LoadTexture(full.c_str());
+                ImGui::Image((void*)(intptr_t)tex_cache[full].id, ImVec2(icon_size, icon_size));
+            }
+        
+            else {
+                std::string ext = fs::path(entry.filename).extension().string();
+                if (!ext.empty() && ext[0] == '.') ext = ext.substr(1);
+                if (ext.empty()) ext = "file";
+                ImGui::Button(ext.c_str(), ImVec2(icon_size, icon_size));
+            }
+
+            if (!entry.is_directory && is_model_file(fs::path(entry.filename))) {
+                if (item_active && ImGui::IsMouseDragging(ImGuiMouseButton_Left)) {
                     scene_asset_dragging = true;
-                    dragged_scene_asset_name = asset_entries[i].filename;
+                    dragged_scene_asset_name = entry.filename;
                 }
 
-                if (scene_asset_dragging && dragged_scene_asset_name == asset_entries[i].filename) {
+                if (scene_asset_dragging && dragged_scene_asset_name == entry.filename) {
                     ImGui::SetTooltip("Spawn %s", dragged_scene_asset_name.c_str());
                 }
             }
 
-            ImGui::SetCursorScreenPos(ImVec2(pos.x, pos.y + icon_size));
-            std::string label = asset_entries[i].filename;
+            std::string label = entry.filename;
+            if (label.size() > 10) label = label.substr(0, 8) + "..";
 
-            if (label.size() > 10) label = label.substr(0, 8) + "...";
-
-            ImGui::TextWrapped("%s", label.c_str());
+            ImVec2 label_size = ImGui::CalcTextSize(label.c_str());
+            ImGui::SetCursorScreenPos(ImVec2(pos.x + (icon_size - label_size.x) * 0.5f, pos.y + icon_size + 2.0f));
+            ImGui::TextUnformatted(label.c_str());
             ImGui::EndGroup();
 
             float last_x2 = ImGui::GetItemRectMax().x;
             float next_x2 = last_x2 + ImGui::GetStyle().ItemSpacing.x + icon_size;
 
-            if (i + 1 < asset_entries.size() && next_x2 < window_visible_x2) ImGui::SameLine();
+            if (i + 1 < (int)entries.size() && next_x2 < window_visible_x2) {
+                ImGui::SameLine();
+            }
 
             ImGui::PopID();
         }
 
         if (selecting && (fabs(selection_start.x - selection_end.x) > 5.0f || fabs(selection_start.y - selection_end.y) > 5.0f)) {
-            ImVec2 min = ImVec2(std::min(selection_start.x, selection_end.x), std::min(selection_start.y, selection_end.y));
-            ImVec2 max = ImVec2(std::max(selection_start.x, selection_end.x), std::max(selection_start.y, selection_end.y));
+            ImVec2 min(std::min(selection_start.x, selection_end.x), std::min(selection_start.y, selection_end.y));
+            ImVec2 max(std::max(selection_start.x, selection_end.x), std::max(selection_start.y, selection_end.y));
 
             ImGui::GetForegroundDrawList()->AddRectFilled(min, max, IM_COL32(80, 140, 255, 40));
         }
@@ -1154,16 +1270,16 @@ void Editor::draw_assets_ui() {
         static std::string last_filename;
         if (rename_target == -2 && ImGui::BeginPopupModal("RenameAsset", nullptr, ImGuiWindowFlags_AlwaysAutoResize)) {
             ImGui::InputText("##rename", rename_buf, IM_ARRAYSIZE(rename_buf));
+
             if (ImGui::Button("OK")) {
                 std::string new_filename = rename_buf;
                 if (last_filename != new_filename) {
                     save_state();
                     last_filename = new_filename;
-                    
-                    if (selected_asset_index >= 0 && selected_asset_index < asset_entries.size()) {
-                        fs::path resource_dir = fs::path(project_path) / "resources";
-                        fs::path old_path = resource_dir / asset_entries[selected_asset_index].filename;
-                        fs::path new_path = resource_dir / rename_buf;
+
+                    if (selected_asset_index >= 0 && selected_asset_index < (int)entries.size()) {
+                        fs::path old_path = current_asset_path / entries[selected_asset_index].filename;
+                        fs::path new_path = current_asset_path / rename_buf;
 
                         if (rename_buf[0] != '\0' && old_path != new_path && fs::exists(old_path)) {
                             try {
@@ -1172,13 +1288,10 @@ void Editor::draw_assets_ui() {
                                 refresh_assets(project_path);
                                 refresh_models(project_path, scene);
                                 selected_asset_index = -1;
-                            } 
-                            
-                            catch (...) {}
+                            } catch (...) {}
                         }
                     }
                 }
-
                 rename_target = -1;
                 ImGui::CloseCurrentPopup();
             }
@@ -1188,12 +1301,10 @@ void Editor::draw_assets_ui() {
                 rename_target = -1;
                 ImGui::CloseCurrentPopup();
             }
-            
+
             ImGui::EndPopup();
         }
-
         ImGui::EndChild();
     }
-
     ImGui::End();
 }
