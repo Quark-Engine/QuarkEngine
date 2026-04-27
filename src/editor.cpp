@@ -6,6 +6,7 @@
 #include "headers/entity.h"
 #include "headers/ImGuizmo.h"
 #include "headers/project.h"
+#include <algorithm>
 
 namespace fs = std::filesystem;
 
@@ -41,6 +42,54 @@ static ModelAsset* find_asset_by_name(const std::string& asset_name) {
 
 static bool has_valid_model_data(const Model& model) {
     return model.meshCount > 0 && model.meshes != nullptr;
+}
+
+static std::string get_asset_name_for_path(const fs::path& project_path_value, const fs::path& asset_path) {
+    std::error_code ec;
+    const fs::path resource_dir = project_path_value / "resources";
+    const fs::path relative = fs::relative(asset_path, resource_dir, ec);
+    if (!ec) return relative.generic_string();
+    return asset_path.filename().generic_string();
+}
+
+static std::string build_resource_signature(const fs::path& resource_dir) {
+    std::vector<std::string> entries;
+    std::error_code ec;
+    fs::recursive_directory_iterator it(resource_dir, fs::directory_options::skip_permission_denied, ec);
+    if (ec) return {};
+
+    for (const auto& entry : it) {
+        std::error_code entry_ec;
+        const fs::path relative = fs::relative(entry.path(), resource_dir, entry_ec);
+        if (entry_ec) continue;
+
+        std::string row = relative.generic_string();
+        if (entry.is_regular_file(entry_ec) && !entry_ec) {
+            std::error_code size_ec;
+            std::error_code time_ec;
+            const auto size = fs::file_size(entry.path(), size_ec);
+            const auto time = fs::last_write_time(entry.path(), time_ec);
+
+            row += "|f|";
+            row += size_ec ? "0" : std::to_string(size);
+            row += "|";
+            row += time_ec ? "0" : std::to_string(time.time_since_epoch().count());
+        } else {
+            row += "|d";
+        }
+
+        entries.push_back(std::move(row));
+    }
+
+    std::sort(entries.begin(), entries.end());
+
+    std::string signature;
+    for (const auto& entry : entries) {
+        signature += entry;
+        signature.push_back('\n');
+    }
+
+    return signature;
 }
 
 static Entity make_entity_from_asset(Scene& scene, ModelAsset& asset) {
@@ -390,16 +439,11 @@ void Editor::handle_input() {
 
         fs::path resource_dir = fs::path(project_path) / "resources";
         if (fs::exists(resource_dir)) {
-            static int last_file_count = -1;
-            int current_count = 0;
+            static std::string last_resource_signature;
+            const std::string current_signature = build_resource_signature(resource_dir);
 
-            std::error_code ec;
-
-            for (auto& entry : fs::directory_iterator(resource_dir, ec)) 
-                current_count++;
-
-            if (current_count != last_file_count) {
-                last_file_count = current_count;
+            if (current_signature != last_resource_signature) {
+                last_resource_signature = current_signature;
                 refresh_textures(&scene, project_path);
                 refresh_assets(project_path);
                 refresh_models(project_path, scene);
@@ -1227,12 +1271,14 @@ void Editor::draw_assets_ui() {
             }
 
             if (!entry.is_directory && is_model_file(fs::path(entry.filename))) {
+                const std::string asset_name = get_asset_name_for_path(fs::path(project_path), current_asset_path / entry.filename);
+
                 if (item_active && ImGui::IsMouseDragging(ImGuiMouseButton_Left)) {
                     scene_asset_dragging = true;
-                    dragged_scene_asset_name = entry.filename;
+                    dragged_scene_asset_name = asset_name;
                 }
 
-                if (scene_asset_dragging && dragged_scene_asset_name == entry.filename) {
+                if (scene_asset_dragging && dragged_scene_asset_name == asset_name) {
                     ImGui::SetTooltip("Spawn %s", dragged_scene_asset_name.c_str());
                 }
             }
