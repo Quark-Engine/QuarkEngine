@@ -6,7 +6,21 @@
 #include "headers/entity.h"
 #include "headers/ImGuizmo.h"
 #include "headers/project.h"
+#include <cstdlib>
+#ifdef _WIN32
+    #define NOMINMAX
+    #define WIN32_LEAN_AND_MEAN
+    #define CloseWindow WinAPICloseWindow
+    #define ShowCursor WinAPIShowCursor
+
+    #include <windows.h>
+    #include <shellapi.h>
+
+    #undef CloseWindow
+    #undef ShowCursor
+#endif
 #include <algorithm>
+#include <cfloat>
 
 namespace fs = std::filesystem;
 
@@ -16,6 +30,8 @@ static char rename_buf[128] = "";
 static bool scene_asset_dragging = false;
 static std::string dragged_scene_asset_name;
 static std::unordered_map<std::string, Texture> tex_cache;
+static std::unordered_map<std::string, Texture> model_preview_cache;
+static std::unordered_map<std::string, RenderTexture2D> model_render_cache;
 
 const float icon_size = 64.0f;
 const float padding = 10.0f;
@@ -25,7 +41,9 @@ struct LocalEntry {
     std::string filename;
     bool is_directory;
     bool is_image;
+    bool is_model;
     Texture texture;
+    std::string extension;
 };
 
 static void assign_entity_name(Entity& entity, const char* new_name) {
@@ -50,6 +68,11 @@ static std::string get_asset_name_for_path(const fs::path& project_path_value, c
     const fs::path relative = fs::relative(asset_path, resource_dir, ec);
     if (!ec) return relative.generic_string();
     return asset_path.filename().generic_string();
+}
+
+static ModelAsset* find_asset_by_path(const fs::path& full_path, const fs::path& project_path_value) {
+    std::string asset_name = get_asset_name_for_path(project_path_value, full_path);
+    return find_asset_by_name(asset_name);
 }
 
 static std::string build_resource_signature(const fs::path& resource_dir) {
@@ -90,6 +113,96 @@ static std::string build_resource_signature(const fs::path& resource_dir) {
     }
 
     return signature;
+}
+
+static Texture create_model_preview(const ModelAsset& asset, const std::string& cache_key, int preview_size = 64) {
+    Texture result = {0};
+    
+    Model preview_model = {0};
+    if (!load_model_instance(asset, preview_model)) {
+        return result;
+    }
+    
+    if (!has_valid_model_data(preview_model)) {
+        UnloadModel(preview_model);
+        return result;
+    }
+    
+    RenderTexture2D render_texture = LoadRenderTexture(preview_size, preview_size);
+    if (render_texture.id == 0) {
+        UnloadModel(preview_model);
+        return result;
+    }
+    
+    Vector3 min_bound = {FLT_MAX, FLT_MAX, FLT_MAX};
+    Vector3 max_bound = {-FLT_MAX, -FLT_MAX, -FLT_MAX};
+    bool has_vertices = false;
+    
+    for (int m = 0; m < preview_model.meshCount; m++) {
+        Mesh& mesh = preview_model.meshes[m];
+        if (!mesh.vertices) continue;
+        
+        for (int v = 0; v < mesh.vertexCount; v++) {
+            float vx = mesh.vertices[v * 3];
+            float vy = mesh.vertices[v * 3 + 1];
+            float vz = mesh.vertices[v * 3 + 2];
+            
+            min_bound.x = fminf(min_bound.x, vx);
+            min_bound.y = fminf(min_bound.y, vy);
+            min_bound.z = fminf(min_bound.z, vz);
+            max_bound.x = fmaxf(max_bound.x, vx);
+            max_bound.y = fmaxf(max_bound.y, vy);
+            max_bound.z = fmaxf(max_bound.z, vz);
+            has_vertices = true;
+        }
+    }
+    
+    Vector3 center = {0, 0, 0};
+    float distance = 3.0f;
+    
+    if (has_vertices) {
+        center = {
+            (min_bound.x + max_bound.x) * 0.5f,
+            (min_bound.y + max_bound.y) * 0.5f,
+            (min_bound.z + max_bound.z) * 0.5f
+        };
+        
+        Vector3 size = {
+            max_bound.x - min_bound.x,
+            max_bound.y - min_bound.y,
+            max_bound.z - min_bound.z
+        };
+        
+        float max_size = fmaxf(fmaxf(size.x, size.y), size.z);
+        if (max_size < 0.1f) max_size = 1.0f;
+        distance = max_size * 2.0f;
+    }
+    Camera3D preview_camera = {0};
+    preview_camera.position = {center.x + distance * 0.6f, center.y + distance * 0.5f, center.z + distance * 0.6f};
+    preview_camera.target = center;
+    preview_camera.up = {0.0f, 1.0f, 0.0f};
+    preview_camera.fovy = 45.0f;
+    preview_camera.projection = CAMERA_PERSPECTIVE;
+    
+    BeginTextureMode(render_texture);
+    {
+        ClearBackground({32, 32, 40, 255});
+        
+        BeginMode3D(preview_camera);
+        {
+            DrawModel(preview_model, {0, 0, 0}, 1.0f, WHITE);
+        }
+        EndMode3D();
+    }
+    EndTextureMode();
+    
+    result = render_texture.texture;
+    
+    model_render_cache[cache_key] = render_texture;
+    
+    UnloadModel(preview_model);
+    
+    return result;
 }
 
 static Entity make_entity_from_asset(Scene& scene, ModelAsset& asset) {
@@ -1179,7 +1292,6 @@ void Editor::draw_assets_ui() {
 
     ImVec2 window_size = ImGui::GetWindowSize();
 
-    // breadcrumb bar
     fs::path project_root = fs::path(project_path);
     fs::path relative_path = fs::relative(current_asset_path, project_root.parent_path());
 
@@ -1198,6 +1310,11 @@ void Editor::draw_assets_ui() {
             current_asset_path = rebuilt;
             selected_asset_index = -1;
             tex_cache.clear();
+            model_preview_cache.clear();
+            for (auto& rt : model_render_cache) {
+                UnloadRenderTexture(rt.second);
+            }
+            model_render_cache.clear();
         }
 
         ImGui::SameLine();
@@ -1206,7 +1323,6 @@ void Editor::draw_assets_ui() {
     ImGui::NewLine();
     ImGui::Separator();
 
-    // current asset path entries
     std::vector<LocalEntry> dirs_list;
     std::vector<LocalEntry> files_list;
 
@@ -1217,16 +1333,18 @@ void Editor::draw_assets_ui() {
         e.filename = p.path().filename().string();
         e.is_directory = p.is_directory();
         e.is_image = is_image_file(p.path());
+        e.is_model = is_model_file(p.path());
+
+        fs::path fp = p.path();
+        std::string ext = fp.extension().string();
+        if (!ext.empty() && ext[0] == '.') ext = ext.substr(1);
+        e.extension = ext;
 
         if (e.is_directory) {
             dirs_list.push_back(e);
         } 
         
         else {
-            fs::path fp = p.path();
-            std::string ext = fp.extension().string();
-            std::transform(ext.begin(), ext.end(), ext.begin(), ::tolower);
-
             if (e.is_image) {
                 for (auto& ae : asset_entries) {
                     if (ae.filename == e.filename && ae.is_image) {
@@ -1240,7 +1358,6 @@ void Editor::draw_assets_ui() {
         }
     }
 
-    // directory content
     std::vector<LocalEntry> entries;
     entries.insert(entries.end(), dirs_list.begin(), dirs_list.end());
     entries.insert(entries.end(), files_list.begin(), files_list.end());
@@ -1297,9 +1414,27 @@ void Editor::draw_assets_ui() {
                 selected_asset_index = -1;
 
                 tex_cache.clear();
+                model_preview_cache.clear();
+                for (auto& rt : model_render_cache) {
+                    UnloadRenderTexture(rt.second);
+                }
+                model_render_cache.clear();
                 ImGui::EndGroup();
                 ImGui::PopID();
                 break;
+            }
+
+            if (!entry.is_directory && ImGui::IsItemHovered() && ImGui::IsMouseDoubleClicked(0)) {
+                fs::path full_path = current_asset_path / entry.filename;
+#ifdef _WIN32
+                ShellExecuteA(NULL, "open", full_path.string().c_str(), NULL, NULL, SW_SHOWNORMAL);
+#elif __APPLE__
+                std::string command = "open \"" + full_path.string() + "\"";
+                system(command.c_str());
+#elif __linux__
+                std::string command = "xdg-open \"" + full_path.string() + "\"";
+                system(command.c_str());
+#endif
             }
 
             if (ImGui::BeginPopupContextItem("AssetContext")) {
@@ -1359,12 +1494,76 @@ void Editor::draw_assets_ui() {
                     tex_cache[full] = LoadTexture(full.c_str());
                 ImGui::Image((void*)(intptr_t)tex_cache[full].id, ImVec2(icon_size, icon_size));
             }
+            
+            else if (entry.is_model) {
+                std::string full = (current_asset_path / entry.filename).string();
+                
+                Texture preview_tex = {0};
+                bool load_failed = false;
+                
+                if (model_preview_cache.find(full) != model_preview_cache.end()) {
+                    preview_tex = model_preview_cache[full];
+                } else {
+                    ModelAsset* asset = find_asset_by_path(current_asset_path / entry.filename, project_path);
+                    if (asset) {
+                        preview_tex = create_model_preview(*asset, full);
+                        if (preview_tex.id != 0) {
+                            model_preview_cache[full] = preview_tex;
+                        } else {
+                            load_failed = true;
+                        }
+                    } else {
+                        load_failed = true;
+                    }
+                }
+                
+                if (preview_tex.id != 0) {
+                    ImGui::Image((void*)(intptr_t)preview_tex.id, ImVec2(icon_size, icon_size));
+                } else {
+                    ImDrawList* draw_list = ImGui::GetWindowDrawList();
+                    ImU32 bg_color = load_failed ? IM_COL32(80, 80, 90, 255) : IM_COL32(100, 100, 120, 255);
+                    draw_list->AddRectFilled(pos, ImVec2(pos.x + icon_size, pos.y + icon_size), bg_color);
+                    
+                    if (load_failed) {
+                        draw_list->AddLine(
+                            ImVec2(pos.x + 10, pos.y + 10),
+                            ImVec2(pos.x + icon_size - 10, pos.y + icon_size - 10),
+                            IM_COL32(255, 100, 100, 200), 2.0f
+                        );
+                        draw_list->AddLine(
+                            ImVec2(pos.x + icon_size - 10, pos.y + 10),
+                            ImVec2(pos.x + 10, pos.y + icon_size - 10),
+                            IM_COL32(255, 100, 100, 200), 2.0f
+                        );
+                    }
+                }
+            }
         
             else {
-                std::string ext = fs::path(entry.filename).extension().string();
-                if (!ext.empty() && ext[0] == '.') ext = ext.substr(1);
+                std::string ext = entry.extension;
                 if (ext.empty()) ext = "file";
                 ImGui::Button(ext.c_str(), ImVec2(icon_size, icon_size));
+            }
+
+            if (!entry.is_directory && !entry.extension.empty()) {
+                ImDrawList* draw_list = ImGui::GetWindowDrawList();
+                
+                std::string ext_display = entry.extension;
+                if (ext_display.size() > 3) ext_display = ext_display.substr(0, 3);
+                
+                ImVec2 ext_text_size = ImGui::CalcTextSize(ext_display.c_str());
+                ImVec2 ext_pos = ImVec2(
+                    pos.x + icon_size - ext_text_size.x - 2,
+                    pos.y + icon_size - ext_text_size.y - 2
+                );
+                
+                draw_list->AddRectFilled(
+                    ImVec2(ext_pos.x - 2, ext_pos.y - 1),
+                    ImVec2(pos.x + icon_size, pos.y + icon_size),
+                    IM_COL32(0, 0, 0, 180)
+                );
+                
+                draw_list->AddText(ext_pos, IM_COL32(255, 255, 255, 255), ext_display.c_str());
             }
 
             if (!entry.is_directory && is_model_file(fs::path(entry.filename))) {
