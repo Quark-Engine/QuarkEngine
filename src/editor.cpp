@@ -48,6 +48,7 @@ static float viewer_phi = 20.0f, viewer_theta = 45.0f, viewer_radius = 5.0f;
 
 static Texture icon_file_tex = {0};
 static Texture icon_folder_tex = {0};
+static Texture icon_full_folder_tex = {0};
 
 const float icon_size = 64.0f;
 const float padding = 10.0f;
@@ -1479,6 +1480,7 @@ void Editor::draw_assets_ui() {
 
     if (icon_file_tex.id == 0) icon_file_tex = LoadTexture("assets/file.png");
     if (icon_folder_tex.id == 0) icon_folder_tex = LoadTexture("assets/folder.png");
+    if (icon_full_folder_tex.id == 0) icon_full_folder_tex = LoadTexture("assets/full_folder.png");
 
     static ImVec2 selection_start;
     static ImVec2 selection_end;
@@ -1709,8 +1711,15 @@ void Editor::draw_assets_ui() {
 
             ImGui::SetCursorScreenPos(pos);
             if (entry.is_directory) {
-                if (icon_folder_tex.id != 0) ImGui::Image((void*)(intptr_t)icon_folder_tex.id, ImVec2(icon_size, icon_size));
-                else ImGui::Button("Folder", ImVec2(icon_size, icon_size));
+                if (fs::is_empty(current_asset_path / entry.filename)) {
+                    if (icon_folder_tex.id != 0) ImGui::Image((void*)(intptr_t)icon_folder_tex.id, ImVec2(icon_size, icon_size));
+                    else ImGui::Button("Folder", ImVec2(icon_size, icon_size));
+                }
+
+                else {
+                    if (icon_full_folder_tex.id != 0) ImGui::Image((void*)(intptr_t)icon_full_folder_tex.id, ImVec2(icon_size, icon_size));
+                    else ImGui::Button("Folder", ImVec2(icon_size, icon_size));
+                }
             }
             else if (entry.is_image) {
                 std::string full = (current_asset_path / entry.filename).string();
