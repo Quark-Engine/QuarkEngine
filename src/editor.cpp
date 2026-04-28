@@ -46,6 +46,9 @@ static Vector3 viewer_model_center = { 0, 0, 0 };
 static Vector3 viewer_model_rotation = { 0, 0, 0 };
 static float viewer_phi = 20.0f, viewer_theta = 45.0f, viewer_radius = 5.0f;
 
+static Texture icon_file_tex = {0};
+static Texture icon_folder_tex = {0};
+
 const float icon_size = 64.0f;
 const float padding = 10.0f;
 const float cell_size = icon_size + padding;
@@ -1474,6 +1477,9 @@ void Editor::draw_assets_ui() {
     ImGui::SetNextWindowPos(ImVec2(5, 550), ImGuiCond_Once);
     ImGui::Begin("Assets", nullptr, ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoMove);
 
+    if (icon_file_tex.id == 0) icon_file_tex = LoadTexture("assets/file.png");
+    if (icon_folder_tex.id == 0) icon_folder_tex = LoadTexture("assets/folder.png");
+
     static ImVec2 selection_start;
     static ImVec2 selection_end;
     static bool selecting = false;
@@ -1702,7 +1708,10 @@ void Editor::draw_assets_ui() {
             }
 
             ImGui::SetCursorScreenPos(pos);
-            if (entry.is_directory) ImGui::Button("Folder", ImVec2(icon_size, icon_size));
+            if (entry.is_directory) {
+                if (icon_folder_tex.id != 0) ImGui::Image((void*)(intptr_t)icon_folder_tex.id, ImVec2(icon_size, icon_size));
+                else ImGui::Button("Folder", ImVec2(icon_size, icon_size));
+            }
             else if (entry.is_image) {
                 std::string full = (current_asset_path / entry.filename).string();
 
@@ -1725,17 +1734,23 @@ void Editor::draw_assets_ui() {
                         preview_tex = create_model_preview(*asset, full);
                         if (preview_tex.id != 0) {
                             model_preview_cache[full] = preview_tex;
-                        } else {
+                        } 
+                        
+                        else {
                             load_failed = true;
                         }
-                    } else {
+                    } 
+                    
+                    else {
                         load_failed = true;
                     }
                 }
                 
                 if (preview_tex.id != 0) {
                     ImGui::Image((void*)(intptr_t)preview_tex.id, ImVec2(icon_size, icon_size));
-                } else {
+                } 
+                
+                else {
                     ImDrawList* draw_list = ImGui::GetWindowDrawList();
                     ImU32 bg_color = load_failed ? IM_COL32(80, 80, 90, 255) : IM_COL32(100, 100, 120, 255);
                     draw_list->AddRectFilled(pos, ImVec2(pos.x + icon_size, pos.y + icon_size), bg_color);
@@ -1756,9 +1771,13 @@ void Editor::draw_assets_ui() {
             }
         
             else {
-                std::string ext = entry.extension;
-                if (ext.empty()) ext = "file";
-                ImGui::Button(ext.c_str(), ImVec2(icon_size, icon_size));
+                if (icon_file_tex.id != 0)
+                    ImGui::Image((void*)(intptr_t)icon_file_tex.id, ImVec2(icon_size, icon_size));
+                else {
+                    std::string ext = entry.extension;
+                    if (ext.empty()) ext = "file";
+                    ImGui::Button(ext.c_str(), ImVec2(icon_size, icon_size));
+                }
             }
 
             if (!entry.is_directory && !entry.extension.empty()) {
