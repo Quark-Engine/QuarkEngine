@@ -12,12 +12,14 @@
     #define WIN32_LEAN_AND_MEAN
     #define CloseWindow WinAPICloseWindow
     #define ShowCursor WinAPIShowCursor
+    #define Rectangle WinAPIRectangle
 
     #include <windows.h>
     #include <shellapi.h>
 
     #undef CloseWindow
     #undef ShowCursor
+    #undef Rectangle
 #endif
 #include <algorithm>
 #include <cfloat>
@@ -33,6 +35,14 @@ static std::unordered_map<std::string, Texture> tex_cache;
 static std::unordered_map<std::string, Texture> model_preview_cache;
 static std::unordered_map<std::string, RenderTexture2D> model_render_cache;
 
+static bool show_model_viewer = false;
+static Model viewer_model = { 0 };
+static RenderTexture2D viewer_rt = { 0 };
+static Vector3 viewer_target = { 0, 0, 0 };
+static Vector3 viewer_model_center = { 0, 0, 0 };
+static Vector3 viewer_model_rotation = { 0, 0, 0 };
+static float viewer_phi = 20.0f, viewer_theta = 45.0f, viewer_radius = 5.0f;
+
 const float icon_size = 64.0f;
 const float padding = 10.0f;
 const float cell_size = icon_size + padding;
@@ -45,6 +55,85 @@ struct LocalEntry {
     Texture texture;
     std::string extension;
 };
+
+static void draw_model_viewer_window() {
+    if (!show_model_viewer) {
+        if (viewer_model.meshCount > 0) {
+            UnloadModel(viewer_model);
+            viewer_model = { 0 };
+        }
+        return;
+    }
+
+    ImGui::SetNextWindowSize(ImVec2(600, 450), ImGuiCond_FirstUseEver);
+    if (ImGui::Begin("Model Preview", &show_model_viewer)) {
+        ImVec2 size = ImGui::GetContentRegionAvail();
+        if (size.x < 1) size.x = 1;
+        if (size.y < 1) size.y = 1;
+
+        if (viewer_rt.id == 0 || viewer_rt.texture.width != (int)size.x || viewer_rt.texture.height != (int)size.y) {
+            if (viewer_rt.id != 0) UnloadRenderTexture(viewer_rt);
+            viewer_rt = LoadRenderTexture((int)size.x, (int)size.y);
+        }
+
+        ImVec2 viewport_pos = ImGui::GetCursorScreenPos();
+        ImGui::InvisibleButton("ModelViewport", size, ImGuiButtonFlags_MouseButtonLeft | ImGuiButtonFlags_MouseButtonRight);
+        bool is_hovered = ImGui::IsItemHovered();
+        bool is_active = ImGui::IsItemActive();
+
+        if (is_hovered) {
+            viewer_radius -= ImGui::GetIO().MouseWheel * 1.5f;
+            if (viewer_radius < 0.1f) viewer_radius = 0.1f;
+        }
+
+        if (is_active) {
+            ImVec2 delta = ImGui::GetIO().MouseDelta;
+
+            if (ImGui::IsMouseDown(ImGuiMouseButton_Left)) {
+                viewer_model_rotation.y += delta.x * 0.5f;
+                viewer_model_rotation.x += delta.y * 0.5f;
+            }
+
+            if (ImGui::IsMouseDown(ImGuiMouseButton_Right)) {
+                viewer_theta -= delta.x * 0.5f; 
+                viewer_phi -= delta.y * 0.5f;
+            }
+
+
+            if (viewer_phi > 89.0f) viewer_phi = 89.0f;
+            if (viewer_phi < -89.0f) viewer_phi = -89.0f;
+        }
+
+        Camera3D cam = { 0 };
+        cam.fovy = 45.0f;
+        cam.projection = CAMERA_PERSPECTIVE;
+        cam.target = viewer_target;
+        cam.up = { 0, 1, 0 };
+        cam.position.x = viewer_target.x + viewer_radius * cosf(viewer_phi * DEG2RAD) * sinf(viewer_theta * DEG2RAD);
+        cam.position.y = viewer_target.y + viewer_radius * sinf(viewer_phi * DEG2RAD);
+        cam.position.z = viewer_target.z + viewer_radius * cosf(viewer_phi * DEG2RAD) * cosf(viewer_theta * DEG2RAD);
+
+        BeginTextureMode(viewer_rt);
+        ClearBackground({ 40, 40, 45, 255 });
+        BeginMode3D(cam);
+        if (viewer_model.meshCount > 0) {
+            Matrix matCenter = MatrixTranslate(-viewer_model_center.x, -viewer_model_center.y, -viewer_model_center.z);
+            Matrix matRotation = MatrixRotateXYZ({viewer_model_rotation.x * DEG2RAD, viewer_model_rotation.y * DEG2RAD, 0});
+            viewer_model.transform = MatrixMultiply(matCenter, matRotation);
+
+            DrawModel(viewer_model, { 0, 0, 0 }, 1.0f, WHITE);
+            DrawModelWires(viewer_model, { 0, 0, 0 }, 1.0f, DARKGRAY);
+        }
+        DrawGrid(10, 1.0f);
+        EndMode3D();
+        EndTextureMode();
+
+        ImGui::SetCursorScreenPos(viewport_pos);
+        Rectangle src = { 0, 0, (float)viewer_rt.texture.width, -(float)viewer_rt.texture.height };
+        rlImGuiImageRect(&viewer_rt.texture, (int)size.x, (int)size.y, src);
+    }
+    ImGui::End();
+}
 
 static void assign_entity_name(Entity& entity, const char* new_name) {
     if (!new_name || new_name[0] == '\0') return;
@@ -614,6 +703,7 @@ void Editor::draw_gizmo(Camera3D camera) {
 
     was_using = ImGuizmo::IsUsing();
 }
+
 
 void Editor::handle_scene_asset_drop(Camera3D camera) {
     if (!scene_asset_dragging) return;
@@ -1275,6 +1365,7 @@ void Editor::draw_ui(Shader shader) {
     ImGui::End();
 
     draw_assets_ui();
+    draw_model_viewer_window();
 }
 
 void Editor::draw_assets_ui() {
@@ -1426,17 +1517,41 @@ void Editor::draw_assets_ui() {
 
             if (!entry.is_directory && ImGui::IsItemHovered() && ImGui::IsMouseDoubleClicked(0)) {
                 fs::path full_path = current_asset_path / entry.filename;
-#ifdef _WIN32
-                ShellExecuteA(NULL, "open", full_path.string().c_str(), NULL, NULL, SW_SHOWNORMAL);
-#elif __APPLE__
-                std::string command = "open \"" + full_path.string() + "\"";
-                system(command.c_str());
-#elif __linux__
-                std::string command = "xdg-open \"" + full_path.string() + "\"";
-                system(command.c_str());
-#endif
-            }
+                
+                if (entry.is_model) {
+                    ModelAsset* asset = find_asset_by_path(full_path, project_path);
+                    if (asset) {
+                        if (viewer_model.meshCount > 0) UnloadModel(viewer_model);
+                        if (load_model_instance(*asset, viewer_model)) {
+                            show_model_viewer = true;
+                            viewer_radius = 5.0f;
+                            viewer_phi = 20.0f;
+                            viewer_theta = 45.0f;
+                            viewer_target = { 0, 0, 0 };
+                            viewer_model_rotation = { 0, 0, 0 };
 
+                            BoundingBox bb = GetModelBoundingBox(viewer_model);
+                            viewer_model_center = {
+                                (bb.min.x + bb.max.x) * 0.5f,
+                                (bb.min.y + bb.max.y) * 0.5f,
+                                (bb.min.z + bb.max.z) * 0.5f
+                            };
+                        }
+                    }
+                }
+                else {
+#ifdef _WIN32
+                    ShellExecuteA(NULL, "open", full_path.string().c_str(), NULL, NULL, SW_SHOWNORMAL);
+#elif __APPLE__
+                    std::string command = "open \"" + full_path.string() + "\"";
+                    system(command.c_str());
+#elif __linux__
+                    std::string command = "xdg-open \"" + full_path.string() + "\"";
+                    system(command.c_str());
+#endif
+                }
+            }
+            
             if (ImGui::BeginPopupContextItem("AssetContext")) {
                 if (ImGui::MenuItem("Delete")) {
                     save_state();
