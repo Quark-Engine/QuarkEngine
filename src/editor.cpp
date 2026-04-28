@@ -32,6 +32,9 @@ static char rename_buf[128] = "";
 static bool scene_asset_dragging = false;
 static std::string dragged_scene_asset_name;
 static std::unordered_map<std::string, Texture> tex_cache;
+static bool show_about_window = false;
+static bool has_clipboard = false;
+static Entity clipboard_data;
 static std::unordered_map<std::string, Texture> model_preview_cache;
 static std::unordered_map<std::string, RenderTexture2D> model_render_cache;
 
@@ -733,17 +736,98 @@ void Editor::handle_scene_asset_drop(Camera3D camera) {
 void Editor::draw_ui(Shader shader) {
     if (ImGui::BeginMainMenuBar()) {
         if (ImGui::BeginMenu("File")) {
-
             if (ImGui::MenuItem("Save", "Ctrl+S")) {
                 project_save(project_path, scene);
+            }
+            ImGui::Separator();
+            if (ImGui::MenuItem("Exit")) {
+                CloseWindow();
+            }
+            ImGui::EndMenu();
+        }
+
+        if (ImGui::BeginMenu("Edit")) {
+            if (ImGui::MenuItem("Undo", "Ctrl+Z")) undo();
+            if (ImGui::MenuItem("Redo", "Ctrl+Y")) redo();
+            
+            ImGui::Separator();
+            
+            Entity* e = scene.get_selected();
+            if (ImGui::MenuItem("Copy", "Ctrl+C", false, e != nullptr)) {
+                clipboard_data = *e;
+                has_clipboard = true;
+            }
+            
+            if (ImGui::MenuItem("Paste", "Ctrl+V", false, has_clipboard)) {
+                ModelAsset* asset = find_asset_by_name(clipboard_data.asset_name);
+                if (asset) {
+                    save_state();
+                    Entity pasted = make_entity_from_asset(scene, *asset);
+                    pasted.position = clipboard_data.position;
+                    pasted.rotation = clipboard_data.rotation;
+                    pasted.scale = clipboard_data.scale;
+                    pasted.color = clipboard_data.color;
+                    pasted.outline_color = clipboard_data.outline_color;
+                    pasted.has_light = clipboard_data.has_light;
+                    pasted.light = clipboard_data.light;
+                    pasted.light_created = false;
+                    scene.entities.push_back(pasted);
+                    scene.selected = (int)scene.entities.size() - 1;
+                }
+            }
+
+            if (ImGui::MenuItem("Duplicate", "Ctrl+D", false, e != nullptr)) {
+                save_state();
+                Entity ent_copy = *e;
+                ent_copy.id = static_cast<int>(scene.entities.size());
+                ent_copy.name = scene.make_default_name_for(ent_copy);
+                if (ent_copy.has_light) {
+                    ent_copy.light_created = false;
+                    ent_copy.light.id = -1;
+                    ent_copy.light.light = { 0 };
+                }
+                scene.entities.push_back(ent_copy);
+                scene.selected = (int)scene.entities.size() - 1;
             }
 
             ImGui::Separator();
 
-            if (ImGui::MenuItem("Exit")) {
-                CloseWindow();
+            if (ImGui::MenuItem("Delete", "Del", false, e != nullptr)) {
+                save_state();
+                int i = scene.selected;
+                if (e->has_light && e->light_created) {
+                    e->light.enabled = false;
+                    if (e->light.id != -1) update_lighting(shader, e->light);
+                    free_light_id(e->light.id);
+                }
+                scene.entities.erase(scene.entities.begin() + i);
+                scene.selected = -1;
             }
 
+            ImGui::Separator();
+            if (ImGui::MenuItem("Preferences")) { /* TODO */ }
+            ImGui::EndMenu();
+        }
+
+        if (ImGui::BeginMenu("Create")) {
+            for (auto& a : assets) {
+                if (!a.is_procedural) continue;
+                if (ImGui::MenuItem(a.name.c_str())) {
+                    save_state();
+                    Entity new_ent = make_entity_from_asset(scene, a);
+                    if (has_valid_model_data(new_ent.model)) {
+                        scene.entities.push_back(new_ent);
+                        scene.selected = (int)scene.entities.size() - 1;
+                    }
+                }
+            }
+            ImGui::EndMenu();
+        }
+
+        if (ImGui::BeginMenu("Help")) {
+            if (ImGui::MenuItem("About")) {
+                show_about_window = true;
+            }
             ImGui::EndMenu();
         }
 
@@ -1366,6 +1450,23 @@ void Editor::draw_ui(Shader shader) {
 
     draw_assets_ui();
     draw_model_viewer_window();
+
+    if (show_about_window) {
+        ImGui::OpenPopup("About Quark Engine");
+        show_about_window = false;
+    }
+
+    if (ImGui::BeginPopupModal("About Quark Engine", nullptr, ImGuiWindowFlags_AlwaysAutoResize)) {
+        ImGui::Text("Quark Engine v1.0");
+        ImGui::Separator();
+        ImGui::Text("Raylib Version: %s", RAYLIB_VERSION);
+        ImGui::Text("ImGui Version: %s", IMGUI_VERSION);
+        ImGui::Spacing();
+        if (ImGui::Button("Close", ImVec2(120, 0))) {
+            ImGui::CloseCurrentPopup();
+        }
+        ImGui::EndPopup();
+    }
 }
 
 void Editor::draw_assets_ui() {
