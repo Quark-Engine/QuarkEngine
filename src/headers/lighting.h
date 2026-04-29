@@ -3,6 +3,11 @@
 #include "rlights.h"
 #include <string>
 
+#define LIGHT_POINT       0
+#define LIGHT_DIRECTIONAL 1
+#define LIGHT_SPOT        2
+#define LIGHT_AREA        3
+
 struct Lighting {
     int id = -1;
 
@@ -12,6 +17,9 @@ struct Lighting {
 
     Color color = WHITE;
     bool enabled;
+
+    float spot_angle;
+    float spot_angle_loc = -1;
 
     float intensity = 1.0f;
     float range = 5.0f;

@@ -409,14 +409,10 @@ static Model load_obj_model_fallback(const std::string& filepath, bool& ok) {
     std::vector<float> out_normals;
 
     std::string line;
-    std::string mtl_filename;
     while (std::getline(input, line)) {
         if (line.empty() || line[0] == '#') continue;
 
-        size_t first_non_space = line.find_first_not_of(" \t\r\n");
-        if (first_non_space == std::string::npos) continue;
-
-        std::istringstream iss(line.substr(first_non_space));
+        std::istringstream iss(line);
         std::string type;
         iss >> type;
 
@@ -433,8 +429,6 @@ static Model load_obj_model_fallback(const std::string& filepath, bool& ok) {
             Vector3 vn = {0};
             iss >> vn.x >> vn.y >> vn.z;
             normals.push_back(vn);
-        } else if (type == "mtllib") {
-            iss >> mtl_filename;
         } else if (type == "f") {
             std::vector<ObjVertexKey> face;
             std::string token;
@@ -501,9 +495,9 @@ static Model load_obj_model_fallback(const std::string& filepath, bool& ok) {
     mesh.vertexCount = static_cast<int>(out_vertices.size() / 3);
     mesh.triangleCount = mesh.vertexCount / 3;
 
-    mesh.vertices = static_cast<float*>(MemAlloc(static_cast<unsigned int>(out_vertices.size()) * sizeof(float)));
-    mesh.texcoords = static_cast<float*>(MemAlloc(static_cast<unsigned int>(out_texcoords.size()) * sizeof(float)));
-    mesh.normals = static_cast<float*>(MemAlloc(static_cast<unsigned int>(out_normals.size()) * sizeof(float)));
+    mesh.vertices = static_cast<float*>(MemAlloc(static_cast<unsigned int>(out_vertices.size() * sizeof(float))));
+    mesh.texcoords = static_cast<float*>(MemAlloc(static_cast<unsigned int>(out_texcoords.size() * sizeof(float))));
+    mesh.normals = static_cast<float*>(MemAlloc(static_cast<unsigned int>(out_normals.size() * sizeof(float))));
 
     if (!mesh.vertices || !mesh.texcoords || !mesh.normals) {
         if (mesh.vertices) MemFree(mesh.vertices);
@@ -521,106 +515,12 @@ static Model load_obj_model_fallback(const std::string& filepath, bool& ok) {
     Model model = LoadModelFromMesh(mesh);
     ok = (model.meshCount > 0 && model.meshes != nullptr);
 
-    if (ok) {
-        if (model.materialCount == 0) {
-            model.materials = static_cast<Material*>(MemAlloc(sizeof(Material)));
-            model.materials[0] = LoadMaterialDefault();
-            model.materialCount = 1;
-        }
-
-        if (!mtl_filename.empty()) {
-            std::filesystem::path obj_path(filepath);
-            std::filesystem::path mtl_path = obj_path.parent_path() / mtl_filename;
-
-            std::ifstream mtl_input(mtl_path);
-            if (mtl_input.is_open()) {
-                TraceLog(LOG_INFO, "Loading MTL file: %s", mtl_path.string().c_str());
-                
-                Color diffuse_color = WHITE;
-                Color ambient_color = WHITE;
-                Color specular_color = WHITE;
-                std::string texture_filename;
-                float shininess = 32.0f;
-
-                std::string mtl_line;
-                while (std::getline(mtl_input, mtl_line)) {
-                    if (mtl_line.empty() || mtl_line[0] == '#') continue;
-
-                    size_t m_first = mtl_line.find_first_not_of(" \t\r\n");
-                    if (m_first == std::string::npos) continue;
-
-                    std::istringstream mtl_iss(mtl_line.substr(m_first));
-                    std::string mtl_type;
-                    mtl_iss >> mtl_type;
-
-                    if (mtl_type == "Kd") {
-                        float r = 1.0f, g = 1.0f, b = 1.0f;
-                        mtl_iss >> r >> g >> b;
-                        diffuse_color = {
-                            static_cast<unsigned char>(r * 255),
-                            static_cast<unsigned char>(g * 255),
-                            static_cast<unsigned char>(b * 255),
-                            255
-                        };
-                    } 
-                    else if (mtl_type == "Ka") {
-                        float r = 1.0f, g = 1.0f, b = 1.0f;
-                        mtl_iss >> r >> g >> b;
-                        ambient_color = {
-                            static_cast<unsigned char>(r * 255),
-                            static_cast<unsigned char>(g * 255),
-                            static_cast<unsigned char>(b * 255),
-                            255
-                        };
-                    }
-                    else if (mtl_type == "Ks") {
-                        float r = 1.0f, g = 1.0f, b = 1.0f;
-                        mtl_iss >> r >> g >> b;
-                        specular_color = {
-                            static_cast<unsigned char>(r * 255),
-                            static_cast<unsigned char>(g * 255),
-                            static_cast<unsigned char>(b * 255),
-                            255
-                        };
-                    }
-                    else if (mtl_type == "Ns") {
-                        mtl_iss >> shininess;
-                    }
-                    else if (mtl_type == "map_Kd") {
-                        mtl_iss >> texture_filename;
-                    }
-                }
-
-                model.materials[0].maps[MATERIAL_MAP_DIFFUSE].color = diffuse_color;
-
-                if (!texture_filename.empty()) {
-                    std::filesystem::path tex_path = obj_path.parent_path() / texture_filename;
-                    if (std::filesystem::exists(tex_path)) {
-                        Texture2D loaded_tex = LoadTexture(tex_path.string().c_str());
-                        if (loaded_tex.id > 0) {
-                            model.materials[0].maps[MATERIAL_MAP_DIFFUSE].texture = loaded_tex;
-                            TraceLog(LOG_INFO, "Loaded texture for OBJ: %s", tex_path.string().c_str());
-                        } else {
-                            TraceLog(LOG_WARNING, "Failed to load texture: %s", tex_path.string().c_str());
-                        }
-                    } else {
-                        TraceLog(LOG_WARNING, "Texture file not found: %s", tex_path.string().c_str());
-                    }
-                }
-
-                TraceLog(LOG_INFO, "Loaded MTL material: Kd=(%d,%d,%d), has_texture=%s", 
-                    diffuse_color.r, diffuse_color.g, diffuse_color.b,
-                    !texture_filename.empty() ? "yes" : "no");
-            } else {
-                TraceLog(LOG_WARNING, "Failed to open MTL file: %s", mtl_path.string().c_str());
-            }
-        }
-        
-        TraceLog(LOG_INFO, "Loaded OBJ model via fallback parser: %s", filepath.c_str());
-    } else {
+    if (!ok) {
         TraceLog(LOG_WARNING, "Failed to build OBJ model: %s", filepath.c_str());
         return {0};
     }
+
+    TraceLog(LOG_INFO, "Loaded OBJ model via fallback parser: %s", filepath.c_str());
     return model;
 }
 
