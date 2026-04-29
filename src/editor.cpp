@@ -7,6 +7,8 @@
 #include "headers/ImGuizmo.h"
 #include "headers/project.h"
 #include <cstdlib>
+#include <fstream>
+#include <sstream>
 #ifdef _WIN32
     #define NOMINMAX
     #define WIN32_LEAN_AND_MEAN
@@ -41,6 +43,14 @@ static std::unordered_map<std::string, RenderTexture2D> model_render_cache;
 static bool show_model_viewer = false;
 static Model viewer_model = { 0 };
 static RenderTexture2D viewer_rt = { 0 };
+static bool show_material_viewer = false;
+static int material_preview_primitive = 0;
+static Color material_albedo = WHITE;
+static float material_albedo_f[4] = {1,1,1,1};
+static float material_brightness = 1.0f;
+static Texture2D material_texture = {0};
+static Model viewer_mat_sphere = { 0 };
+static RenderTexture2D viewer_mat_rt = { 0 };
 static Vector3 viewer_target = { 0, 0, 0 };
 static Vector3 viewer_model_center = { 0, 0, 0 };
 static Vector3 viewer_model_rotation = { 0, 0, 0 };
@@ -59,6 +69,7 @@ struct LocalEntry {
     bool is_directory;
     bool is_image;
     bool is_model;
+    bool is_material;
     Texture texture;
     std::string extension;
 };
@@ -106,7 +117,6 @@ static void draw_model_viewer_window() {
                 viewer_phi -= delta.y * 0.5f;
             }
 
-
             if (viewer_phi > 89.0f) viewer_phi = 89.0f;
             if (viewer_phi < -89.0f) viewer_phi = -89.0f;
         }
@@ -139,6 +149,176 @@ static void draw_model_viewer_window() {
         Rectangle src = { 0, 0, (float)viewer_rt.texture.width, -(float)viewer_rt.texture.height };
         rlImGuiImageRect(&viewer_rt.texture, (int)size.x, (int)size.y, src);
     }
+    ImGui::End();
+}
+
+static void apply_material_settings() {
+    if (viewer_mat_sphere.meshCount == 0) return;
+
+    Material& mat = viewer_mat_sphere.materials[0];
+
+    Color finalColor = {
+        (unsigned char)(material_albedo.r * material_brightness),
+        (unsigned char)(material_albedo.g * material_brightness),
+        (unsigned char)(material_albedo.b * material_brightness),
+        material_albedo.a
+    };
+
+    mat.maps[MATERIAL_MAP_DIFFUSE].color = finalColor;
+
+    if (material_texture.id != 0) {
+        mat.maps[MATERIAL_MAP_DIFFUSE].texture = material_texture;
+    }
+}
+
+static void rebuild_material_preview_mesh() {
+    if (viewer_mat_sphere.meshCount > 0) {
+        UnloadModel(viewer_mat_sphere);
+        viewer_mat_sphere = {0};
+    }
+
+    Mesh mesh = {0};
+
+    switch (material_preview_primitive) {
+        case 0: mesh = GenMeshSphere(1.0f, 64, 64); break;
+        case 1: mesh = GenMeshCube(2.0f, 2.0f, 2.0f); break;
+        case 2: mesh = GenMeshPlane(3.0f, 3.0f, 1, 1); break;
+    }
+
+    viewer_mat_sphere = LoadModelFromMesh(mesh);
+
+    apply_material_settings();
+}
+
+static void draw_material_viewer_window() {
+    if (!show_material_viewer) {
+        material_preview_primitive = 0;
+
+        if (viewer_mat_sphere.meshCount > 0) {
+            UnloadModel(viewer_mat_sphere);
+            viewer_mat_sphere = { 0 };
+        }
+        return;
+    }
+
+    ImGui::SetNextWindowSize(ImVec2(800, 500), ImGuiCond_FirstUseEver);
+
+    if (ImGui::Begin("Material Editor", &show_material_viewer)) {
+
+        ImGui::Columns(2, nullptr, true);
+
+        ImGui::BeginChild("MaterialSettings");
+
+        ImGui::Text("Material");
+
+        if (ImGui::ColorEdit4("Albedo", material_albedo_f)) {
+            material_albedo = {
+                (unsigned char)(material_albedo_f[0] * 255),
+                (unsigned char)(material_albedo_f[1] * 255),
+                (unsigned char)(material_albedo_f[2] * 255),
+                (unsigned char)(material_albedo_f[3] * 255)
+            };
+
+            apply_material_settings();
+        }
+
+        if (ImGui::SliderFloat("Brightness", &material_brightness, 0.1f, 2.0f)) {
+            apply_material_settings();
+        }
+
+        ImGui::Separator();
+
+        ImGui::Text("Primitive");
+
+        const char* primitives[] = { "Sphere", "Cube", "Plane" };
+        if (ImGui::Combo("Mesh", &material_preview_primitive, primitives, 3)) {
+            rebuild_material_preview_mesh();
+        }
+
+        ImGui::EndChild();
+
+        ImGui::NextColumn();
+
+        ImVec2 size = ImGui::GetContentRegionAvail();
+        if (size.x < 1) size.x = 1;
+        if (size.y < 1) size.y = 1;
+
+        if (viewer_mat_rt.id == 0 ||
+            viewer_mat_rt.texture.width != (int)size.x ||
+            viewer_mat_rt.texture.height != (int)size.y) {
+
+            if (viewer_mat_rt.id != 0) UnloadRenderTexture(viewer_mat_rt);
+            viewer_mat_rt = LoadRenderTexture((int)size.x, (int)size.y);
+        }
+
+        ImVec2 viewport_pos = ImGui::GetCursorScreenPos();
+
+        ImGui::InvisibleButton("Viewport", size,
+            ImGuiButtonFlags_MouseButtonLeft | ImGuiButtonFlags_MouseButtonRight);
+
+        if (ImGui::IsItemHovered()) {
+            viewer_radius -= ImGui::GetIO().MouseWheel * 0.5f;
+            if (viewer_radius < 0.1f) viewer_radius = 0.1f;
+        }
+
+        if (ImGui::IsItemActive()) {
+            ImVec2 delta = ImGui::GetIO().MouseDelta;
+
+            if (ImGui::IsMouseDown(ImGuiMouseButton_Left)) {
+                viewer_model_rotation.y += delta.x * 0.5f;
+                viewer_model_rotation.x += delta.y * 0.5f;
+            }
+
+            if (ImGui::IsMouseDown(ImGuiMouseButton_Right)) {
+                viewer_theta -= delta.x * 0.5f; 
+                viewer_phi -= delta.y * 0.5f;
+            }
+
+            viewer_phi = Clamp(viewer_phi, -89.0f, 89.0f);
+        }
+
+        Camera3D cam = { 0 };
+        cam.fovy = 45.0f;
+        cam.projection = CAMERA_PERSPECTIVE;
+        cam.target = viewer_target;
+        cam.up = { 0, 1, 0 };
+
+        cam.position.x = viewer_target.x + viewer_radius * cosf(viewer_phi * DEG2RAD) * sinf(viewer_theta * DEG2RAD);
+        cam.position.y = viewer_target.y + viewer_radius * sinf(viewer_phi * DEG2RAD);
+        cam.position.z = viewer_target.z + viewer_radius * cosf(viewer_phi * DEG2RAD) * cosf(viewer_theta * DEG2RAD);
+
+        BeginTextureMode(viewer_mat_rt);
+        ClearBackground({ 40, 40, 45, 255 });
+
+        BeginMode3D(cam);
+
+        if (viewer_mat_sphere.meshCount > 0) {
+            Matrix rot = MatrixRotateXYZ({
+                viewer_model_rotation.x * DEG2RAD,
+                viewer_model_rotation.y * DEG2RAD,
+                0
+            });
+
+            viewer_mat_sphere.transform = rot;
+            DrawModel(viewer_mat_sphere, {0,0,0}, 1.0f, WHITE);
+        }
+
+        EndMode3D();
+        EndTextureMode();
+
+        ImGui::SetCursorScreenPos(viewport_pos);
+
+        Rectangle src = {
+            0, 0,
+            (float)viewer_mat_rt.texture.width,
+            -(float)viewer_mat_rt.texture.height
+        };
+
+        rlImGuiImageRect(&viewer_mat_rt.texture, (int)size.x, (int)size.y, src);
+
+        ImGui::Columns(1);
+    }
+
     ImGui::End();
 }
 
@@ -600,7 +780,7 @@ void Editor::handle_input() {
     static bool redo_key_was_pressed = false;
     static float undo_hold_start = 0;
     static float redo_hold_start = 0;
-    float current_time = GetTime();
+    float current_time = static_cast<float>(GetTime());
     
     if (ctrl && IsKeyDown(KEY_Z)) {
         if (!undo_key_was_pressed) {
@@ -1454,6 +1634,7 @@ void Editor::draw_ui(Shader shader) {
 
     draw_assets_ui();
     draw_model_viewer_window();
+    draw_material_viewer_window();
 
     if (show_about_window) {
         ImGui::OpenPopup("About Quark Engine");
@@ -1531,14 +1712,19 @@ void Editor::draw_assets_ui() {
     for (auto& p : fs::directory_iterator(current_asset_path, ec_dir)) {
         LocalEntry e;
         e.filename = p.path().filename().string();
-        e.is_directory = p.is_directory();
-        e.is_image = is_image_file(p.path());
-        e.is_model = is_model_file(p.path());
 
         fs::path fp = p.path();
         std::string ext = fp.extension().string();
         if (!ext.empty() && ext[0] == '.') ext = ext.substr(1);
+
+        std::transform(ext.begin(), ext.end(), ext.begin(), ::tolower);
+
         e.extension = ext;
+
+        e.is_directory = p.is_directory();
+        e.is_image = is_image_file(p.path());
+        e.is_model = is_model_file(p.path());
+        e.is_material = (e.extension == "mtl");
 
         if (e.is_directory) {
             dirs_list.push_back(e);
@@ -1646,6 +1832,70 @@ void Editor::draw_assets_ui() {
                                 (bb.min.z + bb.max.z) * 0.5f
                             };
                         }
+                    }
+                }
+                else if (entry.is_material) {
+                    fs::path full_path = current_asset_path / entry.filename;
+                    std::ifstream mtl_file(full_path);
+                    if (mtl_file.is_open()) {
+                        if (viewer_mat_sphere.meshCount > 0) UnloadModel(viewer_mat_sphere);
+                        viewer_mat_sphere = LoadModelFromMesh(GenMeshSphere(1.0f, 64, 64));
+                        
+                        Material& mat = viewer_mat_sphere.materials[0];
+                        material_albedo = WHITE;
+                        material_albedo_f[0] = 1.0f; material_albedo_f[1] = 1.0f; 
+                        material_albedo_f[2] = 1.0f; material_albedo_f[3] = 1.0f;
+                        material_brightness = 1.0f;
+                        material_texture = { 0 };
+
+                        std::string mtl_line;
+                        while (std::getline(mtl_file, mtl_line)) {
+                            if (mtl_line.empty() || mtl_line[0] == '#') continue;
+                            
+                            std::istringstream iss(mtl_line);
+                            std::string type;
+                            iss >> type;
+                            
+                            if (type == "Kd") {
+                                float r, g, b;
+                                if (iss >> r >> g >> b) {
+                                    mat.maps[MATERIAL_MAP_DIFFUSE].color = { 
+                                        (unsigned char)(r * 255), 
+                                        (unsigned char)(g * 255), 
+                                        (unsigned char)(b * 255), 255 
+                                    };
+                                    material_albedo = { (unsigned char)(r * 255), (unsigned char)(g * 255), (unsigned char)(b * 255), 255 };
+                                    material_albedo_f[0] = r;
+                                    material_albedo_f[1] = g;
+                                    material_albedo_f[2] = b;
+                                    material_albedo_f[3] = 1.0f;
+                                }
+                            } 
+                            else if (type == "map_Kd") {
+                                std::string tex_name;
+                                if (iss >> tex_name) {
+                                    fs::path tex_path = full_path.parent_path() / tex_name;
+                                    std::string tex_full_str = tex_path.string();
+                                    
+                                    if (tex_cache.find(tex_full_str) == tex_cache.end()) {
+                                        if (fs::exists(tex_path)) {
+                                            tex_cache[tex_full_str] = LoadTexture(tex_full_str.c_str());
+                                        }
+                                    }
+                                    if (tex_cache.count(tex_full_str)) {
+                                        mat.maps[MATERIAL_MAP_DIFFUSE].texture = tex_cache[tex_full_str];
+                                        material_texture = tex_cache[tex_full_str];
+                                    }
+                                }
+                            }
+                        }
+                        rebuild_material_preview_mesh();
+                        show_material_viewer = true;
+                        viewer_radius = 2.5f;
+                        viewer_phi = 20.0f;
+                        viewer_theta = 45.0f;
+                        viewer_target = { 0, 0, 0 };
+                        viewer_model_rotation = { 0, 0, 0 };
                     }
                 }
                 else {
