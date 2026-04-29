@@ -13,17 +13,17 @@ include_directories(
 )
 
 set(SOURCE_FILES
-    src/main.cpp
-    src/editor.cpp
-    src/scene.cpp
     src/camera.cpp
-    src/ImGuizmo.cpp
-    src/tex.cpp
-    src/models.cpp
-    src/rlights.cpp
-    src/lighting.cpp
-    src/project.cpp
+    src/editor.cpp
     src/hub.cpp
+    src/ImGuizmo.cpp
+    src/lighting.cpp
+    src/main.cpp
+    src/models.cpp
+    src/project.cpp
+    src/rlights.cpp
+    src/scene.cpp
+    src/tex.cpp
     quark-libs/imgui/include/imgui.cpp
     quark-libs/imgui/include/imgui_draw.cpp
     quark-libs/imgui/include/imgui_widgets.cpp
