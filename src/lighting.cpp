@@ -65,18 +65,17 @@ Lighting create_lighting(Vector3 pos, Color color)
 
 Light create_light_at_slot(int slot, int type, Vector3 position, Vector3 target, Color color, Shader shader)
 {
-    Light light = { 0 };
-    light.enabled  = true;
-    light.type     = type;
-    light.position = position;
-    light.target   = target;
-    light.color    = color;
-
-    light.enabledLoc  = GetShaderLocation(shader, TextFormat("lights[%i].enabled",  slot));
-    light.typeLoc     = GetShaderLocation(shader, TextFormat("lights[%i].type",      slot));
-    light.positionLoc = GetShaderLocation(shader, TextFormat("lights[%i].position",  slot));
-    light.targetLoc   = GetShaderLocation(shader, TextFormat("lights[%i].target",    slot));
-    light.colorLoc    = GetShaderLocation(shader, TextFormat("lights[%i].color",     slot));
-
+    Light light          = { 0 };
+    light.enabled        = true;
+    light.type           = type;
+    light.position       = position;
+    light.target         = target;
+    light.color          = color;
+    light.enabledLoc     = GetShaderLocation(shader, TextFormat("lights[%i].enabled",    slot));
+    light.typeLoc        = GetShaderLocation(shader, TextFormat("lights[%i].type",       slot));
+    light.positionLoc    = GetShaderLocation(shader, TextFormat("lights[%i].position",   slot));
+    light.targetLoc      = GetShaderLocation(shader, TextFormat("lights[%i].target",     slot));
+    light.colorLoc       = GetShaderLocation(shader, TextFormat("lights[%i].color",      slot));
+//    light.spot_angle_loc = GetShaderLocation(shader, TextFormat("lights[%i].spotAngle", slot));
     return light;
 }
