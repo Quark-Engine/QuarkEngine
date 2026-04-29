@@ -153,7 +153,7 @@ int main(int argc, char* argv[]) {
 
     Camera3D light_cam = {0};
     light_cam.projection = CAMERA_ORTHOGRAPHIC;
-    light_cam.up = (Vector3){0, 1, 0};
+    light_cam.up = Vector3{0, 1, 0};
     light_cam.fovy = 20.0f;
     light_cam.target = Vector3Zero();
     light_cam.position = Vector3Scale(light_dir, -15.0f);
