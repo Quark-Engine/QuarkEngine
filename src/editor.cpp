@@ -1605,6 +1605,20 @@ void Editor::draw_ui(Shader shader) {
                 }
             }
 
+            const char* light_types[] = { "Directional", "Point", "Spot", "Area" };
+            int light_type = e->light.light.type;
+            if (ImGui::Combo("Light Type", &light_type, light_types, 4)) {
+                save_state();
+                e->light.light.type = light_type;
+                if (e->light_created) update_lighting(shader, e->light);
+            }
+
+            if (light_type == LIGHT_SPOT) {
+                if (ImGui::SliderFloat("Spot Angle", &e->light.spot_angle, 1.0f, 90.0f, "%.1f deg")) {
+                    if (e->light_created) update_lighting(shader, e->light);
+                }
+            }
+
             if (!e->light_created)
             {
                 int new_id = allocate_light_id();
