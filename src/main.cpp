@@ -277,21 +277,33 @@ int main(int argc, char* argv[]) {
 
         Vector3 cam_pos = camera.get_camera().position;
         SetShaderValue(shadowmap_shader, shadowmap_shader.locs[SHADER_LOC_VECTOR_VIEW], &cam_pos, SHADER_UNIFORM_VEC3);
+        
+        Vector3 shadow_light_pos = Vector3Add(scene_center, Vector3Scale(light_dir, -(scene_radius * 2.5f)));
+        Vector3 shadow_light_dir = light_dir;
+        
+        for (const auto& e : editor.scene.entities) {
+            if (e.has_light && e.light_created && e.light.light.type == LIGHT_DIRECTIONAL && e.light.enabled) {
+                shadow_light_dir = Vector3Normalize(Vector3Subtract(e.light.position, e.light.target));
+                shadow_light_pos = Vector3Add(scene_center, Vector3Scale(shadow_light_dir, -(scene_radius * 2.5f)));
+                break;
+            }
+        }
+        
         light_cam.target = scene_center;
-        light_cam.position = Vector3Add(scene_center, Vector3Scale(light_dir, -(scene_radius * 2.5f)));
+        light_cam.position = shadow_light_pos;
         light_cam.fovy = scene_radius * 2.2f;
         
         BeginTextureMode(shadow_map);
-            ClearBackground(WHITE);
+            ClearBackground(BLACK);
             BeginMode3D(light_cam);
-                light_view = rlGetMatrixModelview();
-                light_proj = rlGetMatrixProjection();
                 for (auto& e : editor.scene.entities) {
                     if (!e.shader_assigned || e.model.materialCount > 0 && e.model.materials[0].shader.id != shadowcaster_shader.id) {
                         set_model_shader(e.model, shadowcaster_shader);
                     }
                     draw_entity_with_texture(e);
                 }
+                light_view = rlGetMatrixModelview();
+                light_proj = rlGetMatrixProjection();
             EndMode3D();
         EndTextureMode();
 
@@ -308,7 +320,7 @@ int main(int argc, char* argv[]) {
             SetShaderValueMatrix(shadowmap_shader, light_vp_loc, light_view_proj);
             rlEnableShader(shadowmap_shader.id);
             rlActiveTextureSlot(texture_active_slot);
-            rlEnableTexture(shadow_map.depth.id);
+            rlEnableTexture(shadow_map.texture.id);
             rlSetUniform(shadow_map_loc, &texture_active_slot, SHADER_UNIFORM_INT, 1);
 
             BeginMode3D(camera.get_camera());

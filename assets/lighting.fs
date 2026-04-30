@@ -41,6 +41,7 @@ uniform float emissionPower;
 float ShadowCalc(vec3 normal, vec3 lightDir) {
     vec3 proj = fragPosLightSpace.xyz / fragPosLightSpace.w;
     proj = proj * 0.5 + 0.5;
+    
     if (proj.z > 1.0) return 0.0;
     if (proj.x < 0.0 || proj.x > 1.0 || proj.y < 0.0 || proj.y > 1.0) return 0.0;
 

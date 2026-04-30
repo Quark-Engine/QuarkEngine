@@ -127,6 +127,6 @@ message(STATUS "  PLATFORM=" ${PLATFORM_CPP})
 message(STATUS "  GRAPHICS=" ${GRAPHICS})
 
 # Options if you want to create an installer using CPack
-include(PackConfigurations)
+# include(PackConfigurations)
 
 enable_testing()
