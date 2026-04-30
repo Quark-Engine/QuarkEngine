@@ -1,5 +1,6 @@
 #include "editor_utils.h"
 #include "raylib.h"
+#include <cmath>
 #include <filesystem>
 
 namespace fs = std::filesystem;
