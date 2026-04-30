@@ -20,6 +20,8 @@ add_library(raylib STATIC ${RAYLIB_SRC})
 
 target_include_directories(raylib PUBLIC
     ${CMAKE_SOURCE_DIR}/quark-libs/raylib
+    ${CMAKE_SOURCE_DIR}/quark-libs/raylib/external
+    ${CMAKE_SOURCE_DIR}/quark-libs/raylib/external/glfw/include
 )
 
 target_compile_definitions(raylib PRIVATE PLATFORM_DESKTOP)
