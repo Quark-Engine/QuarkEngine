@@ -9,19 +9,17 @@ struct SceneState {
     int selected;
 };
 
-struct Editor {
-    Scene scene;
-    std::string project_path = "projects/TestProject";
-    int selected_asset_index = -1;
+extern Scene scene;
+extern std::string project_path;
+extern int selected_asset_index;
 
-    std::stack<SceneState> undo_stack;
-    std::stack<SceneState> redo_stack;
+extern std::stack<SceneState> undo_stack;
+extern std::stack<SceneState> redo_stack;
 
-    std::filesystem::path current_asset_path;
-    
-    void handle_input();
-    void handle_scene_asset_drop(Camera3D camera);
-    void save_state();
-    void undo();
-    void redo();
-};
+extern std::filesystem::path current_asset_path;
+
+void handle_input();
+void handle_scene_asset_drop(Camera3D camera);
+void save_state();
+void undo();
+void redo();
