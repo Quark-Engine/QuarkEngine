@@ -88,6 +88,9 @@ void project_save(const std::string& folder_path, const Scene& scene) {
         ej["light_color"]      = color_to_hex(e.light.color);
         ej["light_intensity"]  = e.light.intensity;
         ej["light_range"]      = e.light.range;
+        ej["light_spot_angle"] = e.light.spot_angle;
+        ej["light_target"]     = json::array({ (float)e.light.target.x, (float)e.light.target.y, (float)e.light.target.z });
+        ej["light_rotation"]   = json::array({ (float)e.light.rotation.x, (float)e.light.rotation.y, (float)e.light.rotation.z });
 
         ej["asset_name"]       = e.asset_name;
 
@@ -277,8 +280,17 @@ bool project_load(const std::string& folder_path, Scene& scene, Shader shader) {
         e.has_light = ej["has_light"].get<bool>();
         if (e.has_light) {
             e.light = create_lighting(e.position, hex_to_color(ej["light_color"].get<std::string>()));
-            e.light.intensity = ej["light_intensity"].get<float>();
-            e.light.range     = ej["light_range"].get<float>();
+            e.light.intensity  = ej["light_intensity"].get<float>();
+            e.light.range      = ej["light_range"].get<float>();
+            e.light.spot_angle = ej["light_spot_angle"].get<float>();
+            e.light.target     = { 
+                ej["light_target"][0].get<float>(), 
+                ej["light_target"][1].get<float>(), 
+                ej["light_target"][2].get<float>() };
+            e.light.rotation   = { 
+                ej["light_rotation"][0].get<float>(), 
+                ej["light_rotation"][1].get<float>(), 
+                ej["light_rotation"][2].get<float>() };
 
             int new_id = allocate_light_id();
             if (new_id != -1) {

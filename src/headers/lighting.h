@@ -14,6 +14,7 @@ struct Lighting {
     Light light;
     Vector3 position;
     Vector3 target;
+    Vector3 rotation;
 
     Color color = WHITE;
     bool enabled;

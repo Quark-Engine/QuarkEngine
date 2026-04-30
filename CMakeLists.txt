@@ -26,7 +26,7 @@ set(EDITOR_FILES
 
 set(SOURCE_FILES
     src/camera.cpp
-    src/editor.cpp
+    src/editor/editor.cpp
     src/hub.cpp
     src/ImGuizmo.cpp
     src/lighting.cpp

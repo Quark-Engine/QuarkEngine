@@ -4,14 +4,14 @@
 #include "raymath.h"
 #include "rlgl.h"
 #include "headers/lighting.h"
-#include "headers/editor.h"
+#include "editor/editor.h"
 #include "headers/camera.h"
 #include "headers/project.h"
 #include "headers/hub.h"
 #include "headers/tex.h"
 #include <iostream>
 
-#define SHADOWMAP_RESOLUTION 1024
+#define SHADOWMAP_RESOLUTION 4096
 
 namespace fs = std::filesystem;
 
@@ -208,7 +208,6 @@ int main(int argc, char* argv[]) {
 
         Matrix light_view_proj = MatrixMultiply(light_view, light_proj);
 
-        // PASS 2: main render
         BeginDrawing();
             ClearBackground(DARKGRAY);
             rlImGuiBegin();
@@ -235,6 +234,7 @@ int main(int argc, char* argv[]) {
                         e.light.position       = e.position;
                         e.light.light.position = e.position;
                         e.light.light.color    = e.light.color;
+                        e.light.light.target   = e.light.target;
                         e.light.enabled        = true;
                         update_lighting(shadowmap_shader, e.light);
                     }

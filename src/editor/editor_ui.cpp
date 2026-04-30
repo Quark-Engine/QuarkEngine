@@ -756,6 +756,17 @@ void draw_ui(Editor& editor, Shader shader) {
                 if (entity->light_created) update_lighting(shader, entity->light);
             }
 
+            float target[3] = { entity->light.target.x, entity->light.target.y, entity->light.target.z };
+            static Vector3 last_target = {};
+
+            if (ImGui::DragFloat3("Target", target, 0.1f)) {
+                if (last_target.x != target[0] || last_target.y != target[1] || last_target.z != target[2]) {
+                    editor.save_state();
+                    last_target = { target[0], target[1], target[2] };
+                }
+                entity->light.target = { target[0], target[1], target[2] };
+            }
+
             if (!entity->light_created) {
                 const int new_id = allocate_light_id();
                 if (new_id == -1) {
