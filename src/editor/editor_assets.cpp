@@ -234,7 +234,7 @@ void draw_assets_ui(Editor& editor) {
     ImGui::SetNextWindowSize(ImVec2(1270, 165), ImGuiCond_Once);
     ImGui::SetNextWindowPos(ImVec2(5, 550), ImGuiCond_Once);
     ImGui::Begin("Assets", nullptr, ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoMove);
-
+    
     if (icon_file_tex.id == 0) icon_file_tex = LoadTexture("assets/file.png");
     if (icon_folder_tex.id == 0) icon_folder_tex = LoadTexture("assets/folder.png");
     if (icon_full_folder_tex.id == 0) icon_full_folder_tex = LoadTexture("assets/full_folder.png");
@@ -244,7 +244,11 @@ void draw_assets_ui(Editor& editor) {
     static bool selecting = false;
     static int rename_target = -1;
 
-    if (editor.current_asset_path.empty()) editor.current_asset_path = fs::path(editor.project_path);
+    if (editor.current_asset_path.empty() && !editor.project_path.empty()) {
+        editor.current_asset_path = fs::path(editor.project_path) / "resources";
+        std::error_code ec;
+        fs::create_directories(editor.current_asset_path, ec);
+    }
 
     const ImVec2 window_size = ImGui::GetWindowSize();
     const fs::path project_root = fs::path(editor.project_path);

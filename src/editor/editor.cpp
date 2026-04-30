@@ -108,12 +108,16 @@ void Editor::handle_input() {
         FilePathList dropped = LoadDroppedFiles();
         bool imported_any = false;
 
-        if (current_asset_path.empty()) {
-            current_asset_path = fs::path(project_path);
-        }
-
         std::error_code ec;
-        fs::create_directories(current_asset_path, ec);
+
+        if (current_asset_path.empty()) {
+            if (!project_path.empty()) {
+                current_asset_path = fs::path(project_path) / "resources";
+            } else {
+                current_asset_path = fs::current_path() / "projects" / "default" / "resources";
+            }
+            fs::create_directories(current_asset_path, ec);
+        }
 
         for (unsigned int i = 0; i < dropped.count; i++) {
             imported_any = import_path_to_resources(fs::path(dropped.paths[i]), current_asset_path) || imported_any;

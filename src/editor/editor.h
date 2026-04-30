@@ -7,7 +7,6 @@
 #include <unordered_map>
 
 namespace editor_internal {
-
 extern ImGuizmo::OPERATION gizmo_mode;
 extern int renaming_index;
 extern char rename_buf[128];

@@ -207,6 +207,8 @@ int main(int argc, char* argv[]) {
         }
     }
 
+    project_path = project_resolve_root(project_path);
+
     fs::create_directories(fs::path(project_path) / "resources");
 
     Editor editor;
@@ -250,7 +252,7 @@ int main(int argc, char* argv[]) {
     refresh_assets(project_path);
     refresh_models(project_path, editor.scene);
 
-    if (fs::exists(project_path + "/scene.json"))
+    if (project_is_valid(project_path))
         project_load(project_path, editor.scene, shadowmap_shader);
     else
         project_new(project_path, editor.scene);

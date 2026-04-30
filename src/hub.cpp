@@ -10,6 +10,7 @@
     #define Rectangle WinRectangle
 
     #include <windows.h>
+    #include <commdlg.h>
     #include <shlobj.h>
     #include <ole2.h>
 
@@ -19,6 +20,7 @@
 #endif
 
 #include "hub.h"
+#include "project.h"
 #include "rlImGui.h"
 #include "imgui.h"
 #include "nlohmann/json.hpp"
@@ -71,10 +73,10 @@ static void hub_refresh() {
             f >> j;
             for (auto& entry : j) {
                 std::string path = entry["path"];
-                if (fs::exists(fs::path(path) / "scene.json")) {
+                if (project_is_valid(path)) {
                     HubProject p;
                     p.name = entry["name"];
-                    p.path = path;
+                    p.path = project_resolve_root(path);
                     hub_projects.push_back(p);
                 }
             }
@@ -87,9 +89,8 @@ static void hub_refresh() {
 
 static void hub_create_project(const std::string& name, const std::string& base) {
     fs::path proj = fs::path(base) / name;
-    fs::create_directories(proj / "resources");
-    std::ofstream f(proj / "scene.json");
-    f << "{\n    \"entities\": []\n}\n";
+    Scene empty_scene;
+    project_new(proj.string(), empty_scene);
 
     HubProject p;
     p.name = name;
@@ -146,12 +147,58 @@ static std::string hub_browse_folder() {
 #endif
 }
 
+static std::string hub_browse_project_file() {
+#ifdef _WIN32
+    char path[MAX_PATH] = {};
+    OPENFILENAMEA ofn = {};
+    ofn.lStructSize = sizeof(ofn);
+    ofn.hwndOwner = nullptr;
+    ofn.lpstrFilter = "Quark Project (*.quarkproj)\0*.quarkproj\0All Files (*.*)\0*.*\0";
+    ofn.lpstrFile = path;
+    ofn.nMaxFile = MAX_PATH;
+    ofn.Flags = OFN_FILEMUSTEXIST | OFN_PATHMUSTEXIST;
+    ofn.lpstrDefExt = "quarkproj";
+    if (GetOpenFileNameA(&ofn)) return path;
+    return "";
+#elif __linux__
+    FILE* pipe = popen("zenity --file-selection --file-filter='*.quarkproj' 2>/dev/null", "r");
+    if (!pipe) return "";
+    char result[512] = {};
+    if (fgets(result, sizeof(result), pipe)) {
+        size_t len = strlen(result);
+        if (len > 0 && result[len - 1] == '\n') result[len - 1] = '\0';
+    }
+    pclose(pipe);
+    return result;
+#else
+    return "";
+#endif
+}
+
+static void hub_import_project(const std::string& manifest_or_path) {
+    if (!project_is_valid(manifest_or_path)) return;
+
+    const std::string root_path = project_resolve_root(manifest_or_path);
+    const fs::path root(root_path);
+    const std::string name = root.filename().string().empty() ? root.stem().string() : root.filename().string();
+
+    for (auto& existing : hub_projects) {
+        if (existing.path == root_path) return;
+    }
+
+    HubProject project;
+    project.name = name;
+    project.path = root_path;
+    hub_projects.push_back(project);
+    hub_save_registry();
+}
+
 std::string run_hub() {
     fs::create_directories(HUB_PROJECTS_ROOT);
     if (!fs::exists(HUB_REGISTRY_FILE)) {
         for (auto& entry : fs::directory_iterator(HUB_PROJECTS_ROOT)) {
             if (!entry.is_directory()) continue;
-            if (!fs::exists(entry.path() / "scene.json")) continue;
+            if (!project_is_valid(entry.path().string())) continue;
 
             HubProject p;
             p.name = entry.path().filename().string();
@@ -181,7 +228,16 @@ std::string run_hub() {
         ImGui::Text("QUARK HUB");
         ImGui::SameLine();
         ImGui::TextDisabled("  Project Manager");
-        ImGui::SameLine(ImGui::GetContentRegionAvail().x - 134);
+        ImGui::SameLine(ImGui::GetContentRegionAvail().x - 262);
+
+        if (ImGui::Button("Import Project", ImVec2(120, 28))) {
+            std::string picked = hub_browse_project_file();
+            if (!picked.empty()) {
+                hub_import_project(picked);
+                hub_refresh();
+            }
+        }
+        ImGui::SameLine();
 
         if (ImGui::Button("+ Create Project", ImVec2(134, 28))) {
             memset(hub_create_name, 0, sizeof(hub_create_name));

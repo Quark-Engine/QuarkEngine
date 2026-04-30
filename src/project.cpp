@@ -3,6 +3,7 @@
 #include "headers/lighting.h"
 #include "headers/models.h"
 #include "headers/tex.h"
+#include "editor/editor.h"
 #include "raylib.h"
 #include "nlohmann/json.hpp"
 #include <fstream>
@@ -11,6 +12,8 @@
 
 namespace fs = std::filesystem;
 using json = nlohmann::json;
+
+static const char* QUARK_PROJECT_EXTENSION = ".quarkproj";
 
 static std::string color_to_hex(Color color) {
     char buf[12];
@@ -29,21 +32,135 @@ static Color hex_to_color(const std::string& hex) {
     return color;
 }
 
+static fs::path project_manifest_path_for_root(const fs::path& root_path) {
+    const std::string root_name = root_path.filename().string();
+    const std::string manifest_name = (root_name.empty() ? std::string("project") : root_name) + QUARK_PROJECT_EXTENSION;
+    return root_path / manifest_name;
+}
+
+static fs::path find_project_manifest(const fs::path& root_path) {
+    std::error_code ec;
+
+    if (!fs::exists(root_path, ec) || !fs::is_directory(root_path, ec))
+        return {};
+
+    const fs::path preferred = project_manifest_path_for_root(root_path);
+    if (fs::exists(preferred)) return preferred;
+
+    for (const auto& entry : fs::directory_iterator(root_path, ec)) {
+        if (ec) break;
+        if (!entry.is_regular_file()) continue;
+        if (entry.path().extension() == QUARK_PROJECT_EXTENSION)
+            return entry.path();
+    }
+
+    return {};
+}
+
+static fs::path resolve_project_root_path(const fs::path& input_path) {
+    if (input_path.empty()) return {};
+
+    fs::path p = fs::absolute(input_path);
+
+    std::error_code ec;
+
+    if (fs::is_directory(p, ec)) {
+        return p;
+    }
+
+    if (fs::is_regular_file(p, ec)) {
+        if (p.extension() == QUARK_PROJECT_EXTENSION) {
+            return p.parent_path();
+        }
+
+        return p.parent_path();
+    }
+
+    return p.parent_path();
+}
+
+static bool write_project_manifest(const fs::path& root_path) {
+    fs::create_directories(root_path);
+
+    json manifest;
+    manifest["format"] = "quark-project";
+    manifest["version"] = 1;
+    manifest["name"] = root_path.filename().string();
+    manifest["scene"] = "scene.json";
+    manifest["resources"] = "resources";
+
+    const fs::path manifest_path = project_manifest_path_for_root(root_path);
+    std::ofstream manifest_file(manifest_path);
+    if (!manifest_file.is_open()) return false;
+    manifest_file << manifest.dump(4);
+    return true;
+}
+
+static fs::path resolve_scene_json_path(const fs::path& input_path) {
+    const fs::path root_path = resolve_project_root_path(input_path);
+    if (root_path.empty()) return {};
+
+    if (fs::is_regular_file(input_path) && input_path.extension() == QUARK_PROJECT_EXTENSION) {
+        std::ifstream manifest_file(input_path);
+        if (manifest_file.is_open()) {
+            json manifest;
+            try {
+                manifest_file >> manifest;
+                if (manifest.contains("scene") && manifest["scene"].is_string()) {
+                    return root_path / manifest["scene"].get<std::string>();
+                }
+            } catch (...) {}
+        }
+    }
+
+    const fs::path manifest_path = find_project_manifest(root_path);
+    if (!manifest_path.empty()) {
+        std::ifstream manifest_file(manifest_path);
+        if (manifest_file.is_open()) {
+            json manifest;
+            try {
+                manifest_file >> manifest;
+                if (manifest.contains("scene") && manifest["scene"].is_string()) {
+                    return root_path / manifest["scene"].get<std::string>();
+                }
+            } catch (...) {}
+        }
+    }
+
+    return root_path / "scene.json";
+}
+
+std::string project_resolve_root(const std::string& path) {
+    const fs::path root_path = resolve_project_root_path(fs::path(path));
+    if (root_path.empty()) return {};
+    return fs::absolute(root_path).string();
+}
+
+bool project_is_valid(const std::string& path) {
+    const fs::path input_path(path);
+    const fs::path root_path = resolve_project_root_path(input_path);
+    if (root_path.empty() || !fs::exists(root_path)) return false;
+    return fs::exists(resolve_scene_json_path(input_path));
+}
+
 void project_new(const std::string& folder_path, Scene& scene) {
-    fs::create_directories(folder_path);
-    fs::create_directories(folder_path + "/resources");
+    const fs::path root_path = resolve_project_root_path(fs::path(folder_path));
+    fs::create_directories(root_path);
+    fs::create_directories(root_path / "resources");
 
     json j;
     j["entities"] = json::array();
     
-    std::ofstream f(folder_path + "/scene.json");
+    std::ofstream f(root_path / "scene.json");
     f << j.dump(4);
+    write_project_manifest(root_path);
 
     scene.release_resources();
 }
 
 void project_save(const std::string& folder_path, const Scene& scene) {
-    fs::create_directories(folder_path + "/resources");
+    const fs::path root_path = resolve_project_root_path(fs::path(folder_path));
+    fs::create_directories(root_path / "resources");
 
     json j;
     j["entities"] = json::array();
@@ -97,24 +214,26 @@ void project_save(const std::string& folder_path, const Scene& scene) {
         j["entities"].push_back(ej);
     }
 
-    std::ofstream f(folder_path + "/scene.json");
+    std::ofstream f(root_path / "scene.json");
     if (!f.is_open()) {
         TraceLog(LOG_ERROR, "Failed to open scene.json for writing: %s", folder_path.c_str());
         return;
     }
     f << j.dump(4);
     f.close();
+    write_project_manifest(root_path);
 }
 
 bool project_load(const std::string& folder_path, Scene& scene, Shader shader) {
     TraceLog(LOG_INFO, "project_load called: %s", folder_path.c_str());
-    std::string json_path = folder_path + "/scene.json";
+    const fs::path root_path = resolve_project_root_path(fs::path(folder_path));
+    const fs::path json_path = resolve_scene_json_path(fs::path(folder_path));
     if (!fs::exists(json_path)) return false;
 
     scene.release_resources();
-    refresh_textures(nullptr, folder_path);
-    refresh_assets(folder_path);
-    refresh_models(folder_path, scene);
+    refresh_textures(nullptr, root_path.string());
+    refresh_assets(root_path.string());
+    refresh_models(root_path.string(), scene);
 
     std::ifstream f(json_path);
     json j;

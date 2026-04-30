@@ -319,6 +319,8 @@ void load_assets(std::string project_path) {
 }
 
 void refresh_assets(std::string project_path) {
+    if (project_path.empty()) return;
+
     for (auto& asset : asset_entries) {
         if (asset.is_image && asset.texture.id != 0) {
             UnloadTexture(asset.texture);
