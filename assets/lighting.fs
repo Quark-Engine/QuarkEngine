@@ -3,6 +3,7 @@
 in vec3 fragPosition;
 in vec2 fragTexCoord;
 in vec4 fragColor;
+in vec4 fragPosLightSpace;
 in vec3 fragNormal;
 
 uniform sampler2D texture0;
@@ -37,13 +38,14 @@ uniform vec3 viewPos;
 uniform vec3 emissionColor;
 uniform float emissionPower;
 
-float ShadowCalc(vec3 fragPos) {
-    vec4 fragPosLS = lightVP * vec4(fragPos, 1.0);
-    vec3 proj = fragPosLS.xyz / fragPosLS.w;
+float ShadowCalc(vec3 normal, vec3 lightDir) {
+    vec3 proj = fragPosLightSpace.xyz / fragPosLightSpace.w;
     proj = proj * 0.5 + 0.5;
     if (proj.z > 1.0) return 0.0;
+    if (proj.x < 0.0 || proj.x > 1.0 || proj.y < 0.0 || proj.y > 1.0) return 0.0;
 
-    float bias = 0.0002;
+    float ndotl = max(dot(normal, lightDir), 0.0);
+    float bias = max(0.0005 * (1.0 - ndotl), 0.00005);
     int shadowCounter = 0;
     vec2 texelSize = vec2(1.0 / float(shadowMapResolution));
 
@@ -66,6 +68,8 @@ void main() {
     vec3 viewD = normalize(viewPos - fragPosition);
     vec3 lightAccum = vec3(0.0);
     vec3 specular = vec3(0.0);
+    const float specularStrength = 0.08;
+    const float shininess = 48.0;
 
     for (int i = 0; i < MAX_LIGHTS; i++) {
         if (lights[i].enabled != 1) continue;
@@ -106,14 +110,28 @@ void main() {
         lightAccum += lights[i].color.rgb * NdotL * attenuation * lights[i].intensity;
 
         if (NdotL > 0.0) {
-            float spec = pow(max(dot(viewD, reflect(-lightDir, normal)), 0.0), 16.0);
-            specular += spec * attenuation * lights[i].intensity * lights[i].color.rgb;
+            float spec = pow(max(dot(viewD, reflect(-lightDir, normal)), 0.0), shininess);
+            specular += spec * attenuation * lights[i].intensity * lights[i].color.rgb * specularStrength;
         }
     }
 
-    float shadow = ShadowCalc(fragPosition);
+    vec3 shadowLightDir = vec3(0.0, 1.0, 0.0);
+    bool hasDirectionalShadowLight = false;
+
+    for (int i = 0; i < MAX_LIGHTS; i++) {
+        if (lights[i].enabled != 1) continue;
+        if (lights[i].type != LIGHT_DIRECTIONAL) continue;
+        shadowLightDir = normalize(lights[i].position - lights[i].target);
+        hasDirectionalShadowLight = true;
+        break;
+    }
+
+    float shadow = hasDirectionalShadowLight ? ShadowCalc(normal, shadowLightDir) : 0.0;
     vec3 ambientLight = ambient.rgb;
-    vec3 color = texelColor.rgb * tint.rgb * (ambientLight + lightAccum * (1.0 - shadow * 0.8)) + specular * (1.0 - shadow);
+    float shadowDiffuseFactor = 1.0 - shadow * 0.85;
+    float shadowSpecularFactor = 1.0 - shadow;
+    shadowSpecularFactor *= shadowSpecularFactor;
+    vec3 color = texelColor.rgb * tint.rgb * (ambientLight + lightAccum * shadowDiffuseFactor) + specular * shadowSpecularFactor;
     color += emissionColor * emissionPower;
 
     finalColor = vec4(color, texelColor.a * tint.a);

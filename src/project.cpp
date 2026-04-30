@@ -296,6 +296,7 @@ bool project_load(const std::string& folder_path, Scene& scene, Shader shader) {
             if (new_id != -1) {
                 e.light.id = new_id;
                 e.light.light = create_light_at_slot(new_id, LIGHT_POINT, e.position, Vector3Zero(), e.light.color, shader);
+                initialize_lighting_uniform_cache(e.light, shader, new_id);
                 e.light_created = true;
             } 
             

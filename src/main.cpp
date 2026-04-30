@@ -17,6 +17,7 @@ namespace fs = std::filesystem;
 
 Shader shadowmap_shader = {0};
 RenderTexture2D shadow_map = {0};
+static Shader shadowcaster_shader = {0};
 
 static Entity make_entity_from_asset(Scene& scene, ModelAsset* asset) {
     Entity entity;
@@ -35,6 +36,74 @@ static Entity make_entity_from_asset(Scene& scene, ModelAsset* asset) {
 
     entity.texture = {0};
     return entity;
+}
+
+static Matrix compose_entity_transform(const Entity& entity) {
+    Matrix transform = MatrixIdentity();
+    transform = MatrixMultiply(transform, MatrixTranslate(entity.position.x, entity.position.y, entity.position.z));
+    transform = MatrixMultiply(transform, MatrixRotateX(entity.rotation.x * DEG2RAD));
+    transform = MatrixMultiply(transform, MatrixRotateY(entity.rotation.y * DEG2RAD));
+    transform = MatrixMultiply(transform, MatrixRotateZ(entity.rotation.z * DEG2RAD));
+    transform = MatrixMultiply(transform, MatrixScale(entity.scale.x, entity.scale.y, entity.scale.z));
+    return transform;
+}
+
+static void expand_bounds_with_point(BoundingBox& bounds, const Vector3& point) {
+    bounds.min.x = fminf(bounds.min.x, point.x);
+    bounds.min.y = fminf(bounds.min.y, point.y);
+    bounds.min.z = fminf(bounds.min.z, point.z);
+    bounds.max.x = fmaxf(bounds.max.x, point.x);
+    bounds.max.y = fmaxf(bounds.max.y, point.y);
+    bounds.max.z = fmaxf(bounds.max.z, point.z);
+}
+
+static BoundingBox compute_scene_bounds(const Scene& scene) {
+    BoundingBox bounds = {
+        { FLT_MAX, FLT_MAX, FLT_MAX },
+        { -FLT_MAX, -FLT_MAX, -FLT_MAX }
+    };
+    bool has_bounds = false;
+
+    for (const auto& entity : scene.entities) {
+        if (entity.model.meshCount <= 0 || !entity.model.meshes) continue;
+
+        Entity& mutable_entity = const_cast<Entity&>(entity);
+        if (mutable_entity.bounds_dirty) {
+            mutable_entity.cached_local_bounds = GetModelBoundingBox(entity.model);
+            mutable_entity.bounds_dirty = false;
+        }
+        BoundingBox local_bounds = mutable_entity.cached_local_bounds;
+        Matrix transform = compose_entity_transform(entity);
+
+        const Vector3 corners[8] = {
+            { local_bounds.min.x, local_bounds.min.y, local_bounds.min.z },
+            { local_bounds.max.x, local_bounds.min.y, local_bounds.min.z },
+            { local_bounds.min.x, local_bounds.max.y, local_bounds.min.z },
+            { local_bounds.max.x, local_bounds.max.y, local_bounds.min.z },
+            { local_bounds.min.x, local_bounds.min.y, local_bounds.max.z },
+            { local_bounds.max.x, local_bounds.min.y, local_bounds.max.z },
+            { local_bounds.min.x, local_bounds.max.y, local_bounds.max.z },
+            { local_bounds.max.x, local_bounds.max.y, local_bounds.max.z }
+        };
+
+        for (const Vector3& corner : corners) {
+            expand_bounds_with_point(bounds, Vector3Transform(corner, transform));
+        }
+        has_bounds = true;
+    }
+
+    if (!has_bounds) {
+        bounds.min = { -5.0f, -5.0f, -5.0f };
+        bounds.max = { 5.0f, 5.0f, 5.0f };
+    }
+
+    return bounds;
+}
+
+static void set_model_shader(Model& model, Shader shader) {
+    for (int i = 0; i < model.materialCount; i++) {
+        model.materials[i].shader = shader;
+    }
 }
 
 void ApplyCustomImGuiTheme()
@@ -145,6 +214,7 @@ int main(int argc, char* argv[]) {
     editor.project_path = project_path;
 
     shadowmap_shader = LoadShader("assets/lighting.vs", "assets/lighting.fs");
+    shadowcaster_shader = LoadShader("assets/shadowmap.vs", "assets/shadowmap.fs");
     shadowmap_shader.locs[SHADER_LOC_VECTOR_VIEW] = GetShaderLocation(shadowmap_shader, "viewPos");
 
     shadow_map = load_shadowmap_render_texture(SHADOWMAP_RESOLUTION, SHADOWMAP_RESOLUTION);
@@ -189,9 +259,25 @@ int main(int argc, char* argv[]) {
         SetWindowTitle(TextFormat("Quark Engine | %s | FPS: %d",
             fs::path(project_path).filename().string().c_str(), GetFPS()));
 
+        BoundingBox scene_bounds = compute_scene_bounds(editor.scene);
+        Vector3 scene_center = {
+            (scene_bounds.min.x + scene_bounds.max.x) * 0.5f,
+            (scene_bounds.min.y + scene_bounds.max.y) * 0.5f,
+            (scene_bounds.min.z + scene_bounds.max.z) * 0.5f
+        };
+        Vector3 scene_extents = {
+            (scene_bounds.max.x - scene_bounds.min.x) * 0.5f,
+            (scene_bounds.max.y - scene_bounds.min.y) * 0.5f,
+            (scene_bounds.max.z - scene_bounds.min.z) * 0.5f
+        };
+        float scene_radius = fmaxf(fmaxf(scene_extents.x, scene_extents.y), scene_extents.z);
+        if (scene_radius < 10.0f) scene_radius = 10.0f;
+
         Vector3 cam_pos = camera.get_camera().position;
         SetShaderValue(shadowmap_shader, shadowmap_shader.locs[SHADER_LOC_VECTOR_VIEW], &cam_pos, SHADER_UNIFORM_VEC3);
-        light_cam.position = Vector3Scale(light_dir, -15.0f);
+        light_cam.target = scene_center;
+        light_cam.position = Vector3Add(scene_center, Vector3Scale(light_dir, -(scene_radius * 2.5f)));
+        light_cam.fovy = scene_radius * 2.2f;
         
         BeginTextureMode(shadow_map);
             ClearBackground(WHITE);
@@ -199,14 +285,15 @@ int main(int argc, char* argv[]) {
                 light_view = rlGetMatrixModelview();
                 light_proj = rlGetMatrixProjection();
                 for (auto& e : editor.scene.entities) {
-                    for (int i = 0; i < e.model.materialCount; i++)
-                        e.model.materials[i].shader = shadowmap_shader;
+                    if (!e.shader_assigned || e.model.materialCount > 0 && e.model.materials[0].shader.id != shadowcaster_shader.id) {
+                        set_model_shader(e.model, shadowcaster_shader);
+                    }
                     draw_entity_with_texture(e);
                 }
             EndMode3D();
         EndTextureMode();
 
-        Matrix light_view_proj = MatrixMultiply(light_view, light_proj);
+        Matrix light_view_proj = MatrixMultiply(light_proj, light_view);
 
         BeginDrawing();
             ClearBackground(DARKGRAY);
@@ -226,8 +313,9 @@ int main(int argc, char* argv[]) {
                 DrawGrid(20, 1.0f);
 
                 for (auto& e : editor.scene.entities) {
-                    for (int i = 0; i < e.model.materialCount; i++)
-                        e.model.materials[i].shader = shadowmap_shader;
+                    if (!e.shader_assigned || e.model.materialCount > 0 && e.model.materials[0].shader.id != shadowmap_shader.id) {
+                        set_model_shader(e.model, shadowmap_shader);
+                    }
                     e.shader_assigned = true;
 
                     if (e.has_light && e.light_created) {
@@ -279,6 +367,7 @@ int main(int argc, char* argv[]) {
     editor.scene.release_resources();
     unload_models();
     unload_textures();
+    UnloadShader(shadowcaster_shader);
     UnloadShader(shadowmap_shader);
     unload_shadowmap_render_texture(shadow_map);
     rlImGuiShutdown();

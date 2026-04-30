@@ -21,13 +21,9 @@ void update_lighting(Shader shader, Lighting& l) {
 
     float intensity = l.intensity;
     float range = l.range;
-    int intensity_loc = GetShaderLocation(shader, TextFormat("lights[%i].intensity", l.id));
-    int range_loc     = GetShaderLocation(shader, TextFormat("lights[%i].range",     l.id));
-    SetShaderValue(shader, intensity_loc, &intensity, SHADER_UNIFORM_FLOAT);
-    SetShaderValue(shader, range_loc,     &range,     SHADER_UNIFORM_FLOAT);
+    SetShaderValue(shader, l.intensity_loc, &intensity, SHADER_UNIFORM_FLOAT);
+    SetShaderValue(shader, l.range_loc,     &range,     SHADER_UNIFORM_FLOAT);
 
-    if (l.spot_angle_loc == -1)
-        l.spot_angle_loc = GetShaderLocation(shader, TextFormat("lights[%i].spotAngle", l.id));
     SetShaderValue(shader, l.spot_angle_loc, &l.spot_angle, SHADER_UNIFORM_FLOAT);
 }
 
@@ -67,4 +63,14 @@ Light create_light_at_slot(int slot, int type, Vector3 position, Vector3 target,
     light.targetLoc   = GetShaderLocation(shader, TextFormat("lights[%i].target",   slot));
     light.colorLoc    = GetShaderLocation(shader, TextFormat("lights[%i].color",    slot));
     return light;
+}
+
+static void cache_extended_light_uniform_locations(Lighting& lighting, Shader shader, int slot) {
+    lighting.intensity_loc  = GetShaderLocation(shader, TextFormat("lights[%i].intensity", slot));
+    lighting.range_loc      = GetShaderLocation(shader, TextFormat("lights[%i].range", slot));
+    lighting.spot_angle_loc = GetShaderLocation(shader, TextFormat("lights[%i].spotAngle", slot));
+}
+
+void initialize_lighting_uniform_cache(Lighting& lighting, Shader shader, int slot) {
+    cache_extended_light_uniform_locations(lighting, shader, slot);
 }

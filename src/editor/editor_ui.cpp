@@ -9,10 +9,272 @@
 #include "../headers/lighting.h"
 #include "../headers/project.h"
 #include "imgui.h"
+#include "raymath.h"
 #include <cstring>
+#include <cmath>
 #include <vector>
 
+namespace {
+
+struct MeshEditState {
+    bool enabled = false;
+    int entity_index = -1;
+    int mesh_index = 0;
+    int triangle_index = 0;
+    int vertex_corner = 0;
+    bool was_using_gizmo = false;
+};
+
+MeshEditState g_mesh_edit_state;
+
+Matrix compose_entity_transform_matrix(const Entity& entity) {
+    Matrix transform = MatrixIdentity();
+    transform = MatrixMultiply(transform, MatrixTranslate(entity.position.x, entity.position.y, entity.position.z));
+    transform = MatrixMultiply(transform, MatrixRotateX(entity.rotation.x * DEG2RAD));
+    transform = MatrixMultiply(transform, MatrixRotateY(entity.rotation.y * DEG2RAD));
+    transform = MatrixMultiply(transform, MatrixRotateZ(entity.rotation.z * DEG2RAD));
+    transform = MatrixMultiply(transform, MatrixScale(entity.scale.x, entity.scale.y, entity.scale.z));
+    return transform;
+}
+
+void sync_mesh_edit_state(const Editor& editor) {
+    if (editor.scene.selected != g_mesh_edit_state.entity_index) {
+        g_mesh_edit_state.entity_index = editor.scene.selected;
+        g_mesh_edit_state.mesh_index = 0;
+        g_mesh_edit_state.triangle_index = 0;
+        g_mesh_edit_state.vertex_corner = 0;
+        g_mesh_edit_state.was_using_gizmo = false;
+    }
+}
+
+bool get_selected_triangle_vertices(const Entity& entity, int mesh_index, int triangle_index, int out_indices[3]) {
+    if (!has_valid_model_data(entity.model)) return false;
+    if (mesh_index < 0 || mesh_index >= entity.model.meshCount) return false;
+
+    const Mesh& mesh = entity.model.meshes[mesh_index];
+    if (triangle_index < 0 || triangle_index >= mesh.triangleCount) return false;
+    return get_mesh_triangle_vertex_indices(mesh, triangle_index, out_indices);
+}
+
+bool get_selected_vertex_index(const Entity& entity, int mesh_index, int triangle_index, int vertex_corner, int& out_vertex_index) {
+    int triangle_vertices[3] = {};
+    if (!get_selected_triangle_vertices(entity, mesh_index, triangle_index, triangle_vertices)) return false;
+    if (vertex_corner < 0 || vertex_corner > 2) return false;
+    out_vertex_index = triangle_vertices[vertex_corner];
+    return true;
+}
+
+Vector3 get_mesh_vertex_local_position(const Entity& entity, int mesh_index, int vertex_index) {
+    const Mesh& mesh = entity.model.meshes[mesh_index];
+    return {
+        mesh.vertices[vertex_index * 3 + 0],
+        mesh.vertices[vertex_index * 3 + 1],
+        mesh.vertices[vertex_index * 3 + 2]
+    };
+}
+
+Vector3 get_mesh_vertex_world_position(const Entity& entity, int mesh_index, int vertex_index) {
+    const Matrix transform = compose_entity_transform_matrix(entity);
+    return Vector3Transform(get_mesh_vertex_local_position(entity, mesh_index, vertex_index), transform);
+}
+
+bool ensure_mesh_edit_ready(Entity& entity) {
+    if (entity_has_mesh_overrides(entity)) return true;
+    if (!entity.mesh_triangles_detached) detach_mesh_triangles(entity);
+    capture_mesh_overrides_from_model(entity);
+    return entity_has_mesh_overrides(entity);
+}
+
+bool set_mesh_vertex_local_position(Entity& entity, int mesh_index, int vertex_index, const Vector3& local_position) {
+    if (!has_valid_model_data(entity.model)) return false;
+    if (mesh_index < 0 || mesh_index >= entity.model.meshCount) return false;
+
+    Mesh& mesh = entity.model.meshes[mesh_index];
+    if (!mesh.vertices || vertex_index < 0 || vertex_index >= mesh.vertexCount) return false;
+    if (!ensure_mesh_edit_ready(entity)) return false;
+    if (mesh_index >= static_cast<int>(entity.mesh_vertex_overrides.size())) return false;
+
+    std::vector<float>& mesh_override = entity.mesh_vertex_overrides[mesh_index];
+    if (mesh_override.size() != static_cast<size_t>(mesh.vertexCount * 3)) return false;
+
+    mesh_override[vertex_index * 3 + 0] = local_position.x;
+    mesh_override[vertex_index * 3 + 1] = local_position.y;
+    mesh_override[vertex_index * 3 + 2] = local_position.z;
+
+    const bool applied = apply_mesh_overrides(entity);
+    if (applied) {
+        mark_entity_bounds_dirty(&entity);
+        mark_entity_uv_dirty(&entity);
+    }
+    return applied;
+}
+
+bool set_mesh_vertex_world_position(Entity& entity, int mesh_index, int vertex_index, const Vector3& world_position) {
+    const Matrix inverse_transform = MatrixInvert(compose_entity_transform_matrix(entity));
+    const Vector3 local_position = Vector3Transform(world_position, inverse_transform);
+    return set_mesh_vertex_local_position(entity, mesh_index, vertex_index, local_position);
+}
+
+bool pick_mesh_triangle(
+    const Entity& entity,
+    int mesh_index,
+    Ray ray,
+    int& out_triangle_index,
+    int& out_vertex_corner
+) {
+    if (!has_valid_model_data(entity.model)) return false;
+    if (mesh_index < 0 || mesh_index >= entity.model.meshCount) return false;
+
+    const Mesh& mesh = entity.model.meshes[mesh_index];
+    if (!mesh.vertices || mesh.triangleCount <= 0) return false;
+
+    const Matrix transform = compose_entity_transform_matrix(entity);
+    float best_distance = FLT_MAX;
+    int best_triangle = -1;
+    int best_corner = 0;
+
+    for (int triangle_index = 0; triangle_index < mesh.triangleCount; triangle_index++) {
+        int indices[3] = {};
+        if (!get_mesh_triangle_vertex_indices(mesh, triangle_index, indices)) continue;
+
+        Vector3 vertices[3] = {};
+        for (int i = 0; i < 3; i++) {
+            vertices[i] = Vector3Transform({
+                mesh.vertices[indices[i] * 3 + 0],
+                mesh.vertices[indices[i] * 3 + 1],
+                mesh.vertices[indices[i] * 3 + 2]
+            }, transform);
+        }
+
+        const RayCollision hit = GetRayCollisionTriangle(ray, vertices[0], vertices[1], vertices[2]);
+        if (!hit.hit || hit.distance >= best_distance) continue;
+
+        best_distance = hit.distance;
+        best_triangle = triangle_index;
+
+        float closest_corner_distance = FLT_MAX;
+        for (int i = 0; i < 3; i++) {
+            const float distance_to_corner = Vector3Distance(hit.point, vertices[i]);
+            if (distance_to_corner < closest_corner_distance) {
+                closest_corner_distance = distance_to_corner;
+                best_corner = i;
+            }
+        }
+    }
+
+    if (best_triangle < 0) return false;
+
+    out_triangle_index = best_triangle;
+    out_vertex_corner = best_corner;
+    return true;
+}
+
+void reset_mesh_edit_model(Entity& entity) {
+    clear_mesh_overrides(entity);
+
+    if (entity.asset && entity.asset->is_procedural) {
+        update_model(&entity);
+    } else if (entity.asset) {
+        if (entity_owns_model(entity) && entity.model.meshCount > 0) {
+            UnloadModel(entity.model);
+        }
+
+        entity.model = {0};
+        if (!load_model_instance(*entity.asset, entity.model)) {
+            entity.asset = nullptr;
+            entity.asset_name.clear();
+            entity.owns_model_instance = false;
+        } else {
+            entity.owns_model_instance = true;
+        }
+    }
+
+    if (entity.asset) {
+        store_uv(&entity);
+        store_material_textures(&entity);
+        entity.shader_assigned = false;
+    }
+}
+
+void draw_mesh_vertex_overlay(Editor& editor, Camera3D camera) {
+    sync_mesh_edit_state(editor);
+    if (!g_mesh_edit_state.enabled) return;
+
+    Entity* entity = editor.scene.get_selected();
+    if (!entity || !has_valid_model_data(entity->model)) return;
+    if (g_mesh_edit_state.mesh_index >= entity->model.meshCount) g_mesh_edit_state.mesh_index = 0;
+
+    int triangle_vertices[3] = {};
+    if (!get_selected_triangle_vertices(*entity, g_mesh_edit_state.mesh_index, g_mesh_edit_state.triangle_index, triangle_vertices)) return;
+
+    ImDrawList* draw_list = ImGui::GetForegroundDrawList();
+    Vector2 screen_points[3] = {};
+    Vector3 world_points[3] = {};
+
+    for (int i = 0; i < 3; i++) {
+        world_points[i] = get_mesh_vertex_world_position(*entity, g_mesh_edit_state.mesh_index, triangle_vertices[i]);
+        screen_points[i] = GetWorldToScreen(world_points[i], camera);
+    }
+
+    for (int i = 0; i < 3; i++) {
+        const int next = (i + 1) % 3;
+        draw_list->AddLine(
+            ImVec2(screen_points[i].x, screen_points[i].y),
+            ImVec2(screen_points[next].x, screen_points[next].y),
+            IM_COL32(255, 210, 120, 220),
+            2.0f
+        );
+    }
+
+    for (int i = 0; i < 3; i++) {
+        const bool selected = g_mesh_edit_state.vertex_corner == i;
+        const ImU32 fill = selected ? IM_COL32(255, 170, 64, 255) : IM_COL32(70, 180, 255, 240);
+        const float radius = selected ? 8.0f : 6.0f;
+        draw_list->AddCircleFilled(ImVec2(screen_points[i].x, screen_points[i].y), radius, fill);
+        draw_list->AddCircle(ImVec2(screen_points[i].x, screen_points[i].y), radius, IM_COL32(20, 20, 20, 255), 0, 2.0f);
+    }
+
+    if (ImGuizmo::IsOver() || ImGuizmo::IsUsing()) return;
+    if (ImGui::GetIO().WantCaptureMouse) return;
+    if (!IsMouseButtonPressed(MOUSE_BUTTON_LEFT)) return;
+
+    const Vector2 mouse = GetMousePosition();
+    float best_distance = 18.0f;
+    int best_corner = -1;
+
+    for (int i = 0; i < 3; i++) {
+        const float dx = mouse.x - screen_points[i].x;
+        const float dy = mouse.y - screen_points[i].y;
+        const float distance = sqrtf(dx * dx + dy * dy);
+        if (distance < best_distance) {
+            best_distance = distance;
+            best_corner = i;
+        }
+    }
+
+    if (best_corner >= 0) {
+        g_mesh_edit_state.vertex_corner = best_corner;
+        return;
+    }
+
+    int picked_triangle = -1;
+    int picked_corner = 0;
+    if (pick_mesh_triangle(
+            *entity,
+            g_mesh_edit_state.mesh_index,
+            GetScreenToWorldRay(mouse, camera),
+            picked_triangle,
+            picked_corner)) {
+        g_mesh_edit_state.triangle_index = picked_triangle;
+        g_mesh_edit_state.vertex_corner = picked_corner;
+    }
+}
+
+}
+
 void draw_gizmo(Editor& editor, Camera3D camera) {
+    sync_mesh_edit_state(editor);
+
     Entity* entity = editor.scene.get_selected();
     if (!entity) return;
 
@@ -38,6 +300,49 @@ void draw_gizmo(Editor& editor, Camera3D camera) {
     memcpy(view_matrix, &view, sizeof(view_matrix));
     memcpy(projection_matrix, &projection, sizeof(projection_matrix));
 
+    draw_mesh_vertex_overlay(editor, camera);
+
+    if (g_mesh_edit_state.enabled && has_valid_model_data(entity->model)) {
+        if (g_mesh_edit_state.mesh_index >= entity->model.meshCount) g_mesh_edit_state.mesh_index = 0;
+
+        int vertex_index = -1;
+        if (get_selected_vertex_index(*entity, g_mesh_edit_state.mesh_index, g_mesh_edit_state.triangle_index, g_mesh_edit_state.vertex_corner, vertex_index)) {
+            const Vector3 vertex_world = get_mesh_vertex_world_position(*entity, g_mesh_edit_state.mesh_index, vertex_index);
+            float vertex_translation[3] = { vertex_world.x, vertex_world.y, vertex_world.z };
+            float vertex_rotation[3] = { 0.0f, 0.0f, 0.0f };
+            float vertex_scale[3] = { 1.0f, 1.0f, 1.0f };
+
+            ImGuizmo::RecomposeMatrixFromComponents(vertex_translation, vertex_rotation, vertex_scale, transform_matrix);
+            ImGuizmo::Manipulate(
+                view_matrix,
+                projection_matrix,
+                ImGuizmo::TRANSLATE,
+                ImGuizmo::WORLD,
+                transform_matrix
+            );
+
+            if (ImGuizmo::IsUsing() && !g_mesh_edit_state.was_using_gizmo) {
+                editor.save_state();
+            }
+
+            if (ImGuizmo::IsUsing()) {
+                float next_translation[3] = {};
+                float next_rotation[3] = {};
+                float next_scale[3] = {};
+                ImGuizmo::DecomposeMatrixToComponents(transform_matrix, next_translation, next_rotation, next_scale);
+                set_mesh_vertex_world_position(
+                    *entity,
+                    g_mesh_edit_state.mesh_index,
+                    vertex_index,
+                    { next_translation[0], next_translation[1], next_translation[2] }
+                );
+            }
+
+            g_mesh_edit_state.was_using_gizmo = ImGuizmo::IsUsing();
+            return;
+        }
+    }
+
     ImGuizmo::RecomposeMatrixFromComponents(translation, rotation, scale, transform_matrix);
     ImGuizmo::Manipulate(
         view_matrix,
@@ -61,9 +366,11 @@ void draw_gizmo(Editor& editor, Camera3D camera) {
         entity->position = { next_translation[0], next_translation[1], next_translation[2] };
         entity->rotation = { next_rotation[0], next_rotation[1], next_rotation[2] };
         entity->scale = { next_scale[0], next_scale[1], next_scale[2] };
+        if (!entity->texture_stretch) mark_entity_uv_dirty(entity);
     }
 
     was_using = ImGuizmo::IsUsing();
+    g_mesh_edit_state.was_using_gizmo = false;
 }
 
 void handle_scene_asset_drop(Editor& editor, Camera3D camera) {
@@ -352,6 +659,7 @@ void draw_ui(Editor& editor, Shader shader) {
                 last_scale = { scale[0], scale[1], scale[2] };
             }
             entity->scale = { scale[0], scale[1], scale[2] };
+            if (!entity->texture_stretch) mark_entity_uv_dirty(entity);
         }
 
         ImGui::Separator();
@@ -369,6 +677,8 @@ void draw_ui(Editor& editor, Shader shader) {
                     clear_mesh_overrides(*entity);
                     update_model(entity);
                     store_uv(entity);
+                    mark_entity_uv_dirty(entity);
+                    mark_entity_bounds_dirty(entity);
                     entity->shader_assigned = false;
                 }
             }
@@ -408,6 +718,8 @@ void draw_ui(Editor& editor, Shader shader) {
                     entity->owns_model_instance = true;
                     store_uv(entity);
                     store_material_textures(entity);
+                    mark_entity_uv_dirty(entity);
+                    mark_entity_bounds_dirty(entity);
                     entity->texture_source = TEXTURE_NONE;
                     entity->texture_name.clear();
                 } else {
@@ -425,6 +737,8 @@ void draw_ui(Editor& editor, Shader shader) {
                     entity->owns_model_instance = true;
                     store_uv(entity);
                     store_material_textures(entity);
+                    mark_entity_uv_dirty(entity);
+                    mark_entity_bounds_dirty(entity);
 
                     bool has_embedded = false;
                     for (int i = 0; i < entity->model.materialCount; i++) {
@@ -441,27 +755,30 @@ void draw_ui(Editor& editor, Shader shader) {
         }
 
         if (has_valid_model_data(entity->model)) {
-            static int selected_mesh_index = 0;
-            static int selected_triangle_index = 0;
-
-            if (selected_mesh_index >= entity->model.meshCount) selected_mesh_index = 0;
+            sync_mesh_edit_state(editor);
+            if (g_mesh_edit_state.mesh_index >= entity->model.meshCount) g_mesh_edit_state.mesh_index = 0;
             if (entity->model.meshCount > 1) {
-                ImGui::SliderInt("Editable Mesh", &selected_mesh_index, 0, entity->model.meshCount - 1);
+                ImGui::SliderInt("Editable Mesh", &g_mesh_edit_state.mesh_index, 0, entity->model.meshCount - 1);
             } else {
                 ImGui::Text("Editable Mesh: 0");
             }
 
-            Mesh& editable_mesh = entity->model.meshes[selected_mesh_index];
+            Mesh& editable_mesh = entity->model.meshes[g_mesh_edit_state.mesh_index];
             if (editable_mesh.triangleCount > 0) {
-                if (selected_triangle_index < 0) selected_triangle_index = 0;
-                if (selected_triangle_index >= editable_mesh.triangleCount) {
-                    selected_triangle_index = editable_mesh.triangleCount - 1;
+                if (g_mesh_edit_state.triangle_index < 0) g_mesh_edit_state.triangle_index = 0;
+                if (g_mesh_edit_state.triangle_index >= editable_mesh.triangleCount) {
+                    g_mesh_edit_state.triangle_index = editable_mesh.triangleCount - 1;
                 }
-                ImGui::SliderInt("Triangle", &selected_triangle_index, 0, editable_mesh.triangleCount - 1);
+                ImGui::SliderInt("Triangle", &g_mesh_edit_state.triangle_index, 0, editable_mesh.triangleCount - 1);
                 ImGui::Text("Vertices: %d  Triangles: %d", editable_mesh.vertexCount, editable_mesh.triangleCount);
+                ImGui::Checkbox("Vertex Gizmo", &g_mesh_edit_state.enabled);
+                ImGui::SameLine();
+                ImGui::TextUnformatted(g_mesh_edit_state.enabled ? "Scene gizmo edits selected vertex" : "Inspector fields only");
 
                 int triangle_vertices[3] = {};
-                if (get_mesh_triangle_vertex_indices(editable_mesh, selected_triangle_index, triangle_vertices)) {
+                if (get_mesh_triangle_vertex_indices(editable_mesh, g_mesh_edit_state.triangle_index, triangle_vertices)) {
+                    ImGui::SliderInt("Vertex", &g_mesh_edit_state.vertex_corner, 0, 2, "Vertex %d");
+
                     auto edit_triangle_vertex = [&](const char* label, int vertex_index) {
                         float vertex[3] = {
                             editable_mesh.vertices[vertex_index * 3 + 0],
@@ -471,16 +788,9 @@ void draw_ui(Editor& editor, Shader shader) {
 
                         if (ImGui::DragFloat3(label, vertex, 0.01f)) {
                             editor.save_state();
-                            if (!entity_has_mesh_overrides(*entity)) {
-                                if (!entity->mesh_triangles_detached) detach_mesh_triangles(*entity);
-                                capture_mesh_overrides_from_model(*entity);
-                            }
-
-                            std::vector<float>& mesh_override = entity->mesh_vertex_overrides[selected_mesh_index];
-                            mesh_override[vertex_index * 3 + 0] = vertex[0];
-                            mesh_override[vertex_index * 3 + 1] = vertex[1];
-                            mesh_override[vertex_index * 3 + 2] = vertex[2];
-                            apply_mesh_overrides(*entity);
+                            set_mesh_vertex_local_position(*entity, g_mesh_edit_state.mesh_index, vertex_index, {
+                                vertex[0], vertex[1], vertex[2]
+                            });
                         }
                     };
 
@@ -494,30 +804,7 @@ void draw_ui(Editor& editor, Shader shader) {
 
                     if (entity_has_mesh_overrides(*entity) && ImGui::Button("Reset Mesh Edits")) {
                         editor.save_state();
-                        clear_mesh_overrides(*entity);
-
-                        if (entity->asset && entity->asset->is_procedural) {
-                            update_model(entity);
-                        } else if (entity->asset) {
-                            if (entity_owns_model(*entity) && entity->model.meshCount > 0) {
-                                UnloadModel(entity->model);
-                            }
-
-                            entity->model = {0};
-                            if (!load_model_instance(*entity->asset, entity->model)) {
-                                entity->asset = nullptr;
-                                entity->asset_name.clear();
-                                entity->owns_model_instance = false;
-                            } else {
-                                entity->owns_model_instance = true;
-                            }
-                        }
-
-                        if (entity->asset) {
-                            store_uv(entity);
-                            store_material_textures(entity);
-                            entity->shader_assigned = false;
-                        }
+                        reset_mesh_edit_model(*entity);
                     }
                 }
             }
@@ -576,6 +863,7 @@ void draw_ui(Editor& editor, Shader shader) {
                 entity->texture_name.clear();
                 entity->texture = {0};
                 clear_material_textures(entity);
+                mark_entity_uv_dirty(entity);
             } else if (selected_type == TEXTURE_EXTERNAL) {
                 entity->texture_source = TEXTURE_EXTERNAL;
                 entity->texture_name = texture_sources[current_texture_index];
@@ -591,11 +879,13 @@ void draw_ui(Editor& editor, Shader shader) {
                 for (int i = 0; i < entity->model.materialCount; i++) {
                     entity->model.materials[i].maps[MATERIAL_MAP_DIFFUSE].texture = entity->texture;
                 }
+                mark_entity_uv_dirty(entity);
             } else {
                 entity->texture_source = TEXTURE_MODEL;
                 entity->texture_name.clear();
                 entity->texture = {0};
                 restore_model_textures(entity);
+                mark_entity_uv_dirty(entity);
             }
         }
 
@@ -604,6 +894,7 @@ void draw_ui(Editor& editor, Shader shader) {
             if (last_stretch_texture != entity->texture_stretch) {
                 editor.save_state();
                 last_stretch_texture = entity->texture_stretch;
+                mark_entity_uv_dirty(entity);
             }
         }
 
@@ -613,6 +904,7 @@ void draw_ui(Editor& editor, Shader shader) {
                 if (last_auto_uv != entity->auto_uv) {
                     editor.save_state();
                     last_auto_uv = entity->auto_uv;
+                    mark_entity_uv_dirty(entity);
                 }
             }
 
@@ -622,6 +914,7 @@ void draw_ui(Editor& editor, Shader shader) {
                     if (last_uv_scale.x != entity->uv_scale_vec.x) {
                         editor.save_state();
                         last_uv_scale.x = entity->uv_scale_vec.x;
+                        mark_entity_uv_dirty(entity);
                     }
                     if (entity->uv_scale_vec.x < 0.01f) entity->uv_scale_vec.x = 0.01f;
                 }
@@ -629,6 +922,7 @@ void draw_ui(Editor& editor, Shader shader) {
                     if (last_uv_scale.y != entity->uv_scale_vec.y) {
                         editor.save_state();
                         last_uv_scale.y = entity->uv_scale_vec.y;
+                        mark_entity_uv_dirty(entity);
                     }
                     if (entity->uv_scale_vec.y < 0.01f) entity->uv_scale_vec.y = 0.01f;
                 }
@@ -639,6 +933,7 @@ void draw_ui(Editor& editor, Shader shader) {
                     if (last_repeat_u != entity->texture_repeat_u) {
                         editor.save_state();
                         last_repeat_u = entity->texture_repeat_u;
+                        mark_entity_uv_dirty(entity);
                     }
                     if (entity->texture_repeat_u < 0.01f) entity->texture_repeat_u = 0.01f;
                 }
@@ -646,6 +941,7 @@ void draw_ui(Editor& editor, Shader shader) {
                     if (last_repeat_v != entity->texture_repeat_v) {
                         editor.save_state();
                         last_repeat_v = entity->texture_repeat_v;
+                        mark_entity_uv_dirty(entity);
                     }
                     if (entity->texture_repeat_v < 0.01f) entity->texture_repeat_v = 0.01f;
                 }
@@ -782,6 +1078,7 @@ void draw_ui(Editor& editor, Shader shader) {
                         entity->light.color,
                         shader
                     );
+                    initialize_lighting_uniform_cache(entity->light, shader, new_id);
                     entity->light_created = true;
                 }
             }

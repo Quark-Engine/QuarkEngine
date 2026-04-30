@@ -76,6 +76,9 @@ struct Entity {
     bool light_created = false;
     bool shader_assigned = false;
     bool owns_materials = false;
+    bool uv_dirty = true;
+    bool bounds_dirty = true;
+    BoundingBox cached_local_bounds = {{0, 0, 0}, {0, 0, 0}};
     Lighting light;
 
     Entity()

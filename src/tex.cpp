@@ -1,4 +1,5 @@
 #include "headers/tex.h"
+#include "headers/models.h"
 #include <algorithm>
 #include <unordered_map>
 #include <unordered_set>
@@ -160,6 +161,19 @@ void store_uv(Entity* e) {
 
         e->original_texcoords.push_back(uv);
     }
+
+    e->uv_dirty = true;
+    e->bounds_dirty = true;
+}
+
+void mark_entity_uv_dirty(Entity* e) {
+    if (!e) return;
+    e->uv_dirty = true;
+}
+
+void mark_entity_bounds_dirty(Entity* e) {
+    if (!e) return;
+    e->bounds_dirty = true;
 }
 
 void store_material_textures(Entity* e) {
@@ -187,25 +201,32 @@ void clear_material_textures(Entity* e) {
     }
 }
 
-void draw_entity_with_texture(Entity& e) {
+void refresh_entity_render_state(Entity& e) {
+    if (!e.uv_dirty) return;
+
     if (e.texture.id != 0) {
-        for (int i = 0; i < e.model.materialCount; i++)
+        for (int i = 0; i < e.model.materialCount; i++) {
             e.model.materials[i].maps[MATERIAL_MAP_DIFFUSE].texture = e.texture;
-
-        if (e.texture_stretch) {
-            for (int m = 0; m < e.model.meshCount; m++) {
-                Mesh& mesh = e.model.meshes[m];
-                if (!mesh.texcoords || m >= e.original_texcoords.size()) continue;
-
-                memcpy(mesh.texcoords, e.original_texcoords[m].data(), mesh.vertexCount * 2 * sizeof(float));
-                UpdateMeshBuffer(mesh, 1, mesh.texcoords, mesh.vertexCount * 2 * sizeof(float), 0);
-            }
-        } 
-        
-        else {
-            apply_texture_repeat(e);
         }
     }
+
+    if (e.texture_stretch) {
+        for (int m = 0; m < e.model.meshCount; m++) {
+            Mesh& mesh = e.model.meshes[m];
+            if (!mesh.texcoords || m >= e.original_texcoords.size()) continue;
+
+            memcpy(mesh.texcoords, e.original_texcoords[m].data(), mesh.vertexCount * 2 * sizeof(float));
+            UpdateMeshBuffer(mesh, 1, mesh.texcoords, mesh.vertexCount * 2 * sizeof(float), 0);
+        }
+    } else {
+        apply_texture_repeat(e);
+    }
+
+    e.uv_dirty = false;
+}
+
+void draw_entity_with_texture(Entity& e) {
+    refresh_entity_render_state(e);
 
     rlPushMatrix();
     rlTranslatef(e.position.x, e.position.y, e.position.z);
@@ -216,8 +237,13 @@ void draw_entity_with_texture(Entity& e) {
     
     rlScalef(e.scale.x, e.scale.y, e.scale.z);
 
+    const bool edited_mesh_is_double_sided = entity_has_mesh_overrides(e) || e.mesh_triangles_detached;
+    if (edited_mesh_is_double_sided) rlDisableBackfaceCulling();
+
     DrawModel(e.model, {0,0,0}, 1.0f, e.color);
     if (e.outline_color.a > 0) DrawModelWires(e.model, {0,0,0}, 1.0f, e.outline_color);
+
+    if (edited_mesh_is_double_sided) rlEnableBackfaceCulling();
 
     rlPopMatrix();
 }
