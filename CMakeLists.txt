@@ -75,6 +75,12 @@ elseif(UNIX AND NOT APPLE)
     )
     target_compile_options(${PROJECT_NAME} PRIVATE -Wall -Wextra)
 elseif(APPLE)
+    if(EXISTS "${RAYLIB_LIB_DIR}/libraylibOSX.a")
+        set(RAYLIB_LIB "${RAYLIB_LIB_DIR}/libraylibOSX.a")
+    else()
+        set(RAYLIB_LIB raylib)
+    endif()
+
     target_link_directories(${PROJECT_NAME} PRIVATE ${RAYLIB_LIB_DIR})
     target_link_libraries(${PROJECT_NAME}
         raylib
