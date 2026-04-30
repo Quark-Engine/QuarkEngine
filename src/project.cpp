@@ -76,7 +76,7 @@ static fs::path resolve_project_root_path(const fs::path& input_path) {
         return p.parent_path();
     }
 
-    return p.parent_path();
+    return p;
 }
 
 static bool write_project_manifest(const fs::path& root_path) {
