@@ -372,7 +372,7 @@ static std::string build_resource_signature(const fs::path& resource_dir) {
             row += "|f|";
             row += size_ec ? "0" : std::to_string(size);
             row += "|";
-            row += time_ec ? "0" : std::to_string(time.time_since_epoch().count());
+            row += time_ec ? "0" : std::to_string(static_cast<long long>(time.time_since_epoch().count()));
         } else {
             row += "|d";
         }
@@ -1691,7 +1691,7 @@ void Editor::draw_assets_ui() {
     fs::path relative_path = fs::relative(current_asset_path, project_root.parent_path());
 
     std::vector<fs::path> crumbs;
-    for (auto& part : relative_path) {
+    for (const auto& part : relative_path) {
         crumbs.push_back(part);
     }
 
