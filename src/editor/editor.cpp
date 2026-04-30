@@ -1,0 +1,194 @@
+﻿#include "editor.h"
+
+#include "editor_assets.h"
+#include "editor_ui.h"
+#include "editor_utils.h"
+#include "editor_viewers.h"
+#include "../headers/project.h"
+#include "imgui.h"
+
+namespace fs = std::filesystem;
+
+namespace editor_internal {
+
+ImGuizmo::OPERATION gizmo_mode = ImGuizmo::TRANSLATE;
+int renaming_index = -1;
+char rename_buf[128] = "";
+bool scene_asset_dragging = false;
+std::string dragged_scene_asset_name;
+std::unordered_map<std::string, Texture> tex_cache;
+bool show_about_window = false;
+bool has_clipboard = false;
+Entity clipboard_data;
+
+void restore_scene_entity_models(Scene& scene) {
+    for (auto& entity : scene.entities) {
+        if (!entity.asset) continue;
+
+        if (entity.asset->is_procedural) {
+            entity.model = entity.asset->generator(entity.segments);
+            entity.owns_model_instance = true;
+            store_uv(&entity);
+            store_material_textures(&entity);
+            apply_mesh_overrides(entity);
+        } else {
+            if (!load_model_instance(*entity.asset, entity.model)) {
+                entity.asset = nullptr;
+                entity.asset_name.clear();
+                entity.model = {0};
+                entity.owns_model_instance = false;
+                continue;
+            }
+
+            entity.owns_model_instance = true;
+            store_uv(&entity);
+            store_material_textures(&entity);
+            apply_mesh_overrides(entity);
+        }
+
+        entity.shader_assigned = false;
+    }
+}
+
+}
+
+static SceneState capture_scene_state(const Scene& scene) {
+    SceneState state;
+    state.selected = scene.selected;
+
+    for (auto entity : scene.entities) {
+        entity.model.materials = nullptr;
+        entity.model.meshMaterial = nullptr;
+        entity.owns_materials = false;
+        state.entities.push_back(entity);
+    }
+
+    return state;
+}
+
+void Editor::save_state() {
+    undo_stack.push(capture_scene_state(scene));
+    while (!redo_stack.empty()) redo_stack.pop();
+}
+
+void Editor::undo() {
+    if (undo_stack.empty()) return;
+
+    redo_stack.push(capture_scene_state(scene));
+
+    SceneState previous = undo_stack.top();
+    undo_stack.pop();
+
+    scene.entities = previous.entities;
+    scene.selected = previous.selected;
+    editor_internal::restore_scene_entity_models(scene);
+}
+
+void Editor::redo() {
+    if (redo_stack.empty()) return;
+
+    undo_stack.push(capture_scene_state(scene));
+
+    SceneState next = redo_stack.top();
+    redo_stack.pop();
+
+    scene.entities = next.entities;
+    scene.selected = next.selected;
+    editor_internal::restore_scene_entity_models(scene);
+}
+
+void Editor::handle_input() {
+    using namespace editor_internal;
+
+    if (IsKeyPressed(KEY_P)) gizmo_mode = ImGuizmo::TRANSLATE;
+    if (IsKeyPressed(KEY_R)) gizmo_mode = ImGuizmo::ROTATE;
+    if (IsKeyPressed(KEY_S)) gizmo_mode = ImGuizmo::SCALE;
+
+    if (IsFileDropped()) {
+        FilePathList dropped = LoadDroppedFiles();
+        bool imported_any = false;
+
+        if (current_asset_path.empty()) {
+            current_asset_path = fs::path(project_path);
+        }
+
+        std::error_code ec;
+        fs::create_directories(current_asset_path, ec);
+
+        for (unsigned int i = 0; i < dropped.count; i++) {
+            imported_any = import_path_to_resources(fs::path(dropped.paths[i]), current_asset_path) || imported_any;
+        }
+
+        UnloadDroppedFiles(dropped);
+
+        if (imported_any) {
+            save_state();
+            refresh_textures(&scene, project_path);
+            refresh_assets(project_path);
+            refresh_models(project_path, scene);
+        }
+    }
+
+    ImGuiIO& io = ImGui::GetIO();
+    const bool ctrl = IsKeyDown(KEY_LEFT_CONTROL) || IsKeyDown(KEY_RIGHT_CONTROL);
+
+    if (!io.WantCaptureKeyboard && ctrl && IsKeyPressed(KEY_S)) {
+        project_save(project_path, scene);
+    }
+
+    static float last_undo_time = 0.0f;
+    static float last_redo_time = 0.0f;
+    static bool undo_key_was_pressed = false;
+    static bool redo_key_was_pressed = false;
+    static float undo_hold_start = 0.0f;
+    static float redo_hold_start = 0.0f;
+    const float now = static_cast<float>(GetTime());
+
+    if (ctrl && IsKeyDown(KEY_Z)) {
+        if (!undo_key_was_pressed) {
+            undo();
+            undo_key_was_pressed = true;
+            undo_hold_start = now;
+            last_undo_time = now;
+        } else if (now - undo_hold_start > 0.5f && now - last_undo_time > 0.15f) {
+            undo();
+            last_undo_time = now;
+        }
+    } else {
+        undo_key_was_pressed = false;
+        undo_hold_start = 0.0f;
+    }
+
+    if (ctrl && IsKeyDown(KEY_Y)) {
+        if (!redo_key_was_pressed) {
+            redo();
+            redo_key_was_pressed = true;
+            redo_hold_start = now;
+            last_redo_time = now;
+        } else if (now - redo_hold_start > 0.5f && now - last_redo_time > 0.15f) {
+            redo();
+            last_redo_time = now;
+        }
+    } else {
+        redo_key_was_pressed = false;
+        redo_hold_start = 0.0f;
+    }
+
+    static double last_asset_poll = 0.0;
+    const double current_time = GetTime();
+    if (current_time - last_asset_poll <= 2.0) return;
+
+    last_asset_poll = current_time;
+
+    const fs::path resource_dir = fs::path(project_path) / "resources";
+    if (!fs::exists(resource_dir)) return;
+
+    static std::string last_resource_signature;
+    const std::string current_signature = build_resource_signature(resource_dir);
+    if (current_signature == last_resource_signature) return;
+
+    last_resource_signature = current_signature;
+    refresh_textures(&scene, project_path);
+    refresh_assets(project_path);
+    refresh_models(project_path, scene);
+}

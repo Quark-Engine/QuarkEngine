@@ -1,7 +1,16 @@
 #include "editor_entity.h"
-#include "tex.h"
+#include "editor_assets.h"
+#include "editor_utils.h"
+#include "../headers/models.h"
+#include "../headers/entity.h"
+#include <filesystem>
 
 namespace fs = std::filesystem;
+
+void assign_entity_name(Entity& entity, const char* new_name) {
+    if (!new_name || new_name[0] == '\0') return;
+    entity.name = new_name;
+}
 
 Entity make_entity_from_asset(Scene& scene, ModelAsset& asset) {
     Entity entity;
@@ -22,7 +31,6 @@ Entity make_entity_from_asset(Scene& scene, ModelAsset& asset) {
         entity.texture_source = TEXTURE_NONE;
         entity.texture_name.clear();
     } 
-    
     else {
         if (!load_model_instance(asset, entity.model)) {
             entity.asset = nullptr;
@@ -50,11 +58,4 @@ Entity make_entity_from_asset(Scene& scene, ModelAsset& asset) {
 
     entity.texture = {0};
     return entity;
-}
-
-ModelAsset* find_asset_by_name(const std::string& asset_name) {
-    for (auto& asset : assets) {
-        if (asset.name == asset_name) return &asset;
-    }
-    return nullptr;
 }

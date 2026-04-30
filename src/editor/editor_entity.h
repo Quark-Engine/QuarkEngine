@@ -1,7 +1,10 @@
 #pragma once
-#include "headers/entity.h"
-#include "headers/scene.h"
-#include "headers/models.h"
 
+#include "../headers/scene.h"
+#include "../headers/entity.h"
+
+// Entity creation
 Entity make_entity_from_asset(Scene& scene, ModelAsset& asset);
-ModelAsset* find_asset_by_name(const std::string& asset_name);
+
+// Entity naming
+void assign_entity_name(Entity& entity, const char* new_name);

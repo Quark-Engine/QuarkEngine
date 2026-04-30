@@ -12,6 +12,14 @@ include_directories(
     ${CMAKE_SOURCE_DIR}/src/headers
 )
 
+set(EDITOR_FILES
+    src/editor/editor_assets.cpp
+    src/editor/editor_entity.cpp
+    src/editor/editor_ui.cpp
+    src/editor/editor_utils.cpp
+    src/editor/editor_viewers.cpp
+)
+
 set(SOURCE_FILES
     src/camera.cpp
     src/editor.cpp
@@ -31,7 +39,7 @@ set(SOURCE_FILES
     quark-libs/imgui/include/rlImGui.cpp
 )
 
-add_executable(${PROJECT_NAME} ${SOURCE_FILES})
+add_executable(${PROJECT_NAME} ${SOURCE_FILES} ${EDITOR_FILES})
 
 set(RAYLIB_LIB_DIR "${CMAKE_SOURCE_DIR}/quark-libs/raylib/lib")
 

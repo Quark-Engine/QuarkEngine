@@ -1,32 +1,188 @@
 #include "editor_viewers.h"
 #include "editor_utils.h"
-#include "models.h"
+#include "../headers/tex.h"
+#include "rlImGui.h"
 #include "imgui.h"
-#include <rlImGui.h>
+#include "raymath.h"
+#include <cmath>
+#include <fstream>
+#include <sstream>
 
-bool show_model_viewer = false;
-Model viewer_model = { 0 };
-RenderTexture2D viewer_rt = { 0 };
-bool show_material_viewer = false;
-int material_preview_primitive = 0;
+// Global state for viewers
+static bool show_model_viewer = false;
+static Model viewer_model = { 0 };
+static RenderTexture2D viewer_rt = { 0 };
 
-Color material_albedo = WHITE;
-float material_albedo_f[4] = {1,1,1,1};
-float material_brightness = 1.0f;
+static bool show_material_viewer = false;
+static int material_preview_primitive = 0;
+static Color material_albedo = WHITE;
+static float material_albedo_f[4] = {1,1,1,1};
+static float material_brightness = 1.0f;
+static Texture2D material_texture = {0};
+static Model viewer_mat_sphere = { 0 };
+static RenderTexture2D viewer_mat_rt = { 0 };
 
-Texture2D material_texture = {0};
-Model viewer_mat_sphere = { 0 };
-RenderTexture2D viewer_mat_rt = { 0 };
+static Vector3 viewer_target = { 0, 0, 0 };
+static Vector3 viewer_model_center = { 0, 0, 0 };
+static Vector3 viewer_model_rotation = { 0, 0, 0 };
+static float viewer_phi = 20.0f, viewer_theta = 45.0f, viewer_radius = 5.0f;
 
-Vector3 viewer_target = { 0, 0, 0 };
-Vector3 viewer_model_center = { 0, 0, 0 };
-Vector3 viewer_model_rotation = { 0, 0, 0 };
+bool open_model_viewer_for_asset(const ModelAsset& asset) {
+    if (viewer_model.meshCount > 0) {
+        UnloadModel(viewer_model);
+        viewer_model = {0};
+    }
 
-std::unordered_map<std::string, Texture> model_preview_cache;
-std::unordered_map<std::string, RenderTexture2D> model_render_cache;
+    if (!load_model_instance(asset, viewer_model)) return false;
 
-float viewer_phi = 20.0f, viewer_theta = 45.0f, viewer_radius = 5.0f;
+    show_model_viewer = true;
+    viewer_radius = 5.0f;
+    viewer_phi = 20.0f;
+    viewer_theta = 45.0f;
+    viewer_target = { 0, 0, 0 };
+    viewer_model_rotation = { 0, 0, 0 };
 
+    const BoundingBox box = GetModelBoundingBox(viewer_model);
+    viewer_model_center = {
+        (box.min.x + box.max.x) * 0.5f,
+        (box.min.y + box.max.y) * 0.5f,
+        (box.min.z + box.max.z) * 0.5f
+    };
+
+    return true;
+}
+
+bool open_material_viewer_for_path(const std::filesystem::path& material_path, std::unordered_map<std::string, Texture>& texture_cache) {
+    std::ifstream material_file(material_path);
+    if (!material_file.is_open()) return false;
+
+    if (viewer_mat_sphere.meshCount > 0) {
+        UnloadModel(viewer_mat_sphere);
+        viewer_mat_sphere = {0};
+    }
+
+    viewer_mat_sphere = LoadModelFromMesh(GenMeshSphere(1.0f, 64, 64));
+    Material& material = viewer_mat_sphere.materials[0];
+    material_albedo = WHITE;
+    material_albedo_f[0] = 1.0f;
+    material_albedo_f[1] = 1.0f;
+    material_albedo_f[2] = 1.0f;
+    material_albedo_f[3] = 1.0f;
+    material_brightness = 1.0f;
+    material_texture = {0};
+
+    std::string line;
+    while (std::getline(material_file, line)) {
+        if (line.empty() || line[0] == '#') continue;
+
+        std::istringstream stream(line);
+        std::string type;
+        stream >> type;
+
+        if (type == "Kd") {
+            float r = 1.0f;
+            float g = 1.0f;
+            float b = 1.0f;
+            if (stream >> r >> g >> b) {
+                material.maps[MATERIAL_MAP_DIFFUSE].color = {
+                    static_cast<unsigned char>(r * 255),
+                    static_cast<unsigned char>(g * 255),
+                    static_cast<unsigned char>(b * 255),
+                    255
+                };
+                material_albedo = material.maps[MATERIAL_MAP_DIFFUSE].color;
+                material_albedo_f[0] = r;
+                material_albedo_f[1] = g;
+                material_albedo_f[2] = b;
+                material_albedo_f[3] = 1.0f;
+            }
+        } else if (type == "map_Kd") {
+            std::string texture_name;
+            if (!(stream >> texture_name)) continue;
+
+            const std::filesystem::path texture_path = material_path.parent_path() / texture_name;
+            const std::string cache_key = texture_path.string();
+            if (!texture_cache.count(cache_key) && std::filesystem::exists(texture_path)) {
+                texture_cache[cache_key] = LoadTexture(cache_key.c_str());
+            }
+
+            if (texture_cache.count(cache_key)) {
+                material.maps[MATERIAL_MAP_DIFFUSE].texture = texture_cache[cache_key];
+                material_texture = texture_cache[cache_key];
+            }
+        }
+    }
+
+    rebuild_material_preview_mesh();
+    show_material_viewer = true;
+    viewer_radius = 2.5f;
+    viewer_phi = 20.0f;
+    viewer_theta = 45.0f;
+    viewer_target = { 0, 0, 0 };
+    viewer_model_rotation = { 0, 0, 0 };
+    return true;
+}
+
+// State accessors
+bool is_model_viewer_visible() {
+    return show_model_viewer;
+}
+
+bool is_material_viewer_visible() {
+    return show_material_viewer;
+}
+
+void show_model_viewer_window(bool show) {
+    show_model_viewer = show;
+}
+
+void show_material_viewer_window(bool show) {
+    show_material_viewer = show;
+}
+
+void set_model_viewer_model(const Model& model) {
+    if (viewer_model.meshCount > 0) {
+        UnloadModel(viewer_model);
+    }
+    viewer_model = model;
+}
+
+void apply_material_settings() {
+    if (viewer_mat_sphere.meshCount == 0) return;
+
+    Material& mat = viewer_mat_sphere.materials[0];
+
+    Color finalColor = {
+        (unsigned char)(material_albedo.r * material_brightness),
+        (unsigned char)(material_albedo.g * material_brightness),
+        (unsigned char)(material_albedo.b * material_brightness),
+        material_albedo.a
+    };
+
+    mat.maps[MATERIAL_MAP_DIFFUSE].color = finalColor;
+
+    if (material_texture.id != 0) {
+        mat.maps[MATERIAL_MAP_DIFFUSE].texture = material_texture;
+    }
+}
+
+void rebuild_material_preview_mesh() {
+    if (viewer_mat_sphere.meshCount > 0) {
+        UnloadModel(viewer_mat_sphere);
+        viewer_mat_sphere = {0};
+    }
+
+    Mesh mesh = {0};
+
+    switch (material_preview_primitive) {
+        case 0: mesh = GenMeshSphere(1.0f, 64, 64); break;
+        case 1: mesh = GenMeshCube(2.0f, 2.0f, 2.0f); break;
+        case 2: mesh = GenMeshPlane(3.0f, 3.0f, 1, 1); break;
+    }
+
+    viewer_mat_sphere = LoadModelFromMesh(mesh);
+    apply_material_settings();
+}
 
 void draw_model_viewer_window() {
     if (!show_model_viewer) {
@@ -106,44 +262,6 @@ void draw_model_viewer_window() {
     ImGui::End();
 }
 
-void apply_material_settings() {
-    if (viewer_mat_sphere.meshCount == 0) return;
-
-    Material& mat = viewer_mat_sphere.materials[0];
-
-    Color finalColor = {
-        (unsigned char)(material_albedo.r * material_brightness),
-        (unsigned char)(material_albedo.g * material_brightness),
-        (unsigned char)(material_albedo.b * material_brightness),
-        material_albedo.a
-    };
-
-    mat.maps[MATERIAL_MAP_DIFFUSE].color = finalColor;
-
-    if (material_texture.id != 0) {
-        mat.maps[MATERIAL_MAP_DIFFUSE].texture = material_texture;
-    }
-}
-
-void rebuild_material_preview_mesh() {
-    if (viewer_mat_sphere.meshCount > 0) {
-        UnloadModel(viewer_mat_sphere);
-        viewer_mat_sphere = {0};
-    }
-
-    Mesh mesh = {0};
-
-    switch (material_preview_primitive) {
-        case 0: mesh = GenMeshSphere(1.0f, 64, 64); break;
-        case 1: mesh = GenMeshCube(2.0f, 2.0f, 2.0f); break;
-        case 2: mesh = GenMeshPlane(3.0f, 3.0f, 1, 1); break;
-    }
-
-    viewer_mat_sphere = LoadModelFromMesh(mesh);
-
-    apply_material_settings();
-}
-
 void draw_material_viewer_window() {
     if (!show_material_viewer) {
         material_preview_primitive = 0;
@@ -160,7 +278,9 @@ void draw_material_viewer_window() {
     if (ImGui::Begin("Material Editor", &show_material_viewer)) {
 
         ImGui::Columns(2, nullptr, true);
+
         ImGui::BeginChild("MaterialSettings");
+
         ImGui::Text("Material");
 
         if (ImGui::ColorEdit4("Albedo", material_albedo_f)) {
@@ -188,6 +308,7 @@ void draw_material_viewer_window() {
         }
 
         ImGui::EndChild();
+
         ImGui::NextColumn();
 
         ImVec2 size = ImGui::GetContentRegionAvail();
@@ -273,92 +394,24 @@ void draw_material_viewer_window() {
     ImGui::End();
 }
 
-Texture create_model_preview(const ModelAsset& asset, const std::string& cache_key, int preview_size = 64) {
-    Texture result = {0};
-    
-    Model preview_model = {0};
-    if (!load_model_instance(asset, preview_model)) {
-        return result;
+void cleanup_viewers() {
+    if (viewer_model.meshCount > 0) {
+        UnloadModel(viewer_model);
+        viewer_model = { 0 };
     }
-    
-    if (!has_valid_model_data(preview_model)) {
-        UnloadModel(preview_model);
-        return result;
+
+    if (viewer_rt.id != 0) {
+        UnloadRenderTexture(viewer_rt);
+        viewer_rt = { 0 };
     }
-    
-    RenderTexture2D render_texture = LoadRenderTexture(preview_size, preview_size);
-    if (render_texture.id == 0) {
-        UnloadModel(preview_model);
-        return result;
+
+    if (viewer_mat_sphere.meshCount > 0) {
+        UnloadModel(viewer_mat_sphere);
+        viewer_mat_sphere = { 0 };
     }
-    
-    Vector3 min_bound = {FLT_MAX, FLT_MAX, FLT_MAX};
-    Vector3 max_bound = {-FLT_MAX, -FLT_MAX, -FLT_MAX};
-    bool has_vertices = false;
-    
-    for (int m = 0; m < preview_model.meshCount; m++) {
-        Mesh& mesh = preview_model.meshes[m];
-        if (!mesh.vertices) continue;
-        
-        for (int v = 0; v < mesh.vertexCount; v++) {
-            float vx = mesh.vertices[v * 3];
-            float vy = mesh.vertices[v * 3 + 1];
-            float vz = mesh.vertices[v * 3 + 2];
-            
-            min_bound.x = fminf(min_bound.x, vx);
-            min_bound.y = fminf(min_bound.y, vy);
-            min_bound.z = fminf(min_bound.z, vz);
-            max_bound.x = fmaxf(max_bound.x, vx);
-            max_bound.y = fmaxf(max_bound.y, vy);
-            max_bound.z = fmaxf(max_bound.z, vz);
-            has_vertices = true;
-        }
+
+    if (viewer_mat_rt.id != 0) {
+        UnloadRenderTexture(viewer_mat_rt);
+        viewer_mat_rt = { 0 };
     }
-    
-    Vector3 center = {0, 0, 0};
-    float distance = 3.0f;
-    
-    if (has_vertices) {
-        center = {
-            (min_bound.x + max_bound.x) * 0.5f,
-            (min_bound.y + max_bound.y) * 0.5f,
-            (min_bound.z + max_bound.z) * 0.5f
-        };
-        
-        Vector3 size = {
-            max_bound.x - min_bound.x,
-            max_bound.y - min_bound.y,
-            max_bound.z - min_bound.z
-        };
-        
-        float max_size = fmaxf(fmaxf(size.x, size.y), size.z);
-        if (max_size < 0.1f) max_size = 1.0f;
-        distance = max_size * 2.0f;
-    }
-    Camera3D preview_camera = {0};
-    preview_camera.position = {center.x + distance * 0.6f, center.y + distance * 0.5f, center.z + distance * 0.6f};
-    preview_camera.target = center;
-    preview_camera.up = {0.0f, 1.0f, 0.0f};
-    preview_camera.fovy = 45.0f;
-    preview_camera.projection = CAMERA_PERSPECTIVE;
-    
-    BeginTextureMode(render_texture);
-    {
-        ClearBackground({32, 32, 40, 255});
-        
-        BeginMode3D(preview_camera);
-        {
-            DrawModel(preview_model, {0, 0, 0}, 1.0f, WHITE);
-        }
-        EndMode3D();
-    }
-    EndTextureMode();
-    
-    result = render_texture.texture;
-    
-    model_render_cache[cache_key] = render_texture;
-    
-    UnloadModel(preview_model);
-    
-    return result;
 }

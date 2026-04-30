@@ -1,25 +1,23 @@
-#pragma once
-#include "scene.h"
-#include "raylib.h"
-#include <stack>
-#include <filesystem>
+﻿#pragma once
 
-struct SceneState {
-    std::vector<Entity> entities;
-    int selected;
-};
+#include "../headers/editor.h"
+#include "imgui.h"
+#include "../headers/ImGuizmo.h"
+#include <string>
+#include <unordered_map>
 
-extern Scene scene;
-extern std::string project_path;
-extern int selected_asset_index;
+namespace editor_internal {
 
-extern std::stack<SceneState> undo_stack;
-extern std::stack<SceneState> redo_stack;
+extern ImGuizmo::OPERATION gizmo_mode;
+extern int renaming_index;
+extern char rename_buf[128];
+extern bool scene_asset_dragging;
+extern std::string dragged_scene_asset_name;
+extern std::unordered_map<std::string, Texture> tex_cache;
+extern bool show_about_window;
+extern bool has_clipboard;
+extern Entity clipboard_data;
 
-extern std::filesystem::path current_asset_path;
+void restore_scene_entity_models(Scene& scene);
 
-void handle_input();
-void handle_scene_asset_drop(Camera3D camera);
-void save_state();
-void undo();
-void redo();
+}

@@ -1,32 +1,23 @@
 #pragma once
+
+#include "../headers/models.h"
 #include "raylib.h"
-#include "tex.h"
-
-extern bool show_model_viewer = false;
-extern Model viewer_model = { 0 };
-extern RenderTexture2D viewer_rt = { 0 };
-extern bool show_material_viewer = false;
-extern int material_preview_primitive = 0;
-
-extern Color material_albedo = WHITE;
-extern float material_albedo_f[4] = {1,1,1,1};
-extern float material_brightness = 1.0f;
-
-extern Texture2D material_texture = {0};
-extern Model viewer_mat_sphere = { 0 };
-extern RenderTexture2D viewer_mat_rt = { 0 };
-
-extern Vector3 viewer_target = { 0, 0, 0 };
-extern Vector3 viewer_model_center = { 0, 0, 0 };
-extern Vector3 viewer_model_rotation = { 0, 0, 0 };
-
-extern std::unordered_map<std::string, Texture> model_preview_cache;
-extern std::unordered_map<std::string, RenderTexture2D> model_render_cache;
-
-extern float viewer_phi = 20.0f, viewer_theta = 45.0f, viewer_radius = 5.0f;
+#include <filesystem>
+#include <unordered_map>
 
 void draw_model_viewer_window();
+void set_model_viewer_model(const Model& model);
+bool open_model_viewer_for_asset(const ModelAsset& asset);
+
 void draw_material_viewer_window();
 void apply_material_settings();
 void rebuild_material_preview_mesh();
-Texture create_model_preview(const ModelAsset& asset, const std::string& cache_key, int preview_size = 64);
+bool open_material_viewer_for_path(const std::filesystem::path& material_path, std::unordered_map<std::string, Texture>& texture_cache);
+
+bool is_model_viewer_visible();
+bool is_material_viewer_visible();
+
+void show_model_viewer_window(bool show);
+void show_material_viewer_window(bool show);
+
+void cleanup_viewers();

@@ -1,8 +1,12 @@
 #include "editor_utils.h"
+#include "raylib.h"
 #include <filesystem>
-#include <cmath>
 
 namespace fs = std::filesystem;
+
+bool has_valid_model_data(const Model& model) {
+    return model.meshCount > 0 && model.meshes != nullptr;
+}
 
 std::string get_asset_name_for_path(const fs::path& project_path_value, const fs::path& asset_path) {
     std::error_code ec;
@@ -32,8 +36,4 @@ Vector3 get_scene_drop_position(Camera3D camera) {
         0.0f,
         camera.position.z + camera.target.z
     };
-}
-
-bool has_valid_model_data(const Model& model) {
-    return model.meshCount > 0 && model.meshes != nullptr;
 }
