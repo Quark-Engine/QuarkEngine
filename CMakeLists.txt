@@ -8,23 +8,13 @@ set(CMAKE_RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/bin)
 
 include_directories(
     ${CMAKE_SOURCE_DIR}/quark-libs/imgui/include
-    ${CMAKE_SOURCE_DIR}/quark-libs/raylib/include
     ${CMAKE_SOURCE_DIR}/src/headers
 )
 
-file(GLOB RAYLIB_SRC
-    ${CMAKE_SOURCE_DIR}/quark-libs/raylib/*.c
-)
+set(BUILD_EXAMPLES OFF CACHE BOOL "" FORCE)
+set(BUILD_GAMES OFF CACHE BOOL "" FORCE)
 
-add_library(raylib STATIC ${RAYLIB_SRC})
-
-target_include_directories(raylib PUBLIC
-    ${CMAKE_SOURCE_DIR}/quark-libs/raylib
-    ${CMAKE_SOURCE_DIR}/quark-libs/raylib/external
-    ${CMAKE_SOURCE_DIR}/quark-libs/raylib/external/glfw/include
-)
-
-target_compile_definitions(raylib PRIVATE PLATFORM_DESKTOP)
+add_subdirectory(quark-libs/raylib)
 
 set(EDITOR_FILES
     src/editor/editor_assets.cpp
@@ -46,6 +36,7 @@ set(SOURCE_FILES
     src/rlights.cpp
     src/scene.cpp
     src/tex.cpp
+
     quark-libs/imgui/include/imgui.cpp
     quark-libs/imgui/include/imgui_draw.cpp
     quark-libs/imgui/include/imgui_widgets.cpp
@@ -55,9 +46,35 @@ set(SOURCE_FILES
 
 add_executable(${PROJECT_NAME} ${SOURCE_FILES} ${EDITOR_FILES})
 
-set(RAYLIB_LIB_DIR "${CMAKE_SOURCE_DIR}/quark-libs/raylib/lib")
+target_link_libraries(${PROJECT_NAME} raylib)
+
+if(WIN32)
+    target_link_libraries(${PROJECT_NAME}
+        winmm
+        gdi32
+        opengl32
+    )
+elseif(UNIX AND NOT APPLE)
+    target_link_libraries(${PROJECT_NAME}
+        GL
+        m
+        pthread
+        dl
+        rt
+        X11
+    )
+elseif(APPLE)
+    target_link_libraries(${PROJECT_NAME}
+        "-framework Cocoa"
+        "-framework OpenGL"
+        "-framework IOKit"
+        "-framework CoreAudio"
+        "-framework CoreVideo"
+    )
+endif()
 
 set(ASSETS_DIR "${CMAKE_SOURCE_DIR}/assets")
+
 if(EXISTS "${ASSETS_DIR}")
     add_custom_command(TARGET ${PROJECT_NAME} POST_BUILD
         COMMAND ${CMAKE_COMMAND} -E copy_directory
@@ -66,30 +83,5 @@ if(EXISTS "${ASSETS_DIR}")
         COMMENT "Copying assets to output directory"
     )
 else()
-    message(WARNING "Assets directory not found: ${ASSETS_DIR}. Skipping asset copy step.")
-endif()
-
-if(WIN32)
-    target_link_libraries(${PROJECT_NAME}
-        raylib
-        opengl32
-        winmm
-    )
-
-elseif(UNIX AND NOT APPLE)
-    target_link_libraries(${PROJECT_NAME}
-        raylib
-        GL
-        m
-    )
-
-elseif(APPLE)
-    target_link_libraries(${PROJECT_NAME}
-        raylib
-        "-framework Cocoa"
-        "-framework OpenGL"
-        "-framework IOKit"
-        "-framework CoreAudio"
-        "-framework CoreVideo"
-    )
+    message(WARNING "Assets directory not found: ${ASSETS_DIR}")
 endif()
