@@ -12,6 +12,18 @@ include_directories(
     ${CMAKE_SOURCE_DIR}/src/headers
 )
 
+file(GLOB RAYLIB_SRC
+    ${CMAKE_SOURCE_DIR}/quark-libs/raylib/*.c
+)
+
+add_library(raylib STATIC ${RAYLIB_SRC})
+
+target_include_directories(raylib PUBLIC
+    ${CMAKE_SOURCE_DIR}/quark-libs/raylib
+)
+
+target_compile_definitions(raylib PRIVATE PLATFORM_DESKTOP)
+
 set(EDITOR_FILES
     src/editor/editor_assets.cpp
     src/editor/editor_entity.cpp
@@ -56,42 +68,20 @@ else()
 endif()
 
 if(WIN32)
-    target_link_directories(${PROJECT_NAME} PRIVATE ${RAYLIB_LIB_DIR})
     target_link_libraries(${PROJECT_NAME}
         raylib
-        winmm
-        gdi32
         opengl32
+        winmm
     )
-elseif(UNIX AND NOT APPLE)
-    if(EXISTS "${RAYLIB_LIB_DIR}/libraylib.so.5.5.0")
-        set(RAYLIB_LIB "${RAYLIB_LIB_DIR}/libraylib.so.5.5.0")
-    elseif(EXISTS "${RAYLIB_LIB_DIR}/libraylib.a")
-        set(RAYLIB_LIB "${RAYLIB_LIB_DIR}/libraylib.a")
-    else()
-        set(RAYLIB_LIB raylib)
-    endif()
 
+elseif(UNIX AND NOT APPLE)
     target_link_libraries(${PROJECT_NAME}
-        ${RAYLIB_LIB}
+        raylib
         GL
         m
-        pthread
-        dl
-        rt
-        X11
     )
-    target_compile_options(${PROJECT_NAME} PRIVATE -Wall -Wextra)
-elseif(APPLE)
-    if(EXISTS "${RAYLIB_LIB_DIR}/libraylibOSX.a")
-        set(RAYLIB_LIB "${RAYLIB_LIB_DIR}/libraylibOSX.a")
-    elseif(EXISTS "${RAYLIB_LIB_DIR}/libraylib.5.5.0.dylib")
-        set(RAYLIB_LIB "${RAYLIB_LIB_DIR}/libraylib.5.5.0.dylib")
-    else()
-        set(RAYLIB_LIB raylib)
-    endif()
 
-    target_link_directories(${PROJECT_NAME} PRIVATE ${RAYLIB_LIB_DIR})
+elseif(APPLE)
     target_link_libraries(${PROJECT_NAME}
         raylib
         "-framework Cocoa"

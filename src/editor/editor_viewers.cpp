@@ -8,7 +8,6 @@
 #include <fstream>
 #include <sstream>
 
-// Global state for viewers
 static bool show_model_viewer = false;
 static Model viewer_model = { 0 };
 static RenderTexture2D viewer_rt = { 0 };
@@ -123,7 +122,6 @@ bool open_material_viewer_for_path(const std::filesystem::path& material_path, s
     return true;
 }
 
-// State accessors
 bool is_model_viewer_visible() {
     return show_model_viewer;
 }
