@@ -3,6 +3,7 @@
 #include "imgui.h"
 #include "raymath.h"
 #include "rlgl.h"
+#include "plugins/plugin_manager.h"
 #include "headers/lighting.h"
 #include "editor/editor.h"
 #include "headers/camera.h"
@@ -257,6 +258,14 @@ int main(int argc, char* argv[]) {
     else
         project_new(project_path, editor.scene);
 
+    PluginManager plugin_manager;
+    plugin_manager.load_all("plugins");
+
+    for (auto& lp : plugin_manager.get_plugins()) {
+        PluginContext ctx { &editor.scene, &editor.scene.selected, 0.0f };
+        if (lp.plugin->on_load) lp.plugin->on_load(&ctx);
+    }
+
     while (!WindowShouldClose()) {
         SetWindowTitle(TextFormat("Quark Engine | %s | FPS: %d",
             fs::path(project_path).filename().string().c_str(), GetFPS()));
@@ -317,6 +326,9 @@ int main(int argc, char* argv[]) {
             camera.update();
             editor.handle_input();
 
+            PluginContext ctx { &editor.scene, &editor.scene.selected, GetFrameTime() };
+            plugin_manager.update_all(ctx);
+
             SetShaderValueMatrix(shadowmap_shader, light_vp_loc, light_view_proj);
             rlEnableShader(shadowmap_shader.id);
             rlActiveTextureSlot(texture_active_slot);
@@ -372,6 +384,7 @@ int main(int argc, char* argv[]) {
             EndMode3D();
 
             editor.draw_ui(shadowmap_shader);
+            plugin_manager.draw_ui_all(ctx);
             editor.handle_scene_asset_drop(camera.get_camera());
 
             rlImGuiEnd();
@@ -384,6 +397,7 @@ int main(int argc, char* argv[]) {
     UnloadShader(shadowcaster_shader);
     UnloadShader(shadowmap_shader);
     unload_shadowmap_render_texture(shadow_map);
+    plugin_manager.unload_all();
     rlImGuiShutdown();
     CloseWindow();
     return 0;
