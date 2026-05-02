@@ -3,6 +3,7 @@
 #include "headers/lighting.h"
 #include "headers/models.h"
 #include "headers/tex.h"
+#include "headers/version.h"
 #include "editor/editor.h"
 #include "raylib.h"
 #include "nlohmann/json.hpp"
@@ -84,7 +85,7 @@ static bool write_project_manifest(const fs::path& root_path) {
 
     json manifest;
     manifest["format"] = "quark-project";
-    manifest["version"] = 1;
+    manifest["version"] = QUARK_ENGINE_VERSION;
     manifest["name"] = root_path.filename().string();
     manifest["scene"] = "scene.json";
     manifest["resources"] = "resources";
@@ -428,4 +429,23 @@ bool project_load(const std::string& folder_path, Scene& scene, Shader shader) {
     }
 
     return true;
+}
+
+std::string get_project_version(const std::string& path) {
+    const fs::path root_path = resolve_project_root_path(fs::path(path));
+    const fs::path manifest_path = find_project_manifest(root_path);
+    if (manifest_path.empty()) return "";
+
+    std::ifstream f(manifest_path);
+    if (!f.is_open()) return "";
+
+    json manifest;
+    try {
+        f >> manifest;
+        if (manifest.contains("version") && manifest["version"].is_string())
+            return manifest["version"].get<std::string>();   
+    }
+    
+    catch (...) {}
+    return "";
 }

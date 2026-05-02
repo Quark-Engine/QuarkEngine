@@ -20,6 +20,7 @@
 #endif
 
 #include "hub.h"
+#include "headers/version.h"
 #include "project.h"
 #include "rlImGui.h"
 #include "imgui.h"
@@ -44,14 +45,18 @@ struct HubProject {
 };
 
 static std::vector<HubProject> hub_projects;
-static int  hub_selected       = -1;
-static int  hub_rename_index   = -1;
-static bool hub_show_create    = false;
-static bool hub_show_rename    = false;
-static bool hub_show_delete    = false;
+static int  hub_selected         = -1;
+static int  hub_rename_index     = -1;
+static bool hub_show_create      = false;
+static bool hub_show_rename      = false;
+static bool hub_show_delete      = false;
 static char hub_create_name[256] = "";
 static char hub_create_path[512] = "";
 static char hub_rename_buf[256]  = "";
+
+static bool        hub_show_version_warning = false;
+static std::string hub_pending_open_path    = "";
+static std::string hub_saved_version        = "";
 
 static void hub_save_registry() {
     json j = json::array();
@@ -293,8 +298,17 @@ std::string run_hub() {
                 hub_selected = i;
 
             if (ImGui::IsItemHovered() && ImGui::IsMouseDoubleClicked(ImGuiMouseButton_Left)) {
-                result_path = hub_projects[i].path;
-                should_exit = true;
+                std::string saved_ver = get_project_version(hub_projects[i].path);
+                if (!saved_ver.empty() && saved_ver != QUARK_ENGINE_VERSION) {
+                    hub_pending_open_path = hub_projects[i].path;
+                    hub_saved_version = saved_ver;
+                    hub_show_version_warning = true;
+                } 
+                
+                else {
+                    result_path = hub_projects[i].path;
+                    should_exit = true;
+                }
             }
 
             if (ImGui::BeginPopupContextItem("##ctx")) {
@@ -443,6 +457,37 @@ std::string run_hub() {
 
             ImGui::SameLine();
             if (ImGui::Button("Cancel", ImVec2(110, 28))) ImGui::CloseCurrentPopup();
+            ImGui::EndPopup();
+        }
+
+        if (hub_show_version_warning) { ImGui::OpenPopup("Version Mismatch"); hub_show_version_warning = false; }
+
+        ImGui::SetNextWindowSize(ImVec2(480, 155), ImGuiCond_Always);
+        ImGui::SetNextWindowPos(
+            ImVec2(GetScreenWidth() * 0.5f, GetScreenHeight() * 0.5f),
+            ImGuiCond_Always, ImVec2(0.5f, 0.5f));
+
+        if (ImGui::BeginPopupModal("Version Mismatch", nullptr, ImGuiWindowFlags_NoResize)) {
+            ImGui::Spacing();
+            ImGui::TextWrapped(
+                "This project was saved with engine version %s,\n"
+                "but the current engine version is %s.\n\n"
+                "Opening it may cause issues or data loss.",
+                hub_saved_version.c_str(), QUARK_ENGINE_VERSION.c_str());
+            ImGui::Spacing();
+            ImGui::Separator();
+            ImGui::Spacing();
+
+            if (ImGui::Button("Open Anyway", ImVec2(130, 28))) {
+                result_path = hub_pending_open_path;
+                should_exit = true;
+                ImGui::CloseCurrentPopup();
+            }
+            ImGui::SameLine();
+            if (ImGui::Button("Cancel", ImVec2(110, 28))) {
+                hub_pending_open_path.clear();
+                ImGui::CloseCurrentPopup();
+            }
             ImGui::EndPopup();
         }
 
