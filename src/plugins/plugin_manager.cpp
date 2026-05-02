@@ -4,6 +4,7 @@
 #include "plugin_manager.h"
 #include <filesystem>
 #include <iostream>
+#include <imgui.h>
 
 namespace fs = std::filesystem;
 

@@ -39,6 +39,61 @@ static Entity make_entity_from_asset(Scene& scene, ModelAsset* asset) {
     return entity;
 }
 
+static void update_plugins(PluginManager& plugin_manager, Editor& editor) {
+    static Editor* s_editor = nullptr;
+    s_editor = &editor;
+
+    PluginContext ctx;
+    ctx.delta_time      = GetFrameTime();
+    ctx.entity_count    = (int)s_editor->scene.entities.size();
+    ctx.selected        = &s_editor->scene.selected;
+
+    ctx.ui_begin            = [](const char* t) { return ImGui::Begin(t); };
+    ctx.ui_end              = []() { ImGui::End(); };
+    ctx.ui_text             = [](const char* t) { ImGui::Text("%s", t); };
+    ctx.ui_button           = [](const char* l) { return ImGui::Button(l); };
+    ctx.ui_checkbox         = [](const char* l, bool* v) { return ImGui::Checkbox(l, v); };
+    ctx.ui_slider_float     = [](const char* l, float* v, float mn, float mx) { return ImGui::SliderFloat(l, v, mn, mx); };
+    ctx.ui_input_float      = [](const char* l, float* v) { return ImGui::InputFloat(l, v); };
+    ctx.ui_color_edit3      = [](const char* l, float c[3]) { return ImGui::ColorEdit3(l, c); };
+    ctx.ui_separator        = []() { ImGui::Separator(); };
+    ctx.ui_same_line        = []() { ImGui::SameLine(); };
+
+    ctx.entity_get_name     = [](int i) -> const char* { return s_editor->scene.entities[i].name.c_str(); };
+    ctx.entity_get_position = [](int i, float* x, float* y, float* z) { auto& p = s_editor->scene.entities[i].position; *x = p.x; *y = p.y; *z = p.z; };
+    ctx.entity_get_rotation = [](int i, float* x, float* y, float* z) { auto& r = s_editor->scene.entities[i].rotation; *x = r.x; *y = r.y; *z = r.z; };
+    ctx.entity_get_scale    = [](int i, float* x, float* y, float* z) { auto& s = s_editor->scene.entities[i].scale; *x = s.x; *y = s.y; *z = s.z; };
+    ctx.entity_get_color    = [](int i, unsigned char* r, unsigned char* g, unsigned char* b, unsigned char* a) { auto& c = s_editor->scene.entities[i].color; *r = c.r; *g = c.g; *b = c.b; *a = c.a; };
+
+    ctx.entity_set_position = [](int i, float x, float y, float z) { s_editor->scene.entities[i].position = {x, y, z}; };
+    ctx.entity_set_rotation = [](int i, float x, float y, float z) { s_editor->scene.entities[i].rotation = {x, y, z}; };
+    ctx.entity_set_scale    = [](int i, float x, float y, float z) { s_editor->scene.entities[i].scale = {x, y, z}; };
+    ctx.entity_set_color    = [](int i, unsigned char r, unsigned char g, unsigned char b, unsigned char a) { s_editor->scene.entities[i].color = {r, g, b, a}; };
+    ctx.entity_set_name     = [](int i, const char* name) { s_editor->scene.entities[i].name = name; };
+
+    ctx.scene_save = []() { project_save(s_editor->project_path, s_editor->scene); };
+    ctx.scene_spawn = [](const char* asset_name) -> int {
+        for (auto& a : assets) {
+            if (a.name == asset_name) {
+                Entity e = make_entity_from_asset(s_editor->scene, &a);
+                if (!e.model.meshCount) return -1;
+                s_editor->scene.entities.push_back(e);
+                return (int)s_editor->scene.entities.size() - 1;
+            }
+        }
+        return -1;
+    };
+    ctx.scene_delete = [](int i) {
+        if (i < 0 || i >= (int)s_editor->scene.entities.size()) return;
+        s_editor->scene.entities.erase(s_editor->scene.entities.begin() + i);
+        if (s_editor->scene.selected >= (int)s_editor->scene.entities.size())
+            s_editor->scene.selected = -1;
+    };
+
+    plugin_manager.update_all(ctx);
+    plugin_manager.draw_ui_all(ctx);
+}
+
 static Matrix compose_entity_transform(const Entity& entity) {
     Matrix transform = MatrixIdentity();
     transform = MatrixMultiply(transform, MatrixTranslate(entity.position.x, entity.position.y, entity.position.z));
@@ -321,21 +376,10 @@ int main(int argc, char* argv[]) {
             camera.update();
             editor.handle_input();
 
-            PluginContext ctx;
-            ctx.delta_time   = GetFrameTime();
-            ctx.entity_count = (int)editor.scene.entities.size();
-            ctx.selected     = &editor.scene.selected;
-            ctx.ui_begin     = [](const char* title) { return ImGui::Begin(title); };
-            ctx.ui_end       = []() { ImGui::End(); };
-            ctx.ui_text      = [](const char* text) { ImGui::Text("%s", text); };
-            ctx.ui_button    = [](const char* label) { return ImGui::Button(label); };
-
-            plugin_manager.update_all(ctx);
-
             SetShaderValueMatrix(shadowmap_shader, light_vp_loc, light_view_proj);
             rlEnableShader(shadowmap_shader.id);
             rlActiveTextureSlot(texture_active_slot);
-            rlEnableTexture(shadow_map.texture.id);
+            rlEnableTexture(shadow_map.depth.id);
             rlSetUniform(shadow_map_loc, &texture_active_slot, SHADER_UNIFORM_INT, 1);
 
             BeginMode3D(camera.get_camera());
@@ -361,7 +405,9 @@ int main(int argc, char* argv[]) {
                         float power = 2.0f;
                         SetShaderValue(shadowmap_shader, emission_color_loc, &emission, SHADER_UNIFORM_VEC3);
                         SetShaderValue(shadowmap_shader, emission_power_loc, &power, SHADER_UNIFORM_FLOAT);
-                    } else {
+                    } 
+                    
+                    else {
                         Vector3 zero = {0.0f, 0.0f, 0.0f};
                         float power = 0.0f;
                         SetShaderValue(shadowmap_shader, emission_color_loc, &zero, SHADER_UNIFORM_VEC3);
@@ -371,7 +417,9 @@ int main(int argc, char* argv[]) {
                     int use = 0;
                     if (e.texture.id != 0) {
                         use = 1;
-                    } else {
+                    } 
+                    
+                    else {
                         for (int i = 0; i < e.model.materialCount; i++) {
                             if (e.model.materials[i].maps[MATERIAL_MAP_DIFFUSE].texture.id != 0) {
                                 use = 1;
@@ -380,7 +428,6 @@ int main(int argc, char* argv[]) {
                         }
                     }
                     SetShaderValue(shadowmap_shader, use_tex_loc, &use, SHADER_UNIFORM_INT);
-
                     draw_entity_with_texture(e);
                 }
 
@@ -388,9 +435,9 @@ int main(int argc, char* argv[]) {
 
             editor.draw_ui(shadowmap_shader);
             editor.handle_scene_asset_drop(camera.get_camera());
-            plugin_manager.draw_ui_all(ctx);
+            update_plugins(plugin_manager, editor);
 
-            rlImGuiEnd();   
+            rlImGuiEnd();
         EndDrawing();
     }
 
