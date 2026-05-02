@@ -8,6 +8,7 @@
 #include "../headers/tex.h"
 #include "imgui.h"
 #include <algorithm>
+#include <fstream>
 #include <cfloat>
 #include <cmath>
 #include <cctype>
@@ -316,6 +317,35 @@ void draw_assets_ui(Editor& editor) {
         ImGui::SetCursorPosX((window_size.x - text_size.x) * 0.5f);
         ImGui::SetCursorPosY((window_size.y - text_size.y) * 0.5f);
         ImGui::TextUnformatted(text);
+
+        if (ImGui::BeginPopupContextWindow("AssetBgContext", ImGuiPopupFlags_MouseButtonRight | ImGuiPopupFlags_NoOpenOverItems)) {
+            if (ImGui::MenuItem("New File")) {
+                fs::path new_file = editor.current_asset_path / "New File.txt";
+                int suffix = 1;
+
+                while (fs::exists(new_file))
+                    new_file = editor.current_asset_path / ("New File " + std::to_string(suffix++) + ".txt");
+
+                std::ofstream f(new_file);
+                f.close();
+                refresh_assets(editor.project_path);
+            }
+
+            if (ImGui::MenuItem("New Folder")) {
+                fs::path new_folder = editor.current_asset_path / "New Folder";
+                int suffix = 1;
+
+                while (fs::exists(new_folder))
+                    new_folder = editor.current_asset_path / ("New Folder " + std::to_string(suffix++));
+
+                std::error_code ec;
+                fs::create_directory(new_folder, ec);
+                refresh_assets(editor.project_path);
+            }
+
+            ImGui::EndPopup();
+        }
+
         ImGui::End();
         return;
     }
@@ -398,6 +428,32 @@ void draw_assets_ui(Editor& editor) {
                 const size_t copied = entry.filename.copy(editor_internal::rename_buf, sizeof(editor_internal::rename_buf) - 1);
                 editor_internal::rename_buf[copied] = '\0';
                 ImGui::OpenPopup("RenameAsset");
+            }
+
+            ImGui::Separator();
+
+            if (ImGui::MenuItem("New File")) {
+                fs::path new_file = editor.current_asset_path / "New File.txt";
+                int suffix = 1;
+                
+                while (fs::exists(new_file))
+                    new_file = editor.current_asset_path / ("New File" + std::to_string(suffix++) + ".txt");
+
+                std::ofstream f(new_file);
+                f.close();
+                refresh_assets(editor.project_path);
+            }
+
+            if (ImGui::MenuItem("New Folder")) {
+                fs::path new_folder = editor.current_asset_path / "New Folder";
+                int suffix = 1;
+
+                while (fs::exists(new_folder))
+                    new_folder = editor.current_asset_path / ("New Folder " + std::to_string(suffix++));
+
+                std::error_code ec;
+                fs::create_directory(new_folder, ec);
+                refresh_assets(editor.project_path);
             }
 
             ImGui::EndPopup();
@@ -543,6 +599,35 @@ void draw_assets_ui(Editor& editor) {
 
         ImGui::EndPopup();
     }
+
+    if (ImGui::BeginPopupContextWindow("AssetBgContext", ImGuiPopupFlags_MouseButtonRight | ImGuiPopupFlags_NoOpenOverItems)) {
+        if (ImGui::MenuItem("New File")) {
+            fs::path new_file = editor.current_asset_path / "New File.txt";
+            int suffix = 1;
+
+            while (fs::exists(new_file))
+                new_file = editor.current_asset_path / ("New File " + std::to_string(suffix++) + ".txt");
+
+            std::ofstream f(new_file);
+            f.close();
+            refresh_assets(editor.project_path);
+        }
+
+        if (ImGui::MenuItem("New Folder")) {
+            fs::path new_folder = editor.current_asset_path / "New Folder";
+            int suffix = 1;
+
+            while (fs::exists(new_folder))
+                new_folder = editor.current_asset_path / ("New Folder " + std::to_string(suffix++));
+
+            std::error_code ec;
+            fs::create_directory(new_folder, ec);
+            refresh_assets(editor.project_path);
+        }
+
+        ImGui::EndPopup();
+    }
+
 
     ImGui::EndChild();
     ImGui::End();
