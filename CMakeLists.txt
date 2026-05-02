@@ -66,6 +66,11 @@ if(BUILD_ENGINE)
             "-framework CoreVideo"
         )
     endif()
+
+    add_custom_command(TARGET QuarkEngine POST_BUILD
+    COMMAND ${CMAKE_COMMAND} -E copy_directory
+    ${CMAKE_SOURCE_DIR}/assets
+    ${CMAKE_BINARY_DIR}/bin/assets)
 endif()
 
 if(BUILD_PLUGIN)

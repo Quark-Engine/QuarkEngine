@@ -4,7 +4,17 @@
 #include <string>
 
 #ifdef _WIN32
+    #define WIN32_LEAN_AND_MEAN
+
+    #define CloseWindow WinCloseWindow
+    #define ShowCursor WinShowCursor
+    #define Rectangle WinRectangle
+
     #include <windows.h>
+
+    #undef CloseWindow
+    #undef ShowCursor
+    #undef Rectangle
     typedef HMODULE LibHandle;
 #else
     #include <dlfcn.h>
@@ -26,7 +36,7 @@ public:
     void draw_ui_all(PluginContext& ctx);
     
     const std::vector<LoadedPlugin>& get_plugins() const { return plugins; }
+
 private:
     std::vector<LoadedPlugin> plugins;
 };
-
