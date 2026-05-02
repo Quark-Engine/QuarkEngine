@@ -18,6 +18,10 @@ namespace fs = std::filesystem;
 
 Shader shadowmap_shader = {0};
 RenderTexture2D shadow_map = {0};
+RenderTexture2D scene_rt = {0};
+
+extern bool g_is_scene_hovered;
+extern bool g_is_scene_active;
 static Shader shadowcaster_shader = {0};
 
 static Entity make_entity_from_asset(Scene& scene, ModelAsset* asset) {
@@ -276,6 +280,7 @@ int main(int argc, char* argv[]) {
     shadowmap_shader.locs[SHADER_LOC_VECTOR_VIEW] = GetShaderLocation(shadowmap_shader, "viewPos");
 
     shadow_map = load_shadowmap_render_texture(SHADOWMAP_RESOLUTION, SHADOWMAP_RESOLUTION);
+    scene_rt = LoadRenderTexture(GetScreenWidth(), GetScreenHeight());
 
     Vector3 light_dir = Vector3Normalize({0.35f, -1.0f, -0.35f});
 
@@ -367,74 +372,39 @@ int main(int argc, char* argv[]) {
         EndTextureMode();
 
         Matrix light_view_proj = MatrixMultiply(light_proj, light_view);
+        
+        BeginTextureMode(scene_rt);
+            ClearBackground(DARKGRAY);
+            BeginMode3D(camera.get_camera());
+                DrawGrid(20, 1.0f);
+                for (auto& e : editor.scene.entities) {
+                    if (!e.shader_assigned || (e.model.materialCount > 0 && e.model.materials[0].shader.id != shadowmap_shader.id)) {
+                        set_model_shader(e.model, shadowmap_shader);
+                    }
+                    e.shader_assigned = true;
+                    if (e.has_light && e.light_created) {
+                        e.light.position = e.position;
+                        e.light.light.position = e.position;
+                        update_lighting(shadowmap_shader, e.light);
+                    }
+                    int use = (e.texture.id != 0) ? 1 : 0;
+                    SetShaderValue(shadowmap_shader, use_tex_loc, &use, SHADER_UNIFORM_INT);
+                    draw_entity_with_texture(e);
+                }
+            EndMode3D();
+        EndTextureMode();
 
         BeginDrawing();
             ClearBackground(DARKGRAY);
             rlImGuiBegin();
 
-            editor.draw_gizmo(camera.get_camera());
-            camera.update();
+            if (IsCursorHidden() || ((g_is_scene_hovered || g_is_scene_active) && (!ImGui::IsAnyItemActive() || g_is_scene_active) && !ImGuizmo::IsUsing())) {
+                camera.update();
+            }
+
             editor.handle_input();
 
-            SetShaderValueMatrix(shadowmap_shader, light_vp_loc, light_view_proj);
-            rlEnableShader(shadowmap_shader.id);
-            rlActiveTextureSlot(texture_active_slot);
-            rlEnableTexture(shadow_map.depth.id);
-            rlSetUniform(shadow_map_loc, &texture_active_slot, SHADER_UNIFORM_INT, 1);
-
-            BeginMode3D(camera.get_camera());
-                DrawGrid(20, 1.0f);
-
-                for (auto& e : editor.scene.entities) {
-                    if (!e.shader_assigned || e.model.materialCount > 0 && e.model.materials[0].shader.id != shadowmap_shader.id) {
-                        set_model_shader(e.model, shadowmap_shader);
-                    }
-                    e.shader_assigned = true;
-
-                    if (e.has_light && e.light_created) {
-                        e.light.position       = e.position;
-                        e.light.light.position = e.position;
-                        e.light.light.color    = e.light.color;
-                        e.light.light.target   = e.light.target;
-                        e.light.enabled        = true;
-                        update_lighting(shadowmap_shader, e.light);
-                    }
-
-                    if (e.has_light) {
-                        Vector3 emission = { e.color.r / 255.0f, e.color.g / 255.0f, e.color.b / 255.0f };
-                        float power = 2.0f;
-                        SetShaderValue(shadowmap_shader, emission_color_loc, &emission, SHADER_UNIFORM_VEC3);
-                        SetShaderValue(shadowmap_shader, emission_power_loc, &power, SHADER_UNIFORM_FLOAT);
-                    } 
-                    
-                    else {
-                        Vector3 zero = {0.0f, 0.0f, 0.0f};
-                        float power = 0.0f;
-                        SetShaderValue(shadowmap_shader, emission_color_loc, &zero, SHADER_UNIFORM_VEC3);
-                        SetShaderValue(shadowmap_shader, emission_power_loc, &power, SHADER_UNIFORM_FLOAT);
-                    }
-
-                    int use = 0;
-                    if (e.texture.id != 0) {
-                        use = 1;
-                    } 
-                    
-                    else {
-                        for (int i = 0; i < e.model.materialCount; i++) {
-                            if (e.model.materials[i].maps[MATERIAL_MAP_DIFFUSE].texture.id != 0) {
-                                use = 1;
-                                break;
-                            }
-                        }
-                    }
-                    SetShaderValue(shadowmap_shader, use_tex_loc, &use, SHADER_UNIFORM_INT);
-                    draw_entity_with_texture(e);
-                }
-
-            EndMode3D();
-
-            editor.draw_ui(shadowmap_shader);
-            editor.handle_scene_asset_drop(camera.get_camera());
+            editor.draw_ui(shadowmap_shader, camera.get_camera());
             update_plugins(plugin_manager, editor);
 
             rlImGuiEnd();

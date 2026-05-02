@@ -6,15 +6,30 @@
 #include "editor_utils.h"
 #include "editor_viewers.h"
 #include "../headers/ImGuizmo.h"
+#include "rlImGui.h"
 #include "../headers/lighting.h"
 #include "../headers/project.h"
 #include "imgui.h"
+#include "imgui_internal.h"
 #include "raymath.h"
+#include "rlgl.h"
 #include <cstring>
 #include <cmath>
 #include <vector>
 
+extern RenderTexture2D scene_rt;
+bool show_hierarchy = true;
+bool show_inspector = true;
+bool show_assets = true;
+bool show_scene = true;
+
+bool g_is_scene_hovered = false;
+bool g_is_scene_active = false;
+
 namespace {
+
+ImVec2 g_scene_window_pos = { 0, 0 };
+ImVec2 g_scene_window_size = { 0, 0 };
 
 struct MeshEditState {
     bool enabled = false;
@@ -196,6 +211,26 @@ void reset_mesh_edit_model(Entity& entity) {
     }
 }
 
+void reset_editor_layout(ImGuiID dockspace_id) {
+    ImGui::DockBuilderRemoveNode(dockspace_id);
+    ImGui::DockBuilderAddNode(dockspace_id, ImGuiDockNodeFlags_PassthruCentralNode | ImGuiDockNodeFlags_DockSpace);
+    ImGui::DockBuilderSetNodeSize(dockspace_id, ImGui::GetMainViewport()->Size);
+
+    ImGuiID dock_main_id = dockspace_id;
+    ImGuiID dock_id_left = ImGui::DockBuilderSplitNode(dock_main_id, ImGuiDir_Left, 0.20f, nullptr, &dock_main_id);
+    ImGuiID dock_id_right = ImGui::DockBuilderSplitNode(dock_main_id, ImGuiDir_Right, 0.25f, nullptr, &dock_main_id);
+    ImGuiID dock_id_bottom = ImGui::DockBuilderSplitNode(dock_main_id, ImGuiDir_Down, 0.30f, nullptr, &dock_main_id);
+
+    ImGui::DockBuilderDockWindow("Hierarchy", dock_id_left);
+    ImGui::DockBuilderDockWindow("Inspector", dock_id_right);
+    ImGui::DockBuilderDockWindow("Assets", dock_id_bottom);
+    ImGui::DockBuilderDockWindow("Scene", dock_main_id);
+    
+    ImGui::DockBuilderFinish(dockspace_id);
+    
+    show_hierarchy = show_inspector = show_assets = show_scene = true;
+}
+
 void draw_mesh_vertex_overlay(Editor& editor, Camera3D camera) {
     sync_mesh_edit_state(editor);
     if (!g_mesh_edit_state.enabled) return;
@@ -278,14 +313,15 @@ void draw_gizmo(Editor& editor, Camera3D camera) {
     Entity* entity = editor.scene.get_selected();
     if (!entity) return;
 
-    ImGuizmo::BeginFrame();
+    ImGuizmo::SetDrawlist();
     ImGuiIO& io = ImGui::GetIO();
-    ImGuizmo::SetRect(0, 0, io.DisplaySize.x, io.DisplaySize.y);
+    ImGuizmo::SetRect(g_scene_window_pos.x, g_scene_window_pos.y, g_scene_window_size.x, g_scene_window_size.y);
 
     Matrix view = MatrixTranspose(GetCameraMatrix(camera));
+    float aspect = (g_scene_window_size.y > 0) ? (g_scene_window_size.x / g_scene_window_size.y) : 1.0f;
     Matrix projection = MatrixTranspose(MatrixPerspective(
         camera.fovy * DEG2RAD,
-        io.DisplaySize.x / io.DisplaySize.y,
+        aspect,
         0.1f,
         1000.0f
     ));
@@ -316,7 +352,7 @@ void draw_gizmo(Editor& editor, Camera3D camera) {
             ImGuizmo::Manipulate(
                 view_matrix,
                 projection_matrix,
-                ImGuizmo::TRANSLATE,
+                editor_internal::gizmo_mode,
                 ImGuizmo::WORLD,
                 transform_matrix
             );
@@ -373,7 +409,7 @@ void draw_gizmo(Editor& editor, Camera3D camera) {
     g_mesh_edit_state.was_using_gizmo = false;
 }
 
-void handle_scene_asset_drop(Editor& editor, Camera3D camera) {
+void handle_scene_asset_drop(Editor& editor, Camera3D camera, bool is_hovered) {
     if (!editor_internal::scene_asset_dragging) return;
     if (!IsMouseButtonReleased(MOUSE_BUTTON_LEFT)) return;
 
@@ -382,7 +418,7 @@ void handle_scene_asset_drop(Editor& editor, Camera3D camera) {
     editor_internal::dragged_scene_asset_name.clear();
 
     if (ImGuizmo::IsUsing()) return;
-    if (ImGui::IsWindowHovered(ImGuiHoveredFlags_AnyWindow)) return;
+    if (!is_hovered) return;
 
     ModelAsset* asset = find_asset_by_name(asset_name);
     if (!asset) return;
@@ -397,16 +433,19 @@ void handle_scene_asset_drop(Editor& editor, Camera3D camera) {
     editor.scene.selected = static_cast<int>(editor.scene.entities.size()) - 1;
 }
 
-void Editor::draw_gizmo(Camera3D camera) {
-    ::draw_gizmo(*this, camera);
-}
-
-void Editor::handle_scene_asset_drop(Camera3D camera) {
-    ::handle_scene_asset_drop(*this, camera);
-}
-
-void draw_ui(Editor& editor, Shader shader) {
+void draw_ui(Editor& editor, Shader shader, Camera3D camera) {
     using namespace editor_internal;
+
+    ImGuizmo::BeginFrame();
+
+    static ImGuiDockNodeFlags dockspace_flags = ImGuiDockNodeFlags_PassthruCentralNode;
+    ImGuiID dockspace_id = ImGui::GetID("MainDockSpace");
+
+    ImGui::DockSpaceOverViewport(dockspace_id, ImGui::GetMainViewport(), dockspace_flags);
+
+    if (ImGui::DockBuilderGetNode(dockspace_id) == nullptr) {
+        reset_editor_layout(dockspace_id);
+    }
 
     if (ImGui::BeginMainMenuBar()) {
         if (ImGui::BeginMenu("File")) {
@@ -479,6 +518,18 @@ void draw_ui(Editor& editor, Shader shader) {
             ImGui::EndMenu();
         }
 
+        if (ImGui::BeginMenu("Layout")) {
+            if (ImGui::MenuItem("Reset Layout")) {
+                reset_editor_layout(dockspace_id);
+            }
+            ImGui::Separator();
+            ImGui::MenuItem("Hierarchy", nullptr, &show_hierarchy);
+            ImGui::MenuItem("Inspector", nullptr, &show_inspector);
+            ImGui::MenuItem("Assets", nullptr, &show_assets);
+            ImGui::MenuItem("Scene", nullptr, &show_scene);
+            ImGui::EndMenu();
+        }
+
         if (ImGui::BeginMenu("Create")) {
             for (auto& asset : assets) {
                 if (!asset.is_procedural) continue;
@@ -502,11 +553,10 @@ void draw_ui(Editor& editor, Shader shader) {
         ImGui::EndMainMenuBar();
     }
 
-    const float menu_bar_height = ImGui::GetFrameHeight();
+    ImGuiIO& io = ImGui::GetIO();
 
-    ImGui::SetNextWindowSize(ImVec2(150, 520), ImGuiCond_Once);
-    ImGui::SetNextWindowPos(ImVec2(5, 5 + menu_bar_height), ImGuiCond_Once);
-    ImGui::Begin("Hierarchy", nullptr, ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoMove);
+    if (show_hierarchy) {
+        ImGui::Begin("Hierarchy", &show_hierarchy);
 
     for (int i = 0; i < static_cast<int>(editor.scene.entities.size()); i++) {
         Entity& entity = editor.scene.entities[i];
@@ -578,29 +628,10 @@ void draw_ui(Editor& editor, Shader shader) {
         ImGui::EndPopup();
     }
     ImGui::End();
-
-    if (renaming_index != -1) ImGui::OpenPopup("Rename");
-
-    if (ImGui::BeginPopupModal("Rename", nullptr, ImGuiWindowFlags_AlwaysAutoResize)) {
-        ImGui::InputText("##rename", rename_buf, IM_ARRAYSIZE(rename_buf));
-        if (ImGui::Button("OK")) {
-            if (renaming_index >= 0 && renaming_index < static_cast<int>(editor.scene.entities.size())) {
-                assign_entity_name(editor.scene.entities[renaming_index], rename_buf);
-            }
-            renaming_index = -1;
-            ImGui::CloseCurrentPopup();
-        }
-        ImGui::SameLine();
-        if (ImGui::Button("Cancel")) {
-            renaming_index = -1;
-            ImGui::CloseCurrentPopup();
-        }
-        ImGui::EndPopup();
     }
 
-    ImGui::SetNextWindowSize(ImVec2(225, 520), ImGuiCond_Once);
-    ImGui::SetNextWindowPos(ImVec2(1050, 5 + menu_bar_height), ImGuiCond_Once);
-    ImGui::Begin("Inspector", nullptr, ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoMove);
+    if (show_inspector) {
+        ImGui::Begin("Inspector", &show_inspector);
     ImGui::Text("Mode");
     ImGui::SameLine();
     if (ImGui::Button("P")) gizmo_mode = ImGuizmo::TRANSLATE;
@@ -1089,8 +1120,53 @@ void draw_ui(Editor& editor, Shader shader) {
     }
 
     ImGui::End();
+    }
 
-    draw_assets_ui(editor);
+    if (show_scene) {
+        ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(0, 0));
+        if (ImGui::Begin("Scene", &show_scene)) {
+            g_scene_window_pos = ImGui::GetCursorScreenPos();
+            g_scene_window_size = ImGui::GetContentRegionAvail();
+            if (scene_rt.id > 0) {
+                if (scene_rt.texture.width != (int)g_scene_window_size.x || scene_rt.texture.height != (int)g_scene_window_size.y) {
+                    UnloadRenderTexture(scene_rt);
+                    scene_rt = LoadRenderTexture((int)g_scene_window_size.x, (int)g_scene_window_size.y);
+                }
+                Rectangle src = { 0, 0, (float)scene_rt.texture.width, -(float)scene_rt.texture.height };
+                rlImGuiImageRect(&scene_rt.texture, (int)g_scene_window_size.x, (int)g_scene_window_size.y, src);
+            }
+            ImGui::SetCursorScreenPos(g_scene_window_pos);
+            ImGui::InvisibleButton("SceneCanvas", g_scene_window_size, ImGuiButtonFlags_MouseButtonLeft | ImGuiButtonFlags_MouseButtonRight | ImGuiButtonFlags_MouseButtonMiddle);
+            g_is_scene_hovered = ImGui::IsItemHovered();
+            g_is_scene_active = ImGui::IsItemActive();
+
+            draw_gizmo(editor, camera);
+            handle_scene_asset_drop(editor, camera, g_is_scene_hovered);
+        }
+        ImGui::End();
+        ImGui::PopStyleVar();
+    }
+
+    if (renaming_index != -1) ImGui::OpenPopup("Rename");
+
+    if (ImGui::BeginPopupModal("Rename", nullptr, ImGuiWindowFlags_AlwaysAutoResize)) {
+        ImGui::InputText("##rename", rename_buf, IM_ARRAYSIZE(rename_buf));
+        if (ImGui::Button("OK")) {
+            if (renaming_index >= 0 && renaming_index < static_cast<int>(editor.scene.entities.size())) {
+                assign_entity_name(editor.scene.entities[renaming_index], rename_buf);
+            }
+            renaming_index = -1;
+            ImGui::CloseCurrentPopup();
+        }
+        ImGui::SameLine();
+        if (ImGui::Button("Cancel")) {
+            renaming_index = -1;
+            ImGui::CloseCurrentPopup();
+        }
+        ImGui::EndPopup();
+    }
+
+    if (show_assets) draw_assets_ui(editor);
     draw_model_viewer_window();
     draw_material_viewer_window();
 
@@ -1110,6 +1186,6 @@ void draw_ui(Editor& editor, Shader shader) {
     }
 }
 
-void Editor::draw_ui(Shader shader) {
-    ::draw_ui(*this, shader);
+void Editor::draw_ui(Shader shader, Camera3D camera) {
+    ::draw_ui(*this, shader, camera);
 }

@@ -17,10 +17,10 @@ FlyCamera::FlyCamera() {
 }
 
 void FlyCamera::update() {
-    if (!active && (ImGuizmo::IsUsing() || ImGui::GetIO().WantCaptureMouse))
+    if (!active && ImGuizmo::IsUsing())
         return;
 
-    if (IsMouseButtonPressed(MOUSE_LEFT_BUTTON)) {
+    if (IsMouseButtonPressed(MOUSE_LEFT_BUTTON) && !ImGuizmo::IsOver()) {
         DisableCursor();
         active = true;
         

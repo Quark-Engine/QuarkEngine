@@ -461,6 +461,7 @@ void rlImGuiBeginInitImGui(void)
     SetupKeymap();
 
     ImGuiIO& io = ImGui::GetIO();
+    io.ConfigFlags |= ImGuiConfigFlags_DockingEnable;
 
     ImFontConfig defaultConfig;
 

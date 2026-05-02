@@ -28,6 +28,8 @@
 
 namespace fs = std::filesystem;
 
+extern bool show_assets;
+
 namespace {
 
 std::unordered_map<std::string, Texture> model_preview_cache;
@@ -232,9 +234,7 @@ bool import_path_to_resources(const fs::path& src, const fs::path& resource_dir)
 }
 
 void draw_assets_ui(Editor& editor) {
-    ImGui::SetNextWindowSize(ImVec2(1270, 165), ImGuiCond_Once);
-    ImGui::SetNextWindowPos(ImVec2(5, 550), ImGuiCond_Once);
-    ImGui::Begin("Assets", nullptr, ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoMove);
+    ImGui::Begin("Assets", &show_assets, ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoMove);
     
     if (icon_file_tex.id == 0) icon_file_tex = LoadTexture("assets/file.png");
     if (icon_folder_tex.id == 0) icon_folder_tex = LoadTexture("assets/folder.png");

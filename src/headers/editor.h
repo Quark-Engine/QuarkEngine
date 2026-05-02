@@ -21,12 +21,10 @@ struct Editor {
 
     std::filesystem::path current_asset_path;
     
-    void draw_ui(Shader shader);
+    void draw_ui(Shader shader, Camera3D camera);
     void draw_assets_ui();
     void handle_input();
-    void handle_scene_asset_drop(Camera3D camera);
     void draw_entity_with_texture(Entity& e);
-    void draw_gizmo(Camera3D camera);
     void save_state();
     void undo();
     void redo();
