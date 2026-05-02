@@ -1,20 +1,23 @@
 #include "plugin.h"
-#include "imgui.h"
+#include <cstdio>
 
-static PluginContext* g_ctx = nullptr;
-
-void on_load(PluginContext* ctx)  { g_ctx = ctx; }
-void on_unload()                  {}
+void on_load(PluginContext* ctx) {}
+void on_unload() {}
 void on_update(PluginContext* ctx) {}
 
 void on_draw_ui(PluginContext* ctx) {
-    ImGui::Begin("Huesos Plugin");
-    ImGui::Text("Penis");
-    ImGui::End();
+    if (ctx->ui_begin("MyPlugin")) {
+        ctx->ui_text("Hello World");
+        char buf[64];
+        sprintf(buf, "Entities: %d", ctx->entity_count);
+        ctx->ui_text(buf);
+    }
+    ctx->ui_end();
 }
+
 static Plugin info {
-    "Deadass Plugin", "14.88",
+    "MyPlugin", "0.1",
     on_load, on_unload, on_update, on_draw_ui
 };
 
-extern "C" Plugin* get_plugin() { return &info; }
+extern "C" __declspec(dllexport) Plugin* get_plugin() { return &info; }

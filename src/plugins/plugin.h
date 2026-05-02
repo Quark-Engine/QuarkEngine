@@ -1,14 +1,20 @@
 #pragma once
-#include "raylib.h"
-#include "scene.h"
-#include "entity.h"
 
-#define PLUGIN_API extern "C"
+#ifdef _WIN32
+    #define PLUGIN_EXPORT extern "C" __declspec(dllexport)
+#else
+    #define PLUGIN_EXPORT extern "C"
+#endif
 
 struct PluginContext {
-    Scene* scene;
-    int* selected;
     float delta_time;
+    int entity_count;
+    int* selected;
+
+    bool (*ui_begin)(const char* title);
+    void (*ui_end)();
+    void (*ui_text)(const char* text);
+    bool (*ui_button)(const char* label);
 };
 
 struct Plugin {
@@ -20,4 +26,4 @@ struct Plugin {
     void (*on_draw_ui)(PluginContext* ctx);
 };
 
-PLUGIN_API Plugin* get_plugin();
+PLUGIN_EXPORT Plugin* get_plugin();

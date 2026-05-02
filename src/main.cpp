@@ -224,16 +224,16 @@ int main(int argc, char* argv[]) {
 
     Vector3 light_dir = Vector3Normalize({0.35f, -1.0f, -0.35f});
 
-    Camera3D light_cam = {0};
-    light_cam.projection = CAMERA_ORTHOGRAPHIC;
-    light_cam.up         = {0.0f, 1.0f, 0.0f};
-    light_cam.fovy       = 20.0f;
-    light_cam.target     = Vector3Zero();
-    light_cam.position   = Vector3Scale(light_dir, -15.0f);
+    Camera3D light_cam     = {0};
+    light_cam.projection   = CAMERA_ORTHOGRAPHIC;
+    light_cam.up           = {0.0f, 1.0f, 0.0f};
+    light_cam.fovy         = 20.0f;
+    light_cam.target       = Vector3Zero();
+    light_cam.position     = Vector3Scale(light_dir, -15.0f);
 
-    int light_vp_loc      = GetShaderLocation(shadowmap_shader, "lightVP");
-    int shadow_map_loc    = GetShaderLocation(shadowmap_shader, "shadowMap");
-    int shadow_map_res    = SHADOWMAP_RESOLUTION;
+    int light_vp_loc       = GetShaderLocation(shadowmap_shader, "lightVP");
+    int shadow_map_loc     = GetShaderLocation(shadowmap_shader, "shadowMap");
+    int shadow_map_res     = SHADOWMAP_RESOLUTION;
     int emission_color_loc = GetShaderLocation(shadowmap_shader, "emissionColor");
     int emission_power_loc = GetShaderLocation(shadowmap_shader, "emissionPower");
     int use_tex_loc        = GetShaderLocation(shadowmap_shader, "useTexture");
@@ -260,11 +260,6 @@ int main(int argc, char* argv[]) {
 
     PluginManager plugin_manager;
     plugin_manager.load_all("plugins");
-
-    for (auto& lp : plugin_manager.get_plugins()) {
-        PluginContext ctx { &editor.scene, &editor.scene.selected, 0.0f };
-        if (lp.plugin->on_load) lp.plugin->on_load(&ctx);
-    }
 
     while (!WindowShouldClose()) {
         SetWindowTitle(TextFormat("Quark Engine | %s | FPS: %d",
@@ -326,7 +321,15 @@ int main(int argc, char* argv[]) {
             camera.update();
             editor.handle_input();
 
-            PluginContext ctx { &editor.scene, &editor.scene.selected, GetFrameTime() };
+            PluginContext ctx;
+            ctx.delta_time   = GetFrameTime();
+            ctx.entity_count = (int)editor.scene.entities.size();
+            ctx.selected     = &editor.scene.selected;
+            ctx.ui_begin     = [](const char* title) { return ImGui::Begin(title); };
+            ctx.ui_end       = []() { ImGui::End(); };
+            ctx.ui_text      = [](const char* text) { ImGui::Text("%s", text); };
+            ctx.ui_button    = [](const char* label) { return ImGui::Button(label); };
+
             plugin_manager.update_all(ctx);
 
             SetShaderValueMatrix(shadowmap_shader, light_vp_loc, light_view_proj);
@@ -384,10 +387,10 @@ int main(int argc, char* argv[]) {
             EndMode3D();
 
             editor.draw_ui(shadowmap_shader);
-            plugin_manager.draw_ui_all(ctx);
             editor.handle_scene_asset_drop(camera.get_camera());
+            plugin_manager.draw_ui_all(ctx);
 
-            rlImGuiEnd();
+            rlImGuiEnd();   
         EndDrawing();
     }
 

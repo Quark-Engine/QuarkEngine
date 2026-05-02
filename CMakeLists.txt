@@ -7,19 +7,19 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 option(BUILD_ENGINE "Build Quark Engine" ON)
 option(BUILD_PLUGIN "Build Plugin" OFF)
 
+set(BUILD_EXAMPLES OFF CACHE BOOL "" FORCE)
+set(BUILD_GAMES OFF CACHE BOOL "" FORCE)
+add_subdirectory(quark-libs/raylib)
+
 include_directories(
     ${CMAKE_SOURCE_DIR}/quark-libs/imgui/include
     ${CMAKE_SOURCE_DIR}/src/headers
     ${CMAKE_SOURCE_DIR}/src/plugins
+    ${CMAKE_SOURCE_DIR}/src
 )
 
 if(BUILD_ENGINE)
     set(CMAKE_RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/bin)
-
-    set(BUILD_EXAMPLES OFF CACHE BOOL "" FORCE)
-    set(BUILD_GAMES OFF CACHE BOOL "" FORCE)
-
-    add_subdirectory(quark-libs/raylib)
 
     set(EDITOR_FILES
         src/editor/editor_assets.cpp
@@ -42,7 +42,6 @@ if(BUILD_ENGINE)
         src/rlights.cpp
         src/scene.cpp
         src/tex.cpp
-
         quark-libs/imgui/include/imgui.cpp
         quark-libs/imgui/include/imgui_draw.cpp
         quark-libs/imgui/include/imgui_widgets.cpp
@@ -51,14 +50,14 @@ if(BUILD_ENGINE)
     )
 
     add_executable(${PROJECT_NAME} ${SOURCE_FILES} ${EDITOR_FILES})
-    target_link_libraries(${PROJECT_NAME} raylib)
+    target_link_libraries(${PROJECT_NAME} PRIVATE raylib)
 
     if(WIN32)
-        target_link_libraries(${PROJECT_NAME} winmm gdi32 opengl32)
+        target_link_libraries(${PROJECT_NAME} PRIVATE winmm gdi32 opengl32)
     elseif(UNIX AND NOT APPLE)
-        target_link_libraries(${PROJECT_NAME} GL m pthread dl rt X11)
+        target_link_libraries(${PROJECT_NAME} PRIVATE GL m pthread dl rt X11)
     elseif(APPLE)
-        target_link_libraries(${PROJECT_NAME}
+        target_link_libraries(${PROJECT_NAME} PRIVATE
             "-framework Cocoa"
             "-framework OpenGL"
             "-framework IOKit"
@@ -67,30 +66,30 @@ if(BUILD_ENGINE)
         )
     endif()
 
-    add_custom_command(TARGET QuarkEngine POST_BUILD
-    COMMAND ${CMAKE_COMMAND} -E copy_directory
-    ${CMAKE_SOURCE_DIR}/assets
-    ${CMAKE_BINARY_DIR}/bin/assets)
+    add_custom_command(TARGET ${PROJECT_NAME} POST_BUILD
+        COMMAND ${CMAKE_COMMAND} -E copy_directory
+        ${CMAKE_SOURCE_DIR}/assets
+        ${CMAKE_BINARY_DIR}/bin/assets
+    )
 endif()
 
 if(BUILD_PLUGIN)
     add_library(MyPlugin SHARED
         plugins/MyPlugin/plugin.cpp
-
-        quark-libs/imgui/include/imgui.cpp
-        quark-libs/imgui/include/imgui_draw.cpp
-        quark-libs/imgui/include/imgui_widgets.cpp
-        quark-libs/imgui/include/imgui_tables.cpp
     )
 
     target_include_directories(MyPlugin PRIVATE
-        ${CMAKE_SOURCE_DIR}/quark-libs/imgui/include
-        ${CMAKE_SOURCE_DIR}/src/headers
         ${CMAKE_SOURCE_DIR}/src/plugins
     )
 
+    if(WIN32)
+        target_link_options(MyPlugin PRIVATE -Wl,--allow-shlib-undefined)
+    endif()
+
     set_target_properties(MyPlugin PROPERTIES
         PREFIX ""
-        LIBRARY_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/plugins
+        RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/bin/plugins
+        LIBRARY_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/bin/plugins
+        ARCHIVE_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/bin/plugins
     )
 endif()
