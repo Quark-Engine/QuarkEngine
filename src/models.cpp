@@ -745,7 +745,7 @@ static std::vector<std::filesystem::path> collect_model_paths(const std::filesys
 bool is_model_file(const std::filesystem::path& p) {
     std::string ext = lowercase_copy(p.extension().string());
 
-    return ext == ".obj" || ext == ".glb" || ext == ".gltf" || ext == ".fbx" || ext == ".iqm";
+    return ext == ".obj" || ext == ".glb" || ext == ".gltf" || ext == ".iqm";
 }
 
 bool entity_owns_model(const Entity& entity) {

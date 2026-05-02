@@ -1024,11 +1024,11 @@ void draw_ui(Editor& editor, Shader shader, Camera3D camera) {
         ImGui::Separator();
         ImGui::Text("Lighting");
 
-        static bool last_has_light = false;
         if (ImGui::Checkbox("Has Light", &entity->has_light)) {
-            if (last_has_light != entity->has_light) {
-                editor.save_state();
-                last_has_light = entity->has_light;
+            editor.save_state();
+            if (entity->light_created) {
+                entity->light.enabled = entity->has_light;
+                if (entity->light.id != -1) update_lighting(shader, entity->light);
             }
         }
 
@@ -1093,29 +1093,6 @@ void draw_ui(Editor& editor, Shader shader, Camera3D camera) {
                 }
                 entity->light.target = { target[0], target[1], target[2] };
             }
-
-            if (!entity->light_created) {
-                const int new_id = allocate_light_id();
-                if (new_id == -1) {
-                    entity->has_light = false;
-                } else {
-                    entity->light = create_lighting(entity->position, entity->light.color);
-                    entity->light.id = new_id;
-                    entity->light.light = create_light_at_slot(
-                        new_id,
-                        LIGHT_POINT,
-                        entity->position,
-                        Vector3Zero(),
-                        entity->light.color,
-                        shader
-                    );
-                    initialize_lighting_uniform_cache(entity->light, shader, new_id);
-                    entity->light_created = true;
-                }
-            }
-        } else if (entity->light_created) {
-            entity->light.enabled = false;
-            if (entity->light.id != -1) update_lighting(shader, entity->light);
         }
     }
 
@@ -1137,7 +1114,7 @@ void draw_ui(Editor& editor, Shader shader, Camera3D camera) {
             }
             ImGui::SetCursorScreenPos(g_scene_window_pos);
             ImGui::InvisibleButton("SceneCanvas", g_scene_window_size, ImGuiButtonFlags_MouseButtonLeft | ImGuiButtonFlags_MouseButtonRight | ImGuiButtonFlags_MouseButtonMiddle);
-            g_is_scene_hovered = ImGui::IsItemHovered();
+            g_is_scene_hovered = ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenBlockedByActiveItem);
             g_is_scene_active = ImGui::IsItemActive();
 
             draw_gizmo(editor, camera);
