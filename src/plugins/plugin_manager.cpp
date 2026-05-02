@@ -33,31 +33,39 @@ static void close_lib(LibHandle handle) {
 }
 
 void PluginManager::load(const std::string& filepath) {
-    LibHandle handle = LoadLibraryA(filepath.c_str());
-    if (!handle) {
-        DWORD err = GetLastError();
-        char msg[256];
-        FormatMessageA(FORMAT_MESSAGE_FROM_SYSTEM, nullptr, err, 0, msg, sizeof(msg), nullptr);
-        TraceLog(LOG_ERROR, "PLUGIN: Failed to load '%s': %s", filepath.c_str(), msg);
-        return;
-    }
+    #ifdef _WIN32
+        LibHandle handle = LoadLibraryA(filepath.c_str());
+        if (!handle) {
+            DWORD err = GetLastError();
+            char msg[256];
+            FormatMessageA(FORMAT_MESSAGE_FROM_SYSTEM, nullptr, err, 0, msg, sizeof(msg), nullptr);
+            TraceLog(LOG_ERROR, "PLUGIN: Failed to load '%s': %s", filepath.c_str(), msg);
+            return;
+        }
+    #else
+        LibHandle handle = dlopen(filepath.c_str(), RTLD_NOW);
+        if (!handle) {
+            TraceLog(LOG_ERROR, "PLUGIN: Failed to load '%s': %s", filepath.c_str(), dlerror());
+            return;
+        }
+    #endif
 
-    using get_plugin_func = Plugin*(*)();
-    get_plugin_func get_plugin = (get_plugin_func)get_sym(handle, "get_plugin");
+        using get_plugin_func = Plugin*(*)();
+        get_plugin_func get_plugin = (get_plugin_func)get_sym(handle, "get_plugin");
 
-    if (!get_plugin) {
-        close_lib(handle);
-        return;
-    }
+        if (!get_plugin) {
+            close_lib(handle);
+            return;
+        }
 
-    Plugin* plugin = get_plugin();
-    if (!plugin) {
-        close_lib(handle);
-        return;
-    }
+        Plugin* plugin = get_plugin();
+        if (!plugin) {
+            close_lib(handle);
+            return;
+        }
 
-    plugins.push_back({ handle, plugin, filepath });
-    TraceLog(LOG_INFO, "PLUGIN: Loaded '%s' v%s", plugin->name, plugin->version);
+        plugins.push_back({ handle, plugin, filepath });
+        TraceLog(LOG_INFO, "PLUGIN: Loaded '%s' v%s", plugin->name, plugin->version);
 }
 
 void PluginManager::load_all(const std::string& plugin_dir) {
