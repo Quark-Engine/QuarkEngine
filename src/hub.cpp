@@ -156,10 +156,11 @@ static std::string hub_browse_project_file() {
     ofn.lpstrFilter = "Quark Project (*.quarkproj)\0*.quarkproj\0All Files (*.*)\0*.*\0";
     ofn.lpstrFile = path;
     ofn.nMaxFile = MAX_PATH;
-    ofn.Flags = OFN_FILEMUSTEXIST | OFN_PATHMUSTEXIST;
+    ofn.Flags = OFN_FILEMUSTEXIST | OFN_PATHMUSTEXIST | OFN_NOCHANGEDIR;
     ofn.lpstrDefExt = "quarkproj";
     if (GetOpenFileNameA(&ofn)) return path;
     return "";
+
 #elif __linux__
     FILE* pipe = popen("zenity --file-selection --file-filter='*.quarkproj' 2>/dev/null", "r");
     if (!pipe) return "";
