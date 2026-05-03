@@ -166,7 +166,7 @@ void project_save(const std::string& folder_path, const Scene& scene) {
 
     json j;
     j["entities"] = json::array();
-    j["version"] = 2;
+    j["version"] = QUARK_ENGINE_VERSION;
 
     for (const auto& e : scene.entities) {
         json ej;
@@ -194,6 +194,30 @@ bool project_load(const std::string& folder_path, Scene& scene, Shader shader) {
     const fs::path root_path = resolve_project_root_path(fs::path(folder_path));
     const fs::path json_path = resolve_scene_json_path(fs::path(folder_path));
     if (!fs::exists(json_path)) return false;
+    const fs::path manifest_path = find_project_manifest(root_path);
+    std::string project_name = root_path.filename().string();
+    std::string project_version = "unknown";
+
+    if (!manifest_path.empty()) {
+        std::ifstream mf(manifest_path);
+        if (mf.is_open()) {
+            json manifest;
+            try {
+                mf >> manifest;
+                if (manifest.contains("name") && manifest["name"].is_string())
+                    project_name = manifest["name"].get<std::string>();
+                if (manifest.contains("version") && manifest["version"].is_string())
+                    project_version = manifest["version"].get<std::string>();
+            } catch (...) {}
+        }
+    }
+
+    TraceLog(LOG_INFO, "=== Loading project ===");
+    TraceLog(LOG_INFO, "  Name:    %s", project_name.c_str());
+    TraceLog(LOG_INFO, "  Version: %s", project_version.c_str());
+    TraceLog(LOG_INFO, "  Scene:   %s", json_path.string().c_str());
+    TraceLog(LOG_INFO, "  Engine:  %s", QUARK_ENGINE_VERSION.c_str());
+    TraceLog(LOG_INFO, "======================");
 
     scene.release_resources();
     reset_light_registry();
@@ -315,10 +339,11 @@ std::string get_project_version(const std::string& path) {
     json manifest;
     try {
         f >> manifest;
-        if (manifest.contains("version") && manifest["version"].is_string())
-            return manifest["version"].get<std::string>();   
-    }
-    
-    catch (...) {}
+        if (manifest.contains("version")) {
+            if (manifest["version"].is_string())
+                return manifest["version"].get<std::string>();
+            return manifest["version"].dump();
+        }
+    } catch (...) {}
     return "";
 }
