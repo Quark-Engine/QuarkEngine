@@ -236,14 +236,15 @@ void draw_gizmo(Editor& editor, Camera3D camera) {
     MeshComponent* mesh = entity->get_mesh_component();
     if (!transform || !mesh) return;
 
-    ImGuizmo::SetDrawlist();
+    if (g_scene_window_size.x <= 0 || g_scene_window_size.y <= 0) return;
+
+    ImGuizmo::SetDrawlist(ImGui::GetWindowDrawList());
     ImGuizmo::SetRect(g_scene_window_pos.x, g_scene_window_pos.y, g_scene_window_size.x, g_scene_window_size.y);
 
     Matrix view = MatrixTranspose(GetCameraMatrix(camera));
-    float aspect = (g_scene_window_size.y > 0) ? (g_scene_window_size.x / g_scene_window_size.y) : 1.0f;
     Matrix projection = MatrixTranspose(MatrixPerspective(
         camera.fovy * DEG2RAD,
-        aspect,
+        g_scene_window_size.x / g_scene_window_size.y,
         0.1f,
         1000.0f
     ));
@@ -251,9 +252,6 @@ void draw_gizmo(Editor& editor, Camera3D camera) {
     float view_matrix[16] = {};
     float projection_matrix[16] = {};
     float transform_matrix[16] = {};
-    float translation[3] = { transform->position.x, transform->position.y, transform->position.z };
-    float rotation[3] = { transform->rotation.x, transform->rotation.y, transform->rotation.z };
-    float scale[3] = { transform->scale.x, transform->scale.y, transform->scale.z };
 
     memcpy(view_matrix, &view, sizeof(view_matrix));
     memcpy(projection_matrix, &projection, sizeof(projection_matrix));
@@ -261,21 +259,39 @@ void draw_gizmo(Editor& editor, Camera3D camera) {
     draw_mesh_vertex_overlay(editor, camera);
 
     if (g_mesh_edit_state.enabled && has_valid_model_data(mesh->model)) {
-        if (g_mesh_edit_state.mesh_index >= mesh->model.meshCount) g_mesh_edit_state.mesh_index = 0;
+        if (g_mesh_edit_state.mesh_index >= mesh->model.meshCount) 
+            g_mesh_edit_state.mesh_index = 0;
 
         int vertex_index = -1;
-        if (get_selected_vertex_index(*entity, g_mesh_edit_state.mesh_index, g_mesh_edit_state.triangle_index, g_mesh_edit_state.vertex_corner, vertex_index)) {
-            const Vector3 vertex_world = get_mesh_vertex_world_position(*entity, g_mesh_edit_state.mesh_index, vertex_index);
+        if (get_selected_vertex_index(
+            *entity, 
+            g_mesh_edit_state.mesh_index, 
+            g_mesh_edit_state.triangle_index, 
+            g_mesh_edit_state.vertex_corner, 
+            vertex_index)) {
+            
+            const Vector3 vertex_world = get_mesh_vertex_world_position(
+                *entity, 
+                g_mesh_edit_state.mesh_index, 
+                vertex_index
+            );
+            
             float vertex_translation[3] = { vertex_world.x, vertex_world.y, vertex_world.z };
-            float vertex_rotation[3] = { transform->rotation.x, transform->rotation.y, transform->rotation.z };
+            float vertex_rotation[3] = { 0.0f, 0.0f, 0.0f };
             float vertex_scale[3] = { 1.0f, 1.0f, 1.0f };
 
-            ImGuizmo::RecomposeMatrixFromComponents(vertex_translation, vertex_rotation, vertex_scale, transform_matrix);
+            ImGuizmo::RecomposeMatrixFromComponents(
+                vertex_translation, 
+                vertex_rotation, 
+                vertex_scale, 
+                transform_matrix
+            );
+            
             ImGuizmo::Manipulate(
                 view_matrix,
                 projection_matrix,
                 ImGuizmo::TRANSLATE,
-                ImGuizmo::LOCAL,
+                ImGuizmo::WORLD,
                 transform_matrix
             );
 
@@ -287,7 +303,13 @@ void draw_gizmo(Editor& editor, Camera3D camera) {
                 float next_translation[3] = {};
                 float next_rotation[3] = {};
                 float next_scale[3] = {};
-                ImGuizmo::DecomposeMatrixToComponents(transform_matrix, next_translation, next_rotation, next_scale);
+                ImGuizmo::DecomposeMatrixToComponents(
+                    transform_matrix, 
+                    next_translation, 
+                    next_rotation, 
+                    next_scale
+                );
+                
                 set_mesh_vertex_world_position(
                     *entity,
                     g_mesh_edit_state.mesh_index,
@@ -301,7 +323,19 @@ void draw_gizmo(Editor& editor, Camera3D camera) {
         }
     }
 
-    ImGuizmo::RecomposeMatrixFromComponents(translation, rotation, scale, transform_matrix);
+    float translation[3] = { transform->position.x, transform->position.y, transform->position.z };
+    float rotation[3] = { transform->rotation.x, transform->rotation.y, transform->rotation.z };
+    float scale[3] = { transform->scale.x, transform->scale.y, transform->scale.z };
+
+    ImGuizmo::RecomposeMatrixFromComponents(
+        translation, 
+        rotation, 
+        scale, 
+        transform_matrix
+    );
+    
+    static bool was_using = false;
+    
     ImGuizmo::Manipulate(
         view_matrix,
         projection_matrix,
@@ -310,7 +344,6 @@ void draw_gizmo(Editor& editor, Camera3D camera) {
         transform_matrix
     );
 
-    static bool was_using = false;
     if (ImGuizmo::IsUsing() && !was_using) {
         editor.save_state();
     }
@@ -319,7 +352,12 @@ void draw_gizmo(Editor& editor, Camera3D camera) {
         float next_translation[3] = {};
         float next_rotation[3] = {};
         float next_scale[3] = {};
-        ImGuizmo::DecomposeMatrixToComponents(transform_matrix, next_translation, next_rotation, next_scale);
+        ImGuizmo::DecomposeMatrixToComponents(
+            transform_matrix, 
+            next_translation, 
+            next_rotation, 
+            next_scale
+        );
 
         transform->position = { next_translation[0], next_translation[1], next_translation[2] };
         transform->rotation = { next_rotation[0], next_rotation[1], next_rotation[2] };
@@ -331,6 +369,60 @@ void draw_gizmo(Editor& editor, Camera3D camera) {
 
     was_using = ImGuizmo::IsUsing();
     g_mesh_edit_state.was_using_gizmo = false;
+}
+
+static Vector2 world_to_scene_screen(const Vector3& world, const Camera3D& camera) {
+    Camera3D cam = camera;
+    
+    float aspect = g_scene_window_size.x / g_scene_window_size.y;
+    float fovy_rad = cam.fovy * DEG2RAD;
+    
+    Matrix view = GetCameraMatrix(cam);
+    Vector3 view_pos = Vector3Transform(world, view);
+    
+    float proj_x = view_pos.x / (-view_pos.z * tanf(fovy_rad * 0.5f) * aspect);
+    float proj_y = view_pos.y / (-view_pos.z * tanf(fovy_rad * 0.5f));
+    
+    return {
+        g_scene_window_pos.x + (proj_x * 0.5f + 0.5f) * g_scene_window_size.x,
+        g_scene_window_pos.y + (1.0f - (proj_y * 0.5f + 0.5f)) * g_scene_window_size.y
+    };
+}
+
+static Ray scene_screen_to_world_ray(const Vector2& mouse, const Camera3D& camera) {
+    float nx = (mouse.x - g_scene_window_pos.x) / g_scene_window_size.x;
+    float ny = (mouse.y - g_scene_window_pos.y) / g_scene_window_size.y;
+
+    Matrix view   = GetCameraMatrix(camera);
+    Matrix proj   = MatrixPerspective(
+        camera.fovy * DEG2RAD,
+        g_scene_window_size.x / g_scene_window_size.y,
+        0.1f, 1000.0f
+    );
+    Matrix inv_vp = MatrixInvert(MatrixMultiply(proj, view));
+
+    float ndcX =  nx * 2.0f - 1.0f;
+    float ndcY = -(ny * 2.0f - 1.0f);
+
+    auto mul = [](Matrix m, Vector4 v) -> Vector4 {
+        return {
+            m.m0*v.x + m.m4*v.y + m.m8*v.z  + m.m12*v.w,
+            m.m1*v.x + m.m5*v.y + m.m9*v.z  + m.m13*v.w,
+            m.m2*v.x + m.m6*v.y + m.m10*v.z + m.m14*v.w,
+            m.m3*v.x + m.m7*v.y + m.m11*v.z + m.m15*v.w
+        };
+    };
+
+    Vector4 near_w = mul(inv_vp, {ndcX, ndcY, -1.0f, 1.0f});
+    Vector4 far_w  = mul(inv_vp, {ndcX, ndcY,  1.0f, 1.0f});
+
+    Vector3 near_pos = { near_w.x/near_w.w, near_w.y/near_w.w, near_w.z/near_w.w };
+    Vector3 far_pos  = { far_w.x/far_w.w,   far_w.y/far_w.w,   far_w.z/far_w.w  };
+
+    Ray ray;
+    ray.position  = near_pos;
+    ray.direction = Vector3Normalize(Vector3Subtract(far_pos, near_pos));
+    return ray;
 }
 
 void draw_mesh_vertex_overlay(Editor& editor, Camera3D camera) {
@@ -347,11 +439,26 @@ void draw_mesh_vertex_overlay(Editor& editor, Camera3D camera) {
 
     ImDrawList* draw_list = ImGui::GetForegroundDrawList();
     Vector2 screen_points[3] = {};
-    Vector3 world_points[3] = {};
 
     for (int i = 0; i < 3; i++) {
-        world_points[i] = get_mesh_vertex_world_position(*entity, g_mesh_edit_state.mesh_index, triangle_vertices[i]);
-        screen_points[i] = GetWorldToScreen(world_points[i], camera);
+        Vector3 wp = get_mesh_vertex_world_position(*entity, g_mesh_edit_state.mesh_index, triangle_vertices[i]);
+        screen_points[i] = world_to_scene_screen(wp, camera);
+    }
+
+    // debug
+    for (int i = 0; i < 3; i++) {
+        Vector3 wp = get_mesh_vertex_world_position(*entity, g_mesh_edit_state.mesh_index, triangle_vertices[i]);
+        Vector2 raylib_screen = GetWorldToScreen(wp, camera);
+        draw_list->AddLine(
+            ImVec2(raylib_screen.x - 10, raylib_screen.y),
+            ImVec2(raylib_screen.x + 10, raylib_screen.y),
+            IM_COL32(255, 0, 0, 255), 2.0f
+        );
+        draw_list->AddLine(
+            ImVec2(raylib_screen.x, raylib_screen.y - 10),
+            ImVec2(raylib_screen.x, raylib_screen.y + 10),
+            IM_COL32(255, 0, 0, 255), 2.0f
+        );
     }
 
     for (int i = 0; i < 3; i++) {
@@ -359,8 +466,7 @@ void draw_mesh_vertex_overlay(Editor& editor, Camera3D camera) {
         draw_list->AddLine(
             ImVec2(screen_points[i].x, screen_points[i].y),
             ImVec2(screen_points[next].x, screen_points[next].y),
-            IM_COL32(255, 210, 120, 220),
-            2.0f
+            IM_COL32(255, 210, 120, 220), 2.0f
         );
     }
 
@@ -373,7 +479,7 @@ void draw_mesh_vertex_overlay(Editor& editor, Camera3D camera) {
     }
 
     if (ImGuizmo::IsOver() || ImGuizmo::IsUsing()) return;
-    if (ImGui::GetIO().WantCaptureMouse) return;
+    if (!g_is_scene_hovered) return;
     if (!IsMouseButtonPressed(MOUSE_BUTTON_LEFT)) return;
 
     const Vector2 mouse = GetMousePosition();
@@ -383,9 +489,8 @@ void draw_mesh_vertex_overlay(Editor& editor, Camera3D camera) {
     for (int i = 0; i < 3; i++) {
         const float dx = mouse.x - screen_points[i].x;
         const float dy = mouse.y - screen_points[i].y;
-        const float distance = sqrtf(dx * dx + dy * dy);
-        if (distance < best_distance) {
-            best_distance = distance;
+        if (sqrtf(dx*dx + dy*dy) < best_distance) {
+            best_distance = sqrtf(dx*dx + dy*dy);
             best_corner = i;
         }
     }
@@ -397,12 +502,9 @@ void draw_mesh_vertex_overlay(Editor& editor, Camera3D camera) {
 
     int picked_triangle = -1;
     int picked_corner = 0;
-    if (pick_mesh_triangle(
-            *entity,
-            g_mesh_edit_state.mesh_index,
-            GetScreenToWorldRay(mouse, camera),
-            picked_triangle,
-            picked_corner)) {
+    if (pick_mesh_triangle(*entity, g_mesh_edit_state.mesh_index,
+            scene_screen_to_world_ray(mouse, camera),
+            picked_triangle, picked_corner)) {
         g_mesh_edit_state.triangle_index = picked_triangle;
         g_mesh_edit_state.vertex_corner = picked_corner;
     }
@@ -704,21 +806,29 @@ void draw_ui(Editor& editor, Shader shader, Camera3D camera) {
         if (ImGui::Begin("Scene", &show_scene)) {
             g_scene_window_pos = ImGui::GetCursorScreenPos();
             g_scene_window_size = ImGui::GetContentRegionAvail();
-            if (scene_rt.id > 0) {
-                if (scene_rt.texture.width != (int)g_scene_window_size.x || scene_rt.texture.height != (int)g_scene_window_size.y) {
-                    UnloadRenderTexture(scene_rt);
-                    scene_rt = LoadRenderTexture((int)g_scene_window_size.x, (int)g_scene_window_size.y);
-                }
-                Rectangle src = { 0, 0, (float)scene_rt.texture.width, -(float)scene_rt.texture.height };
-                rlImGuiImageRect(&scene_rt.texture, (int)g_scene_window_size.x, (int)g_scene_window_size.y, src);
-            }
-            ImGui::SetCursorScreenPos(g_scene_window_pos);
-            ImGui::InvisibleButton("SceneCanvas", g_scene_window_size, ImGuiButtonFlags_MouseButtonLeft | ImGuiButtonFlags_MouseButtonRight | ImGuiButtonFlags_MouseButtonMiddle);
-            g_is_scene_hovered = ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenBlockedByActiveItem);
-            g_is_scene_active = ImGui::IsItemActive();
 
-            draw_gizmo(editor, camera);
-            handle_scene_asset_drop(editor, camera, g_is_scene_hovered);
+            if (g_scene_window_size.x > 0 && g_scene_window_size.y > 0) {
+                if (scene_rt.id > 0) {
+                    if (scene_rt.texture.width  != (int)g_scene_window_size.x ||
+                        scene_rt.texture.height != (int)g_scene_window_size.y) {
+                        UnloadRenderTexture(scene_rt);
+                        scene_rt = LoadRenderTexture((int)g_scene_window_size.x, (int)g_scene_window_size.y);
+                    }
+                    ImGui::GetWindowDrawList()->AddImage(
+                        (ImTextureID)(intptr_t)scene_rt.texture.id,
+                        g_scene_window_pos,
+                        ImVec2(g_scene_window_pos.x + g_scene_window_size.x,
+                            g_scene_window_pos.y + g_scene_window_size.y),
+                        ImVec2(0, 1), ImVec2(1, 0)
+                    );
+                }
+
+                g_is_scene_hovered = ImGui::IsWindowHovered(ImGuiHoveredFlags_AllowWhenBlockedByActiveItem);
+                g_is_scene_active  = ImGui::IsWindowFocused();
+
+                draw_gizmo(editor, camera);
+                handle_scene_asset_drop(editor, camera, g_is_scene_hovered);
+            }
         }
         ImGui::End();
         ImGui::PopStyleVar();

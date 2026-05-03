@@ -8,7 +8,10 @@ option(BUILD_ENGINE "Build Quark Engine" ON)
 option(BUILD_PLUGIN "Build Plugin" OFF)
 
 set(BUILD_EXAMPLES OFF CACHE BOOL "" FORCE)
-set(BUILD_GAMES OFF CACHE BOOL "" FORCE)
+set(BUILD_GAMES    OFF CACHE BOOL "" FORCE)
+set(BUILD_SHARED_LIBS    ON CACHE BOOL "" FORCE)
+set(GLFW_BUILD_SHARED_LIBS ON CACHE BOOL "" FORCE)
+
 add_subdirectory(quark-libs/raylib)
 
 include_directories(
@@ -71,9 +74,17 @@ if(BUILD_ENGINE)
 
     add_custom_command(TARGET ${PROJECT_NAME} POST_BUILD
         COMMAND ${CMAKE_COMMAND} -E copy_directory
-        ${CMAKE_SOURCE_DIR}/assets
-        ${CMAKE_BINARY_DIR}/bin/assets
+            ${CMAKE_SOURCE_DIR}/assets
+            ${CMAKE_BINARY_DIR}/bin/assets
     )
+
+    if(WIN32)
+        add_custom_command(TARGET ${PROJECT_NAME} POST_BUILD
+            COMMAND ${CMAKE_COMMAND} -E copy_if_different
+                $<TARGET_FILE:raylib>
+                ${CMAKE_BINARY_DIR}/bin/debug
+        )
+    endif()
 endif()
 
 if(BUILD_PLUGIN)

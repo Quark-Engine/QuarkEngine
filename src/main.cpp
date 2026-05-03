@@ -424,7 +424,8 @@ int main(int argc, char* argv[]) {
             ClearBackground(DARKGRAY);
             rlImGuiBegin();
 
-            if (IsCursorHidden() || ((g_is_scene_hovered || g_is_scene_active) && (!ImGui::IsAnyItemActive() || g_is_scene_active) && !ImGuizmo::IsUsing())) {
+            const bool gizmo_busy = ImGuizmo::IsOver() || ImGuizmo::IsUsing();
+            if (!gizmo_busy && (IsCursorHidden() || g_is_scene_hovered)) {
                 camera.update();
             }
 
