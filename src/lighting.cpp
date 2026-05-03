@@ -27,6 +27,12 @@ void update_lighting(Shader shader, Lighting& l) {
     SetShaderValue(shader, l.spot_angle_loc, &l.spot_angle, SHADER_UNIFORM_FLOAT);
 }
 
+void reset_light_registry() {
+    for (int i = 0; i < MAX_LIGHTS; i++) {
+        used[i] = false;
+    }
+}
+
 int allocate_light_id() {
     for (int i = 0; i < MAX_LIGHTS; i++) {
         if (!used[i]) { used[i] = true; return i; }

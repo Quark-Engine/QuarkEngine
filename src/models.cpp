@@ -185,49 +185,57 @@ static void rebuild_mesh_normals(Mesh& mesh) {
 }
 
 void clear_mesh_overrides(Entity& entity) {
-    entity.mesh_vertex_overrides.clear();
-    entity.mesh_triangles_detached = false;
+    MeshComponent* mesh = entity.get_mesh_component();
+    if (!mesh) return;
+    mesh->mesh_vertex_overrides.clear();
+    mesh->mesh_triangles_detached = false;
 }
 
 bool entity_has_mesh_overrides(const Entity& entity) {
-    return !entity.mesh_vertex_overrides.empty();
+    const MeshComponent* mesh = entity.get_mesh_component();
+    return mesh && !mesh->mesh_vertex_overrides.empty();
 }
 
 void capture_mesh_overrides_from_model(Entity& entity) {
-    const bool triangles_detached = entity.mesh_triangles_detached;
-    entity.mesh_vertex_overrides.clear();
-    entity.mesh_triangles_detached = triangles_detached;
-    if (entity.model.meshCount <= 0 || !entity.model.meshes) return;
+    MeshComponent* mesh_component = entity.get_mesh_component();
+    if (!mesh_component) return;
 
-    entity.mesh_vertex_overrides.reserve(entity.model.meshCount);
-    for (int mesh_index = 0; mesh_index < entity.model.meshCount; mesh_index++) {
-        const Mesh& mesh = entity.model.meshes[mesh_index];
+    const bool triangles_detached = mesh_component->mesh_triangles_detached;
+    mesh_component->mesh_vertex_overrides.clear();
+    mesh_component->mesh_triangles_detached = triangles_detached;
+    if (mesh_component->model.meshCount <= 0 || !mesh_component->model.meshes) return;
+
+    mesh_component->mesh_vertex_overrides.reserve(mesh_component->model.meshCount);
+    for (int mesh_index = 0; mesh_index < mesh_component->model.meshCount; mesh_index++) {
+        const Mesh& mesh = mesh_component->model.meshes[mesh_index];
         if (!mesh.vertices || mesh.vertexCount <= 0) {
-            entity.mesh_vertex_overrides.emplace_back();
+            mesh_component->mesh_vertex_overrides.emplace_back();
             continue;
         }
 
         const float* begin = mesh.vertices;
         const float* end = mesh.vertices + mesh.vertexCount * 3;
-        entity.mesh_vertex_overrides.emplace_back(begin, end);
+        mesh_component->mesh_vertex_overrides.emplace_back(begin, end);
     }
 }
 
 bool apply_mesh_overrides(Entity& entity) {
+    MeshComponent* mesh_component = entity.get_mesh_component();
+    if (!mesh_component) return false;
     if (!entity_has_mesh_overrides(entity)) return false;
-    if (entity.model.meshCount <= 0 || !entity.model.meshes) return false;
+    if (mesh_component->model.meshCount <= 0 || !mesh_component->model.meshes) return false;
 
-    if (entity.mesh_triangles_detached) {
+    if (mesh_component->mesh_triangles_detached) {
         detach_mesh_triangles(entity);
     }
 
     bool applied_any = false;
 
-    for (int mesh_index = 0; mesh_index < entity.model.meshCount; mesh_index++) {
-        if (mesh_index >= static_cast<int>(entity.mesh_vertex_overrides.size())) break;
+    for (int mesh_index = 0; mesh_index < mesh_component->model.meshCount; mesh_index++) {
+        if (mesh_index >= static_cast<int>(mesh_component->mesh_vertex_overrides.size())) break;
 
-        Mesh& mesh = entity.model.meshes[mesh_index];
-        std::vector<float>& override_vertices = entity.mesh_vertex_overrides[mesh_index];
+        Mesh& mesh = mesh_component->model.meshes[mesh_index];
+        std::vector<float>& override_vertices = mesh_component->mesh_vertex_overrides[mesh_index];
         if (!mesh.vertices || mesh.vertexCount <= 0) continue;
         if (override_vertices.size() != static_cast<size_t>(mesh.vertexCount * 3)) continue;
 
@@ -331,20 +339,21 @@ static bool detach_single_mesh_triangles(Mesh& mesh) {
 }
 
 bool detach_mesh_triangles(Entity& entity) {
-    if (entity.model.meshCount <= 0 || !entity.model.meshes) return false;
+    MeshComponent* mesh_component = entity.get_mesh_component();
+    if (!mesh_component || mesh_component->model.meshCount <= 0 || !mesh_component->model.meshes) return false;
 
     bool detached_any = false;
-    for (int mesh_index = 0; mesh_index < entity.model.meshCount; mesh_index++) {
-        Mesh& mesh = entity.model.meshes[mesh_index];
+    for (int mesh_index = 0; mesh_index < mesh_component->model.meshCount; mesh_index++) {
+        Mesh& mesh = mesh_component->model.meshes[mesh_index];
         if (!mesh.indices) continue;
         if (!detach_single_mesh_triangles(mesh)) continue;
         detached_any = true;
     }
 
     if (detached_any) {
-        entity.mesh_triangles_detached = true;
-    } else if (!entity.mesh_triangles_detached) {
-        entity.mesh_triangles_detached = true;
+        mesh_component->mesh_triangles_detached = true;
+    } else if (!mesh_component->mesh_triangles_detached) {
+        mesh_component->mesh_triangles_detached = true;
     }
 
     return detached_any;
@@ -749,7 +758,8 @@ bool is_model_file(const std::filesystem::path& p) {
 }
 
 bool entity_owns_model(const Entity& entity) {
-    return entity.owns_model_instance;
+    const MeshComponent* mesh = entity.get_mesh_component();
+    return mesh && mesh->owns_model_instance;
 }
 
 void load_models() {
@@ -797,17 +807,19 @@ void load_models() {
 }
 
 void update_model(Entity* e) {
-    if (!e || !e->asset || !e->asset->is_procedural || !e->asset->generator) return;
-    if (e->model.meshCount > 0 && entity_owns_model(*e)) UnloadModel(e->model);
+    if (!e) return;
+    MeshComponent* mesh = e->get_mesh_component();
+    if (!mesh || !mesh->asset || !mesh->asset->is_procedural || !mesh->asset->generator) return;
+    if (mesh->model.meshCount > 0 && entity_owns_model(*e)) UnloadModel(mesh->model);
 
     int max_seg = 125;
-    if (e->type == SPHERE || e->type == HEMISPHERE) max_seg = 100;
+    if (mesh->type == SPHERE || mesh->type == HEMISPHERE) max_seg = 100;
 
-    if (e->segments < 3)        e->segments = 3;
-    if (e->segments > max_seg)  e->segments = max_seg;
+    if (mesh->segments < 3)        mesh->segments = 3;
+    if (mesh->segments > max_seg)  mesh->segments = max_seg;
 
-    e->model = e->asset->generator(e->segments);
-    e->owns_model_instance = true;
+    mesh->model = mesh->asset->generator(mesh->segments);
+    mesh->owns_model_instance = true;
 }
 
 void unload_models() {
@@ -906,13 +918,13 @@ void refresh_models(std::string project_path, Scene& scene) {
     assets = std::move(next);
 
     for (auto& entity : scene.entities) {
-        if (!entity.asset_name.empty()) {
-            entity.asset = nullptr;
-            for (auto& a : assets) {
-                if (a.name == entity.asset_name) {
-                    entity.asset = &a;
-                    break;
-                }
+        MeshComponent* mesh = entity.get_mesh_component();
+        if (!mesh || mesh->asset_name.empty()) continue;
+        mesh->asset = nullptr;
+        for (auto& a : assets) {
+            if (a.name == mesh->asset_name) {
+                mesh->asset = &a;
+                break;
             }
         }
     }

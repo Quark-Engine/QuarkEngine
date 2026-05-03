@@ -34,3 +34,4 @@ void initialize_lighting_uniform_cache(Lighting& lighting, Shader shader, int sl
 void update_lighting(Shader shader, Lighting& l);
 void free_light_id(int id);
 int allocate_light_id();
+void reset_light_registry();

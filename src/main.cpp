@@ -26,20 +26,22 @@ static Shader shadowcaster_shader = {0};
 
 static Entity make_entity_from_asset(Scene& scene, ModelAsset* asset) {
     Entity entity;
+    MeshComponent* mesh = entity.get_mesh_component();
+    if (!mesh) return entity;
     entity.id = static_cast<int>(scene.entities.size());
-    entity.type = asset->type;
-    entity.asset = asset;
-    entity.segments = 16;
+    mesh->type = asset->type;
+    mesh->asset = asset;
+    mesh->segments = 16;
     entity.name = scene.make_default_name_for(entity);
 
     if (asset->is_procedural) {
-        entity.model = asset->generator(entity.segments);
+        mesh->model = asset->generator(mesh->segments);
         store_uv(&entity);
     } else {
-        entity.model = asset->loaded_model;
+        mesh->model = asset->loaded_model;
     }
 
-    entity.texture = {0};
+    mesh->texture = {0};
     return entity;
 }
 
@@ -64,15 +66,15 @@ static void update_plugins(PluginManager& plugin_manager, Editor& editor) {
     ctx.ui_same_line        = []() { ImGui::SameLine(); };
 
     ctx.entity_get_name     = [](int i) -> const char* { return s_editor->scene.entities[i].name.c_str(); };
-    ctx.entity_get_position = [](int i, float* x, float* y, float* z) { auto& p = s_editor->scene.entities[i].position; *x = p.x; *y = p.y; *z = p.z; };
-    ctx.entity_get_rotation = [](int i, float* x, float* y, float* z) { auto& r = s_editor->scene.entities[i].rotation; *x = r.x; *y = r.y; *z = r.z; };
-    ctx.entity_get_scale    = [](int i, float* x, float* y, float* z) { auto& s = s_editor->scene.entities[i].scale; *x = s.x; *y = s.y; *z = s.z; };
-    ctx.entity_get_color    = [](int i, unsigned char* r, unsigned char* g, unsigned char* b, unsigned char* a) { auto& c = s_editor->scene.entities[i].color; *r = c.r; *g = c.g; *b = c.b; *a = c.a; };
+    ctx.entity_get_position = [](int i, float* x, float* y, float* z) { if (auto* t = s_editor->scene.entities[i].get_transform_component()) { *x = t->position.x; *y = t->position.y; *z = t->position.z; } };
+    ctx.entity_get_rotation = [](int i, float* x, float* y, float* z) { if (auto* t = s_editor->scene.entities[i].get_transform_component()) { *x = t->rotation.x; *y = t->rotation.y; *z = t->rotation.z; } };
+    ctx.entity_get_scale    = [](int i, float* x, float* y, float* z) { if (auto* t = s_editor->scene.entities[i].get_transform_component()) { *x = t->scale.x; *y = t->scale.y; *z = t->scale.z; } };
+    ctx.entity_get_color    = [](int i, unsigned char* r, unsigned char* g, unsigned char* b, unsigned char* a) { if (auto* m = s_editor->scene.entities[i].get_mesh_component()) { *r = m->color.r; *g = m->color.g; *b = m->color.b; *a = m->color.a; } };
 
-    ctx.entity_set_position = [](int i, float x, float y, float z) { s_editor->scene.entities[i].position = {x, y, z}; };
-    ctx.entity_set_rotation = [](int i, float x, float y, float z) { s_editor->scene.entities[i].rotation = {x, y, z}; };
-    ctx.entity_set_scale    = [](int i, float x, float y, float z) { s_editor->scene.entities[i].scale = {x, y, z}; };
-    ctx.entity_set_color    = [](int i, unsigned char r, unsigned char g, unsigned char b, unsigned char a) { s_editor->scene.entities[i].color = {r, g, b, a}; };
+    ctx.entity_set_position = [](int i, float x, float y, float z) { if (auto* t = s_editor->scene.entities[i].get_transform_component()) t->position = {x, y, z}; };
+    ctx.entity_set_rotation = [](int i, float x, float y, float z) { if (auto* t = s_editor->scene.entities[i].get_transform_component()) t->rotation = {x, y, z}; };
+    ctx.entity_set_scale    = [](int i, float x, float y, float z) { if (auto* t = s_editor->scene.entities[i].get_transform_component()) t->scale = {x, y, z}; };
+    ctx.entity_set_color    = [](int i, unsigned char r, unsigned char g, unsigned char b, unsigned char a) { if (auto* m = s_editor->scene.entities[i].get_mesh_component()) m->color = {r, g, b, a}; };
     ctx.entity_set_name     = [](int i, const char* name) { s_editor->scene.entities[i].name = name; };
 
     ctx.scene_save = []() { project_save(s_editor->project_path, s_editor->scene); };
@@ -80,7 +82,8 @@ static void update_plugins(PluginManager& plugin_manager, Editor& editor) {
         for (auto& a : assets) {
             if (a.name == asset_name) {
                 Entity e = make_entity_from_asset(s_editor->scene, &a);
-                if (!e.model.meshCount) return -1;
+                const MeshComponent* mesh = e.get_mesh_component();
+                if (!mesh || !mesh->model.meshCount) return -1;
                 s_editor->scene.entities.push_back(e);
                 return (int)s_editor->scene.entities.size() - 1;
             }
@@ -99,13 +102,12 @@ static void update_plugins(PluginManager& plugin_manager, Editor& editor) {
 }
 
 static Matrix compose_entity_transform(const Entity& entity) {
-    Matrix transform = MatrixIdentity();
-    transform = MatrixMultiply(transform, MatrixTranslate(entity.position.x, entity.position.y, entity.position.z));
-    transform = MatrixMultiply(transform, MatrixRotateX(entity.rotation.x * DEG2RAD));
-    transform = MatrixMultiply(transform, MatrixRotateY(entity.rotation.y * DEG2RAD));
-    transform = MatrixMultiply(transform, MatrixRotateZ(entity.rotation.z * DEG2RAD));
-    transform = MatrixMultiply(transform, MatrixScale(entity.scale.x, entity.scale.y, entity.scale.z));
-    return transform;
+    const TransformComponent* transform = entity.get_transform_component();
+    if (!transform) return MatrixIdentity();
+    Matrix matScale = MatrixScale(transform->scale.x, transform->scale.y, transform->scale.z);
+    Matrix matRotation = MatrixRotateXYZ({transform->rotation.x * DEG2RAD, transform->rotation.y * DEG2RAD, transform->rotation.z * DEG2RAD});
+    Matrix matTranslation = MatrixTranslate(transform->position.x, transform->position.y, transform->position.z);
+    return MatrixMultiply(MatrixMultiply(matTranslation, matRotation), matScale);
 }
 
 static void expand_bounds_with_point(BoundingBox& bounds, const Vector3& point) {
@@ -125,14 +127,16 @@ static BoundingBox compute_scene_bounds(const Scene& scene) {
     bool has_bounds = false;
 
     for (const auto& entity : scene.entities) {
-        if (entity.model.meshCount <= 0 || !entity.model.meshes) continue;
+        const MeshComponent* mesh = entity.get_mesh_component();
+        if (!mesh || mesh->model.meshCount <= 0 || !mesh->model.meshes) continue;
 
         Entity& mutable_entity = const_cast<Entity&>(entity);
-        if (mutable_entity.bounds_dirty) {
-            mutable_entity.cached_local_bounds = GetModelBoundingBox(entity.model);
-            mutable_entity.bounds_dirty = false;
+        MeshComponent* mutable_mesh = mutable_entity.get_mesh_component();
+        if (mutable_mesh->bounds_dirty) {
+            mutable_mesh->cached_local_bounds = GetModelBoundingBox(mesh->model);
+            mutable_mesh->bounds_dirty = false;
         }
-        BoundingBox local_bounds = mutable_entity.cached_local_bounds;
+        BoundingBox local_bounds = mutable_mesh->cached_local_bounds;
         Matrix transform = compose_entity_transform(entity);
 
         const Vector3 corners[8] = {
@@ -237,6 +241,9 @@ void ApplyCustomImGuiTheme()
     colors[ImGuiCol_ResizeGrip]         = ImVec4(0.30f, 0.32f, 0.35f, 1.00f); // #4D5259FF
     colors[ImGuiCol_ResizeGripHovered]  = ImVec4(0.40f, 0.43f, 0.46f, 1.00f); // #666E75FF
     colors[ImGuiCol_ResizeGripActive]   = ImVec4(0.0f, 0.6f, 1.0f, 1.0f); // #0099ffff
+
+    // ====== DOCKING ======
+    colors[ImGuiCol_DockingPreview] = ImVec4(0.78f, 0.52f, 0.17f, 0.4f); // #c9802b66
 }
 
 int main(int argc, char* argv[]) {
@@ -346,8 +353,9 @@ int main(int argc, char* argv[]) {
         Vector3 shadow_light_dir = light_dir;
         
         for (const auto& e : editor.scene.entities) {
-            if (e.has_light && e.light_created && e.light.light.type == LIGHT_DIRECTIONAL && e.light.enabled) {
-                shadow_light_dir = Vector3Normalize(Vector3Subtract(e.light.position, e.light.target));
+            const LightComponent* light = e.get_light_component();
+            if (light && light->created && light->light.light.type == LIGHT_DIRECTIONAL && light->enabled) {
+                shadow_light_dir = Vector3Normalize(Vector3Subtract(light->light.position, light->light.target));
                 shadow_light_pos = Vector3Add(scene_center, Vector3Scale(shadow_light_dir, -(scene_radius * 2.5f)));
                 break;
             }
@@ -361,8 +369,10 @@ int main(int argc, char* argv[]) {
             ClearBackground(BLACK);
             BeginMode3D(light_cam);
                 for (auto& e : editor.scene.entities) {
-                    if (!e.shader_assigned || e.model.materialCount > 0 && e.model.materials[0].shader.id != shadowcaster_shader.id) {
-                        set_model_shader(e.model, shadowcaster_shader);
+                    MeshComponent* mesh = e.get_mesh_component();
+                    if (!mesh) continue;
+                    if (!mesh->shader_assigned || mesh->model.materialCount > 0 && mesh->model.materials[0].shader.id != shadowcaster_shader.id) {
+                        set_model_shader(mesh->model, shadowcaster_shader);
                     }
                     draw_entity_with_texture(e);
                 }
@@ -378,16 +388,32 @@ int main(int argc, char* argv[]) {
             BeginMode3D(camera.get_camera());
                 DrawGrid(20, 1.0f);
                 for (auto& e : editor.scene.entities) {
-                    if (!e.shader_assigned || (e.model.materialCount > 0 && e.model.materials[0].shader.id != shadowmap_shader.id)) {
-                        set_model_shader(e.model, shadowmap_shader);
+                    MeshComponent* mesh = e.get_mesh_component();
+                    TransformComponent* transform = e.get_transform_component();
+                    LightComponent* light = e.get_light_component();
+                    if (!mesh || !transform) continue;
+
+                    if (!mesh->shader_assigned || (mesh->model.materialCount > 0 && mesh->model.materials[0].shader.id != shadowmap_shader.id)) {
+                        set_model_shader(mesh->model, shadowmap_shader);
                     }
-                    e.shader_assigned = true;
-                    if (e.has_light && e.light_created) {
-                        e.light.position = e.position;
-                        e.light.light.position = e.position;
-                        update_lighting(shadowmap_shader, e.light);
+                    mesh->shader_assigned = true;
+                    if (light && light->enabled) {
+                        light->light.enabled = true;
+                        if (!light->created) {
+                            int new_id = allocate_light_id();
+                            if (new_id != -1) {
+                                light->light.id = new_id;
+                                light->light.light = create_light_at_slot(new_id, light->light.light.type, transform->position, light->light.target, light->light.color, shadowmap_shader);
+                                initialize_lighting_uniform_cache(light->light, shadowmap_shader, new_id);
+                                light->created = true;
+                            }
+                        }
+
+                        light->light.position = transform->position;
+                        light->light.light.position = transform->position;
+                        update_lighting(shadowmap_shader, light->light);
                     }
-                    int use = (e.texture.id != 0) ? 1 : 0;
+                    int use = (mesh->texture.id != 0) ? 1 : 0;
                     SetShaderValue(shadowmap_shader, use_tex_loc, &use, SHADER_UNIFORM_INT);
                     draw_entity_with_texture(e);
                 }
@@ -405,6 +431,7 @@ int main(int argc, char* argv[]) {
             editor.handle_input();
 
             editor.draw_ui(shadowmap_shader, camera.get_camera());
+            
             update_plugins(plugin_manager, editor);
 
             rlImGuiEnd();

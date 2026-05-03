@@ -23,30 +23,31 @@ Entity clipboard_data;
 
 void restore_scene_entity_models(Scene& scene) {
     for (auto& entity : scene.entities) {
-        if (!entity.asset) continue;
+        MeshComponent* mesh = entity.get_mesh_component();
+        if (!mesh || !mesh->asset) continue;
 
-        if (entity.asset->is_procedural) {
-            entity.model = entity.asset->generator(entity.segments);
-            entity.owns_model_instance = true;
+        if (mesh->asset->is_procedural) {
+            mesh->model = mesh->asset->generator(mesh->segments);
+            mesh->owns_model_instance = true;
             store_uv(&entity);
             store_material_textures(&entity);
             apply_mesh_overrides(entity);
         } else {
-            if (!load_model_instance(*entity.asset, entity.model)) {
-                entity.asset = nullptr;
-                entity.asset_name.clear();
-                entity.model = {0};
-                entity.owns_model_instance = false;
+            if (!load_model_instance(*mesh->asset, mesh->model)) {
+                mesh->asset = nullptr;
+                mesh->asset_name.clear();
+                mesh->model = {0};
+                mesh->owns_model_instance = false;
                 continue;
             }
 
-            entity.owns_model_instance = true;
+            mesh->owns_model_instance = true;
             store_uv(&entity);
             store_material_textures(&entity);
             apply_mesh_overrides(entity);
         }
 
-        entity.shader_assigned = false;
+        mesh->shader_assigned = false;
     }
 }
 
@@ -57,9 +58,12 @@ static SceneState capture_scene_state(const Scene& scene) {
     state.selected = scene.selected;
 
     for (auto entity : scene.entities) {
-        entity.model.materials = nullptr;
-        entity.model.meshMaterial = nullptr;
-        entity.owns_materials = false;
+        MeshComponent* mesh = entity.get_mesh_component();
+        if (mesh) {
+            mesh->model.materials = nullptr;
+            mesh->model.meshMaterial = nullptr;
+            mesh->owns_materials = false;
+        }
         state.entities.push_back(entity);
     }
 

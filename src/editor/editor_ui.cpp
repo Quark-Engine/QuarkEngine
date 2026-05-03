@@ -2,6 +2,7 @@
 
 #include "editor.h"
 #include "editor_assets.h"
+#include "editor_components_ui.h"
 #include "editor_entity.h"
 #include "editor_utils.h"
 #include "editor_viewers.h"
@@ -26,30 +27,18 @@ bool show_scene = true;
 bool g_is_scene_hovered = false;
 bool g_is_scene_active = false;
 
-namespace {
-
 ImVec2 g_scene_window_pos = { 0, 0 };
 ImVec2 g_scene_window_size = { 0, 0 };
-
-struct MeshEditState {
-    bool enabled = false;
-    int entity_index = -1;
-    int mesh_index = 0;
-    int triangle_index = 0;
-    int vertex_corner = 0;
-    bool was_using_gizmo = false;
-};
 
 MeshEditState g_mesh_edit_state;
 
 Matrix compose_entity_transform_matrix(const Entity& entity) {
-    Matrix transform = MatrixIdentity();
-    transform = MatrixMultiply(transform, MatrixTranslate(entity.position.x, entity.position.y, entity.position.z));
-    transform = MatrixMultiply(transform, MatrixRotateX(entity.rotation.x * DEG2RAD));
-    transform = MatrixMultiply(transform, MatrixRotateY(entity.rotation.y * DEG2RAD));
-    transform = MatrixMultiply(transform, MatrixRotateZ(entity.rotation.z * DEG2RAD));
-    transform = MatrixMultiply(transform, MatrixScale(entity.scale.x, entity.scale.y, entity.scale.z));
-    return transform;
+    const TransformComponent* transform = entity.get_transform_component();
+    if (!transform) return MatrixIdentity();
+    Matrix matScale = MatrixScale(transform->scale.x, transform->scale.y, transform->scale.z);
+    Matrix matRotation = MatrixRotateXYZ({transform->rotation.x * DEG2RAD, transform->rotation.y * DEG2RAD, transform->rotation.z * DEG2RAD});
+    Matrix matTranslation = MatrixTranslate(transform->position.x, transform->position.y, transform->position.z);
+    return MatrixMultiply(MatrixMultiply(matTranslation, matRotation), matScale);
 }
 
 void sync_mesh_edit_state(const Editor& editor) {
@@ -63,10 +52,11 @@ void sync_mesh_edit_state(const Editor& editor) {
 }
 
 bool get_selected_triangle_vertices(const Entity& entity, int mesh_index, int triangle_index, int out_indices[3]) {
-    if (!has_valid_model_data(entity.model)) return false;
-    if (mesh_index < 0 || mesh_index >= entity.model.meshCount) return false;
+    const MeshComponent* mesh_component = entity.get_mesh_component();
+    if (!mesh_component || !has_valid_model_data(mesh_component->model)) return false;
+    if (mesh_index < 0 || mesh_index >= mesh_component->model.meshCount) return false;
 
-    const Mesh& mesh = entity.model.meshes[mesh_index];
+    const Mesh& mesh = mesh_component->model.meshes[mesh_index];
     if (triangle_index < 0 || triangle_index >= mesh.triangleCount) return false;
     return get_mesh_triangle_vertex_indices(mesh, triangle_index, out_indices);
 }
@@ -80,7 +70,8 @@ bool get_selected_vertex_index(const Entity& entity, int mesh_index, int triangl
 }
 
 Vector3 get_mesh_vertex_local_position(const Entity& entity, int mesh_index, int vertex_index) {
-    const Mesh& mesh = entity.model.meshes[mesh_index];
+    const MeshComponent* mesh_component = entity.get_mesh_component();
+    const Mesh& mesh = mesh_component->model.meshes[mesh_index];
     return {
         mesh.vertices[vertex_index * 3 + 0],
         mesh.vertices[vertex_index * 3 + 1],
@@ -95,21 +86,23 @@ Vector3 get_mesh_vertex_world_position(const Entity& entity, int mesh_index, int
 
 bool ensure_mesh_edit_ready(Entity& entity) {
     if (entity_has_mesh_overrides(entity)) return true;
-    if (!entity.mesh_triangles_detached) detach_mesh_triangles(entity);
+    MeshComponent* mesh = entity.get_mesh_component();
+    if (mesh && !mesh->mesh_triangles_detached) detach_mesh_triangles(entity);
     capture_mesh_overrides_from_model(entity);
     return entity_has_mesh_overrides(entity);
 }
 
 bool set_mesh_vertex_local_position(Entity& entity, int mesh_index, int vertex_index, const Vector3& local_position) {
-    if (!has_valid_model_data(entity.model)) return false;
-    if (mesh_index < 0 || mesh_index >= entity.model.meshCount) return false;
+    MeshComponent* mesh_component = entity.get_mesh_component();
+    if (!mesh_component || !has_valid_model_data(mesh_component->model)) return false;
+    if (mesh_index < 0 || mesh_index >= mesh_component->model.meshCount) return false;
 
-    Mesh& mesh = entity.model.meshes[mesh_index];
+    Mesh& mesh = mesh_component->model.meshes[mesh_index];
     if (!mesh.vertices || vertex_index < 0 || vertex_index >= mesh.vertexCount) return false;
     if (!ensure_mesh_edit_ready(entity)) return false;
-    if (mesh_index >= static_cast<int>(entity.mesh_vertex_overrides.size())) return false;
+    if (mesh_index >= static_cast<int>(mesh_component->mesh_vertex_overrides.size())) return false;
 
-    std::vector<float>& mesh_override = entity.mesh_vertex_overrides[mesh_index];
+    std::vector<float>& mesh_override = mesh_component->mesh_vertex_overrides[mesh_index];
     if (mesh_override.size() != static_cast<size_t>(mesh.vertexCount * 3)) return false;
 
     mesh_override[vertex_index * 3 + 0] = local_position.x;
@@ -137,10 +130,11 @@ bool pick_mesh_triangle(
     int& out_triangle_index,
     int& out_vertex_corner
 ) {
-    if (!has_valid_model_data(entity.model)) return false;
-    if (mesh_index < 0 || mesh_index >= entity.model.meshCount) return false;
+    const MeshComponent* mesh_component = entity.get_mesh_component();
+    if (!mesh_component || !has_valid_model_data(mesh_component->model)) return false;
+    if (mesh_index < 0 || mesh_index >= mesh_component->model.meshCount) return false;
 
-    const Mesh& mesh = entity.model.meshes[mesh_index];
+    const Mesh& mesh = mesh_component->model.meshes[mesh_index];
     if (!mesh.vertices || mesh.triangleCount <= 0) return false;
 
     const Matrix transform = compose_entity_transform_matrix(entity);
@@ -185,29 +179,31 @@ bool pick_mesh_triangle(
 }
 
 void reset_mesh_edit_model(Entity& entity) {
+    MeshComponent* mesh = entity.get_mesh_component();
+    if (!mesh) return;
     clear_mesh_overrides(entity);
 
-    if (entity.asset && entity.asset->is_procedural) {
+    if (mesh->asset && mesh->asset->is_procedural) {
         update_model(&entity);
-    } else if (entity.asset) {
-        if (entity_owns_model(entity) && entity.model.meshCount > 0) {
-            UnloadModel(entity.model);
+    } else if (mesh->asset) {
+        if (entity_owns_model(entity) && mesh->model.meshCount > 0) {
+            UnloadModel(mesh->model);
         }
 
-        entity.model = {0};
-        if (!load_model_instance(*entity.asset, entity.model)) {
-            entity.asset = nullptr;
-            entity.asset_name.clear();
-            entity.owns_model_instance = false;
+        mesh->model = {0};
+        if (!load_model_instance(*mesh->asset, mesh->model)) {
+            mesh->asset = nullptr;
+            mesh->asset_name.clear();
+            mesh->owns_model_instance = false;
         } else {
-            entity.owns_model_instance = true;
+            mesh->owns_model_instance = true;
         }
     }
 
-    if (entity.asset) {
+    if (mesh->asset) {
         store_uv(&entity);
         store_material_textures(&entity);
-        entity.shader_assigned = false;
+        mesh->shader_assigned = false;
     }
 }
 
@@ -231,13 +227,120 @@ void reset_editor_layout(ImGuiID dockspace_id) {
     show_hierarchy = show_inspector = show_assets = show_scene = true;
 }
 
+void draw_gizmo(Editor& editor, Camera3D camera) {
+    sync_mesh_edit_state(editor);
+
+    Entity* entity = editor.scene.get_selected();
+    if (!entity) return;
+    TransformComponent* transform = entity->get_transform_component();
+    MeshComponent* mesh = entity->get_mesh_component();
+    if (!transform || !mesh) return;
+
+    ImGuizmo::SetDrawlist();
+    ImGuizmo::SetRect(g_scene_window_pos.x, g_scene_window_pos.y, g_scene_window_size.x, g_scene_window_size.y);
+
+    Matrix view = MatrixTranspose(GetCameraMatrix(camera));
+    float aspect = (g_scene_window_size.y > 0) ? (g_scene_window_size.x / g_scene_window_size.y) : 1.0f;
+    Matrix projection = MatrixTranspose(MatrixPerspective(
+        camera.fovy * DEG2RAD,
+        aspect,
+        0.1f,
+        1000.0f
+    ));
+
+    float view_matrix[16] = {};
+    float projection_matrix[16] = {};
+    float transform_matrix[16] = {};
+    float translation[3] = { transform->position.x, transform->position.y, transform->position.z };
+    float rotation[3] = { transform->rotation.x, transform->rotation.y, transform->rotation.z };
+    float scale[3] = { transform->scale.x, transform->scale.y, transform->scale.z };
+
+    memcpy(view_matrix, &view, sizeof(view_matrix));
+    memcpy(projection_matrix, &projection, sizeof(projection_matrix));
+
+    draw_mesh_vertex_overlay(editor, camera);
+
+    if (g_mesh_edit_state.enabled && has_valid_model_data(mesh->model)) {
+        if (g_mesh_edit_state.mesh_index >= mesh->model.meshCount) g_mesh_edit_state.mesh_index = 0;
+
+        int vertex_index = -1;
+        if (get_selected_vertex_index(*entity, g_mesh_edit_state.mesh_index, g_mesh_edit_state.triangle_index, g_mesh_edit_state.vertex_corner, vertex_index)) {
+            const Vector3 vertex_world = get_mesh_vertex_world_position(*entity, g_mesh_edit_state.mesh_index, vertex_index);
+            float vertex_translation[3] = { vertex_world.x, vertex_world.y, vertex_world.z };
+            float vertex_rotation[3] = { transform->rotation.x, transform->rotation.y, transform->rotation.z };
+            float vertex_scale[3] = { 1.0f, 1.0f, 1.0f };
+
+            ImGuizmo::RecomposeMatrixFromComponents(vertex_translation, vertex_rotation, vertex_scale, transform_matrix);
+            ImGuizmo::Manipulate(
+                view_matrix,
+                projection_matrix,
+                ImGuizmo::TRANSLATE,
+                ImGuizmo::LOCAL,
+                transform_matrix
+            );
+
+            if (ImGuizmo::IsUsing() && !g_mesh_edit_state.was_using_gizmo) {
+                editor.save_state();
+            }
+
+            if (ImGuizmo::IsUsing()) {
+                float next_translation[3] = {};
+                float next_rotation[3] = {};
+                float next_scale[3] = {};
+                ImGuizmo::DecomposeMatrixToComponents(transform_matrix, next_translation, next_rotation, next_scale);
+                set_mesh_vertex_world_position(
+                    *entity,
+                    g_mesh_edit_state.mesh_index,
+                    vertex_index,
+                    { next_translation[0], next_translation[1], next_translation[2] }
+                );
+            }
+
+            g_mesh_edit_state.was_using_gizmo = ImGuizmo::IsUsing();
+            return;
+        }
+    }
+
+    ImGuizmo::RecomposeMatrixFromComponents(translation, rotation, scale, transform_matrix);
+    ImGuizmo::Manipulate(
+        view_matrix,
+        projection_matrix,
+        editor_internal::gizmo_mode,
+        ImGuizmo::WORLD,
+        transform_matrix
+    );
+
+    static bool was_using = false;
+    if (ImGuizmo::IsUsing() && !was_using) {
+        editor.save_state();
+    }
+
+    if (ImGuizmo::IsUsing()) {
+        float next_translation[3] = {};
+        float next_rotation[3] = {};
+        float next_scale[3] = {};
+        ImGuizmo::DecomposeMatrixToComponents(transform_matrix, next_translation, next_rotation, next_scale);
+
+        transform->position = { next_translation[0], next_translation[1], next_translation[2] };
+        transform->rotation = { next_rotation[0], next_rotation[1], next_rotation[2] };
+        transform->scale = { next_scale[0], next_scale[1], next_scale[2] };
+
+        mark_entity_bounds_dirty(entity);
+        if (!mesh->texture_stretch) mark_entity_uv_dirty(entity);
+    }
+
+    was_using = ImGuizmo::IsUsing();
+    g_mesh_edit_state.was_using_gizmo = false;
+}
+
 void draw_mesh_vertex_overlay(Editor& editor, Camera3D camera) {
     sync_mesh_edit_state(editor);
     if (!g_mesh_edit_state.enabled) return;
 
     Entity* entity = editor.scene.get_selected();
-    if (!entity || !has_valid_model_data(entity->model)) return;
-    if (g_mesh_edit_state.mesh_index >= entity->model.meshCount) g_mesh_edit_state.mesh_index = 0;
+    MeshComponent* mesh = entity ? entity->get_mesh_component() : nullptr;
+    if (!entity || !mesh || !has_valid_model_data(mesh->model)) return;
+    if (g_mesh_edit_state.mesh_index >= mesh->model.meshCount) g_mesh_edit_state.mesh_index = 0;
 
     int triangle_vertices[3] = {};
     if (!get_selected_triangle_vertices(*entity, g_mesh_edit_state.mesh_index, g_mesh_edit_state.triangle_index, triangle_vertices)) return;
@@ -305,110 +408,6 @@ void draw_mesh_vertex_overlay(Editor& editor, Camera3D camera) {
     }
 }
 
-}
-
-void draw_gizmo(Editor& editor, Camera3D camera) {
-    sync_mesh_edit_state(editor);
-
-    Entity* entity = editor.scene.get_selected();
-    if (!entity) return;
-
-    ImGuizmo::SetDrawlist();
-    ImGuiIO& io = ImGui::GetIO();
-    ImGuizmo::SetRect(g_scene_window_pos.x, g_scene_window_pos.y, g_scene_window_size.x, g_scene_window_size.y);
-
-    Matrix view = MatrixTranspose(GetCameraMatrix(camera));
-    float aspect = (g_scene_window_size.y > 0) ? (g_scene_window_size.x / g_scene_window_size.y) : 1.0f;
-    Matrix projection = MatrixTranspose(MatrixPerspective(
-        camera.fovy * DEG2RAD,
-        aspect,
-        0.1f,
-        1000.0f
-    ));
-
-    float view_matrix[16] = {};
-    float projection_matrix[16] = {};
-    float transform_matrix[16] = {};
-    float translation[3] = { entity->position.x, entity->position.y, entity->position.z };
-    float rotation[3] = { entity->rotation.x, entity->rotation.y, entity->rotation.z };
-    float scale[3] = { entity->scale.x, entity->scale.y, entity->scale.z };
-
-    memcpy(view_matrix, &view, sizeof(view_matrix));
-    memcpy(projection_matrix, &projection, sizeof(projection_matrix));
-
-    draw_mesh_vertex_overlay(editor, camera);
-
-    if (g_mesh_edit_state.enabled && has_valid_model_data(entity->model)) {
-        if (g_mesh_edit_state.mesh_index >= entity->model.meshCount) g_mesh_edit_state.mesh_index = 0;
-
-        int vertex_index = -1;
-        if (get_selected_vertex_index(*entity, g_mesh_edit_state.mesh_index, g_mesh_edit_state.triangle_index, g_mesh_edit_state.vertex_corner, vertex_index)) {
-            const Vector3 vertex_world = get_mesh_vertex_world_position(*entity, g_mesh_edit_state.mesh_index, vertex_index);
-            float vertex_translation[3] = { vertex_world.x, vertex_world.y, vertex_world.z };
-            float vertex_rotation[3] = { 0.0f, 0.0f, 0.0f };
-            float vertex_scale[3] = { 1.0f, 1.0f, 1.0f };
-
-            ImGuizmo::RecomposeMatrixFromComponents(vertex_translation, vertex_rotation, vertex_scale, transform_matrix);
-            ImGuizmo::Manipulate(
-                view_matrix,
-                projection_matrix,
-                editor_internal::gizmo_mode,
-                ImGuizmo::WORLD,
-                transform_matrix
-            );
-
-            if (ImGuizmo::IsUsing() && !g_mesh_edit_state.was_using_gizmo) {
-                editor.save_state();
-            }
-
-            if (ImGuizmo::IsUsing()) {
-                float next_translation[3] = {};
-                float next_rotation[3] = {};
-                float next_scale[3] = {};
-                ImGuizmo::DecomposeMatrixToComponents(transform_matrix, next_translation, next_rotation, next_scale);
-                set_mesh_vertex_world_position(
-                    *entity,
-                    g_mesh_edit_state.mesh_index,
-                    vertex_index,
-                    { next_translation[0], next_translation[1], next_translation[2] }
-                );
-            }
-
-            g_mesh_edit_state.was_using_gizmo = ImGuizmo::IsUsing();
-            return;
-        }
-    }
-
-    ImGuizmo::RecomposeMatrixFromComponents(translation, rotation, scale, transform_matrix);
-    ImGuizmo::Manipulate(
-        view_matrix,
-        projection_matrix,
-        editor_internal::gizmo_mode,
-        ImGuizmo::WORLD,
-        transform_matrix
-    );
-
-    static bool was_using = false;
-    if (ImGuizmo::IsUsing() && !was_using) {
-        editor.save_state();
-    }
-
-    if (ImGuizmo::IsUsing()) {
-        float next_translation[3] = {};
-        float next_rotation[3] = {};
-        float next_scale[3] = {};
-        ImGuizmo::DecomposeMatrixToComponents(transform_matrix, next_translation, next_rotation, next_scale);
-
-        entity->position = { next_translation[0], next_translation[1], next_translation[2] };
-        entity->rotation = { next_rotation[0], next_rotation[1], next_rotation[2] };
-        entity->scale = { next_scale[0], next_scale[1], next_scale[2] };
-        if (!entity->texture_stretch) mark_entity_uv_dirty(entity);
-    }
-
-    was_using = ImGuizmo::IsUsing();
-    g_mesh_edit_state.was_using_gizmo = false;
-}
-
 void handle_scene_asset_drop(Editor& editor, Camera3D camera, bool is_hovered) {
     if (!editor_internal::scene_asset_dragging) return;
     if (!IsMouseButtonReleased(MOUSE_BUTTON_LEFT)) return;
@@ -424,10 +423,12 @@ void handle_scene_asset_drop(Editor& editor, Camera3D camera, bool is_hovered) {
     if (!asset) return;
 
     Entity entity = make_entity_from_asset(editor.scene, *asset);
-    if (!has_valid_model_data(entity.model)) return;
+    MeshComponent* mesh = entity.get_mesh_component();
+    TransformComponent* transform = entity.get_transform_component();
+    if (!mesh || !transform || !has_valid_model_data(mesh->model)) return;
 
     editor.save_state();
-    entity.position = get_scene_drop_position(camera);
+    transform->position = get_scene_drop_position(camera);
 
     editor.scene.entities.push_back(entity);
     editor.scene.selected = static_cast<int>(editor.scene.entities.size()) - 1;
@@ -468,18 +469,45 @@ void draw_ui(Editor& editor, Shader shader, Camera3D camera) {
             }
 
             if (ImGui::MenuItem("Paste", "Ctrl+V", false, has_clipboard)) {
-                ModelAsset* asset = find_asset_by_name(clipboard_data.asset_name);
+                const MeshComponent* clipboard_mesh = clipboard_data.get_mesh_component();
+                const TransformComponent* clipboard_transform = clipboard_data.get_transform_component();
+                const LightComponent* clipboard_light = clipboard_data.get_light_component();
+                ModelAsset* asset = (clipboard_mesh && !clipboard_mesh->asset_name.empty())
+                    ? find_asset_by_name(clipboard_mesh->asset_name)
+                    : nullptr;
                 if (asset) {
                     editor.save_state();
                     Entity pasted = make_entity_from_asset(editor.scene, *asset);
-                    pasted.position = clipboard_data.position;
-                    pasted.rotation = clipboard_data.rotation;
-                    pasted.scale = clipboard_data.scale;
-                    pasted.color = clipboard_data.color;
-                    pasted.outline_color = clipboard_data.outline_color;
-                    pasted.has_light = clipboard_data.has_light;
-                    pasted.light = clipboard_data.light;
-                    pasted.light_created = false;
+                    if (auto pasted_transform = pasted.get_transform_component(); pasted_transform && clipboard_transform) {
+                        pasted_transform->position = clipboard_transform->position;
+                        pasted_transform->rotation = clipboard_transform->rotation;
+                        pasted_transform->scale = clipboard_transform->scale;
+                    }
+                    if (auto pasted_mesh = pasted.get_mesh_component(); pasted_mesh && clipboard_mesh) {
+                        pasted_mesh->color = clipboard_mesh->color;
+                        pasted_mesh->outline_color = clipboard_mesh->outline_color;
+                        pasted_mesh->texture_source = clipboard_mesh->texture_source;
+                        pasted_mesh->texture_name = clipboard_mesh->texture_name;
+                        pasted_mesh->texture = clipboard_mesh->texture;
+                        pasted_mesh->texture_stretch = clipboard_mesh->texture_stretch;
+                        pasted_mesh->auto_uv = clipboard_mesh->auto_uv;
+                        pasted_mesh->texture_repeat_u = clipboard_mesh->texture_repeat_u;
+                        pasted_mesh->texture_repeat_v = clipboard_mesh->texture_repeat_v;
+                        pasted_mesh->uv_scale_vec = clipboard_mesh->uv_scale_vec;
+                        pasted_mesh->uv_scale = clipboard_mesh->uv_scale;
+                        pasted_mesh->mesh_triangles_detached = clipboard_mesh->mesh_triangles_detached;
+                        pasted_mesh->mesh_vertex_overrides = clipboard_mesh->mesh_vertex_overrides;
+                        apply_mesh_overrides(pasted);
+                    }
+                    if (clipboard_light) {
+                        auto light_copy = std::make_shared<LightComponent>(*clipboard_light);
+                        const int light_type = light_copy->light.light.type;
+                        light_copy->created = false;
+                        light_copy->light.id = -1;
+                        light_copy->light.light = {0};
+                        light_copy->light.light.type = light_type;
+                        pasted.get_components()->add_component(light_copy);
+                    }
                     editor.scene.entities.push_back(pasted);
                     editor.scene.selected = static_cast<int>(editor.scene.entities.size()) - 1;
                 }
@@ -490,10 +518,12 @@ void draw_ui(Editor& editor, Shader shader, Camera3D camera) {
                 Entity copy = *entity;
                 copy.id = static_cast<int>(editor.scene.entities.size());
                 copy.name = editor.scene.make_default_name_for(copy);
-                if (copy.has_light) {
-                    copy.light_created = false;
-                    copy.light.id = -1;
-                    copy.light.light = {0};
+                if (auto light = copy.get_light_component()) {
+                    const int light_type = light->light.light.type;
+                    light->created = false;
+                    light->light.id = -1;
+                    light->light.light = {0};
+                    light->light.light.type = light_type;
                 }
                 editor.scene.entities.push_back(copy);
                 editor.scene.selected = static_cast<int>(editor.scene.entities.size()) - 1;
@@ -504,10 +534,10 @@ void draw_ui(Editor& editor, Shader shader, Camera3D camera) {
             if (ImGui::MenuItem("Delete", "Del", false, entity != nullptr)) {
                 editor.save_state();
                 const int index = editor.scene.selected;
-                if (entity->has_light && entity->light_created) {
-                    entity->light.enabled = false;
-                    if (entity->light.id != -1) update_lighting(shader, entity->light);
-                    free_light_id(entity->light.id);
+                if (auto light = entity->get_light_component(); light && light->created) {
+                    light->light.enabled = false;
+                    if (light->light.id != -1) update_lighting(shader, light->light);
+                    free_light_id(light->light.id);
                 }
                 editor.scene.entities.erase(editor.scene.entities.begin() + index);
                 editor.scene.selected = -1;
@@ -536,7 +566,8 @@ void draw_ui(Editor& editor, Shader shader, Camera3D camera) {
                 if (ImGui::MenuItem(asset.name.c_str())) {
                     editor.save_state();
                     Entity created = make_entity_from_asset(editor.scene, asset);
-                    if (has_valid_model_data(created.model)) {
+                    const MeshComponent* created_mesh = created.get_mesh_component();
+                    if (created_mesh && has_valid_model_data(created_mesh->model)) {
                         editor.scene.entities.push_back(created);
                         editor.scene.selected = static_cast<int>(editor.scene.entities.size()) - 1;
                     }
@@ -568,10 +599,10 @@ void draw_ui(Editor& editor, Shader shader, Camera3D camera) {
         if (ImGui::BeginPopupContextItem(TextFormat("context_%d", entity.id))) {
             if (ImGui::MenuItem("Delete")) {
                 editor.save_state();
-                if (entity.has_light && entity.light_created) {
-                    entity.light.enabled = false;
-                    if (entity.light.id != -1) update_lighting(shader, entity.light);
-                    free_light_id(entity.light.id);
+                if (auto light = entity.get_light_component(); light && light->created) {
+                    light->light.enabled = false;
+                    if (light->light.id != -1) update_lighting(shader, light->light);
+                    free_light_id(light->light.id);
                 }
 
                 editor.scene.entities.erase(editor.scene.entities.begin() + i);
@@ -595,12 +626,12 @@ void draw_ui(Editor& editor, Shader shader, Camera3D camera) {
                 Entity copy = entity;
                 copy.id = static_cast<int>(editor.scene.entities.size());
                 copy.name = editor.scene.make_default_name_for(copy);
-                if (copy.has_light) {
-                    copy.light_created = false;
-                    copy.light.id = -1;
-                    copy.light.light = {0};
-                    copy.light.intensity = entity.light.intensity;
-                    copy.light.range = entity.light.range;
+                if (auto light = copy.get_light_component()) {
+                    const int light_type = light->light.light.type;
+                    light->created = false;
+                    light->light.id = -1;
+                    light->light.light = {0};
+                    light->light.light.type = light_type;
                 }
                 editor.scene.entities.push_back(copy);
             }
@@ -619,7 +650,8 @@ void draw_ui(Editor& editor, Shader shader, Camera3D camera) {
                 const std::string label = asset.name + "##create_" + std::to_string(asset_index);
                 if (ImGui::MenuItem(label.c_str())) {
                     Entity entity = make_entity_from_asset(editor.scene, asset);
-                    if (!has_valid_model_data(entity.model)) continue;
+                    const MeshComponent* mesh = entity.get_mesh_component();
+                    if (!mesh || !has_valid_model_data(mesh->model)) continue;
                     editor.scene.entities.push_back(entity);
                 }
             }
@@ -659,441 +691,9 @@ void draw_ui(Editor& editor, Shader shader, Camera3D camera) {
         }
 
         ImGui::Separator();
-        ImGui::Text("Transform");
-        float position[3] = { entity->position.x, entity->position.y, entity->position.z };
-        float rotation[3] = { entity->rotation.x, entity->rotation.y, entity->rotation.z };
-        float scale[3] = { entity->scale.x, entity->scale.y, entity->scale.z };
+        ImGui::Spacing();
 
-        static Vector3 last_position = {};
-        static Vector3 last_rotation = {};
-        static Vector3 last_scale = {};
-
-        if (ImGui::DragFloat3("Position", position, 0.1f)) {
-            if (last_position.x != position[0] || last_position.y != position[1] || last_position.z != position[2]) {
-                editor.save_state();
-                last_position = { position[0], position[1], position[2] };
-            }
-            entity->position = { position[0], position[1], position[2] };
-        }
-
-        if (ImGui::DragFloat3("Rotation", rotation, 1.0f)) {
-            if (last_rotation.x != rotation[0] || last_rotation.y != rotation[1] || last_rotation.z != rotation[2]) {
-                editor.save_state();
-                last_rotation = { rotation[0], rotation[1], rotation[2] };
-            }
-            entity->rotation = { rotation[0], rotation[1], rotation[2] };
-        }
-
-        if (ImGui::DragFloat3("Scale", scale, 0.1f)) {
-            if (last_scale.x != scale[0] || last_scale.y != scale[1] || last_scale.z != scale[2]) {
-                editor.save_state();
-                last_scale = { scale[0], scale[1], scale[2] };
-            }
-            entity->scale = { scale[0], scale[1], scale[2] };
-            if (!entity->texture_stretch) mark_entity_uv_dirty(entity);
-        }
-
-        ImGui::Separator();
-        ImGui::Text("Mesh");
-
-        if (entity->asset && entity->asset->is_procedural) {
-            int max_segments = 125;
-            if (entity->type == SPHERE || entity->type == HEMISPHERE) max_segments = 100;
-
-            static int last_segments = 0;
-            if (ImGui::DragInt("Segments", &entity->segments, 1, 3, max_segments)) {
-                if (last_segments != entity->segments) {
-                    editor.save_state();
-                    last_segments = entity->segments;
-                    clear_mesh_overrides(*entity);
-                    update_model(entity);
-                    store_uv(entity);
-                    mark_entity_uv_dirty(entity);
-                    mark_entity_bounds_dirty(entity);
-                    entity->shader_assigned = false;
-                }
-            }
-        }
-
-        static int current_model_index = 0;
-        std::vector<const char*> model_names;
-        model_names.reserve(assets.size());
-        for (int i = 0; i < static_cast<int>(assets.size()); i++) {
-            model_names.push_back(assets[i].name.c_str());
-            if (entity->asset_name == assets[i].name) current_model_index = i;
-        }
-
-        static int last_model_index = -1;
-        if (!model_names.empty() &&
-            ImGui::Combo("Model", &current_model_index, model_names.data(), static_cast<int>(model_names.size()))) {
-            if (last_model_index != current_model_index) {
-                editor.save_state();
-                last_model_index = current_model_index;
-
-                if (entity_owns_model(*entity) && entity->model.meshCount > 0) {
-                    UnloadModel(entity->model);
-                }
-                entity->model = {0};
-                entity->original_texcoords.clear();
-                entity->original_material_textures.clear();
-                clear_mesh_overrides(*entity);
-
-                entity->asset = &assets[current_model_index];
-                entity->asset_name = entity->asset->name;
-                entity->type = entity->asset->type;
-                entity->shader_assigned = false;
-
-                if (entity->asset->is_procedural) {
-                    entity->segments = 16;
-                    update_model(entity);
-                    entity->owns_model_instance = true;
-                    store_uv(entity);
-                    store_material_textures(entity);
-                    mark_entity_uv_dirty(entity);
-                    mark_entity_bounds_dirty(entity);
-                    entity->texture_source = TEXTURE_NONE;
-                    entity->texture_name.clear();
-                } else {
-                    if (!load_model_instance(*entity->asset, entity->model)) {
-                        entity->asset = nullptr;
-                        entity->asset_name.clear();
-                        entity->model = {0};
-                        entity->owns_model_instance = false;
-                        entity->texture_source = TEXTURE_NONE;
-                        entity->texture_name.clear();
-                        ImGui::End();
-                        return;
-                    }
-
-                    entity->owns_model_instance = true;
-                    store_uv(entity);
-                    store_material_textures(entity);
-                    mark_entity_uv_dirty(entity);
-                    mark_entity_bounds_dirty(entity);
-
-                    bool has_embedded = false;
-                    for (int i = 0; i < entity->model.materialCount; i++) {
-                        if (entity->model.materials[i].maps[MATERIAL_MAP_DIFFUSE].texture.id != 0) {
-                            has_embedded = true;
-                            break;
-                        }
-                    }
-
-                    entity->texture_source = has_embedded ? TEXTURE_MODEL : TEXTURE_NONE;
-                    entity->texture_name.clear();
-                }
-            }
-        }
-
-        if (has_valid_model_data(entity->model)) {
-            sync_mesh_edit_state(editor);
-            if (g_mesh_edit_state.mesh_index >= entity->model.meshCount) g_mesh_edit_state.mesh_index = 0;
-            if (entity->model.meshCount > 1) {
-                ImGui::SliderInt("Editable Mesh", &g_mesh_edit_state.mesh_index, 0, entity->model.meshCount - 1);
-            } else {
-                ImGui::Text("Editable Mesh: 0");
-            }
-
-            Mesh& editable_mesh = entity->model.meshes[g_mesh_edit_state.mesh_index];
-            if (editable_mesh.triangleCount > 0) {
-                if (g_mesh_edit_state.triangle_index < 0) g_mesh_edit_state.triangle_index = 0;
-                if (g_mesh_edit_state.triangle_index >= editable_mesh.triangleCount) {
-                    g_mesh_edit_state.triangle_index = editable_mesh.triangleCount - 1;
-                }
-                ImGui::SliderInt("Triangle", &g_mesh_edit_state.triangle_index, 0, editable_mesh.triangleCount - 1);
-                ImGui::Text("Vertices: %d  Triangles: %d", editable_mesh.vertexCount, editable_mesh.triangleCount);
-                ImGui::Checkbox("Vertex Gizmo", &g_mesh_edit_state.enabled);
-                ImGui::SameLine();
-                ImGui::TextUnformatted(g_mesh_edit_state.enabled ? "Scene gizmo edits selected vertex" : "Inspector fields only");
-
-                int triangle_vertices[3] = {};
-                if (get_mesh_triangle_vertex_indices(editable_mesh, g_mesh_edit_state.triangle_index, triangle_vertices)) {
-                    ImGui::SliderInt("Vertex", &g_mesh_edit_state.vertex_corner, 0, 2, "Vertex %d");
-
-                    auto edit_triangle_vertex = [&](const char* label, int vertex_index) {
-                        float vertex[3] = {
-                            editable_mesh.vertices[vertex_index * 3 + 0],
-                            editable_mesh.vertices[vertex_index * 3 + 1],
-                            editable_mesh.vertices[vertex_index * 3 + 2]
-                        };
-
-                        if (ImGui::DragFloat3(label, vertex, 0.01f)) {
-                            editor.save_state();
-                            set_mesh_vertex_local_position(*entity, g_mesh_edit_state.mesh_index, vertex_index, {
-                                vertex[0], vertex[1], vertex[2]
-                            });
-                        }
-                    };
-
-                    edit_triangle_vertex("Vertex A", triangle_vertices[0]);
-                    edit_triangle_vertex("Vertex B", triangle_vertices[1]);
-                    edit_triangle_vertex("Vertex C", triangle_vertices[2]);
-
-                    ImGui::TextUnformatted(entity->mesh_triangles_detached
-                        ? "Triangle sculpt mode is active."
-                        : "Triangles are still shared until first edit.");
-
-                    if (entity_has_mesh_overrides(*entity) && ImGui::Button("Reset Mesh Edits")) {
-                        editor.save_state();
-                        reset_mesh_edit_model(*entity);
-                    }
-                }
-            }
-        }
-
-        int current_texture_index = 0;
-        std::vector<const char*> texture_names = { "None" };
-        std::vector<TextureSource> texture_types = { TEXTURE_NONE };
-        std::vector<std::string> texture_sources = { "" };
-
-        for (int i = 1; i < static_cast<int>(texture_options.size()); i++) {
-            texture_names.push_back(texture_options[i].name.c_str());
-            texture_types.push_back(TEXTURE_EXTERNAL);
-            texture_sources.push_back(texture_options[i].name);
-        }
-
-        bool has_model_texture = false;
-        static std::string model_texture_label;
-        if (entity->asset && !entity->asset->is_procedural) {
-            for (const auto& texture : entity->original_material_textures) {
-                if (texture.id != 0 && texture.id != 1) {
-                    has_model_texture = true;
-                    break;
-                }
-            }
-        }
-
-        if (has_model_texture) {
-            model_texture_label = TextFormat("%s [texture]", entity->asset_name.c_str());
-            texture_names.push_back(model_texture_label.c_str());
-            texture_types.push_back(TEXTURE_MODEL);
-            texture_sources.push_back("__model__");
-        }
-
-        for (int i = 0; i < static_cast<int>(texture_types.size()); i++) {
-            if (texture_types[i] != entity->texture_source) continue;
-            if (entity->texture_source == TEXTURE_EXTERNAL && entity->texture_name == texture_sources[i]) {
-                current_texture_index = i;
-                break;
-            }
-            if (entity->texture_source != TEXTURE_EXTERNAL) {
-                current_texture_index = i;
-                break;
-            }
-        }
-
-        ImGui::Separator();
-        ImGui::Text("Material");
-
-        if (ImGui::Combo("Texture", &current_texture_index, texture_names.data(), static_cast<int>(texture_names.size()))) {
-            editor.save_state();
-            TextureSource selected_type = texture_types[current_texture_index];
-
-            if (selected_type == TEXTURE_NONE) {
-                entity->texture_source = TEXTURE_NONE;
-                entity->texture_name.clear();
-                entity->texture = {0};
-                clear_material_textures(entity);
-                mark_entity_uv_dirty(entity);
-            } else if (selected_type == TEXTURE_EXTERNAL) {
-                entity->texture_source = TEXTURE_EXTERNAL;
-                entity->texture_name = texture_sources[current_texture_index];
-                entity->texture = {0};
-
-                for (int i = 1; i < static_cast<int>(texture_options.size()); i++) {
-                    if (texture_options[i].name == entity->texture_name) {
-                        entity->texture = texture_options[i].texture;
-                        break;
-                    }
-                }
-
-                for (int i = 0; i < entity->model.materialCount; i++) {
-                    entity->model.materials[i].maps[MATERIAL_MAP_DIFFUSE].texture = entity->texture;
-                }
-                mark_entity_uv_dirty(entity);
-            } else {
-                entity->texture_source = TEXTURE_MODEL;
-                entity->texture_name.clear();
-                entity->texture = {0};
-                restore_model_textures(entity);
-                mark_entity_uv_dirty(entity);
-            }
-        }
-
-        static bool last_stretch_texture = false;
-        if (ImGui::Checkbox("Stretch Texture", &entity->texture_stretch)) {
-            if (last_stretch_texture != entity->texture_stretch) {
-                editor.save_state();
-                last_stretch_texture = entity->texture_stretch;
-                mark_entity_uv_dirty(entity);
-            }
-        }
-
-        if (!entity->texture_stretch) {
-            static bool last_auto_uv = false;
-            if (ImGui::Checkbox("Auto UV", &entity->auto_uv)) {
-                if (last_auto_uv != entity->auto_uv) {
-                    editor.save_state();
-                    last_auto_uv = entity->auto_uv;
-                    mark_entity_uv_dirty(entity);
-                }
-            }
-
-            if (entity->auto_uv) {
-                static Vector2 last_uv_scale = {};
-                if (ImGui::InputFloat("Scale X", &entity->uv_scale_vec.x, 0.1f, 1.0f, "%.2f")) {
-                    if (last_uv_scale.x != entity->uv_scale_vec.x) {
-                        editor.save_state();
-                        last_uv_scale.x = entity->uv_scale_vec.x;
-                        mark_entity_uv_dirty(entity);
-                    }
-                    if (entity->uv_scale_vec.x < 0.01f) entity->uv_scale_vec.x = 0.01f;
-                }
-                if (ImGui::InputFloat("Scale Y", &entity->uv_scale_vec.y, 0.1f, 1.0f, "%.2f")) {
-                    if (last_uv_scale.y != entity->uv_scale_vec.y) {
-                        editor.save_state();
-                        last_uv_scale.y = entity->uv_scale_vec.y;
-                        mark_entity_uv_dirty(entity);
-                    }
-                    if (entity->uv_scale_vec.y < 0.01f) entity->uv_scale_vec.y = 0.01f;
-                }
-            } else {
-                static float last_repeat_u = 0.0f;
-                static float last_repeat_v = 0.0f;
-                if (ImGui::InputFloat("Repeat U", &entity->texture_repeat_u, 0.1f, 1.0f, "%.2f")) {
-                    if (last_repeat_u != entity->texture_repeat_u) {
-                        editor.save_state();
-                        last_repeat_u = entity->texture_repeat_u;
-                        mark_entity_uv_dirty(entity);
-                    }
-                    if (entity->texture_repeat_u < 0.01f) entity->texture_repeat_u = 0.01f;
-                }
-                if (ImGui::InputFloat("Repeat V", &entity->texture_repeat_v, 0.1f, 1.0f, "%.2f")) {
-                    if (last_repeat_v != entity->texture_repeat_v) {
-                        editor.save_state();
-                        last_repeat_v = entity->texture_repeat_v;
-                        mark_entity_uv_dirty(entity);
-                    }
-                    if (entity->texture_repeat_v < 0.01f) entity->texture_repeat_v = 0.01f;
-                }
-            }
-        }
-
-        float color[4] = {
-            entity->color.r / 255.0f,
-            entity->color.g / 255.0f,
-            entity->color.b / 255.0f,
-            entity->color.a / 255.0f
-        };
-        static Color last_color = {};
-        if (ImGui::ColorEdit4("Color", color)) {
-            Color next_color = {
-                static_cast<unsigned char>(color[0] * 255),
-                static_cast<unsigned char>(color[1] * 255),
-                static_cast<unsigned char>(color[2] * 255),
-                static_cast<unsigned char>(color[3] * 255)
-            };
-            if (memcmp(&last_color, &next_color, sizeof(Color)) != 0) {
-                editor.save_state();
-                last_color = next_color;
-                entity->color = next_color;
-            }
-        }
-
-        float outline[4] = {
-            entity->outline_color.r / 255.0f,
-            entity->outline_color.g / 255.0f,
-            entity->outline_color.b / 255.0f,
-            entity->outline_color.a / 255.0f
-        };
-        static Color last_outline = {};
-        if (ImGui::ColorEdit4("Outline", outline)) {
-            Color next_outline = {
-                static_cast<unsigned char>(outline[0] * 255),
-                static_cast<unsigned char>(outline[1] * 255),
-                static_cast<unsigned char>(outline[2] * 255),
-                static_cast<unsigned char>(outline[3] * 255)
-            };
-            if (memcmp(&last_outline, &next_outline, sizeof(Color)) != 0) {
-                editor.save_state();
-                last_outline = next_outline;
-                entity->outline_color = next_outline;
-            }
-        }
-
-        ImGui::Separator();
-        ImGui::Text("Lighting");
-
-        if (ImGui::Checkbox("Has Light", &entity->has_light)) {
-            editor.save_state();
-            if (entity->light_created) {
-                entity->light.enabled = entity->has_light;
-                if (entity->light.id != -1) update_lighting(shader, entity->light);
-            }
-        }
-
-        if (entity->has_light) {
-            float light_color[4] = {
-                entity->light.color.r / 255.0f,
-                entity->light.color.g / 255.0f,
-                entity->light.color.b / 255.0f,
-                entity->light.color.a / 255.0f
-            };
-
-            static Color last_light_color = {};
-            if (ImGui::ColorEdit4("Light Color", light_color)) {
-                Color next_light_color = {
-                    static_cast<unsigned char>(light_color[0] * 255),
-                    static_cast<unsigned char>(light_color[1] * 255),
-                    static_cast<unsigned char>(light_color[2] * 255),
-                    static_cast<unsigned char>(light_color[3] * 255)
-                };
-                if (memcmp(&last_light_color, &next_light_color, sizeof(Color)) != 0) {
-                    editor.save_state();
-                    last_light_color = next_light_color;
-                    entity->light.color = next_light_color;
-                }
-            }
-
-            static float last_intensity = 0.0f;
-            static float last_range = 0.0f;
-            if (ImGui::InputFloat("Intensity", &entity->light.intensity, 0.1f, 1.0f, "%.2f")) {
-                if (last_intensity != entity->light.intensity) {
-                    editor.save_state();
-                    last_intensity = entity->light.intensity;
-                }
-            }
-
-            if (ImGui::InputFloat("Range", &entity->light.range, 0.1f, 1.0f, "%.2f")) {
-                if (last_range != entity->light.range) {
-                    editor.save_state();
-                    last_range = entity->light.range;
-                }
-            }
-
-            const char* light_types[] = { "Directional", "Point", "Spot", "Area" };
-            int light_type = entity->light.light.type;
-            if (ImGui::Combo("Light Type", &light_type, light_types, 4)) {
-                editor.save_state();
-                entity->light.light.type = light_type;
-                if (entity->light_created) update_lighting(shader, entity->light);
-            }
-
-            if (light_type == LIGHT_SPOT && ImGui::SliderFloat("Spot Angle", &entity->light.spot_angle, 1.0f, 90.0f, "%.1f deg")) {
-                if (entity->light_created) update_lighting(shader, entity->light);
-            }
-
-            float target[3] = { entity->light.target.x, entity->light.target.y, entity->light.target.z };
-            static Vector3 last_target = {};
-
-            if (ImGui::DragFloat3("Target", target, 0.1f)) {
-                if (last_target.x != target[0] || last_target.y != target[1] || last_target.z != target[2]) {
-                    editor.save_state();
-                    last_target = { target[0], target[1], target[2] };
-                }
-                entity->light.target = { target[0], target[1], target[2] };
-            }
-        }
+        ComponentUIHelper::draw_entity_inspector(editor, *entity);
     }
 
     ImGui::End();

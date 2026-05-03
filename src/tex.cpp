@@ -84,14 +84,18 @@ void unload_textures() {
 }
 
 void apply_texture_repeat(Entity &e) {
-    for (int m = 0; m < e.model.meshCount; m++) {
-        Mesh &mesh = e.model.meshes[m];
+    MeshComponent* mesh_component = e.get_mesh_component();
+    const TransformComponent* transform = e.get_transform_component();
+    if (!mesh_component || !transform) return;
+
+    for (int m = 0; m < mesh_component->model.meshCount; m++) {
+        Mesh &mesh = mesh_component->model.meshes[m];
         if (!mesh.texcoords) continue;
 
         for (int i = 0; i < mesh.vertexCount; i++) {
             float u, v;
 
-            if (e.auto_uv) {
+            if (mesh_component->auto_uv) {
                 Vector3 pos = {
                     mesh.vertices[i*3+0],
                     mesh.vertices[i*3+1],
@@ -108,9 +112,9 @@ void apply_texture_repeat(Entity &e) {
                 float ay = fabs(normal.y);
                 float az = fabs(normal.z);
 
-                float sx = e.scale.x;
-                float sy = e.scale.y;
-                float sz = e.scale.z;
+                float sx = transform->scale.x;
+                float sy = transform->scale.y;
+                float sz = transform->scale.z;
 
                 if (ay > ax && ay > az) {
                     u = pos.x * sx;
@@ -127,14 +131,14 @@ void apply_texture_repeat(Entity &e) {
                     v = pos.y * sy;
                 }
 
-                u *= e.uv_scale_vec.x;
-                v *= e.uv_scale_vec.y;
+                u *= mesh_component->uv_scale_vec.x;
+                v *= mesh_component->uv_scale_vec.y;
             } else {
-                if (m >= e.original_texcoords.size()) continue;
-                auto& base = e.original_texcoords[m];
+                if (m >= mesh_component->original_texcoords.size()) continue;
+                auto& base = mesh_component->original_texcoords[m];
 
-                u = base[i*2+0] * e.texture_repeat_u * e.scale.x;
-                v = base[i*2+1] * e.texture_repeat_v * e.scale.y;
+                u = base[i*2+0] * mesh_component->texture_repeat_u * transform->scale.x;
+                v = base[i*2+1] * mesh_component->texture_repeat_v * transform->scale.y;
             }
 
             mesh.texcoords[i*2+0] = u;
@@ -146,102 +150,120 @@ void apply_texture_repeat(Entity &e) {
 }
 
 void store_uv(Entity* e) {
-    e->original_texcoords.clear();
+    if (!e) return;
+    MeshComponent* mesh_component = e->get_mesh_component();
+    if (!mesh_component) return;
+    mesh_component->original_texcoords.clear();
 
-    for (int m = 0; m < e->model.meshCount; m++) {
-        Mesh& mesh = e->model.meshes[m];
+    for (int m = 0; m < mesh_component->model.meshCount; m++) {
+        Mesh& mesh = mesh_component->model.meshes[m];
 
         if (!mesh.texcoords) {
-            e->original_texcoords.push_back({});
+            mesh_component->original_texcoords.push_back({});
             continue;
         }
 
         std::vector<float> uv(mesh.vertexCount * 2);
         memcpy(uv.data(), mesh.texcoords, uv.size() * sizeof(float));
 
-        e->original_texcoords.push_back(uv);
+        mesh_component->original_texcoords.push_back(uv);
     }
 
-    e->uv_dirty = true;
-    e->bounds_dirty = true;
+    mesh_component->uv_dirty = true;
+    mesh_component->bounds_dirty = true;
 }
 
 void mark_entity_uv_dirty(Entity* e) {
     if (!e) return;
-    e->uv_dirty = true;
+    MeshComponent* mesh = e->get_mesh_component();
+    if (mesh) mesh->uv_dirty = true;
 }
 
 void mark_entity_bounds_dirty(Entity* e) {
     if (!e) return;
-    e->bounds_dirty = true;
+    MeshComponent* mesh = e->get_mesh_component();
+    if (mesh) mesh->bounds_dirty = true;
 }
 
 void store_material_textures(Entity* e) {
-    e->original_material_textures.clear();
-    e->original_material_textures.reserve(e->model.materialCount);
+    if (!e) return;
+    MeshComponent* mesh = e->get_mesh_component();
+    if (!mesh) return;
+    mesh->original_material_textures.clear();
+    mesh->original_material_textures.reserve(mesh->model.materialCount);
 
-    for (int i = 0; i < e->model.materialCount; i++) {
-        e->original_material_textures.push_back(
-            e->model.materials[i].maps[MATERIAL_MAP_DIFFUSE].texture
+    for (int i = 0; i < mesh->model.materialCount; i++) {
+        mesh->original_material_textures.push_back(
+            mesh->model.materials[i].maps[MATERIAL_MAP_DIFFUSE].texture
         );
     }
 }
 
 void restore_model_textures(Entity* e) {
-    if (e->original_material_textures.size() != static_cast<size_t>(e->model.materialCount)) return;
+    if (!e) return;
+    MeshComponent* mesh = e->get_mesh_component();
+    if (!mesh) return;
+    if (mesh->original_material_textures.size() != static_cast<size_t>(mesh->model.materialCount)) return;
 
-    for (int i = 0; i < e->model.materialCount; i++) {
-        e->model.materials[i].maps[MATERIAL_MAP_DIFFUSE].texture = e->original_material_textures[i];
+    for (int i = 0; i < mesh->model.materialCount; i++) {
+        mesh->model.materials[i].maps[MATERIAL_MAP_DIFFUSE].texture = mesh->original_material_textures[i];
     }
 }
 
 void clear_material_textures(Entity* e) {
-    for (int i = 0; i < e->model.materialCount; i++) {
-        e->model.materials[i].maps[MATERIAL_MAP_DIFFUSE].texture = {0};
+    if (!e) return;
+    MeshComponent* mesh = e->get_mesh_component();
+    if (!mesh) return;
+    for (int i = 0; i < mesh->model.materialCount; i++) {
+        mesh->model.materials[i].maps[MATERIAL_MAP_DIFFUSE].texture = {0};
     }
 }
 
 void refresh_entity_render_state(Entity& e) {
-    if (!e.uv_dirty) return;
+    MeshComponent* mesh = e.get_mesh_component();
+    if (!mesh || !mesh->uv_dirty) return;
 
-    if (e.texture.id != 0) {
-        for (int i = 0; i < e.model.materialCount; i++) {
-            e.model.materials[i].maps[MATERIAL_MAP_DIFFUSE].texture = e.texture;
+    if (mesh->texture.id != 0) {
+        for (int i = 0; i < mesh->model.materialCount; i++) {
+            mesh->model.materials[i].maps[MATERIAL_MAP_DIFFUSE].texture = mesh->texture;
         }
     }
 
-    if (e.texture_stretch) {
-        for (int m = 0; m < e.model.meshCount; m++) {
-            Mesh& mesh = e.model.meshes[m];
-            if (!mesh.texcoords || m >= e.original_texcoords.size()) continue;
+    if (mesh->texture_stretch) {
+        for (int m = 0; m < mesh->model.meshCount; m++) {
+            Mesh& model_mesh = mesh->model.meshes[m];
+            if (!model_mesh.texcoords || m >= mesh->original_texcoords.size()) continue;
 
-            memcpy(mesh.texcoords, e.original_texcoords[m].data(), mesh.vertexCount * 2 * sizeof(float));
-            UpdateMeshBuffer(mesh, 1, mesh.texcoords, mesh.vertexCount * 2 * sizeof(float), 0);
+            memcpy(model_mesh.texcoords, mesh->original_texcoords[m].data(), model_mesh.vertexCount * 2 * sizeof(float));
+            UpdateMeshBuffer(model_mesh, 1, model_mesh.texcoords, model_mesh.vertexCount * 2 * sizeof(float), 0);
         }
     } else {
         apply_texture_repeat(e);
     }
 
-    e.uv_dirty = false;
+    mesh->uv_dirty = false;
 }
 
 void draw_entity_with_texture(Entity& e) {
     refresh_entity_render_state(e);
+    const MeshComponent* mesh = e.get_mesh_component();
+    const TransformComponent* transform = e.get_transform_component();
+    if (!mesh || !transform) return;
 
     rlPushMatrix();
-    rlTranslatef(e.position.x, e.position.y, e.position.z);
+    rlTranslatef(transform->position.x, transform->position.y, transform->position.z);
 
-    rlRotatef(e.rotation.x, 1, 0, 0);
-    rlRotatef(e.rotation.y, 0, 1, 0);
-    rlRotatef(e.rotation.z, 0, 0, 1);
+    rlRotatef(transform->rotation.x, 1, 0, 0);
+    rlRotatef(transform->rotation.y, 0, 1, 0);
+    rlRotatef(transform->rotation.z, 0, 0, 1);
     
-    rlScalef(e.scale.x, e.scale.y, e.scale.z);
+    rlScalef(transform->scale.x, transform->scale.y, transform->scale.z);
 
-    const bool edited_mesh_is_double_sided = entity_has_mesh_overrides(e) || e.mesh_triangles_detached;
+    const bool edited_mesh_is_double_sided = entity_has_mesh_overrides(e) || mesh->mesh_triangles_detached;
     if (edited_mesh_is_double_sided) rlDisableBackfaceCulling();
 
-    DrawModel(e.model, {0,0,0}, 1.0f, e.color);
-    if (e.outline_color.a > 0) DrawModelWires(e.model, {0,0,0}, 1.0f, e.outline_color);
+    DrawModel(mesh->model, {0,0,0}, 1.0f, mesh->color);
+    if (mesh->outline_color.a > 0) DrawModelWires(mesh->model, {0,0,0}, 1.0f, mesh->outline_color);
 
     if (edited_mesh_is_double_sided) rlEnableBackfaceCulling();
 
@@ -280,8 +302,9 @@ void refresh_textures(Scene* scene, const std::string& project_path) {
     if (scene) {
         for (const auto& [_, removed_tex] : old_by_name) {
             for (auto& entity : scene->entities) {
-                if (entity.texture.id == removed_tex.id) {
-                    entity.texture = {0};
+                MeshComponent* mesh = entity.get_mesh_component();
+                if (mesh && mesh->texture.id == removed_tex.id) {
+                    mesh->texture = {0};
                 }
             }
         }
@@ -344,24 +367,28 @@ void refresh_assets(std::string project_path) {
 }
 
 void clone_model_materials(Entity* e) {
-    if (e->model.materialCount <= 0) return;
+    if (!e) return;
+    MeshComponent* mesh = e->get_mesh_component();
+    if (!mesh || mesh->model.materialCount <= 0) return;
 
-    if (e->owns_materials) {
-        if (e->model.materials)    RL_FREE(e->model.materials);
-        if (e->model.meshMaterial) RL_FREE(e->model.meshMaterial);
-        e->model.materials    = nullptr;
-        e->model.meshMaterial = nullptr;
-        e->owns_materials     = false;
+    if (mesh->owns_materials) {
+        if (mesh->model.materials)    RL_FREE(mesh->model.materials);
+        if (mesh->model.meshMaterial) RL_FREE(mesh->model.meshMaterial);
+        mesh->model.materials    = nullptr;
+        mesh->model.meshMaterial = nullptr;
+        mesh->owns_materials     = false;
     }
 
-    Material* cloned = (Material*)RL_MALLOC(e->model.materialCount * sizeof(Material));
-    memcpy(cloned, e->asset->loaded_model.materials, e->model.materialCount * sizeof(Material));
-    e->model.materials = cloned;
+    if (!mesh->asset || !mesh->asset->loaded_model.materials) return;
 
-    e->model.meshMaterial = (int*)RL_MALLOC(e->model.meshCount * sizeof(int));
-    memcpy(e->model.meshMaterial, e->asset->loaded_model.meshMaterial, e->model.meshCount * sizeof(int));
+    Material* cloned = (Material*)RL_MALLOC(mesh->model.materialCount * sizeof(Material));
+    memcpy(cloned, mesh->asset->loaded_model.materials, mesh->model.materialCount * sizeof(Material));
+    mesh->model.materials = cloned;
 
-    e->owns_materials = true;
+    mesh->model.meshMaterial = (int*)RL_MALLOC(mesh->model.meshCount * sizeof(int));
+    memcpy(mesh->model.meshMaterial, mesh->asset->loaded_model.meshMaterial, mesh->model.meshCount * sizeof(int));
+
+    mesh->owns_materials = true;
 }
 
 RenderTexture2D load_shadowmap_render_texture(int width, int height) {

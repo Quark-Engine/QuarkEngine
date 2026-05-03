@@ -4,3 +4,4 @@ build-plugin/
 /projects
 projects.json
 run.bat
+imgui.ini

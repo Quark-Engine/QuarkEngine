@@ -1,5 +1,6 @@
 #include "headers/project.h"
 #include "headers/entity.h"
+#include "headers/component.h"
 #include "headers/lighting.h"
 #include "headers/models.h"
 #include "headers/tex.h"
@@ -165,52 +166,15 @@ void project_save(const std::string& folder_path, const Scene& scene) {
 
     json j;
     j["entities"] = json::array();
+    j["version"] = 2;
 
     for (const auto& e : scene.entities) {
         json ej;
-        ej["name"]          = e.name;
-        ej["type"]          = e.type;
+        ej["name"] = e.name;
 
-        ej["position"] = json::array({ (float)e.position.x, (float)e.position.y, (float)e.position.z });
-        ej["rotation"] = json::array({ (float)e.rotation.x, (float)e.rotation.y, (float)e.rotation.z });
-        ej["scale"]    = json::array({ (float)e.scale.x,    (float)e.scale.y,    (float)e.scale.z    });
-
-        ej["color"]         = color_to_hex(e.color);
-        ej["outline_color"] = color_to_hex(e.outline_color);
-
-        std::string tex_name = "None";
-        if (e.texture_source == TEXTURE_EXTERNAL) {
-            tex_name = e.texture_name.empty() ? "None" : e.texture_name;
-        } else if (e.texture_source == TEXTURE_MODEL) {
-            tex_name = "__model__";
+        if (e.components) {
+            e.components->serialize(ej);
         }
-
-        ej["texture"]          = tex_name;
-        ej["texture_source"]   = (e.texture_source == TEXTURE_EXTERNAL) ? "external" :
-                                   (e.texture_source == TEXTURE_MODEL ? "model" : "none");
-        ej["texture_name"]     = e.texture_name;
-        ej["texture_stretch"]  = e.texture_stretch;
-        ej["auto_uv"]          = e.auto_uv;
-        ej["texture_repeat_u"] = e.texture_repeat_u;
-        ej["texture_repeat_v"] = e.texture_repeat_v;
-        ej["uv_scale_x"]       = e.uv_scale_vec.x;
-        ej["uv_scale_y"]       = e.uv_scale_vec.y;
-        ej["segments"]         = e.segments;
-        ej["mesh_triangles_detached"] = e.mesh_triangles_detached;
-        ej["mesh_vertex_overrides"] = json::array();
-        for (const auto& mesh_vertices : e.mesh_vertex_overrides) {
-            ej["mesh_vertex_overrides"].push_back(mesh_vertices);
-        }
-
-        ej["has_light"]        = e.has_light;
-        ej["light_color"]      = color_to_hex(e.light.color);
-        ej["light_intensity"]  = e.light.intensity;
-        ej["light_range"]      = e.light.range;
-        ej["light_spot_angle"] = e.light.spot_angle;
-        ej["light_target"]     = json::array({ (float)e.light.target.x, (float)e.light.target.y, (float)e.light.target.z });
-        ej["light_rotation"]   = json::array({ (float)e.light.rotation.x, (float)e.light.rotation.y, (float)e.light.rotation.z });
-
-        ej["asset_name"]       = e.asset_name;
 
         j["entities"].push_back(ej);
     }
@@ -232,6 +196,7 @@ bool project_load(const std::string& folder_path, Scene& scene, Shader shader) {
     if (!fs::exists(json_path)) return false;
 
     scene.release_resources();
+    reset_light_registry();
     refresh_textures(nullptr, root_path.string());
     refresh_assets(root_path.string());
     refresh_models(root_path.string(), scene);
@@ -243,185 +208,93 @@ bool project_load(const std::string& folder_path, Scene& scene, Shader shader) {
     for (auto& ej : j["entities"]) {
         Entity e;
         e.name = ej["name"].get<std::string>();
-        e.type = (ObjectType)ej["type"].get<int>();
         e.id   = static_cast<int>(scene.entities.size());
 
-        e.position = {
-            ej["position"][0].get<float>(),
-            ej["position"][1].get<float>(),
-            ej["position"][2].get<float>()
-        };
+        if (!ej.contains("components")) {
+            TraceLog(LOG_WARNING, "Skipping legacy entity '%s': project must use component data only.", e.name.c_str());
+            continue;
+        }
 
-        e.rotation = {
-            ej["rotation"][0].get<float>(),
-            ej["rotation"][1].get<float>(),
-            ej["rotation"][2].get<float>()
-        };
+        e.components->deserialize(ej);
 
-        e.scale = {
-            ej["scale"][0].get<float>(),
-            ej["scale"][1].get<float>(),
-            ej["scale"][2].get<float>()
-        };
+        if (!e.components->get_transform()) {
+            e.components->add_component(std::make_shared<TransformComponent>());
+        }
+        if (!e.components->get_mesh()) {
+            e.components->add_component(std::make_shared<MeshComponent>());
+        }
 
-        e.color         = hex_to_color(ej["color"].get<std::string>());
-        e.outline_color = hex_to_color(ej["outline_color"].get<std::string>());
+        MeshComponent* mesh = e.get_mesh_component();
+        TransformComponent* transform = e.get_transform_component();
+        LightComponent* light = e.get_light_component();
+        if (!mesh || !transform) continue;
 
-        e.texture_stretch  = ej["texture_stretch"].get<bool>();
-        e.auto_uv          = ej["auto_uv"].get<bool>();
-        e.texture_repeat_u = ej["texture_repeat_u"].get<float>();
-        e.texture_repeat_v = ej["texture_repeat_v"].get<float>();
-        e.uv_scale_vec.x   = ej["uv_scale_x"].get<float>();
-        e.uv_scale_vec.y   = ej["uv_scale_y"].get<float>();
-        e.segments         = ej["segments"].get<int>();
-        e.mesh_triangles_detached = ej.value("mesh_triangles_detached", false);
+        if (!mesh->asset_name.empty()) {
+            for (auto& a : assets) {
+                if (a.name != mesh->asset_name) continue;
 
-        std::string asset_name = ej["asset_name"].get<std::string>();
-        e.asset_name = asset_name;
-
-        for (auto& a : assets) {
-            if (a.name == asset_name) {
-                e.asset = &a;
-                e.type = a.type;
-
+                mesh->asset = &a;
+                mesh->type = a.type;
                 if (a.is_procedural) {
-                    e.model = a.generator(e.segments);
-                    e.owns_model_instance = true;
-                } 
-                
-                else {
-                    if (!load_model_instance(a, e.model)) {
-                        e.asset = nullptr;
-                        e.asset_name.clear();
-                        e.model = {0};
-                        e.owns_model_instance = false;
+                    mesh->model = a.generator(mesh->segments);
+                    mesh->owns_model_instance = true;
+                } else {
+                    if (!load_model_instance(a, mesh->model)) {
+                        mesh->asset = nullptr;
+                        mesh->asset_name.clear();
+                        mesh->model = {0};
+                        mesh->owns_model_instance = false;
                         break;
                     }
-                    e.owns_model_instance = true;
+                    mesh->owns_model_instance = true;
                 }
 
                 store_uv(&e);
                 store_material_textures(&e);
-                if (ej.contains("mesh_vertex_overrides") && ej["mesh_vertex_overrides"].is_array()) {
-                    e.mesh_vertex_overrides.clear();
-                    for (const auto& mesh_json : ej["mesh_vertex_overrides"]) {
-                        if (!mesh_json.is_array()) {
-                            e.mesh_vertex_overrides.emplace_back();
-                            continue;
-                        }
-
-                        std::vector<float> vertices;
-                        vertices.reserve(mesh_json.size());
-                        for (const auto& value : mesh_json) {
-                            vertices.push_back(value.get<float>());
-                        }
-                        e.mesh_vertex_overrides.push_back(std::move(vertices));
-                    }
-                }
                 apply_mesh_overrides(e);
+
+                if (mesh->texture_source == TEXTURE_EXTERNAL && !mesh->texture_name.empty()) {
+                    for (auto& opt : texture_options) {
+                        if (opt.name == mesh->texture_name) {
+                            mesh->texture = opt.texture;
+                            break;
+                        }
+                    }
+                } else if (mesh->texture_source == TEXTURE_MODEL) {
+                    restore_model_textures(&e);
+                } else {
+                    clear_material_textures(&e);
+                }
+
                 break;
             }
         }
 
-        if (!e.asset || (e.asset_name.size() > 0 && (e.model.meshCount <= 0 || e.model.meshes == nullptr))) {
+        if (!mesh->asset || (mesh->asset_name.size() > 0 && (mesh->model.meshCount <= 0 || mesh->model.meshes == nullptr))) {
             continue;
         }
 
-        std::string tex_name = "None";
-        if (ej.contains("texture")) {
-            tex_name = ej["texture"].get<std::string>();
-        }
-
-        std::string texture_source = "none";
-        if (ej.contains("texture_source")) {
-            texture_source = ej["texture_source"].get<std::string>();
-        }
-
-        e.texture = {0};
-        e.texture_name.clear();
-
-        if (texture_source == "external") {
-            e.texture_source = TEXTURE_EXTERNAL;
-            if (ej.contains("texture_name")) {
-                e.texture_name = ej["texture_name"].get<std::string>();
-            } else {
-                e.texture_name = tex_name;
+        for (int i = 0; i < mesh->model.materialCount; i++) {
+            mesh->model.materials[i].maps[MATERIAL_MAP_DIFFUSE].color = WHITE;
+            if (mesh->texture.id != 0) {
+                mesh->model.materials[i].maps[MATERIAL_MAP_DIFFUSE].texture = mesh->texture;
             }
+            mesh->model.materials[i].shader = shader;
+        }
 
-            for (auto& opt : texture_options) {
-                if (opt.name == e.texture_name) {
-                    e.texture = opt.texture;
-                    break;
+        mesh->shader_assigned = true;
+
+        if (light) {
+            const int light_type = light->light.light.type;
+            light->created = false;
+            light->light.id = -1;
+            light->light.light = {};
+            light->light.light.type = light_type;
+            if (light->enabled) {
+                light->light.enabled = true;
+                if (light->light.position.x == 0.0f && light->light.position.y == 0.0f && light->light.position.z == 0.0f) {
+                    light->light.position = transform->position;
                 }
-            }
-        } else if (texture_source == "model" || tex_name == "__model__") {
-            e.texture_source = TEXTURE_MODEL;
-            restore_model_textures(&e);
-        } else {
-            bool has_embedded = false;
-            for (int i = 0; i < e.model.materialCount; i++) {
-                if (e.model.materials[i].maps[MATERIAL_MAP_DIFFUSE].texture.id != 0) {
-                    has_embedded = true;
-                    break;
-                }
-            }
-
-            if (tex_name != "None" && tex_name != "__model__") {
-                e.texture_source = TEXTURE_EXTERNAL;
-                e.texture_name = tex_name;
-                for (auto& opt : texture_options) {
-                    if (opt.name == e.texture_name) {
-                        e.texture = opt.texture;
-                        break;
-                    }
-                }
-            } else if (has_embedded) {
-                e.texture_source = TEXTURE_MODEL;
-                restore_model_textures(&e);
-            } else {
-                e.texture_source = TEXTURE_NONE;
-                clear_material_textures(&e);
-            }
-        }
-
-        for (int i = 0; i < e.model.materialCount; i++) {
-            e.model.materials[i].maps[MATERIAL_MAP_DIFFUSE].color = WHITE;
-
-            if (e.texture.id != 0) {
-                e.model.materials[i].maps[MATERIAL_MAP_DIFFUSE].texture = e.texture;
-            }
-            // If no external texture is selected, keep the model's embedded diffuse texture.
-
-            e.model.materials[i].shader = shader;
-        }
-
-        e.shader_assigned = true;
-
-        e.has_light = ej["has_light"].get<bool>();
-        if (e.has_light) {
-            e.light = create_lighting(e.position, hex_to_color(ej["light_color"].get<std::string>()));
-            e.light.intensity  = ej["light_intensity"].get<float>();
-            e.light.range      = ej["light_range"].get<float>();
-            e.light.spot_angle = ej["light_spot_angle"].get<float>();
-            e.light.target     = { 
-                ej["light_target"][0].get<float>(), 
-                ej["light_target"][1].get<float>(), 
-                ej["light_target"][2].get<float>() };
-            e.light.rotation   = { 
-                ej["light_rotation"][0].get<float>(), 
-                ej["light_rotation"][1].get<float>(), 
-                ej["light_rotation"][2].get<float>() };
-
-            int new_id = allocate_light_id();
-            if (new_id != -1) {
-                e.light.id = new_id;
-                e.light.light = create_light_at_slot(new_id, LIGHT_POINT, e.position, Vector3Zero(), e.light.color, shader);
-                initialize_lighting_uniform_cache(e.light, shader, new_id);
-                e.light_created = true;
-            } 
-            
-            else {
-                e.has_light = false;
             }
         }
 

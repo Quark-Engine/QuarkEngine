@@ -24,7 +24,11 @@ std::string Scene::make_unique_name(const std::string& base_name) const {
 }
 
 std::string Scene::make_default_name_for(const Entity& entity) const {
-    const std::string base_name = entity.has_light ? "Light" : object_type_name(entity.type);
+    const LightComponent* light = entity.get_light_component();
+    const MeshComponent* mesh = entity.get_mesh_component();
+    const std::string base_name = (light && light->enabled)
+        ? "Light"
+        : object_type_name(mesh ? mesh->type : CUBE);
     return make_unique_name(base_name);
 }
 
@@ -32,29 +36,32 @@ void Scene::release_resources() {
     std::unordered_set<void*> released_meshes;
 
     for (auto& entity : entities) {
+        MeshComponent* mesh = entity.get_mesh_component();
+        if (!mesh) continue;
+
         const bool owns_model = entity_owns_model(entity);
-        if (entity.owns_materials) {
-            if (entity.model.materials) {
-                RL_FREE(entity.model.materials);
-                entity.model.materials = nullptr;
+        if (mesh->owns_materials) {
+            if (mesh->model.materials) {
+                RL_FREE(mesh->model.materials);
+                mesh->model.materials = nullptr;
             }
 
-            if (entity.model.meshMaterial) {
-                RL_FREE(entity.model.meshMaterial);
-                entity.model.meshMaterial = nullptr;
+            if (mesh->model.meshMaterial) {
+                RL_FREE(mesh->model.meshMaterial);
+                mesh->model.meshMaterial = nullptr;
             }
 
-            entity.owns_materials = false;
+            mesh->owns_materials = false;
         }
 
-        if (owns_model && entity.model.meshCount > 0 && entity.model.meshes) {
-            void* mesh_ptr = static_cast<void*>(entity.model.meshes);
+        if (owns_model && mesh->model.meshCount > 0 && mesh->model.meshes) {
+            void* mesh_ptr = static_cast<void*>(mesh->model.meshes);
             if (released_meshes.insert(mesh_ptr).second) {
-                UnloadModel(entity.model);
+                UnloadModel(mesh->model);
             }
         }
-        entity.model = {0};
-        entity.texture = {0};
+        mesh->model = {0};
+        mesh->texture = {0};
     }
 
     entities.clear();

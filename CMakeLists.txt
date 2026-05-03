@@ -23,15 +23,18 @@ if(BUILD_ENGINE)
 
     set(EDITOR_FILES
         src/editor/editor_assets.cpp
+        src/editor/editor_components_ui.cpp
         src/editor/editor_entity.cpp
         src/editor/editor_ui.cpp
         src/editor/editor_utils.cpp
         src/editor/editor_viewers.cpp
+        src/editor/editor.cpp
     )
 
     set(SOURCE_FILES
         src/camera.cpp
-        src/editor/editor.cpp
+        src/component.cpp
+        src/entity.cpp
         src/hub.cpp
         src/ImGuizmo.cpp
         src/lighting.cpp

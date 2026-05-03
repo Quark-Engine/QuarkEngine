@@ -14,48 +14,51 @@ void assign_entity_name(Entity& entity, const char* new_name) {
 
 Entity make_entity_from_asset(Scene& scene, ModelAsset& asset) {
     Entity entity;
+    MeshComponent* mesh = entity.get_mesh_component();
+    if (!mesh) return entity;
+
     entity.id = static_cast<int>(scene.entities.size());
-    entity.type = asset.type;
-    entity.asset = &asset;
-    entity.asset_name = asset.name;
-    entity.segments = 16;
+    mesh->type = asset.type;
+    mesh->asset = &asset;
+    mesh->asset_name = asset.name;
+    mesh->segments = 16;
     const std::string base_name = asset.is_procedural ? object_type_name(asset.type) : fs::path(asset.name).stem().string();
     entity.name = scene.make_unique_name(base_name.empty() ? "Model" : base_name);
 
     if (asset.is_procedural) {
-        entity.model = asset.generator(entity.segments);
-        entity.owns_model_instance = true;
+        mesh->model = asset.generator(mesh->segments);
+        mesh->owns_model_instance = true;
         clear_mesh_overrides(entity);
         store_uv(&entity);
         store_material_textures(&entity);
-        entity.texture_source = TEXTURE_NONE;
-        entity.texture_name.clear();
+        mesh->texture_source = TEXTURE_NONE;
+        mesh->texture_name.clear();
     } 
     else {
-        if (!load_model_instance(asset, entity.model)) {
-            entity.asset = nullptr;
-            entity.asset_name.clear();
-            entity.model = {0};
+        if (!load_model_instance(asset, mesh->model)) {
+            mesh->asset = nullptr;
+            mesh->asset_name.clear();
+            mesh->model = {0};
             return entity;
         }
 
-        entity.owns_model_instance = true;
+        mesh->owns_model_instance = true;
         clear_mesh_overrides(entity);
         store_uv(&entity);
         store_material_textures(&entity);
 
         bool has_embedded = false;
-        for (int i = 0; i < entity.model.materialCount; i++) {
-            if (entity.model.materials[i].maps[MATERIAL_MAP_DIFFUSE].texture.id != 0) {
+        for (int i = 0; i < mesh->model.materialCount; i++) {
+            if (mesh->model.materials[i].maps[MATERIAL_MAP_DIFFUSE].texture.id != 0) {
                 has_embedded = true;
                 break;
             }
         }
 
-        if (has_embedded) entity.texture_source = TEXTURE_MODEL;
-        else entity.texture_source = TEXTURE_NONE;
+        if (has_embedded) mesh->texture_source = TEXTURE_MODEL;
+        else mesh->texture_source = TEXTURE_NONE;
     }
 
-    entity.texture = {0};
+    mesh->texture = {0};
     return entity;
 }
