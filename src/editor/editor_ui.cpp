@@ -227,8 +227,9 @@ void reset_editor_layout(ImGuiID dockspace_id) {
     show_hierarchy = show_inspector = show_assets = show_scene = true;
 }
 
-void draw_gizmo(Editor& editor, Camera3D camera) {
+void draw_gizmo(Editor& editor, FlyCamera camera) {
     sync_mesh_edit_state(editor);
+    if (camera.active) return;
 
     Entity* entity = editor.scene.get_selected();
     if (!entity) return;
@@ -237,13 +238,14 @@ void draw_gizmo(Editor& editor, Camera3D camera) {
     if (!transform || !mesh) return;
 
     if (g_scene_window_size.x <= 0 || g_scene_window_size.y <= 0) return;
+    if (!g_is_scene_active) return;
 
     ImGuizmo::SetDrawlist(ImGui::GetWindowDrawList());
     ImGuizmo::SetRect(g_scene_window_pos.x, g_scene_window_pos.y, g_scene_window_size.x, g_scene_window_size.y);
 
-    Matrix view = MatrixTranspose(GetCameraMatrix(camera));
+    Matrix view = MatrixTranspose(GetCameraMatrix(camera.get_camera()));
     Matrix projection = MatrixTranspose(MatrixPerspective(
-        camera.fovy * DEG2RAD,
+        camera.get_camera().fovy * DEG2RAD,
         g_scene_window_size.x / g_scene_window_size.y,
         0.1f,
         1000.0f
@@ -256,7 +258,7 @@ void draw_gizmo(Editor& editor, Camera3D camera) {
     memcpy(view_matrix, &view, sizeof(view_matrix));
     memcpy(projection_matrix, &projection, sizeof(projection_matrix));
 
-    draw_mesh_vertex_overlay(editor, camera);
+    draw_mesh_vertex_overlay(editor, camera.get_camera());
 
     if (g_mesh_edit_state.enabled && has_valid_model_data(mesh->model)) {
         if (g_mesh_edit_state.mesh_index >= mesh->model.meshCount) 
@@ -536,7 +538,7 @@ void handle_scene_asset_drop(Editor& editor, Camera3D camera, bool is_hovered) {
     editor.scene.selected = static_cast<int>(editor.scene.entities.size()) - 1;
 }
 
-void draw_ui(Editor& editor, Shader shader, Camera3D camera) {
+void draw_ui(Editor& editor, Shader shader, FlyCamera camera) {
     using namespace editor_internal;
 
     ImGuizmo::BeginFrame();
@@ -827,7 +829,7 @@ void draw_ui(Editor& editor, Shader shader, Camera3D camera) {
                 g_is_scene_active  = ImGui::IsWindowFocused();
 
                 draw_gizmo(editor, camera);
-                handle_scene_asset_drop(editor, camera, g_is_scene_hovered);
+                handle_scene_asset_drop(editor, camera.get_camera(), g_is_scene_hovered);
             }
         }
         ImGui::End();
@@ -873,6 +875,6 @@ void draw_ui(Editor& editor, Shader shader, Camera3D camera) {
     }
 }
 
-void Editor::draw_ui(Shader shader, Camera3D camera) {
+void Editor::draw_ui(Shader shader, FlyCamera camera) {
     ::draw_ui(*this, shader, camera);
 }

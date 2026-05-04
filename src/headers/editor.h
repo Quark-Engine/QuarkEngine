@@ -1,5 +1,6 @@
 #pragma once
 #include "scene.h"
+#include "camera.h"
 #include "raylib.h"
 #include "tex.h"
 #include "models.h"
@@ -21,7 +22,7 @@ struct Editor {
 
     std::filesystem::path current_asset_path;
     
-    void draw_ui(Shader shader, Camera3D camera);
+    void draw_ui(Shader shader, FlyCamera camera);
     void draw_assets_ui();
     void handle_input();
     void draw_entity_with_texture(Entity& e);

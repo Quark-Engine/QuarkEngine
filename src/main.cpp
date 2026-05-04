@@ -431,7 +431,7 @@ int main(int argc, char* argv[]) {
 
             editor.handle_input();
 
-            editor.draw_ui(shadowmap_shader, camera.get_camera());
+            editor.draw_ui(shadowmap_shader, camera);
             
             update_plugins(plugin_manager, editor);
 

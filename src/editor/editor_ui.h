@@ -2,6 +2,7 @@
 
 #include "raylib.h"
 #include "../headers/editor.h"
+#include "../headers/camera.h"
 #include "../headers/entity.h"
 
 struct MeshEditState {
@@ -15,9 +16,9 @@ struct MeshEditState {
 
 extern MeshEditState g_mesh_edit_state;
 
-void draw_ui(Editor& editor, Shader shader, Camera3D camera);
+void draw_ui(Editor& editor, Shader shader, FlyCamera camera);
 
-void draw_gizmo(Editor& editor, Camera3D camera);
+void draw_gizmo(Editor& editor, FlyCamera camera);
 void handle_scene_asset_drop(Editor& editor, Camera3D camera, bool is_hovered);
 
 void draw_mesh_vertex_overlay(Editor& editor, Camera3D camera);
