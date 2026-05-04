@@ -11,6 +11,7 @@ struct Scene;
 void load_models();
 void update_model(Entity* e);
 void unload_models();
+void rebuild_mesh_normals(Mesh& mesh);
 void load_external_models(std::string project_path);
 void refresh_models(std::string project_path, Scene& scene);
 bool ensure_model_asset_loaded(ModelAsset& asset);

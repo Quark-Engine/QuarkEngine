@@ -1,5 +1,6 @@
 #include "headers/models.h"
 #include "headers/scene.h"
+#include "editor/editor_utils.h"
 #include <algorithm>
 #include <cctype>
 #include <cstring>
@@ -133,7 +134,7 @@ bool get_mesh_triangle_vertex_indices(const Mesh& mesh, int triangle_index, int 
     return true;
 }
 
-static void rebuild_mesh_normals(Mesh& mesh) {
+void rebuild_mesh_normals(Mesh& mesh) {
     if (!mesh.vertices || !mesh.normals || mesh.vertexCount <= 0) return;
 
     for (int i = 0; i < mesh.vertexCount * 3; i++) {
@@ -820,6 +821,8 @@ void update_model(Entity* e) {
 
     mesh->model = mesh->asset->generator(mesh->segments);
     mesh->owns_model_instance = true;
+
+    apply_negative_scale_winding(e);
 }
 
 void unload_models() {

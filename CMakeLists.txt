@@ -82,7 +82,7 @@ if(BUILD_ENGINE)
         add_custom_command(TARGET ${PROJECT_NAME} POST_BUILD
             COMMAND ${CMAKE_COMMAND} -E copy_if_different
                 $<TARGET_FILE:raylib>
-                ${CMAKE_BINARY_DIR}/bin/debug
+                ${CMAKE_RUNTIME_OUTPUT_DIRECTORY}
         )
     endif()
 endif()

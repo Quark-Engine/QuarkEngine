@@ -129,9 +129,21 @@ void ComponentUIHelper::draw_transform_component(Editor& editor, Entity& entity,
 
     if (ImGui::DragFloat3("Scale", scale, 0.1f)) {
         editor.save_state();
+
+        auto count_neg = [](float x, float y, float z) {
+            return (x < 0.0f ? 1 : 0) + (y < 0.0f ? 1 : 0) + (z < 0.0f ? 1 : 0);
+        };
+
+        bool was_flipped = count_neg(transform->scale.x, transform->scale.y, transform->scale.z) % 2 != 0;
+        bool will_flip = count_neg(scale[0], scale[1], scale[2]) % 2 != 0;
+
         transform->scale = {scale[0], scale[1], scale[2]};
         mark_entity_bounds_dirty(&entity);
         mark_entity_uv_dirty(&entity);
+
+        if (was_flipped != will_flip) {
+            update_model(&entity);
+        }
     }
 }
 
