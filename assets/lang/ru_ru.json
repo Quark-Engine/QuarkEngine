@@ -28,8 +28,8 @@
     "close": "Закрыть",
 
     "preferences": "Настройки",
-    "name": "Имя",
-    "new_name": "Новое имя",
+    "name": "Название",
+    "new_name": "Новое название",
     "mode": "Режим",
 
     "layout": "Макет",
@@ -103,7 +103,7 @@
 
     "select_project_loc": "Выберите расположение проекта",
     "project_manager": "Менеджер проектов",
-    "import_project": "Импортировать проект",
+    "import_project": "Импорт",
     "create_project": "Создать проект",
     "delete_project": "Удалить проект",
     "rename_project": "Переименовать проект",

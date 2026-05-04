@@ -18,6 +18,7 @@
 #include <cmath>
 #include <vector>
 #include <language_manager.h>
+#include <bits/stdc++.h>
 
 #define lang LanguageManager::get()
 
@@ -35,6 +36,27 @@ ImVec2 g_scene_window_pos = { 0, 0 };
 ImVec2 g_scene_window_size = { 0, 0 };
 
 MeshEditState g_mesh_edit_state;
+
+static const char* language_labels[] = {
+    "English",
+    "Russian"
+};
+
+static const char* language_codes[] = {
+    "en_us",
+    "ru_ru"
+};
+
+
+int find_index(const char* value) {
+    int n = sizeof(language_codes) / sizeof(language_codes[0]);
+    auto ptr = std::find(language_codes, language_codes + n, value);
+
+    int idx = ptr - language_codes;
+    return idx;
+}
+
+static int language_index = find_index(lang.current.c_str());
 
 Matrix compose_entity_transform_matrix(const Entity& entity) {
     const TransformComponent* transform = entity.get_transform_component();
@@ -883,16 +905,14 @@ void draw_ui(Editor& editor, Shader shader, FlyCamera camera) {
         ImGui::Begin(lang.word("preferences"), &show_preferences);
         ImGui::Text(lang.word("preferences"));
         ImGui::Separator();
-
-        int language = 0;
-        const char* languages[] = {
-            "en_us",
-            "ru_ru"
-        };
-
+        
         ImGui::Text(lang.word("language"));
-        if (ImGui::Combo("##lang", &language, languages, IM_ARRAYSIZE(languages))) {
-            lang.set_lang(languages[language]);
+
+        int language_index = find_index(lang.current.c_str());
+        if (language_index < 0) language_index = 0;
+
+        if (ImGui::Combo("##lang", &language_index, language_labels, IM_ARRAYSIZE(language_labels))) {
+            lang.set_lang(language_codes[language_index]);
         }
 
         ImGui::End();

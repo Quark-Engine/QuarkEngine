@@ -21,6 +21,7 @@
 
 #include "hub.h"
 #include "headers/version.h"
+#include "headers/language_manager.h"
 #include "project.h"
 #include "rlImGui.h"
 #include "imgui.h"
@@ -32,6 +33,8 @@
 #include <algorithm>
 #include <cstdio>
 #include <cstring>
+
+#define lang LanguageManager::get()
 
 namespace fs = std::filesystem;
 using json = nlohmann::json;
@@ -130,7 +133,7 @@ static std::string hub_browse_folder() {
 #ifdef _WIN32
     char path[MAX_PATH] = {};
     BROWSEINFOA bi = {};
-    bi.lpszTitle = "Select Project Location";
+    bi.lpszTitle = lang.word("select_project_loc");
     bi.ulFlags   = BIF_RETURNONLYFSDIRS | BIF_NEWDIALOGSTYLE;
     LPITEMIDLIST pidl = SHBrowseForFolderA(&bi);
     if (pidl) {
@@ -233,10 +236,10 @@ std::string run_hub() {
         ImGui::SetCursorPosY(ImGui::GetCursorPosY() + 4);
         ImGui::Text("QUARK HUB");
         ImGui::SameLine();
-        ImGui::TextDisabled("  Project Manager");
+        ImGui::TextDisabled("  %s", lang.word("project_manager"));
         ImGui::SameLine(ImGui::GetContentRegionAvail().x - 262);
 
-        if (ImGui::Button("Import Project", ImVec2(120, 28))) {
+        if (ImGui::Button(lang.word("import_project"), ImVec2(120, 28))) {
             std::string picked = hub_browse_project_file();
             if (!picked.empty()) {
                 hub_import_project(picked);
@@ -245,7 +248,7 @@ std::string run_hub() {
         }
         ImGui::SameLine();
 
-        if (ImGui::Button("+ Create Project", ImVec2(134, 28))) {
+        if (ImGui::Button(("+ %s", lang.word("create_project")), ImVec2(134, 28))) {
             memset(hub_create_name, 0, sizeof(hub_create_name));
             strncpy(hub_create_path, HUB_PROJECTS_ROOT, sizeof(hub_create_path) - 1);
             hub_show_create = true;
@@ -258,7 +261,7 @@ std::string run_hub() {
 
         if (hub_projects.empty()) {
             ImVec2 avail = ImGui::GetContentRegionAvail();
-            const char* msg = "No projects yet. Click \"+ Create Project\" to get started.";
+            const char* msg = lang.word("no_projects");
             ImVec2 ts = ImGui::CalcTextSize(msg);
             ImGui::SetCursorPos(ImVec2((avail.x - ts.x) * 0.5f, (avail.y - ts.y) * 0.5f));
             ImGui::TextDisabled("%s", msg);
@@ -312,19 +315,19 @@ std::string run_hub() {
             }
 
             if (ImGui::BeginPopupContextItem("##ctx")) {
-                if (ImGui::MenuItem("Open")) {
+                if (ImGui::MenuItem(lang.word("open"))) {
                     result_path = hub_projects[i].path;
                     should_exit = true;
                 }
 
                 ImGui::Separator();
-                if (ImGui::MenuItem("Rename")) {
+                if (ImGui::MenuItem(lang.word("rename"))) {
                     hub_rename_index = i;
                     strncpy(hub_rename_buf, hub_projects[i].name.c_str(), sizeof(hub_rename_buf) - 1);
                     hub_show_rename = true;
                 }
 
-                if (ImGui::MenuItem("Delete")) {
+                if (ImGui::MenuItem(lang.word("delete"))) {
                     hub_selected    = i;
                     hub_show_delete = true;
                 }
@@ -346,7 +349,7 @@ std::string run_hub() {
         ImGui::EndChild();
 
         if (hub_selected >= 0 && hub_selected < (int)hub_projects.size()) {
-            if (ImGui::Button("Open Selected", ImVec2(140, 30))) {
+            if (ImGui::Button(lang.word("open_selected"), ImVec2(140, 30))) {
                 result_path = hub_projects[hub_selected].path;
                 should_exit = true;
             }
@@ -354,21 +357,21 @@ std::string run_hub() {
 
         ImGui::End();
 
-        if (hub_show_create) { ImGui::OpenPopup("Create Project"); hub_show_create = false; }
+        if (hub_show_create) { ImGui::OpenPopup(lang.word("create_project")); hub_show_create = false; }
 
         ImGui::SetNextWindowSize(ImVec2(460, 182), ImGuiCond_Always);
         ImGui::SetNextWindowPos(
             ImVec2(GetScreenWidth() * 0.5f, GetScreenHeight() * 0.5f),
             ImGuiCond_Always, ImVec2(0.5f, 0.5f));
 
-        if (ImGui::BeginPopupModal("Create Project", nullptr, ImGuiWindowFlags_NoResize)) {
+        if (ImGui::BeginPopupModal(lang.word("create_project"), nullptr, ImGuiWindowFlags_NoResize)) {
             ImGui::Spacing();
-            ImGui::Text("Project Name");
+            ImGui::Text(lang.word("project_name"));
             ImGui::SetNextItemWidth(-1);
             ImGui::InputText("##cname", hub_create_name, sizeof(hub_create_name));
 
             ImGui::Spacing();
-            ImGui::Text("Location");
+            ImGui::Text(lang.word("location"));
             ImGui::SetNextItemWidth(-64);
             ImGui::InputText("##cpath", hub_create_path, sizeof(hub_create_path));
             ImGui::SameLine();
@@ -386,7 +389,7 @@ std::string run_hub() {
             bool can_create = hub_create_name[0] != '\0' && hub_create_path[0] != '\0';
             if (!can_create) ImGui::BeginDisabled();
 
-            if (ImGui::Button("Create", ImVec2(110, 30))) {
+            if (ImGui::Button(lang.word("create"), ImVec2(110, 30))) {
                 hub_create_project(hub_create_name, hub_create_path);
                 hub_refresh();
                 ImGui::CloseCurrentPopup();
@@ -394,28 +397,28 @@ std::string run_hub() {
 
             if (!can_create) ImGui::EndDisabled();
             ImGui::SameLine();
-            if (ImGui::Button("Cancel", ImVec2(110, 30))) ImGui::CloseCurrentPopup();
+            if (ImGui::Button(lang.word("cancel"), ImVec2(110, 30))) ImGui::CloseCurrentPopup();
 
             ImGui::EndPopup();
         }
 
-        if (hub_show_rename) { ImGui::OpenPopup("Rename Project"); hub_show_rename = false; }
+        if (hub_show_rename) { ImGui::OpenPopup(lang.word("rename_project")); hub_show_rename = false; }
 
         ImGui::SetNextWindowSize(ImVec2(380, 130), ImGuiCond_Always);
         ImGui::SetNextWindowPos(
             ImVec2(GetScreenWidth() * 0.5f, GetScreenHeight() * 0.5f),
             ImGuiCond_Always, ImVec2(0.5f, 0.5f));
 
-        if (ImGui::BeginPopupModal("Rename Project", nullptr, ImGuiWindowFlags_NoResize)) {
+        if (ImGui::BeginPopupModal(lang.word("rename_project"), nullptr, ImGuiWindowFlags_NoResize)) {
             ImGui::Spacing();
-            ImGui::Text("New Name");
+            ImGui::Text(lang.word("new_name"));
             ImGui::SetNextItemWidth(-1);
             ImGui::InputText("##rname", hub_rename_buf, sizeof(hub_rename_buf));
             ImGui::Spacing();
             ImGui::Separator();
             ImGui::Spacing();
 
-            if (ImGui::Button("Rename", ImVec2(110, 28))) {
+            if (ImGui::Button(lang.word("rename"), ImVec2(110, 28))) {
                 if (hub_rename_index >= 0 && hub_rename_buf[0] != '\0') {
                     hub_rename_project(hub_projects[hub_rename_index].path, hub_rename_buf);
                     hub_refresh();
@@ -425,28 +428,28 @@ std::string run_hub() {
             }
 
             ImGui::SameLine();
-            if (ImGui::Button("Cancel", ImVec2(110, 28))) ImGui::CloseCurrentPopup();
+            if (ImGui::Button(lang.word("cancel"), ImVec2(110, 28))) ImGui::CloseCurrentPopup();
             ImGui::EndPopup();
         }
 
-        if (hub_show_delete) { ImGui::OpenPopup("Delete Project"); hub_show_delete = false; }
+        if (hub_show_delete) { ImGui::OpenPopup(lang.word("delete_project")); hub_show_delete = false; }
 
         ImGui::SetNextWindowSize(ImVec2(380, 105), ImGuiCond_Always);
         ImGui::SetNextWindowPos(
             ImVec2(GetScreenWidth() * 0.5f, GetScreenHeight() * 0.5f),
             ImGuiCond_Always, ImVec2(0.5f, 0.5f));
 
-        if (ImGui::BeginPopupModal("Delete Project", nullptr, ImGuiWindowFlags_NoResize)) {
+        if (ImGui::BeginPopupModal(lang.word("delete_project"), nullptr, ImGuiWindowFlags_NoResize)) {
             ImGui::Spacing();
             if (hub_selected >= 0 && hub_selected < (int)hub_projects.size())
-                ImGui::Text("Delete \"%s\"? This cannot be undone.",
+                ImGui::Text(lang.word("delete_project_ask"),
                     hub_projects[hub_selected].name.c_str());
 
             ImGui::Spacing();
             ImGui::Separator();
             ImGui::Spacing();
 
-            if (ImGui::Button("Delete", ImVec2(110, 28))) {
+            if (ImGui::Button(lang.word("delete"), ImVec2(110, 28))) {
                 if (hub_selected >= 0) {
                     hub_delete_project(hub_projects[hub_selected].path);
                     hub_refresh();
@@ -456,35 +459,31 @@ std::string run_hub() {
             }
 
             ImGui::SameLine();
-            if (ImGui::Button("Cancel", ImVec2(110, 28))) ImGui::CloseCurrentPopup();
+            if (ImGui::Button(lang.word("cancel"), ImVec2(110, 28))) ImGui::CloseCurrentPopup();
             ImGui::EndPopup();
         }
 
-        if (hub_show_version_warning) { ImGui::OpenPopup("Version Mismatch"); hub_show_version_warning = false; }
+        if (hub_show_version_warning) { ImGui::OpenPopup(lang.word("version_mismatch")); hub_show_version_warning = false; }
 
         ImGui::SetNextWindowSize(ImVec2(480, 155), ImGuiCond_Always);
         ImGui::SetNextWindowPos(
             ImVec2(GetScreenWidth() * 0.5f, GetScreenHeight() * 0.5f),
             ImGuiCond_Always, ImVec2(0.5f, 0.5f));
 
-        if (ImGui::BeginPopupModal("Version Mismatch", nullptr, ImGuiWindowFlags_NoResize)) {
+        if (ImGui::BeginPopupModal(lang.word("version_mismatch"), nullptr, ImGuiWindowFlags_NoResize)) {
             ImGui::Spacing();
-            ImGui::TextWrapped(
-                "This project was saved with engine version %s,\n"
-                "but the current engine version is %s.\n\n"
-                "Opening it may cause issues or data loss.",
-                hub_saved_version.c_str(), QUARK_ENGINE_VERSION.c_str());
+            ImGui::TextWrapped(lang.word("version_mismatch_msg"), hub_saved_version.c_str(), QUARK_ENGINE_VERSION.c_str());
             ImGui::Spacing();
             ImGui::Separator();
             ImGui::Spacing();
 
-            if (ImGui::Button("Open Anyway", ImVec2(130, 28))) {
+            if (ImGui::Button(lang.word("open_anyway"), ImVec2(130, 28))) {
                 result_path = hub_pending_open_path;
                 should_exit = true;
                 ImGui::CloseCurrentPopup();
             }
             ImGui::SameLine();
-            if (ImGui::Button("Cancel", ImVec2(110, 28))) {
+            if (ImGui::Button(lang.word("cancel"), ImVec2(110, 28))) {
                 hub_pending_open_path.clear();
                 ImGui::CloseCurrentPopup();
             }

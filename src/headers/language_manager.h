@@ -11,12 +11,15 @@ public:
         return instance;
     }
 
+    std::string current;
+
     bool load(const std::string& path);
     void set_lang(const std::string& lang);
     const char* word(const std::string& key) const;
 
 private:
-    std::string current;
     nlohmann::json data;
     mutable std::unordered_map<std::string, std::string> cache;
 };
+
+std::string load_or_create_config();

@@ -251,6 +251,10 @@ int main(int argc, char* argv[]) {
     fs::create_directories("projects");
     fs::create_directories("assets");
 
+    std::string lang = load_or_create_config();
+    LanguageManager::get().set_lang(lang);
+    LanguageManager::get().current = lang;
+
     InitWindow(1280, 720, "Quark Engine");
     SetTargetFPS(GetMonitorRefreshRate(GetCurrentMonitor()));
     rlImGuiSetup(true);
@@ -315,8 +319,6 @@ int main(int argc, char* argv[]) {
 
     Matrix light_view = {0};
     Matrix light_proj = {0};
-
-    LanguageManager::get().set_lang("en_us");
 
     load_models();
     load_textures(project_path);

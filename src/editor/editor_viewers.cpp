@@ -1,5 +1,6 @@
 #include "editor_viewers.h"
 #include "editor_utils.h"
+#include "../headers/language_manager.h"
 #include "../headers/tex.h"
 #include "rlImGui.h"
 #include "imgui.h"
@@ -7,6 +8,8 @@
 #include <cmath>
 #include <fstream>
 #include <sstream>
+
+#define lang LanguageManager::get()
 
 static bool show_model_viewer = false;
 static Model viewer_model = { 0 };
@@ -192,7 +195,7 @@ void draw_model_viewer_window() {
     }
 
     ImGui::SetNextWindowSize(ImVec2(600, 450), ImGuiCond_FirstUseEver);
-    if (ImGui::Begin("Model Preview", &show_model_viewer)) {
+    if (ImGui::Begin(lang.word("model_preview"), &show_model_viewer)) {
         ImVec2 size = ImGui::GetContentRegionAvail();
         if (size.x < 1) size.x = 1;
         if (size.y < 1) size.y = 1;
@@ -273,15 +276,15 @@ void draw_material_viewer_window() {
 
     ImGui::SetNextWindowSize(ImVec2(800, 500), ImGuiCond_FirstUseEver);
 
-    if (ImGui::Begin("Material Editor", &show_material_viewer)) {
+    if (ImGui::Begin(lang.word("material_editor"), &show_material_viewer)) {
 
         ImGui::Columns(2, nullptr, true);
 
         ImGui::BeginChild("MaterialSettings");
 
-        ImGui::Text("Material");
+        ImGui::Text(lang.word("material"));
 
-        if (ImGui::ColorEdit4("Albedo", material_albedo_f)) {
+        if (ImGui::ColorEdit4(lang.word("albedo"), material_albedo_f)) {
             material_albedo = {
                 (unsigned char)(material_albedo_f[0] * 255),
                 (unsigned char)(material_albedo_f[1] * 255),
@@ -292,16 +295,16 @@ void draw_material_viewer_window() {
             apply_material_settings();
         }
 
-        if (ImGui::SliderFloat("Brightness", &material_brightness, 0.1f, 2.0f)) {
+        if (ImGui::SliderFloat(lang.word("brightness"), &material_brightness, 0.1f, 2.0f)) {
             apply_material_settings();
         }
 
         ImGui::Separator();
 
-        ImGui::Text("Primitive");
+        ImGui::Text(lang.word("primitive"));
 
-        const char* primitives[] = { "Sphere", "Cube", "Plane" };
-        if (ImGui::Combo("Mesh", &material_preview_primitive, primitives, 3)) {
+        const char* primitives[] = { lang.word("sphere"), lang.word("cube"), lang.word("plane") };
+        if (ImGui::Combo(lang.word("mesh"), &material_preview_primitive, primitives, 3)) {
             rebuild_material_preview_mesh();
         }
 
