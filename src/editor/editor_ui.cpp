@@ -229,7 +229,7 @@ void reset_editor_layout(ImGuiID dockspace_id) {
 
 void draw_gizmo(Editor& editor, FlyCamera camera) {
     sync_mesh_edit_state(editor);
-    if (camera.active) return;
+    ImGuizmo::Enable(!camera.active);
 
     Entity* entity = editor.scene.get_selected();
     if (!entity) return;
@@ -238,7 +238,6 @@ void draw_gizmo(Editor& editor, FlyCamera camera) {
     if (!transform || !mesh) return;
 
     if (g_scene_window_size.x <= 0 || g_scene_window_size.y <= 0) return;
-    if (!g_is_scene_active) return;
 
     ImGuizmo::SetDrawlist(ImGui::GetWindowDrawList());
     ImGuizmo::SetRect(g_scene_window_pos.x, g_scene_window_pos.y, g_scene_window_size.x, g_scene_window_size.y);
