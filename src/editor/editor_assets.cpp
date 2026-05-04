@@ -6,6 +6,7 @@
 #include "editor_viewers.h"
 #include "../headers/project.h"
 #include "../headers/tex.h"
+#include "../headers/language_manager.h"
 #include "imgui.h"
 #include <algorithm>
 #include <fstream>
@@ -25,6 +26,8 @@
 #undef ShowCursor
 #undef Rectangle
 #endif
+
+#define lang LanguageManager::get()
 
 namespace fs = std::filesystem;
 
@@ -234,7 +237,7 @@ bool import_path_to_resources(const fs::path& src, const fs::path& resource_dir)
 }
 
 void draw_assets_ui(Editor& editor) {
-    ImGui::Begin("Assets", &show_assets, ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoMove);
+    ImGui::Begin(lang.word("assets"), &show_assets, ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoMove);
     
     if (icon_file_tex.id == 0) icon_file_tex = LoadTexture("assets/file.png");
     if (icon_folder_tex.id == 0) icon_folder_tex = LoadTexture("assets/folder.png");
@@ -312,31 +315,31 @@ void draw_assets_ui(Editor& editor) {
     entries.insert(entries.end(), files.begin(), files.end());
 
     if (entries.empty()) {
-        const char* text = "Empty folder";
+        const char* text = lang.word("empty_folder");
         const ImVec2 text_size = ImGui::CalcTextSize(text);
         ImGui::SetCursorPosX((window_size.x - text_size.x) * 0.5f);
         ImGui::SetCursorPosY((window_size.y - text_size.y) * 0.5f);
         ImGui::TextUnformatted(text);
 
         if (ImGui::BeginPopupContextWindow("AssetBgContext", ImGuiPopupFlags_MouseButtonRight | ImGuiPopupFlags_NoOpenOverItems)) {
-            if (ImGui::MenuItem("New File")) {
-                fs::path new_file = editor.current_asset_path / "New File.txt";
+            if (ImGui::MenuItem(lang.word("new_file"))) {
+                fs::path new_file = editor.current_asset_path / ("%s.txt", lang.word("new_file"));
                 int suffix = 1;
 
                 while (fs::exists(new_file))
-                    new_file = editor.current_asset_path / ("New File " + std::to_string(suffix++) + ".txt");
+                    new_file = editor.current_asset_path / (("%s ", lang.word("new_file")) + std::to_string(suffix++) + ".txt");
 
                 std::ofstream f(new_file);
                 f.close();
                 refresh_assets(editor.project_path);
             }
 
-            if (ImGui::MenuItem("New Folder")) {
-                fs::path new_folder = editor.current_asset_path / "New Folder";
+            if (ImGui::MenuItem(lang.word("new_folder"))) {
+                fs::path new_folder = editor.current_asset_path / lang.word("new_folder");
                 int suffix = 1;
 
                 while (fs::exists(new_folder))
-                    new_folder = editor.current_asset_path / ("New Folder " + std::to_string(suffix++));
+                    new_folder = editor.current_asset_path / (("%s ", lang.word("new_folder")) + std::to_string(suffix++));
 
                 std::error_code ec;
                 fs::create_directory(new_folder, ec);
@@ -404,7 +407,7 @@ void draw_assets_ui(Editor& editor) {
         }
 
         if (ImGui::BeginPopupContextItem("AssetContext")) {
-            if (ImGui::MenuItem("Delete")) {
+            if (ImGui::MenuItem(lang.word("delete"))) {
                 editor.save_state();
 
                 const fs::path target = editor.current_asset_path / entry.filename;
@@ -423,7 +426,7 @@ void draw_assets_ui(Editor& editor) {
                 break;
             }
 
-            if (ImGui::MenuItem("Rename")) {
+            if (ImGui::MenuItem(lang.word("rename"))) {
                 rename_target = i;
                 const size_t copied = entry.filename.copy(editor_internal::rename_buf, sizeof(editor_internal::rename_buf) - 1);
                 editor_internal::rename_buf[copied] = '\0';
@@ -432,24 +435,24 @@ void draw_assets_ui(Editor& editor) {
 
             ImGui::Separator();
 
-            if (ImGui::MenuItem("New File")) {
-                fs::path new_file = editor.current_asset_path / "New File.txt";
+            if (ImGui::MenuItem(lang.word("new_file"))) {
+                fs::path new_file = editor.current_asset_path / ("%s.txt", lang.word("new_file"));
                 int suffix = 1;
                 
                 while (fs::exists(new_file))
-                    new_file = editor.current_asset_path / ("New File" + std::to_string(suffix++) + ".txt");
+                    new_file = editor.current_asset_path / (lang.word("new_file") + std::to_string(suffix++) + ".txt");
 
                 std::ofstream f(new_file);
                 f.close();
                 refresh_assets(editor.project_path);
             }
 
-            if (ImGui::MenuItem("New Folder")) {
-                fs::path new_folder = editor.current_asset_path / "New Folder";
+            if (ImGui::MenuItem(lang.word("new_folder"))) {
+                fs::path new_folder = editor.current_asset_path / lang.word("new_folder");
                 int suffix = 1;
 
                 while (fs::exists(new_folder))
-                    new_folder = editor.current_asset_path / ("New Folder " + std::to_string(suffix++));
+                    new_folder = editor.current_asset_path / (("%s", lang.word("new_folder")) + std::to_string(suffix++));
 
                 std::error_code ec;
                 fs::create_directory(new_folder, ec);
@@ -476,7 +479,7 @@ void draw_assets_ui(Editor& editor) {
         if (entry.is_directory) {
             const Texture texture = fs::is_empty(editor.current_asset_path / entry.filename) ? icon_folder_tex : icon_full_folder_tex;
             if (texture.id != 0) ImGui::Image((void*)(intptr_t)texture.id, ImVec2(kIconSize, kIconSize));
-            else ImGui::Button("Folder", ImVec2(kIconSize, kIconSize));
+            else ImGui::Button(lang.word("folder"), ImVec2(kIconSize, kIconSize));
         } else if (entry.is_image) {
             const std::string full = (editor.current_asset_path / entry.filename).string();
             if (!editor_internal::tex_cache.count(full)) {
@@ -533,7 +536,7 @@ void draw_assets_ui(Editor& editor) {
                 editor_internal::dragged_scene_asset_name = asset_name;
             }
             if (editor_internal::scene_asset_dragging && editor_internal::dragged_scene_asset_name == asset_name) {
-                ImGui::SetTooltip("Spawn %s", editor_internal::dragged_scene_asset_name.c_str());
+                ImGui::SetTooltip(lang.word("spawn"), editor_internal::dragged_scene_asset_name.c_str());
             }
         }
 
@@ -564,7 +567,7 @@ void draw_assets_ui(Editor& editor) {
     if (rename_target == -2 && ImGui::BeginPopupModal("RenameAsset", nullptr, ImGuiWindowFlags_AlwaysAutoResize)) {
         ImGui::InputText("##rename", editor_internal::rename_buf, IM_ARRAYSIZE(editor_internal::rename_buf));
 
-        if (ImGui::Button("OK")) {
+        if (ImGui::Button(lang.word("ok"))) {
             const std::string new_filename = editor_internal::rename_buf;
             if (last_filename != new_filename) {
                 editor.save_state();
@@ -592,7 +595,7 @@ void draw_assets_ui(Editor& editor) {
         }
 
         ImGui::SameLine();
-        if (ImGui::Button("Cancel")) {
+        if (ImGui::Button(lang.word("cancel"))) {
             rename_target = -1;
             ImGui::CloseCurrentPopup();
         }
@@ -601,24 +604,24 @@ void draw_assets_ui(Editor& editor) {
     }
 
     if (ImGui::BeginPopupContextWindow("AssetBgContext", ImGuiPopupFlags_MouseButtonRight | ImGuiPopupFlags_NoOpenOverItems)) {
-        if (ImGui::MenuItem("New File")) {
-            fs::path new_file = editor.current_asset_path / "New File.txt";
+        if (ImGui::MenuItem(lang.word("new_file"))) {
+            fs::path new_file = editor.current_asset_path / ("%s.txt", lang.word("new_file"));
             int suffix = 1;
 
             while (fs::exists(new_file))
-                new_file = editor.current_asset_path / ("New File " + std::to_string(suffix++) + ".txt");
+                new_file = editor.current_asset_path / (("%s ", lang.word("new_file")) + std::to_string(suffix++) + ".txt");
 
             std::ofstream f(new_file);
             f.close();
             refresh_assets(editor.project_path);
         }
 
-        if (ImGui::MenuItem("New Folder")) {
-            fs::path new_folder = editor.current_asset_path / "New Folder";
+        if (ImGui::MenuItem(lang.word("new_folder"))) {
+            fs::path new_folder = editor.current_asset_path / lang.word("new_folder");
             int suffix = 1;
 
             while (fs::exists(new_folder))
-                new_folder = editor.current_asset_path / ("New Folder " + std::to_string(suffix++));
+                new_folder = editor.current_asset_path / (("%s ", lang.word("new_folder")) + std::to_string(suffix++));
 
             std::error_code ec;
             fs::create_directory(new_folder, ec);

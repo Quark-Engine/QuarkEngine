@@ -6,6 +6,9 @@
 #include "headers/entity.h"
 #include "editor/editor_ui.h"
 #include "editor/editor.h"
+#include <language_manager.h>
+
+#define lang LanguageManager::get()
 
 bool ComponentUIHelper::should_show_component_menu = false;
 int ComponentUIHelper::component_to_remove = -1;
@@ -30,7 +33,7 @@ void ComponentUIHelper::draw_entity_inspector(Editor& editor, Entity& entity, Sh
                 ImGui::Spacing();
 
                 bool is_enabled = comp->enabled;
-                if (ImGui::Checkbox("Enabled", &is_enabled)) {
+                if (ImGui::Checkbox(lang.word("enabled"), &is_enabled)) {
                     editor.save_state();
                     comp->enabled = is_enabled;
                 }
@@ -57,7 +60,7 @@ void ComponentUIHelper::draw_entity_inspector(Editor& editor, Entity& entity, Sh
                 if (can_remove) {
                     ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.8f, 0.2f, 0.2f, 1.0f));
                     ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImVec4(1.0f, 0.3f, 0.3f, 1.0f));
-                    if (ImGui::Button("Remove Component", ImVec2(-1, 0))) {
+                    if (ImGui::Button(lang.word("remove_component"), ImVec2(-1, 0))) {
                         component_to_remove = static_cast<int>(i);
                     }
                     ImGui::PopStyleColor(2);
@@ -73,14 +76,14 @@ void ComponentUIHelper::draw_entity_inspector(Editor& editor, Entity& entity, Sh
         }
 
         ImGui::Spacing();
-        if (ImGui::Button("Add Component", ImVec2(-1, 0))) {
+        if (ImGui::Button(lang.word("add_component"), ImVec2(-1, 0))) {
             ImGui::OpenPopup("AddComponentPopup");
         }
 
         if (ImGui::BeginPopup("AddComponentPopup")) {
             auto components_manager = entity.get_components();
 
-            if (ImGui::MenuItem("Light")) {
+            if (ImGui::MenuItem(lang.word("light"))) {
                 editor.save_state();
                 bool already_exists = false;
 
@@ -129,19 +132,19 @@ void ComponentUIHelper::draw_transform_component(Editor& editor, Entity& entity,
     float rotation[3] = {transform->rotation.x, transform->rotation.y, transform->rotation.z};
     float scale[3] = {transform->scale.x, transform->scale.y, transform->scale.z};
 
-    if (ImGui::DragFloat3("Position", position, 0.1f)) {
+    if (ImGui::DragFloat3(lang.word("position"), position, 0.1f)) {
         editor.save_state();
         transform->position = {position[0], position[1], position[2]};
         mark_entity_bounds_dirty(&entity);
     }
 
-    if (ImGui::DragFloat3("Rotation", rotation, 1.0f)) {
+    if (ImGui::DragFloat3(lang.word("rotation"), rotation, 1.0f)) {
         editor.save_state();
         transform->rotation = {rotation[0], rotation[1], rotation[2]};
         mark_entity_bounds_dirty(&entity);
     }
 
-    if (ImGui::DragFloat3("Scale", scale, 0.1f)) {
+    if (ImGui::DragFloat3(lang.word("scale"), scale, 0.1f)) {
         editor.save_state();
 
         auto count_neg = [](float x, float y, float z) {
@@ -164,30 +167,37 @@ void ComponentUIHelper::draw_transform_component(Editor& editor, Entity& entity,
 void ComponentUIHelper::draw_mesh_component(Editor& editor, Entity& entity, MeshComponent* mesh) {
     if (!mesh) return;
 
-    ImGui::Text("Mesh Configuration");
+    ImGui::Text(lang.word("mesh_config"));
     ImGui::Spacing();
 
     if (mesh->asset) {
-        ImGui::Text("Asset: %s", mesh->asset->name.c_str());
+        ImGui::Text("%s: %s", lang.word("asset"), mesh->asset->name.c_str());
     } else {
-        ImGui::Text("Asset: None");
+        ImGui::Text("%s: %s", lang.word("asset"), lang.word("none"));
     }
 
-    const char* object_type_names[] = { "Cube", "Sphere", "Cone", "Cylinder", "HemiSphere", "Torus" };
+    const char* object_type_names[] = {
+        lang.word("cube"),
+        lang.word("sphere"),
+        lang.word("cone"),
+        lang.word("cylinder"),
+        lang.word("hemisphere"),
+        lang.word("torus")
+    };
+
     int current_object_type_index = static_cast<int>(mesh->type);
-    
     bool is_procedural_asset = mesh->asset && mesh->asset->is_procedural;
-    
+
     if (!is_procedural_asset) {
-        ImGui::Text("Mesh Type: %s (Loaded Model)", mesh->asset_name.c_str());
+        ImGui::Text(lang.word("mesh_type"), mesh->asset_name.c_str());
         ImGui::BeginDisabled();
     }
 
-    if (ImGui::Combo("Mesh Type", &current_object_type_index, object_type_names, IM_ARRAYSIZE(object_type_names))) {
+    if (ImGui::Combo(lang.word("mesh_type_combo"), &current_object_type_index, object_type_names, IM_ARRAYSIZE(object_type_names))) {
         if (current_object_type_index != static_cast<int>(mesh->type)) {
             editor.save_state();
             ObjectType new_type = static_cast<ObjectType>(current_object_type_index);
-            
+
             ModelAsset* new_asset = nullptr;
             for (auto& asset_entry : assets) {
                 if (asset_entry.is_procedural && asset_entry.type == new_type) {
@@ -214,7 +224,7 @@ void ComponentUIHelper::draw_mesh_component(Editor& editor, Entity& entity, Mesh
     }
 
     if (mesh->asset && mesh->asset->is_procedural) {
-        if (ImGui::DragInt("Segments", &mesh->segments, 1, 3, 100)) {
+        if (ImGui::DragInt(lang.word("segments"), &mesh->segments, 1, 3, 100)) {
             editor.save_state();
             update_model(&entity);
             store_uv(&entity);
@@ -223,16 +233,16 @@ void ComponentUIHelper::draw_mesh_component(Editor& editor, Entity& entity, Mesh
             mark_entity_uv_dirty(&entity);
         }
     } else {
-        ImGui::Text("Segments: %d (N/A for loaded models)", mesh->segments);
+        ImGui::Text(lang.word("segments_loaded"), mesh->segments);
     }
 
-    ImGui::Checkbox("Vertex Gizmo", &g_mesh_edit_state.enabled);
+    ImGui::Checkbox(lang.word("vertex_gizmo"), &g_mesh_edit_state.enabled);
     if (g_mesh_edit_state.enabled) {
-        ImGui::Text("Mesh Index: %d", g_mesh_edit_state.mesh_index);
-        ImGui::Text("Triangle Index: %d", g_mesh_edit_state.triangle_index);
-        ImGui::Text("Vertex Corner: %d", g_mesh_edit_state.vertex_corner);
+        ImGui::Text(lang.word("mesh_index"), g_mesh_edit_state.mesh_index);
+        ImGui::Text(lang.word("triangle_index"), g_mesh_edit_state.triangle_index);
+        ImGui::Text(lang.word("vertex_corner"), g_mesh_edit_state.vertex_corner);
 
-        if (ImGui::Button("Reset Mesh Overrides")) {
+        if (ImGui::Button(lang.word("reset_mesh"))) {
             editor.save_state();
             reset_mesh_edit_model(entity);
             g_mesh_edit_state.enabled = false;
@@ -243,20 +253,27 @@ void ComponentUIHelper::draw_mesh_component(Editor& editor, Entity& entity, Mesh
 void ComponentUIHelper::draw_light_component(Editor& editor, Entity& entity, LightComponent* light, Shader shader) {
     if (!light) return;
 
-    ImGui::Text("Light Properties");
+    ImGui::Text(lang.word("light_properties"));
     ImGui::Spacing();
 
     bool changed = false;
-    changed |= ImGui::DragFloat3("Position", (float*)&light->light.position, 0.1f);
-    changed |= ImGui::DragFloat3("Target", (float*)&light->light.target, 0.1f);
 
-    changed |= ImGui::DragFloat("Intensity", &light->light.intensity, 0.1f, 0.0f, 10.0f);
-    changed |= ImGui::DragFloat("Range", &light->light.range, 0.1f, 0.1f, 100.0f);
-    changed |= ImGui::DragFloat("Spot Angle", &light->light.spot_angle, 1.0f, 5.0f, 180.0f);
+    changed |= ImGui::DragFloat3(lang.word("position"), (float*)&light->light.position, 0.1f);
+    changed |= ImGui::DragFloat3(lang.word("target"), (float*)&light->light.target, 0.1f);
+
+    changed |= ImGui::DragFloat(lang.word("intensity"), &light->light.intensity, 0.1f, 0.0f, 10.0f);
+    changed |= ImGui::DragFloat(lang.word("range"), &light->light.range, 0.1f, 0.1f, 100.0f);
+    changed |= ImGui::DragFloat(lang.word("spot_angle"), &light->light.spot_angle, 1.0f, 5.0f, 180.0f);
 
     int light_type = light->light.light.type;
-    const char* light_types[] = {"Directional", "Point", "Spot"};
-    if (ImGui::Combo("Light Type##light", &light_type, light_types, IM_ARRAYSIZE(light_types))) {
+
+    const char* light_types[] = {
+        lang.word("directional"),
+        lang.word("point"),
+        lang.word("spot")
+    };
+
+    if (ImGui::Combo(lang.word("light_type"), &light_type, light_types, IM_ARRAYSIZE(light_types))) {
         light->light.light.type = light_type;
         changed = true;
     }
@@ -269,6 +286,7 @@ void ComponentUIHelper::draw_light_component(Editor& editor, Entity& entity, Lig
         editor.save_state();
         light->light.enabled = light->enabled;
 
-        if (light->light.id != -1) update_lighting(shader, light->light);
+        if (light->light.id != -1)
+            update_lighting(shader, light->light);
     }
 }

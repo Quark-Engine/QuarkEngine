@@ -1,0 +1,120 @@
+{
+    "language": "Язык",
+
+    "hierarchy": "Иерархия",
+    "inspector": "Инспектор",
+    "assets": "Ресурсы",
+    "scene": "Сцена",
+
+    "save": "Сохранить",
+    "exit": "Выход",
+
+    "edit": "Редактировать",
+    "undo": "Отменить",
+    "redo": "Повторить",
+    "copy": "Копировать",
+    "paste": "Вставить",
+
+    "create": "Создать",
+    "rename": "Переименовать",
+    "dublicate": "Дублировать",
+    "delete": "Удалить",
+
+    "ok": "OK",
+    "open": "Открыть",
+    "open_anyway": "Всё равно открыть",
+    "open_selected": "Открыть выбранное",
+    "cancel": "Отмена",
+    "close": "Закрыть",
+
+    "preferences": "Настройки",
+    "name": "Имя",
+    "new_name": "Новое имя",
+    "mode": "Режим",
+
+    "layout": "Макет",
+    "reset_layout": "Сбросить макет",
+
+    "help": "Помощь",
+    "about": "О программе",
+    "about_quark_engine": "О Quark Engine",
+    "raylib_version": "Версия Raylib: %s",
+    "imgui_version": "Версия ImGui: %s",
+
+    "model": "Модель",
+    "model_preview": "Предпросмотр модели",
+    "material": "Материал",
+    "material_editor": "Редактор материалов",
+    "albedo": "Альбедо",
+    "brightness": "Яркость",
+    "primitive": "Примитив",
+
+    "file": "Файл",
+    "folder": "Папка",
+    "new_file": "Новый файл",
+    "empty_folder": "Пустая папка",
+    "new_folder": "Новая папка",
+
+    "spawn": "Создать %s",
+
+    "enabled": "Включено",
+    
+    "add_component": "Добавить компонент",
+    "remove_component": "Удалить компонент",
+
+    "cube": "Куб",
+    "sphere": "Сфера",
+    "cone": "Конус",
+    "cylinder": "Цилиндр",
+    "hemisphere": "Полусфера",
+    "torus": "Тор",
+    "plane": "Плоскость",
+
+    "mesh": "Меш",
+    "mesh_config": "Настройка меша",
+    "mesh_type": "Тип меша: %s (загруженный меш)",
+    "mesh_type_combo": "Тип меша",
+    "mesh_index": "Индекс меша: %d",
+    "triangle_index": "Индекс треугольника: %d",
+    "vertex_corner": "Вершина: %d",
+    "reset_mesh": "Сбросить переопределения меша",
+    "segments": "Сегменты",
+    "segments_loaded": "Сегменты: %d (недоступно для загруженных моделей)",
+
+    "vertex_gizmo": "Гизмо вершин",
+
+    "asset": "Ресурс",
+    "none": "Нет",
+
+    "light": "Свет",
+    "light_type": "Тип света",
+    "light_properties": "Свойства света",
+    "intensity": "Интенсивность",
+    "range": "Дальность",
+    "spot_angle": "Угол прожектора",
+    "directional": "Направленный",
+    "point": "Точечный",
+    "spot": "Прожектор",
+    
+    "position": "Позиция",
+    "rotation": "Поворот",
+    "scale": "Масштаб",
+    "target": "Цель",
+
+    "select_project_loc": "Выберите расположение проекта",
+    "project_manager": "Менеджер проектов",
+    "import_project": "Импортировать проект",
+    "create_project": "Создать проект",
+    "delete_project": "Удалить проект",
+    "rename_project": "Переименовать проект",
+
+    "project_name": "Название проекта",
+    "project_location": "Расположение",
+    "browse": "Обзор",
+
+    "no_projects": "Пока нет проектов. Нажмите \"+ Создать проект\", чтобы начать.",
+    "delete_project_ask": "Удалить \"%s\"? Это действие нельзя отменить.",
+
+    "version_mismatch": "Несоответствие версии",
+    "version_mismatch_msg": "Этот проект был сохранён в версии движка %s,\nно текущая версия движка %s.\n\nОткрытие может вызвать проблемы или потерю данных."
+}

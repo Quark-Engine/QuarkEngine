@@ -5,6 +5,7 @@
 #include "rlgl.h"
 #include "plugins/plugin_manager.h"
 #include "headers/lighting.h"
+#include "headers/language_manager.h"
 #include "editor/editor.h"
 #include "headers/camera.h"
 #include "headers/project.h"
@@ -314,6 +315,8 @@ int main(int argc, char* argv[]) {
 
     Matrix light_view = {0};
     Matrix light_proj = {0};
+
+    LanguageManager::get().set_lang("en_us");
 
     load_models();
     load_textures(project_path);

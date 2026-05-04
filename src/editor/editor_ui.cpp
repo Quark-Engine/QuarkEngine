@@ -17,12 +17,16 @@
 #include <cstring>
 #include <cmath>
 #include <vector>
+#include <language_manager.h>
+
+#define lang LanguageManager::get()
 
 extern RenderTexture2D scene_rt;
 bool show_hierarchy = true;
 bool show_inspector = true;
 bool show_assets = true;
 bool show_scene = true;
+bool show_preferences = false;
 
 bool g_is_scene_hovered = false;
 bool g_is_scene_active = false;
@@ -217,10 +221,10 @@ void reset_editor_layout(ImGuiID dockspace_id) {
     ImGuiID dock_id_right = ImGui::DockBuilderSplitNode(dock_main_id, ImGuiDir_Right, 0.25f, nullptr, &dock_main_id);
     ImGuiID dock_id_bottom = ImGui::DockBuilderSplitNode(dock_main_id, ImGuiDir_Down, 0.30f, nullptr, &dock_main_id);
 
-    ImGui::DockBuilderDockWindow("Hierarchy", dock_id_left);
-    ImGui::DockBuilderDockWindow("Inspector", dock_id_right);
-    ImGui::DockBuilderDockWindow("Assets", dock_id_bottom);
-    ImGui::DockBuilderDockWindow("Scene", dock_main_id);
+    ImGui::DockBuilderDockWindow(lang.word("hierarchy"), dock_id_left);
+    ImGui::DockBuilderDockWindow(lang.word("inspector"), dock_id_right);
+    ImGui::DockBuilderDockWindow(lang.word("assets"), dock_id_bottom);
+    ImGui::DockBuilderDockWindow(lang.word("scene"), dock_main_id);
     
     ImGui::DockBuilderFinish(dockspace_id);
     
@@ -552,26 +556,26 @@ void draw_ui(Editor& editor, Shader shader, FlyCamera camera) {
     }
 
     if (ImGui::BeginMainMenuBar()) {
-        if (ImGui::BeginMenu("File")) {
-            if (ImGui::MenuItem("Save", "Ctrl+S")) project_save(editor.project_path, editor.scene);
+        if (ImGui::BeginMenu(lang.word("file"))) {
+            if (ImGui::MenuItem(lang.word("save"), "Ctrl+S")) project_save(editor.project_path, editor.scene);
             ImGui::Separator();
-            if (ImGui::MenuItem("Exit")) CloseWindow();
+            if (ImGui::MenuItem(lang.word("exit"))) CloseWindow();
             ImGui::EndMenu();
         }
 
-        if (ImGui::BeginMenu("Edit")) {
-            if (ImGui::MenuItem("Undo", "Ctrl+Z")) editor.undo();
-            if (ImGui::MenuItem("Redo", "Ctrl+Y")) editor.redo();
+        if (ImGui::BeginMenu(lang.word("edit"))) {
+            if (ImGui::MenuItem(lang.word("undo"), "Ctrl+Z")) editor.undo();
+            if (ImGui::MenuItem(lang.word("redo"), "Ctrl+Y")) editor.redo();
 
             ImGui::Separator();
 
             Entity* entity = editor.scene.get_selected();
-            if (ImGui::MenuItem("Copy", "Ctrl+C", false, entity != nullptr)) {
+            if (ImGui::MenuItem(lang.word("copy"), "Ctrl+C", false, entity != nullptr)) {
                 clipboard_data = *entity;
                 has_clipboard = true;
             }
 
-            if (ImGui::MenuItem("Paste", "Ctrl+V", false, has_clipboard)) {
+            if (ImGui::MenuItem(lang.word("paste"), "Ctrl+V", false, has_clipboard)) {
                 const MeshComponent* clipboard_mesh = clipboard_data.get_mesh_component();
                 const TransformComponent* clipboard_transform = clipboard_data.get_transform_component();
                 const LightComponent* clipboard_light = clipboard_data.get_light_component();
@@ -616,7 +620,7 @@ void draw_ui(Editor& editor, Shader shader, FlyCamera camera) {
                 }
             }
 
-            if (ImGui::MenuItem("Duplicate", "Ctrl+D", false, entity != nullptr)) {
+            if (ImGui::MenuItem(lang.word("dublicate"), "Ctrl+D", false, entity != nullptr)) {
                 editor.save_state();
                 Entity copy = *entity;
                 copy.id = static_cast<int>(editor.scene.entities.size());
@@ -634,7 +638,7 @@ void draw_ui(Editor& editor, Shader shader, FlyCamera camera) {
 
             ImGui::Separator();
 
-            if (ImGui::MenuItem("Delete", "Del", false, entity != nullptr)) {
+            if (ImGui::MenuItem(lang.word("delete"), "Del", false, entity != nullptr)) {
                 editor.save_state();
                 const int index = editor.scene.selected;
                 if (auto light = entity->get_light_component(); light && light->created) {
@@ -647,23 +651,25 @@ void draw_ui(Editor& editor, Shader shader, FlyCamera camera) {
             }
 
             ImGui::Separator();
-            ImGui::MenuItem("Preferences");
+            if (ImGui::MenuItem(lang.word("preferences"))) {
+                show_preferences = true;
+            }
             ImGui::EndMenu();
         }
 
-        if (ImGui::BeginMenu("Layout")) {
-            if (ImGui::MenuItem("Reset Layout")) {
+        if (ImGui::BeginMenu(lang.word("layout"))) {
+            if (ImGui::MenuItem(lang.word("reset_layout"))) {
                 reset_editor_layout(dockspace_id);
             }
             ImGui::Separator();
-            ImGui::MenuItem("Hierarchy", nullptr, &show_hierarchy);
-            ImGui::MenuItem("Inspector", nullptr, &show_inspector);
-            ImGui::MenuItem("Assets", nullptr, &show_assets);
-            ImGui::MenuItem("Scene", nullptr, &show_scene);
+            ImGui::MenuItem(lang.word("hierarchy"), nullptr, &show_hierarchy);
+            ImGui::MenuItem(lang.word("inspector"), nullptr, &show_inspector);
+            ImGui::MenuItem(lang.word("assets"), nullptr, &show_assets);
+            ImGui::MenuItem(lang.word("scene"), nullptr, &show_scene);
             ImGui::EndMenu();
         }
 
-        if (ImGui::BeginMenu("Create")) {
+        if (ImGui::BeginMenu(lang.word("create"))) {
             for (auto& asset : assets) {
                 if (!asset.is_procedural) continue;
                 if (ImGui::MenuItem(asset.name.c_str())) {
@@ -679,8 +685,8 @@ void draw_ui(Editor& editor, Shader shader, FlyCamera camera) {
             ImGui::EndMenu();
         }
 
-        if (ImGui::BeginMenu("Help")) {
-            if (ImGui::MenuItem("About")) show_about_window = true;
+        if (ImGui::BeginMenu(lang.word("help"))) {
+            if (ImGui::MenuItem(lang.word("about"))) show_about_window = true;
             ImGui::EndMenu();
         }
 
@@ -690,7 +696,7 @@ void draw_ui(Editor& editor, Shader shader, FlyCamera camera) {
     ImGuiIO& io = ImGui::GetIO();
 
     if (show_hierarchy) {
-        ImGui::Begin("Hierarchy", &show_hierarchy);
+        ImGui::Begin(lang.word("hierarchy"), &show_hierarchy);
 
     for (int i = 0; i < static_cast<int>(editor.scene.entities.size()); i++) {
         Entity& entity = editor.scene.entities[i];
@@ -700,7 +706,7 @@ void draw_ui(Editor& editor, Shader shader, FlyCamera camera) {
         if (ImGui::Selectable(entity.name.c_str(), selected)) editor.scene.selected = i;
 
         if (ImGui::BeginPopupContextItem(TextFormat("context_%d", entity.id))) {
-            if (ImGui::MenuItem("Delete")) {
+            if (ImGui::MenuItem(lang.word("delete"))) {
                 editor.save_state();
                 if (auto light = entity.get_light_component(); light && light->created) {
                     light->light.enabled = false;
@@ -717,14 +723,14 @@ void draw_ui(Editor& editor, Shader shader, FlyCamera camera) {
                 break;
             }
 
-            if (ImGui::MenuItem("Rename")) {
+            if (ImGui::MenuItem(lang.word("rename"))) {
                 editor.save_state();
                 renaming_index = i;
                 const size_t copied = entity.name.copy(rename_buf, sizeof(rename_buf) - 1);
                 rename_buf[copied] = '\0';
             }
 
-            if (ImGui::MenuItem("Duplicate")) {
+            if (ImGui::MenuItem(lang.word("dublicate"))) {
                 editor.save_state();
                 Entity copy = entity;
                 copy.id = static_cast<int>(editor.scene.entities.size());
@@ -746,7 +752,7 @@ void draw_ui(Editor& editor, Shader shader, FlyCamera camera) {
     }
 
     if (ImGui::BeginPopupContextWindow("HierarchyContext", ImGuiPopupFlags_NoOpenOverItems)) {
-        if (ImGui::BeginMenu("Create")) {
+        if (ImGui::BeginMenu(lang.word("create"))) {
             editor.save_state();
             for (int asset_index = 0; asset_index < static_cast<int>(assets.size()); asset_index++) {
                 auto& asset = assets[asset_index];
@@ -766,8 +772,8 @@ void draw_ui(Editor& editor, Shader shader, FlyCamera camera) {
     }
 
     if (show_inspector) {
-        ImGui::Begin("Inspector", &show_inspector);
-    ImGui::Text("Mode");
+        ImGui::Begin(lang.word("inspector"), &show_inspector);
+    ImGui::Text(lang.word("mode"));
     ImGui::SameLine();
     if (ImGui::Button("P")) gizmo_mode = ImGuizmo::TRANSLATE;
     ImGui::SameLine();
@@ -783,7 +789,7 @@ void draw_ui(Editor& editor, Shader shader, FlyCamera camera) {
         inspector_name[copied] = '\0';
 
         static std::string last_name;
-        if (ImGui::InputText("Name", inspector_name, IM_ARRAYSIZE(inspector_name))) {
+        if (ImGui::InputText(lang.word("name"), inspector_name, IM_ARRAYSIZE(inspector_name))) {
             if (last_name != inspector_name) {
                 editor.save_state();
                 assign_entity_name(*entity, inspector_name);
@@ -804,7 +810,7 @@ void draw_ui(Editor& editor, Shader shader, FlyCamera camera) {
 
     if (show_scene) {
         ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(0, 0));
-        if (ImGui::Begin("Scene", &show_scene)) {
+        if (ImGui::Begin(lang.word("scene"), &show_scene)) {
             g_scene_window_pos = ImGui::GetCursorScreenPos();
             g_scene_window_size = ImGui::GetContentRegionAvail();
 
@@ -835,11 +841,11 @@ void draw_ui(Editor& editor, Shader shader, FlyCamera camera) {
         ImGui::PopStyleVar();
     }
 
-    if (renaming_index != -1) ImGui::OpenPopup("Rename");
+    if (renaming_index != -1) ImGui::OpenPopup(lang.word("rename"));
 
-    if (ImGui::BeginPopupModal("Rename", nullptr, ImGuiWindowFlags_AlwaysAutoResize)) {
+    if (ImGui::BeginPopupModal(lang.word("rename"), nullptr, ImGuiWindowFlags_AlwaysAutoResize)) {
         ImGui::InputText("##rename", rename_buf, IM_ARRAYSIZE(rename_buf));
-        if (ImGui::Button("OK")) {
+        if (ImGui::Button(lang.word("ok"))) {
             if (renaming_index >= 0 && renaming_index < static_cast<int>(editor.scene.entities.size())) {
                 assign_entity_name(editor.scene.entities[renaming_index], rename_buf);
             }
@@ -847,7 +853,7 @@ void draw_ui(Editor& editor, Shader shader, FlyCamera camera) {
             ImGui::CloseCurrentPopup();
         }
         ImGui::SameLine();
-        if (ImGui::Button("Cancel")) {
+        if (ImGui::Button(lang.word("cancel"))) {
             renaming_index = -1;
             ImGui::CloseCurrentPopup();
         }
@@ -859,18 +865,37 @@ void draw_ui(Editor& editor, Shader shader, FlyCamera camera) {
     draw_material_viewer_window();
 
     if (show_about_window) {
-        ImGui::OpenPopup("About Quark Engine");
+        ImGui::OpenPopup(lang.word("about_quark_engine"));
         show_about_window = false;
     }
 
-    if (ImGui::BeginPopupModal("About Quark Engine", nullptr, ImGuiWindowFlags_AlwaysAutoResize)) {
+    if (ImGui::BeginPopupModal(lang.word("about_quark_engine"), nullptr, ImGuiWindowFlags_AlwaysAutoResize)) {
         ImGui::Text("Quark Engine v1.0");
         ImGui::Separator();
-        ImGui::Text("Raylib Version: %s", RAYLIB_VERSION);
-        ImGui::Text("ImGui Version: %s", IMGUI_VERSION);
+        ImGui::Text(lang.word("raylib_version"), RAYLIB_VERSION);
+        ImGui::Text(lang.word("imgui_version"), IMGUI_VERSION);
         ImGui::Spacing();
-        if (ImGui::Button("Close", ImVec2(120, 0))) ImGui::CloseCurrentPopup();
+        if (ImGui::Button(lang.word("close"), ImVec2(120, 0))) ImGui::CloseCurrentPopup();
         ImGui::EndPopup();
+    }
+
+    if (show_preferences) {
+        ImGui::Begin(lang.word("preferences"), &show_preferences);
+        ImGui::Text(lang.word("preferences"));
+        ImGui::Separator();
+
+        int language = 0;
+        const char* languages[] = {
+            "en_us",
+            "ru_ru"
+        };
+
+        ImGui::Text(lang.word("language"));
+        if (ImGui::Combo("##lang", &language, languages, IM_ARRAYSIZE(languages))) {
+            lang.set_lang(languages[language]);
+        }
+
+        ImGui::End();
     }
 }
 

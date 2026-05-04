@@ -40,6 +40,7 @@ if(BUILD_ENGINE)
         src/entity.cpp
         src/hub.cpp
         src/ImGuizmo.cpp
+        src/language_manager.cpp
         src/lighting.cpp
         src/main.cpp
         src/models.cpp
