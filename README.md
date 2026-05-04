@@ -43,6 +43,27 @@ Ensure your project folder contains an `assets` directory with the following res
 *   `lighting.vs` / `lighting.fs` (Shaders)
 *   `file.png`, `folder.png`, `full_folder.png` (Editor icons)
 
+## Configuration
+
+The engine stores all configuration in a single `config.json` file in the project root:
+
+```json
+{
+    "language": "en_us",
+    "projects": [
+        {
+            "name": "ProjectName",
+            "path": "path/to/project"
+        }
+    ]
+}
+```
+
+*   **language:** Current UI language (`en_us`, `ru_ru`)
+*   **projects:** Array of registered projects for the Quark Hub
+
+This file is automatically created on first run and manages both application settings and project registry.
+
 ## Dependencies on Linux
 ```sh
 sudo apt-get install -y ninja-build libgl1-mesa-dev libx11-dev libxrandr-dev libxi-dev libxinerama-dev libxcursor-dev libxxf86vm-dev

@@ -717,13 +717,35 @@ void draw_ui(Editor& editor, Shader shader, FlyCamera camera) {
     if (show_hierarchy) {
         ImGui::Begin(lang.word("hierarchy"), &show_hierarchy);
 
-    for (int i = 0; i < static_cast<int>(editor.scene.entities.size()); i++) {
-        Entity& entity = editor.scene.entities[i];
-
-        ImGui::PushID(i);
-        const bool selected = editor.scene.selected == i;
-        if (ImGui::Selectable(entity.name.c_str(), selected)) editor.scene.selected = i;
-
+    auto draw_entity_item = [&](int entity_index) {
+        Entity& entity = editor.scene.entities[entity_index];
+        const bool selected = editor.scene.selected == entity_index;
+        
+        ImGui::PushID(entity_index);
+        
+        if (ImGui::Selectable(entity.name.c_str(), selected)) {
+            editor.scene.selected = entity_index;
+        }
+        
+        if (ImGui::BeginDragDropSource(ImGuiDragDropFlags_None)) {
+            ImGui::SetDragDropPayload("ENTITY_INDEX", &entity_index, sizeof(int));
+            ImGui::Text("%s", entity.name.c_str());
+            ImGui::EndDragDropSource();
+        }
+        
+        if (entity.is_group) {
+            if (ImGui::BeginDragDropTarget()) {
+                if (const ImGuiPayload* payload = ImGui::AcceptDragDropPayload("ENTITY_INDEX")) {
+                    int dropped_index = *(const int*)payload->Data;
+                    if (dropped_index != entity_index) {
+                        editor.save_state();
+                        move_entity_to_parent(editor.scene, dropped_index, entity_index);
+                    }
+                }
+                ImGui::EndDragDropTarget();
+            }
+        }
+        
         if (ImGui::BeginPopupContextItem(TextFormat("context_%d", entity.id))) {
             if (ImGui::MenuItem(lang.word("delete"))) {
                 editor.save_state();
@@ -733,18 +755,18 @@ void draw_ui(Editor& editor, Shader shader, FlyCamera camera) {
                     free_light_id(light->light.id);
                 }
 
-                editor.scene.entities.erase(editor.scene.entities.begin() + i);
-                if (editor.scene.selected == i) editor.scene.selected = -1;
-                else if (editor.scene.selected > i) editor.scene.selected--;
+                editor.scene.entities.erase(editor.scene.entities.begin() + entity_index);
+                if (editor.scene.selected == entity_index) editor.scene.selected = -1;
+                else if (editor.scene.selected > entity_index) editor.scene.selected--;
 
                 ImGui::EndPopup();
                 ImGui::PopID();
-                break;
+                return;
             }
 
             if (ImGui::MenuItem(lang.word("rename"))) {
                 editor.save_state();
-                renaming_index = i;
+                renaming_index = entity_index;
                 const size_t copied = entity.name.copy(rename_buf, sizeof(rename_buf) - 1);
                 rename_buf[copied] = '\0';
             }
@@ -766,9 +788,98 @@ void draw_ui(Editor& editor, Shader shader, FlyCamera camera) {
 
             ImGui::EndPopup();
         }
-
+        
         ImGui::PopID();
-    }
+    };
+
+    std::function<void(int)> draw_entity_tree = [&](int parent_id) {
+        auto children = get_entity_children(editor.scene, parent_id);
+        for (int child_idx : children) {
+            Entity& child = editor.scene.entities[child_idx];
+            
+            if (child.is_group) {
+                ImGuiTreeNodeFlags flags = ImGuiTreeNodeFlags_DefaultOpen;
+                if (editor.scene.selected == child_idx) {
+                    flags |= ImGuiTreeNodeFlags_Selected;
+                }
+                
+                bool open = ImGui::TreeNodeEx(child.name.c_str(), flags);
+                
+                if (ImGui::BeginDragDropSource(ImGuiDragDropFlags_None)) {
+                    ImGui::SetDragDropPayload("ENTITY_INDEX", &child_idx, sizeof(int));
+                    ImGui::Text("%s", child.name.c_str());
+                    ImGui::EndDragDropSource();
+                }
+                
+                if (ImGui::BeginDragDropTarget()) {
+                    if (const ImGuiPayload* payload = ImGui::AcceptDragDropPayload("ENTITY_INDEX")) {
+                        int dropped_index = *(const int*)payload->Data;
+                        if (dropped_index != child_idx) {
+                            editor.save_state();
+                            move_entity_to_parent(editor.scene, dropped_index, child_idx);
+                        }
+                    }
+                    ImGui::EndDragDropTarget();
+                }
+                
+                if (ImGui::BeginPopupContextItem(TextFormat("group_context_%d", child.id))) {
+                    if (ImGui::MenuItem(lang.word("delete"))) {
+                        editor.save_state();
+                        if (auto light = child.get_light_component(); light && light->created) {
+                            light->light.enabled = false;
+                            if (light->light.id != -1) update_lighting(shader, light->light);
+                            free_light_id(light->light.id);
+                        }
+                        editor.scene.entities.erase(editor.scene.entities.begin() + child_idx);
+                        if (editor.scene.selected == child_idx) editor.scene.selected = -1;
+                        else if (editor.scene.selected > child_idx) editor.scene.selected--;
+                        ImGui::EndPopup();
+                        if (open) ImGui::TreePop();
+                        return;
+                    }
+
+                    if (ImGui::MenuItem(lang.word("rename"))) {
+                        editor.save_state();
+                        renaming_index = child_idx;
+                        const size_t copied = child.name.copy(rename_buf, sizeof(rename_buf) - 1);
+                        rename_buf[copied] = '\0';
+                    }
+
+                    if (ImGui::MenuItem(lang.word("dublicate"))) {
+                        editor.save_state();
+                        Entity copy = child;
+                        copy.id = static_cast<int>(editor.scene.entities.size());
+                        copy.name = editor.scene.make_default_name_for(copy);
+                        if (auto light = copy.get_light_component()) {
+                            const int light_type = light->light.light.type;
+                            light->created = false;
+                            light->light.id = -1;
+                            light->light.light = {0};
+                            light->light.light.type = light_type;
+                        }
+                        editor.scene.entities.push_back(copy);
+                    }
+
+                    ImGui::EndPopup();
+                }
+                
+                ImGui::PushID(child_idx);
+                if (ImGui::IsItemClicked()) {
+                    editor.scene.selected = child_idx;
+                }
+                ImGui::PopID();
+                
+                if (open) {
+                    draw_entity_tree(child_idx);
+                    ImGui::TreePop();
+                }
+            } else {
+                draw_entity_item(child_idx);
+            }
+        }
+    };
+    
+    draw_entity_tree(-1);
 
     if (ImGui::BeginPopupContextWindow("HierarchyContext", ImGuiPopupFlags_NoOpenOverItems)) {
         if (ImGui::BeginMenu(lang.word("create"))) {
@@ -785,46 +896,74 @@ void draw_ui(Editor& editor, Shader shader, FlyCamera camera) {
             }
             ImGui::EndMenu();
         }
+        
+        ImGui::Separator();
+        if (ImGui::MenuItem(lang.word("create_group"))) {
+            editor.save_state();
+            create_group(editor.scene, "Group", -1);
+        }
+        
         ImGui::EndPopup();
+    }
+    
+    if (ImGui::BeginDragDropTarget()) {
+        if (const ImGuiPayload* payload = ImGui::AcceptDragDropPayload("ENTITY_INDEX")) {
+            int dropped_index = *(const int*)payload->Data;
+            editor.save_state();
+            move_entity_to_parent(editor.scene, dropped_index, -1);
+        }
+        ImGui::EndDragDropTarget();
     }
     ImGui::End();
     }
 
     if (show_inspector) {
         ImGui::Begin(lang.word("inspector"), &show_inspector);
-    ImGui::Text(lang.word("mode"));
-    ImGui::SameLine();
-    if (ImGui::Button("P")) gizmo_mode = ImGuizmo::TRANSLATE;
-    ImGui::SameLine();
-    if (ImGui::Button("R")) gizmo_mode = ImGuizmo::ROTATE;
-    ImGui::SameLine();
-    if (ImGui::Button("S")) gizmo_mode = ImGuizmo::SCALE;
+        
+        ImGui::Text(lang.word("mode"));
+        ImGui::SameLine();
+        if (ImGui::Button("P")) gizmo_mode = ImGuizmo::TRANSLATE;
+        ImGui::SameLine();
+        if (ImGui::Button("R")) gizmo_mode = ImGuizmo::ROTATE;
+        ImGui::SameLine();
+        if (ImGui::Button("S")) gizmo_mode = ImGuizmo::SCALE;
 
-    Entity* entity = editor.scene.get_selected();
-    if (entity) {
-        ImGui::Separator();
-        char inspector_name[128] = {};
-        const size_t copied = entity->name.copy(inspector_name, sizeof(inspector_name) - 1);
-        inspector_name[copied] = '\0';
+        Entity* entity = editor.scene.get_selected();
+        if (entity) {
+            ImGui::Separator();
+            ImGui::Spacing();
+            
+            if (ImGui::BeginTabBar("EntityInspectorTabs")) {
+                if (ImGui::BeginTabItem(lang.word("entity"))) {
+                    char inspector_name[128] = {};
+                    const size_t copied = entity->name.copy(inspector_name, sizeof(inspector_name) - 1);
+                    inspector_name[copied] = '\0';
 
-        static std::string last_name;
-        if (ImGui::InputText(lang.word("name"), inspector_name, IM_ARRAYSIZE(inspector_name))) {
-            if (last_name != inspector_name) {
-                editor.save_state();
-                assign_entity_name(*entity, inspector_name);
-                last_name = inspector_name;
+                    static std::string last_name;
+                    if (ImGui::InputText(lang.word("name"), inspector_name, IM_ARRAYSIZE(inspector_name))) {
+                        if (last_name != inspector_name) {
+                            editor.save_state();
+                            assign_entity_name(*entity, inspector_name);
+                            last_name = inspector_name;
+                        }
+                    } else {
+                        last_name = inspector_name;
+                    }
+                    
+                    ImGui::EndTabItem();
+                }
+                
+                if (ImGui::BeginTabItem(lang.word("components"))) {
+                    ImGui::Spacing();
+                    ComponentUIHelper::draw_entity_inspector(editor, *entity, shader);
+                    ImGui::EndTabItem();
+                }
+                
+                ImGui::EndTabBar();
             }
-        } else {
-            last_name = inspector_name;
         }
 
-        ImGui::Separator();
-        ImGui::Spacing();
-
-        ComponentUIHelper::draw_entity_inspector(editor, *entity, shader);
-    }
-
-    ImGui::End();
+        ImGui::End();
     }
 
     if (show_scene) {

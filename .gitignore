@@ -2,7 +2,6 @@ build/
 build-plugin/
 .vscode/
 /projects
-projects.json
 run.bat
 imgui.ini
 config.json

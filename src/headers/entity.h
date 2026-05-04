@@ -35,6 +35,8 @@ struct ModelAsset {
 struct Entity {
     int id;
     std::string name;
+    int parent_id = -1;
+    bool is_group = false;
     
     std::unique_ptr<ComponentManager> components;
 

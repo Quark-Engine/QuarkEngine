@@ -354,7 +354,11 @@ void draw_assets_ui(Editor& editor) {
     }
 
     ImGui::BeginChild("AssetScroll", ImVec2(0, 0), false, ImGuiWindowFlags_AlwaysVerticalScrollbar);
-    if (ImGui::IsWindowHovered()) {
+    
+    static std::string dragged_file_name;
+    static ImVec2 drag_start_pos;
+    
+    if (ImGui::IsWindowHovered() && !editor_internal::file_dragging) {
         if (ImGui::IsMouseClicked(0)) {
             selection_start = ImGui::GetMousePos();
             selection_end = selection_start;
@@ -365,6 +369,8 @@ void draw_assets_ui(Editor& editor) {
     }
 
     const float window_visible_x2 = ImGui::GetWindowPos().x + ImGui::GetWindowContentRegionMax().x;
+
+    editor_internal::dragged_target_folder_index = -1;
 
     for (int i = 0; i < static_cast<int>(entries.size()); i++) {
         auto& entry = entries[i];
@@ -529,12 +535,35 @@ void draw_assets_ui(Editor& editor) {
             draw_list->AddText(ext_pos, IM_COL32(255, 255, 255, 255), ext_display.c_str());
         }
 
+        if (!entry.is_directory && item_hovered && ImGui::IsMouseDown(0) && !editor_internal::file_dragging) {
+            if (dragged_file_name != entry.filename) {
+                dragged_file_name = entry.filename;
+                drag_start_pos = ImGui::GetMousePos();
+            }
+        }
+        
+        if (!entry.is_directory && dragged_file_name == entry.filename && ImGui::IsMouseDown(0)) {
+            ImVec2 mouse_pos = ImGui::GetMousePos();
+            ImVec2 delta = ImVec2(mouse_pos.x - drag_start_pos.x, mouse_pos.y - drag_start_pos.y);
+            if (fabsf(delta.x) > 5.0f || fabsf(delta.y) > 5.0f) {
+                editor_internal::file_dragging = true;
+                editor_internal::dragged_file_index = i;
+                
+                if (is_model_file(fs::path(entry.filename))) {
+                    const std::string asset_name = get_asset_name_for_path(fs::path(editor.project_path), editor.current_asset_path / entry.filename);
+                    editor_internal::scene_asset_dragging = true;
+                    editor_internal::dragged_scene_asset_name = asset_name;
+                }
+            }
+        }
+
+        if (entry.is_directory && editor_internal::file_dragging && item_hovered) {
+            ImGui::GetWindowDrawList()->AddRectFilled(pos, ImVec2(pos.x + size.x, pos.y + size.y), IM_COL32(100, 200, 100, 150));
+            editor_internal::dragged_target_folder_index = i;
+        }
+
         if (!entry.is_directory && is_model_file(fs::path(entry.filename))) {
             const std::string asset_name = get_asset_name_for_path(fs::path(editor.project_path), editor.current_asset_path / entry.filename);
-            if (item_active && ImGui::IsMouseDragging(ImGuiMouseButton_Left)) {
-                editor_internal::scene_asset_dragging = true;
-                editor_internal::dragged_scene_asset_name = asset_name;
-            }
             if (editor_internal::scene_asset_dragging && editor_internal::dragged_scene_asset_name == asset_name) {
                 ImGui::SetTooltip(lang.word("spawn"), editor_internal::dragged_scene_asset_name.c_str());
             }
@@ -556,6 +585,44 @@ void draw_assets_ui(Editor& editor) {
         const ImVec2 min(std::min(selection_start.x, selection_end.x), std::min(selection_start.y, selection_end.y));
         const ImVec2 max(std::max(selection_start.x, selection_end.x), std::max(selection_start.y, selection_end.y));
         ImGui::GetForegroundDrawList()->AddRectFilled(min, max, IM_COL32(80, 140, 255, 40));
+    }
+
+    if (editor_internal::file_dragging && !ImGui::IsMouseDown(ImGuiMouseButton_Left)) {
+        if (editor_internal::dragged_target_folder_index >= 0 && 
+            editor_internal::dragged_file_index >= 0 && 
+            editor_internal::dragged_file_index < static_cast<int>(entries.size()) && 
+            editor_internal::dragged_target_folder_index < static_cast<int>(entries.size()) &&
+            editor_internal::dragged_file_index != editor_internal::dragged_target_folder_index &&
+            !entries[editor_internal::dragged_file_index].is_directory &&
+            entries[editor_internal::dragged_target_folder_index].is_directory) {
+            
+            editor.save_state();
+            const fs::path source_path = editor.current_asset_path / entries[editor_internal::dragged_file_index].filename;
+            const fs::path dest_dir = editor.current_asset_path / entries[editor_internal::dragged_target_folder_index].filename;
+            const fs::path dest_path = dest_dir / fs::path(source_path).filename();
+
+            std::error_code ec;
+            if (source_path != dest_path) {
+                try {
+                    fs::rename(source_path, dest_path, ec);
+                    if (!ec) {
+                        refresh_textures(&editor.scene, editor.project_path);
+                        refresh_assets(editor.project_path);
+                        refresh_models(editor.project_path, editor.scene);
+                        editor.selected_asset_index = -1;
+                    }
+                } catch (...) {
+                }
+            }
+        }
+        editor_internal::file_dragging = false;
+        editor_internal::dragged_file_index = -1;
+        editor_internal::dragged_target_folder_index = -1;
+        dragged_file_name.clear();
+        drag_start_pos = ImVec2(0, 0);
+        
+        editor_internal::scene_asset_dragging = false;
+        editor_internal::dragged_scene_asset_name.clear();
     }
 
     if (rename_target >= 0) {
@@ -631,6 +698,10 @@ void draw_assets_ui(Editor& editor) {
         ImGui::EndPopup();
     }
 
+    if (ImGui::IsMouseReleased(0)) {
+        dragged_file_name.clear();
+        drag_start_pos = ImVec2(0, 0);
+    }
 
     ImGui::EndChild();
     ImGui::End();

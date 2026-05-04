@@ -4,6 +4,8 @@
 #include "../headers/editor.h"
 #include "../headers/camera.h"
 #include "../headers/entity.h"
+#include "editor_hierarchy_utils.h"
+#include "editor_file_utils.h"
 
 struct MeshEditState {
     bool enabled = false;

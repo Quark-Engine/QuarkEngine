@@ -40,7 +40,7 @@ namespace fs = std::filesystem;
 using json = nlohmann::json;
 
 static const char* HUB_PROJECTS_ROOT = "projects";
-static const char* HUB_REGISTRY_FILE = "projects.json";
+static const char* HUB_REGISTRY_FILE = "config.json";
 
 struct HubProject {
     std::string name;
@@ -62,10 +62,24 @@ static std::string hub_pending_open_path    = "";
 static std::string hub_saved_version        = "";
 
 static void hub_save_registry() {
-    json j = json::array();
+    json j;
+    
+    if (fs::exists(HUB_REGISTRY_FILE)) {
+        std::ifstream f(HUB_REGISTRY_FILE);
+        try {
+            f >> j;
+        } catch (...) {}
+    }
+    
+    if (!j.contains("language")) {
+        j["language"] = "en_us";
+    }
 
+    json projects = json::array();
     for (auto& p : hub_projects)
-        j.push_back( { {"name", p.name}, {"path", p.path} } );
+        projects.push_back( { {"name", p.name}, {"path", p.path} } );
+    
+    j["projects"] = projects;
     
     std::ofstream f(HUB_REGISTRY_FILE);
     f << j.dump(4);
@@ -79,13 +93,16 @@ static void hub_refresh() {
         json j;
         try {
             f >> j;
-            for (auto& entry : j) {
-                std::string path = entry["path"];
-                if (project_is_valid(path)) {
-                    HubProject p;
-                    p.name = entry["name"];
-                    p.path = project_resolve_root(path);
-                    hub_projects.push_back(p);
+            json projects = j.contains("projects") ? j["projects"] : json::array();
+            if (projects.is_array()) {
+                for (auto& entry : projects) {
+                    std::string path = entry["path"];
+                    if (project_is_valid(path)) {
+                        HubProject p;
+                        p.name = entry["name"];
+                        p.path = project_resolve_root(path);
+                        hub_projects.push_back(p);
+                    }
                 }
             }
         } catch (...) {}

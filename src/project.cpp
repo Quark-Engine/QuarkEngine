@@ -171,6 +171,8 @@ void project_save(const std::string& folder_path, const Scene& scene) {
     for (const auto& e : scene.entities) {
         json ej;
         ej["name"] = e.name;
+        ej["is_group"] = e.is_group;
+        ej["parent_id"] = e.parent_id;
 
         if (e.components) {
             e.components->serialize(ej);
@@ -233,6 +235,13 @@ bool project_load(const std::string& folder_path, Scene& scene, Shader shader) {
         Entity e;
         e.name = ej["name"].get<std::string>();
         e.id   = static_cast<int>(scene.entities.size());
+        
+        if (ej.contains("is_group")) {
+            e.is_group = ej["is_group"].get<bool>();
+        }
+        if (ej.contains("parent_id")) {
+            e.parent_id = ej["parent_id"].get<int>();
+        }
 
         if (!ej.contains("components")) {
             TraceLog(LOG_WARNING, "Skipping legacy entity '%s': project must use component data only.", e.name.c_str());
@@ -240,6 +249,11 @@ bool project_load(const std::string& folder_path, Scene& scene, Shader shader) {
         }
 
         e.components->deserialize(ej);
+
+        if (e.is_group) {
+            scene.entities.push_back(e);
+            continue;
+        }
 
         if (!e.components->get_transform()) {
             e.components->add_component(std::make_shared<TransformComponent>());

@@ -18,10 +18,19 @@ void LanguageManager::set_lang(const std::string& lang) {
     current = lang;
     load("assets/lang/" + lang + ".json");
 
+    const std::string path = "config.json";
     json j;
+    
+    if (std::filesystem::exists(path)) {
+        std::ifstream in(path);
+        try {
+            in >> j;
+        } catch (...) {}
+    }
+    
     j["language"] = lang;
-
-    std::ofstream out("config.json");
+    
+    std::ofstream out(path);
     out << j.dump(4);
 }
 
@@ -58,6 +67,7 @@ std::string load_or_create_config() {
     if (!std::filesystem::exists(path)) {
         json def;
         def["language"] = "en_us";
+        def["projects"] = json::array();
 
         std::ofstream out(path);
         out << def.dump(4);
@@ -70,11 +80,15 @@ std::string load_or_create_config() {
         return "en_us";
 
     json j;
-    in >> j;
+    try {
+        in >> j;
+    } catch (...) {
+        return "en_us";
+    }
 
-    if (j.contains("language"))
-        j["language"].get<std::string>();
+    if (j.contains("language")) {
         return j["language"].get<std::string>();
+    }
 
     return "en_us";
 }

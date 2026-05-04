@@ -3,7 +3,9 @@
 
 Entity::Entity() 
     : id(0),
-      name("")
+      name(""),
+      parent_id(-1),
+      is_group(false)
 {
     components = std::make_unique<ComponentManager>();
     
@@ -16,7 +18,9 @@ Entity::Entity()
 
 Entity::Entity(int _id) 
     : id(_id),
-      name(object_type_name(CUBE))
+      name(object_type_name(CUBE)),
+      parent_id(-1),
+      is_group(false)
 {
     components = std::make_unique<ComponentManager>();
     
@@ -32,7 +36,9 @@ Entity::~Entity() {
 
 Entity::Entity(const Entity& other)
     : id(other.id),
-      name(other.name)
+      name(other.name),
+      parent_id(other.parent_id),
+      is_group(other.is_group)
 {
     components = std::make_unique<ComponentManager>();
     if (other.components) {
@@ -69,6 +75,8 @@ Entity& Entity::operator=(const Entity& other) {
     
     id = other.id;
     name = other.name;
+    parent_id = other.parent_id;
+    is_group = other.is_group;
     
     components = std::make_unique<ComponentManager>();
     if (other.components) {

@@ -32,6 +32,8 @@ if(BUILD_ENGINE)
         src/editor/editor_utils.cpp
         src/editor/editor_viewers.cpp
         src/editor/editor.cpp
+        src/editor/editor_hierarchy_utils.cpp
+        src/editor/editor_file_utils.cpp
     )
 
     set(SOURCE_FILES
