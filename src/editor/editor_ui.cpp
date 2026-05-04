@@ -18,7 +18,6 @@
 #include <cmath>
 #include <vector>
 #include <language_manager.h>
-#include <bits/stdc++.h>
 
 #define lang LanguageManager::get()
 
@@ -53,10 +52,8 @@ int find_index(const char* value) {
     auto ptr = std::find(language_codes, language_codes + n, value);
 
     int idx = ptr - language_codes;
-    return idx;
+    return (idx < n) ? idx : 0;
 }
-
-static int language_index = find_index(lang.current.c_str());
 
 Matrix compose_entity_transform_matrix(const Entity& entity) {
     const TransformComponent* transform = entity.get_transform_component();
@@ -908,11 +905,15 @@ void draw_ui(Editor& editor, Shader shader, FlyCamera camera) {
         
         ImGui::Text(lang.word("language"));
 
-        int language_index = find_index(lang.current.c_str());
-        if (language_index < 0) language_index = 0;
+        static int language_index = -1;
+        if (language_index == -1) {
+            language_index = find_index(lang.current.c_str());
+        }
 
-        if (ImGui::Combo("##lang", &language_index, language_labels, IM_ARRAYSIZE(language_labels))) {
+        if (ImGui::Combo(lang.word("language"), &language_index, language_labels, IM_ARRAYSIZE(language_labels))) {
+            ImGui::SaveIniSettingsToDisk(ImGui::GetIO().IniFilename);
             lang.set_lang(language_codes[language_index]);
+            ImGui::LoadIniSettingsFromDisk(ImGui::GetIO().IniFilename);
         }
 
         ImGui::End();
