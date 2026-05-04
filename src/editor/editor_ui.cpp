@@ -796,7 +796,7 @@ void draw_ui(Editor& editor, Shader shader, FlyCamera camera) {
         ImGui::Separator();
         ImGui::Spacing();
 
-        ComponentUIHelper::draw_entity_inspector(editor, *entity);
+        ComponentUIHelper::draw_entity_inspector(editor, *entity, shader);
     }
 
     ImGui::End();

@@ -10,7 +10,7 @@
 bool ComponentUIHelper::should_show_component_menu = false;
 int ComponentUIHelper::component_to_remove = -1;
 
-void ComponentUIHelper::draw_entity_inspector(Editor& editor, Entity& entity) {
+void ComponentUIHelper::draw_entity_inspector(Editor& editor, Entity& entity, Shader shader) {
     ImGui::Spacing();
     
     if (entity.get_components()) {
@@ -44,7 +44,7 @@ void ComponentUIHelper::draw_entity_inspector(Editor& editor, Entity& entity) {
                     draw_mesh_component(editor, entity, mesh.get());
                 }
                 else if (auto light = std::dynamic_pointer_cast<LightComponent>(comp)) {
-                    draw_light_component(editor, entity, light.get());
+                    draw_light_component(editor, entity, light.get(), shader);
                 }
 
                 ImGui::Spacing();
@@ -81,8 +81,9 @@ void ComponentUIHelper::draw_entity_inspector(Editor& editor, Entity& entity) {
             auto components_manager = entity.get_components();
 
             if (ImGui::MenuItem("Light")) {
-                    editor.save_state();
+                editor.save_state();
                 bool already_exists = false;
+
                 for (size_t j = 0; j < components_manager->get_component_count(); ++j) {
                     auto existing = components_manager->get_component(j);
                     if (existing && existing->get_type() == COMPONENT_LIGHT) {
@@ -102,6 +103,19 @@ void ComponentUIHelper::draw_entity_inspector(Editor& editor, Entity& entity) {
         }
 
         if (component_to_remove != -1) {
+            std::shared_ptr<Component> comp = components_manager->get_component(component_to_remove);
+
+            if (std::shared_ptr<LightComponent> light = std::dynamic_pointer_cast<LightComponent>(comp)) {
+                if (light->created) {
+                    light->light.enabled = false;
+                    
+                    if (light->light.id != -1) {
+                        update_lighting(shader, light->light);
+                        free_light_id(light->light.id);
+                    }
+                }
+            }
+
             components_manager->remove_component(component_to_remove);
             component_to_remove = -1;
         }
@@ -226,7 +240,7 @@ void ComponentUIHelper::draw_mesh_component(Editor& editor, Entity& entity, Mesh
     }
 }
 
-void ComponentUIHelper::draw_light_component(Editor& editor, Entity& entity, LightComponent* light) {
+void ComponentUIHelper::draw_light_component(Editor& editor, Entity& entity, LightComponent* light, Shader shader) {
     if (!light) return;
 
     ImGui::Text("Light Properties");
@@ -247,10 +261,14 @@ void ComponentUIHelper::draw_light_component(Editor& editor, Entity& entity, Lig
         changed = true;
     }
 
+    if (light->enabled != light->light.enabled) {
+        changed = true;
+    }
+
     if (changed) {
         editor.save_state();
-        if (light->enabled) {
-            light->light.enabled = true;
-        }
+        light->light.enabled = light->enabled;
+
+        if (light->light.id != -1) update_lighting(shader, light->light);
     }
 }
