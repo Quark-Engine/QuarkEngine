@@ -37,13 +37,13 @@ target_include_directories(imgui PUBLIC
 )
 
 if(WIN32)
-    target_compile_definitions(${PROJECT_NAME}
-        PRIVATE USE_LIBTYPE_SHARED
-        PRIVATE IMGUI_API=__declspec\(dllimport\)
+    target_compile_definitions(imgui
+        PRIVATE BUILD_LIBTYPE_SHARED
+        PRIVATE IMGUI_API=__declspec\(dllexport\)
     )
 else()
-    target_compile_definitions(${PROJECT_NAME}
-        PRIVATE USE_LIBTYPE_SHARED
+    target_compile_definitions(imgui
+        PRIVATE BUILD_LIBTYPE_SHARED
         PRIVATE "IMGUI_API=__attribute__((visibility(\"default\")))"
     )
 endif()
