@@ -1029,7 +1029,7 @@ void draw_ui(Editor& editor, Shader shader, FlyCamera camera) {
     }
 
     if (ImGui::BeginPopupModal(lang.word("about_quark_engine"), nullptr, ImGuiWindowFlags_AlwaysAutoResize)) {
-        ImGui::Text("Quark Engine %s", QUARK_ENGINE_VERSION);
+        ImGui::Text("Quark Engine %s", QUARK_ENGINE_VERSION.c_str());
         ImGui::Separator();
         ImGui::Text(lang.word("raylib_version"), RAYLIB_VERSION);
         ImGui::Text(lang.word("imgui_version"), IMGUI_VERSION);
@@ -1049,9 +1049,6 @@ void draw_ui(Editor& editor, Shader shader, FlyCamera camera) {
         if (language_index == -1) {
             language_index = find_index(LanguageManager::get().current.c_str());
         }
-
-        TraceLog(LOG_INFO, "[LANGUAGE_INDEX] %d", language_index);
-        TraceLog(LOG_INFO, "[CURRENT] %s", lang.current.c_str());
 
         if (ImGui::Combo(lang.word("language"), &language_index, language_labels, IM_ARRAYSIZE(language_labels))) {
             ImGui::SaveIniSettingsToDisk(ImGui::GetIO().IniFilename);
