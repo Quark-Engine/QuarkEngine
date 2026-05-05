@@ -21,9 +21,13 @@ void update_lighting(Shader shader, Lighting& l) {
 
     float intensity = l.intensity;
     float range = l.range;
-    SetShaderValue(shader, l.intensity_loc, &intensity, SHADER_UNIFORM_FLOAT);
-    SetShaderValue(shader, l.range_loc,     &range,     SHADER_UNIFORM_FLOAT);
+    int intensity_loc = GetShaderLocation(shader, TextFormat("lights[%i].intensity", l.id));
+    int range_loc     = GetShaderLocation(shader, TextFormat("lights[%i].range",     l.id));
+    SetShaderValue(shader, intensity_loc, &intensity, SHADER_UNIFORM_FLOAT);
+    SetShaderValue(shader, range_loc,     &range,     SHADER_UNIFORM_FLOAT);
 
+    if (l.spot_angle_loc == -1)
+        l.spot_angle_loc = GetShaderLocation(shader, TextFormat("lights[%i].spotAngle", l.id));
     SetShaderValue(shader, l.spot_angle_loc, &l.spot_angle, SHADER_UNIFORM_FLOAT);
 }
 

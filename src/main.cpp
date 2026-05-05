@@ -13,7 +13,7 @@
 #include "headers/tex.h"
 #include <iostream>
 
-#define SHADOWMAP_RESOLUTION 4096
+#define SHADOWMAP_RESOLUTION 1024
 
 namespace fs = std::filesystem;
 
@@ -287,24 +287,24 @@ int main(int argc, char* argv[]) {
     editor.project_path = project_path;
 
     shadowmap_shader = LoadShader("assets/lighting.vs", "assets/lighting.fs");
-    shadowcaster_shader = LoadShader("assets/shadowmap.vs", "assets/shadowmap.fs");
     shadowmap_shader.locs[SHADER_LOC_VECTOR_VIEW] = GetShaderLocation(shadowmap_shader, "viewPos");
 
     shadow_map = load_shadowmap_render_texture(SHADOWMAP_RESOLUTION, SHADOWMAP_RESOLUTION);
+    
     scene_rt = LoadRenderTexture(GetScreenWidth(), GetScreenHeight());
 
     Vector3 light_dir = Vector3Normalize({0.35f, -1.0f, -0.35f});
 
-    Camera3D light_cam     = {0};
-    light_cam.projection   = CAMERA_ORTHOGRAPHIC;
-    light_cam.up           = {0.0f, 1.0f, 0.0f};
-    light_cam.fovy         = 20.0f;
-    light_cam.target       = Vector3Zero();
-    light_cam.position     = Vector3Scale(light_dir, -15.0f);
+    Camera3D light_cam = {0};
+    light_cam.projection = CAMERA_ORTHOGRAPHIC;
+    light_cam.up         = {0.0f, 1.0f, 0.0f};
+    light_cam.fovy       = 20.0f;
+    light_cam.target     = Vector3Zero();
+    light_cam.position   = Vector3Scale(light_dir, -15.0f);
 
-    int light_vp_loc       = GetShaderLocation(shadowmap_shader, "lightVP");
-    int shadow_map_loc     = GetShaderLocation(shadowmap_shader, "shadowMap");
-    int shadow_map_res     = SHADOWMAP_RESOLUTION;
+    int light_vp_loc      = GetShaderLocation(shadowmap_shader, "lightVP");
+    int shadow_map_loc    = GetShaderLocation(shadowmap_shader, "shadowMap");
+    int shadow_map_res    = SHADOWMAP_RESOLUTION;
     int emission_color_loc = GetShaderLocation(shadowmap_shader, "emissionColor");
     int emission_power_loc = GetShaderLocation(shadowmap_shader, "emissionPower");
     int use_tex_loc        = GetShaderLocation(shadowmap_shader, "useTexture");
@@ -352,77 +352,67 @@ int main(int argc, char* argv[]) {
 
         Vector3 cam_pos = camera.get_camera().position;
         SetShaderValue(shadowmap_shader, shadowmap_shader.locs[SHADER_LOC_VECTOR_VIEW], &cam_pos, SHADER_UNIFORM_VEC3);
-        
-        Vector3 shadow_light_pos = Vector3Add(scene_center, Vector3Scale(light_dir, -(scene_radius * 2.5f)));
-        Vector3 shadow_light_dir = light_dir;
-        
-        for (const auto& e : editor.scene.entities) {
-            const LightComponent* light = e.get_light_component();
-            if (light && light->created && light->light.light.type == LIGHT_DIRECTIONAL && light->enabled) {
-                shadow_light_dir = Vector3Normalize(Vector3Subtract(light->light.position, light->light.target));
-                shadow_light_pos = Vector3Add(scene_center, Vector3Scale(shadow_light_dir, -(scene_radius * 2.5f)));
-                break;
-            }
-        }
-        
-        light_cam.target = scene_center;
-        light_cam.position = shadow_light_pos;
-        light_cam.fovy = scene_radius * 2.2f;
+        light_cam.position = Vector3Scale(light_dir, -15.0f);
         
         BeginTextureMode(shadow_map);
-            ClearBackground(BLACK);
+            ClearBackground(WHITE);
             BeginMode3D(light_cam);
-                for (auto& e : editor.scene.entities) {
-                    MeshComponent* mesh = e.get_mesh_component();
-                    if (!mesh) continue;
-                    if (!mesh->shader_assigned || mesh->model.materialCount > 0 && mesh->model.materials[0].shader.id != shadowcaster_shader.id) {
-                        set_model_shader(mesh->model, shadowcaster_shader);
-                    }
-                    draw_entity_with_texture(e);
-                }
                 light_view = rlGetMatrixModelview();
                 light_proj = rlGetMatrixProjection();
-            EndMode3D();
-        EndTextureMode();
-
-        Matrix light_view_proj = MatrixMultiply(light_proj, light_view);
-        
-        BeginTextureMode(scene_rt);
-            ClearBackground(DARKGRAY);
-            BeginMode3D(camera.get_camera());
-                DrawGrid(20, 1.0f);
                 for (auto& e : editor.scene.entities) {
-                    MeshComponent* mesh = e.get_mesh_component();
-                    TransformComponent* transform = e.get_transform_component();
-                    LightComponent* light = e.get_light_component();
-                    if (!mesh || !transform) continue;
-
-                    if (!mesh->shader_assigned || (mesh->model.materialCount > 0 && mesh->model.materials[0].shader.id != shadowmap_shader.id)) {
-                        set_model_shader(mesh->model, shadowmap_shader);
+                    for (int i = 0; i < e.get_mesh_component()->model.meshCount; i++) {
+                        e.get_mesh_component()->model.materials[i].shader = shadowmap_shader;
                     }
-                    mesh->shader_assigned = true;
-                    if (light && light->enabled) {
-                        light->light.enabled = true;
-                        if (!light->created) {
-                            int new_id = allocate_light_id();
-                            if (new_id != -1) {
-                                light->light.id = new_id;
-                                light->light.light = create_light_at_slot(new_id, light->light.light.type, transform->position, light->light.target, light->light.color, shadowmap_shader);
-                                initialize_lighting_uniform_cache(light->light, shadowmap_shader, new_id);
-                                light->created = true;
-                            }
-                        }
-
-                        light->light.position = transform->position;
-                        light->light.light.position = transform->position;
-                        update_lighting(shadowmap_shader, light->light);
-                    }
-                    int use = (mesh->texture.id != 0) ? 1 : 0;
-                    SetShaderValue(shadowmap_shader, use_tex_loc, &use, SHADER_UNIFORM_INT);
                     draw_entity_with_texture(e);
                 }
             EndMode3D();
         EndTextureMode();
+
+        Matrix light_view_proj = MatrixMultiply(light_view, light_proj);
+
+        BeginTextureMode(scene_rt);
+        ClearBackground(DARKGRAY);
+        SetShaderValueMatrix(shadowmap_shader, light_vp_loc, light_view_proj);
+
+        SetShaderValueTexture(shadowmap_shader, shadow_map_loc, shadow_map.depth);
+
+        BeginMode3D(camera.get_camera());
+            DrawGrid(20, 1.0f);
+            for (auto& e : editor.scene.entities) {
+                MeshComponent* mesh = e.get_mesh_component();
+                TransformComponent* transform = e.get_transform_component();
+                LightComponent* light = e.get_light_component();
+                if (!mesh || !transform) continue;
+
+                if (!mesh->shader_assigned || (mesh->model.materialCount > 0 &&
+                    mesh->model.materials[0].shader.id != shadowmap_shader.id)) {
+                    set_model_shader(mesh->model, shadowmap_shader);
+                }
+                mesh->shader_assigned = true;
+
+                if (light && light->enabled) {
+                    light->light.enabled = true;
+                    if (!light->created) {
+                        int new_id = allocate_light_id();
+                        if (new_id != -1) {
+                            light->light.id = new_id;
+                            light->light.light = create_light_at_slot(new_id, light->light.light.type,
+                                transform->position, light->light.target, light->light.color, shadowmap_shader);
+                            initialize_lighting_uniform_cache(light->light, shadowmap_shader, new_id);
+                            light->created = true;
+                        }
+                    }
+                    light->light.position = transform->position;
+                    light->light.light.position = transform->position;
+                    update_lighting(shadowmap_shader, light->light);
+                }
+
+                int use = (mesh->texture.id != 0) ? 1 : 0;
+                SetShaderValue(shadowmap_shader, use_tex_loc, &use, SHADER_UNIFORM_INT);
+                draw_entity_with_texture(e);
+            }
+        EndMode3D();
+    EndTextureMode();
 
         BeginDrawing();
             ClearBackground(DARKGRAY);
