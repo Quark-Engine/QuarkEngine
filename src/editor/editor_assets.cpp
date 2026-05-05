@@ -557,9 +557,15 @@ void draw_assets_ui(Editor& editor) {
             }
         }
 
-        if (entry.is_directory && editor_internal::file_dragging && item_hovered) {
-            ImGui::GetWindowDrawList()->AddRectFilled(pos, ImVec2(pos.x + size.x, pos.y + size.y), IM_COL32(100, 200, 100, 150));
-            editor_internal::dragged_target_folder_index = i;
+        if (entry.is_directory && editor_internal::file_dragging) {
+            ImVec2 mouse_pos = ImGui::GetMousePos();
+            bool mouse_over_folder = mouse_pos.x >= pos.x && mouse_pos.x <= pos.x + size.x &&
+                                    mouse_pos.y >= pos.y && mouse_pos.y <= pos.y + size.y;
+            
+            if (mouse_over_folder) {
+                ImGui::GetWindowDrawList()->AddRectFilled(pos, ImVec2(pos.x + size.x, pos.y + size.y), IM_COL32(100, 200, 100, 150));
+                editor_internal::dragged_target_folder_index = i;
+            }
         }
 
         if (!entry.is_directory && is_model_file(fs::path(entry.filename))) {

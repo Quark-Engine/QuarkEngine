@@ -36,9 +36,7 @@ jobs:
 
       - name: Install macOS dependencies
         if: runner.os == 'macOS'
-        run: |
-          brew update
-          brew install ninja
+        run: brew install ninja
 
       - name: Configure CMake (Linux/macOS)
         if: runner.os != 'Windows'
@@ -51,15 +49,34 @@ jobs:
       - name: Build
         run: cmake --build build --config ${{ matrix.build_type }} --parallel
 
+      - name: Collect artifacts (Windows)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          $src = "build/bin/${{ matrix.build_type }}"
+          if (!(Test-Path "$src/QuarkEngine.exe")) {
+            $src = "build/bin"
+          }
+          New-Item -ItemType Directory -Force -Path dist
+          Copy-Item "$src/QuarkEngine.exe" dist/
+          Copy-Item "$src/*.dll"            dist/
+          Copy-Item "build/bin/assets"      dist/assets -Recurse -ErrorAction SilentlyContinue
+
+      - name: Collect artifacts (Linux/macOS)
+        if: runner.os != 'Windows'
+        run: |
+          mkdir -p dist
+          cp build/bin/QuarkEngine dist/
+          cp build/bin/*.so         dist/ 2>/dev/null || true
+          cp build/bin/*.dylib      dist/ 2>/dev/null || true
+          cp -r build/bin/assets    dist/assets 2>/dev/null || true
+
       - name: Upload artifact (Windows)
         if: runner.os == 'Windows'
         uses: actions/upload-artifact@v7
         with:
           name: QuarkEngine-windows-${{ matrix.build_type }}
-          path: |
-            build/bin/${{ matrix.build_type }}/QuarkEngine.exe
-            build/bin/${{ matrix.build_type }}/raylib.dll
-            build/bin/${{ matrix.build_type }}/assets/**
+          path: dist/
           if-no-files-found: warn
 
       - name: Upload artifact (Linux)
@@ -67,9 +84,7 @@ jobs:
         uses: actions/upload-artifact@v7
         with:
           name: QuarkEngine-linux-${{ matrix.build_type }}
-          path: |
-            build/bin/QuarkEngine
-            build/bin/assets/**
+          path: dist/
           if-no-files-found: warn
 
       - name: Upload artifact (macOS)
@@ -77,7 +92,5 @@ jobs:
         uses: actions/upload-artifact@v7
         with:
           name: QuarkEngine-macos-${{ matrix.build_type }}
-          path: |
-            build/bin/QuarkEngine
-            build/bin/assets/**
+          path: dist/
           if-no-files-found: warn
