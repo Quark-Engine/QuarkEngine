@@ -36,10 +36,17 @@ target_include_directories(imgui PUBLIC
     ${CMAKE_SOURCE_DIR}/src/headers
 )
 
-target_compile_definitions(imgui
-    PRIVATE BUILD_LIBTYPE_SHARED
-    PRIVATE IMGUI_API=__declspec\(dllexport\)
-)
+if(WIN32)
+    target_compile_definitions(imgui
+        PRIVATE BUILD_LIBTYPE_SHARED
+        PRIVATE IMGUI_API=__declspec\(dllexport\)
+    )
+else()
+    target_compile_definitions(imgui
+        PRIVATE BUILD_LIBTYPE_SHARED
+        PRIVATE "IMGUI_API=__attribute__((visibility(\"default\")))"
+    )
+endif()
 
 target_link_libraries(imgui PRIVATE raylib)
 
