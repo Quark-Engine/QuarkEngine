@@ -247,9 +247,12 @@ void draw_assets_ui(Editor& editor) {
     static ImVec2 selection_end = {};
     static bool selecting = false;
     static int rename_target = -1;
+    static fs::path dragged_file_path;
+    static std::string dragged_file_name;
+    static ImVec2 drag_start_pos;
 
-    static bool show_dublicate_popup = false;
-    static std::string dublicate_name;
+    static bool show_duplicate_popup = false;
+    static std::string duplicate_name;
 
     if (editor.current_asset_path.empty() && !editor.project_path.empty()) {
         editor.current_asset_path = fs::path(editor.project_path) / "resources";
@@ -268,9 +271,56 @@ void draw_assets_ui(Editor& editor) {
     for (int index = 0; index < static_cast<int>(crumbs.size()); index++) {
         rebuilt /= crumbs[index];
         const std::string label = crumbs[index].string() + "/";
-        if (ImGui::SmallButton(label.c_str())) {
+
+        ImGui::PushID(index);
+
+        const ImVec2 btn_min = ImGui::GetCursorScreenPos();
+        bool clicked = ImGui::SmallButton(label.c_str());
+        const ImVec2 btn_max = ImVec2(
+            btn_min.x + ImGui::GetItemRectSize().x,
+            btn_min.y + ImGui::GetItemRectSize().y
+        );
+
+        ImGui::PopID();
+
+        if (editor_internal::file_dragging && ImGui::IsMouseHoveringRect(btn_min, btn_max)) {
+            ImGui::GetWindowDrawList()->AddRectFilled(
+                btn_min,
+                btn_max,
+                IM_COL32(100, 200, 100, 120)
+            );
+
+            ImGui::SetMouseCursor(ImGuiMouseCursor_Hand);
+        }
+
+        if (editor_internal::file_dragging && ImGui::IsMouseReleased(0) && ImGui::IsMouseHoveringRect(btn_min, btn_max) && !dragged_file_path.empty())
+        {
+            fs::path dest = rebuilt / dragged_file_path.filename();
+
+            if (fs::exists(dest)) {
+                show_duplicate_popup = true;
+                duplicate_name = dragged_file_path.filename().string();
+            } else {
+                std::error_code ec;
+                fs::rename(dragged_file_path, dest, ec);
+
+                if (!ec) {
+                    refresh_assets(editor.project_path);
+                    refresh_textures(&editor.scene, editor.project_path);
+                    refresh_models(editor.project_path, editor.scene);
+                    editor.selected_asset_index = -1;
+                }
+            }
+
+            editor_internal::file_dragging = false;
+            dragged_file_path.clear();
+            editor_internal::dragged_file_index = -1;
+        }
+
+        if (clicked) {
             editor.current_asset_path = rebuilt;
             editor.selected_asset_index = -1;
+
             editor_internal::tex_cache.clear();
             model_preview_cache.clear();
             for (auto& pair : model_render_cache) UnloadRenderTexture(pair.second);
@@ -357,9 +407,6 @@ void draw_assets_ui(Editor& editor) {
     }
 
     ImGui::BeginChild("AssetScroll", ImVec2(0, 0), false, ImGuiWindowFlags_AlwaysVerticalScrollbar);
-    
-    static std::string dragged_file_name;
-    static ImVec2 drag_start_pos;
     
     if (ImGui::IsWindowHovered() && !editor_internal::file_dragging) {
         if (ImGui::IsMouseClicked(0)) {
@@ -542,6 +589,9 @@ void draw_assets_ui(Editor& editor) {
             if (dragged_file_name != entry.filename) {
                 dragged_file_name = entry.filename;
                 drag_start_pos = ImGui::GetMousePos();
+
+                editor_internal::dragged_file_index = i;
+                dragged_file_path = editor.current_asset_path / entry.filename;
             }
         }
         
@@ -610,8 +660,8 @@ void draw_assets_ui(Editor& editor) {
             const fs::path dest_path = dest_dir / fs::path(source_path).filename();
 
             if (fs::exists(dest_path)) {
-                show_dublicate_popup = true;
-                dublicate_name = source_path.filename().string();
+                show_duplicate_popup = true;
+                duplicate_name = source_path.filename().string();
             }
             
             else {
@@ -711,19 +761,19 @@ void draw_assets_ui(Editor& editor) {
         ImGui::EndPopup();
     }
 
-    if (ImGui::IsMouseReleased(0)) {
+    if (ImGui::IsMouseReleased(0) && editor_internal::file_dragging) {
         dragged_file_name.clear();
         drag_start_pos = ImVec2(0, 0);
     }
 
-    if (show_dublicate_popup) {
+    if (show_duplicate_popup) {
         ImGui::OpenPopup(("%s##DuplicateName", lang.word("move_error")));
-        show_dublicate_popup = false;
+        show_duplicate_popup = false;
     }
 
     if (ImGui::BeginPopupModal(("%s##DuplicateName", lang.word("move_error")), nullptr, ImGuiWindowFlags_AlwaysAutoResize)) {
         ImGui::Text(lang.word("unable_to_move"));
-        ImGui::TextColored(ImVec4(1, 0.4f, 0.4f, 1), "%s", dublicate_name.c_str());
+        ImGui::TextColored(ImVec4(1, 0.4f, 0.4f, 1), "%s", duplicate_name.c_str());
         ImGui::Spacing();
         ImGui::Text(lang.word("path_already_exists"));
 
