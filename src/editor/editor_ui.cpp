@@ -9,6 +9,7 @@
 #include "../headers/ImGuizmo.h"
 #include "rlImGui.h"
 #include "../headers/lighting.h"
+#include "../headers/version.h"
 #include "../headers/project.h"
 #include "imgui.h"
 #include "imgui_internal.h"
@@ -49,10 +50,10 @@ static const char* language_codes[] = {
 
 int find_index(const char* value) {
     int n = sizeof(language_codes) / sizeof(language_codes[0]);
-    auto ptr = std::find(language_codes, language_codes + n, value);
-
-    int idx = ptr - language_codes;
-    return (idx < n) ? idx : 0;
+    for (int i = 0; i < n; i++) {
+        if (strcmp(language_codes[i], value) == 0) return i;
+    }
+    return 0;
 }
 
 Matrix compose_entity_transform_matrix(const Entity& entity) {
@@ -1028,7 +1029,7 @@ void draw_ui(Editor& editor, Shader shader, FlyCamera camera) {
     }
 
     if (ImGui::BeginPopupModal(lang.word("about_quark_engine"), nullptr, ImGuiWindowFlags_AlwaysAutoResize)) {
-        ImGui::Text("Quark Engine v1.0");
+        ImGui::Text("Quark Engine %s", QUARK_ENGINE_VERSION);
         ImGui::Separator();
         ImGui::Text(lang.word("raylib_version"), RAYLIB_VERSION);
         ImGui::Text(lang.word("imgui_version"), IMGUI_VERSION);
@@ -1046,8 +1047,11 @@ void draw_ui(Editor& editor, Shader shader, FlyCamera camera) {
 
         static int language_index = -1;
         if (language_index == -1) {
-            language_index = find_index(lang.current.c_str());
+            language_index = find_index(LanguageManager::get().current.c_str());
         }
+
+        TraceLog(LOG_INFO, "[LANGUAGE_INDEX] %d", language_index);
+        TraceLog(LOG_INFO, "[CURRENT] %s", lang.current.c_str());
 
         if (ImGui::Combo(lang.word("language"), &language_index, language_labels, IM_ARRAYSIZE(language_labels))) {
             ImGui::SaveIniSettingsToDisk(ImGui::GetIO().IniFilename);

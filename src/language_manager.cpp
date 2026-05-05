@@ -14,22 +14,17 @@ bool LanguageManager::load(const std::string& path) {
     return true;
 }
 
-void LanguageManager::set_lang(const std::string& lang) {
-    current = lang;
-    load("assets/lang/" + lang + ".json");
+void LanguageManager::set_lang(const std::string& code) {
+    current = code;
+    load("assets/lang/" + code + ".json");
 
     const std::string path = "config.json";
     json j;
-    
     if (std::filesystem::exists(path)) {
         std::ifstream in(path);
-        try {
-            in >> j;
-        } catch (...) {}
+        try { in >> j; } catch (...) {}
     }
-    
-    j["language"] = lang;
-    
+    j["language"] = code;
     std::ofstream out(path);
     out << j.dump(4);
 }

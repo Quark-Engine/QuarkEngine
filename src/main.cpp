@@ -251,9 +251,8 @@ int main(int argc, char* argv[]) {
     fs::create_directories("projects");
     fs::create_directories("assets");
 
-    std::string lang = load_or_create_config();
-    LanguageManager::get().set_lang(lang);
-    LanguageManager::get().current = lang;
+    std::string lang_code = load_or_create_config();
+    LanguageManager::get().set_lang(lang_code);
 
     InitWindow(1280, 720, "Quark Engine");
     SetTargetFPS(GetMonitorRefreshRate(GetCurrentMonitor()));
