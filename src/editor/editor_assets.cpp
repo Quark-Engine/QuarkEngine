@@ -15,7 +15,7 @@
 #include <cctype>
 
 #ifdef _WIN32
-#define NOMINMAX
+#define NOMINMAX 1
 #define WIN32_LEAN_AND_MEAN
 #define CloseWindow WinAPICloseWindow
 #define ShowCursor WinAPIShowCursor
@@ -247,6 +247,9 @@ void draw_assets_ui(Editor& editor) {
     static ImVec2 selection_end = {};
     static bool selecting = false;
     static int rename_target = -1;
+
+    static bool show_dublicate_popup = false;
+    static std::string dublicate_name;
 
     if (editor.current_asset_path.empty() && !editor.project_path.empty()) {
         editor.current_asset_path = fs::path(editor.project_path) / "resources";
@@ -535,14 +538,14 @@ void draw_assets_ui(Editor& editor) {
             draw_list->AddText(ext_pos, IM_COL32(255, 255, 255, 255), ext_display.c_str());
         }
 
-        if (!entry.is_directory && item_hovered && ImGui::IsMouseDown(0) && !editor_internal::file_dragging) {
+        if (item_hovered && ImGui::IsMouseDown(0) && !editor_internal::file_dragging) {
             if (dragged_file_name != entry.filename) {
                 dragged_file_name = entry.filename;
                 drag_start_pos = ImGui::GetMousePos();
             }
         }
         
-        if (!entry.is_directory && dragged_file_name == entry.filename && ImGui::IsMouseDown(0)) {
+        if (dragged_file_name == entry.filename && ImGui::IsMouseDown(0)) {
             ImVec2 mouse_pos = ImGui::GetMousePos();
             ImVec2 delta = ImVec2(mouse_pos.x - drag_start_pos.x, mouse_pos.y - drag_start_pos.y);
             if (fabsf(delta.x) > 5.0f || fabsf(delta.y) > 5.0f) {
@@ -557,7 +560,7 @@ void draw_assets_ui(Editor& editor) {
             }
         }
 
-        if (entry.is_directory && editor_internal::file_dragging) {
+        if (entry.is_directory && editor_internal::file_dragging && entries[editor_internal::dragged_file_index].filename != entry.filename) {
             ImVec2 mouse_pos = ImGui::GetMousePos();
             bool mouse_over_folder = mouse_pos.x >= pos.x && mouse_pos.x <= pos.x + size.x &&
                                     mouse_pos.y >= pos.y && mouse_pos.y <= pos.y + size.y;
@@ -599,7 +602,6 @@ void draw_assets_ui(Editor& editor) {
             editor_internal::dragged_file_index < static_cast<int>(entries.size()) && 
             editor_internal::dragged_target_folder_index < static_cast<int>(entries.size()) &&
             editor_internal::dragged_file_index != editor_internal::dragged_target_folder_index &&
-            !entries[editor_internal::dragged_file_index].is_directory &&
             entries[editor_internal::dragged_target_folder_index].is_directory) {
             
             editor.save_state();
@@ -607,17 +609,22 @@ void draw_assets_ui(Editor& editor) {
             const fs::path dest_dir = editor.current_asset_path / entries[editor_internal::dragged_target_folder_index].filename;
             const fs::path dest_path = dest_dir / fs::path(source_path).filename();
 
-            std::error_code ec;
-            if (source_path != dest_path) {
-                try {
-                    fs::rename(source_path, dest_path, ec);
-                    if (!ec) {
-                        refresh_textures(&editor.scene, editor.project_path);
-                        refresh_assets(editor.project_path);
-                        refresh_models(editor.project_path, editor.scene);
-                        editor.selected_asset_index = -1;
-                    }
-                } catch (...) {
+            if (fs::exists(dest_path)) {
+                show_dublicate_popup = true;
+                dublicate_name = source_path.filename().string();
+            }
+            
+            else {
+                editor.save_state();
+
+                std::error_code ec;
+                fs::rename(source_path, dest_path, ec);
+
+                if (!ec) {
+                    refresh_textures(&editor.scene, editor.project_path);
+                    refresh_assets(editor.project_path);
+                    refresh_models(editor.project_path, editor.scene);
+                    editor.selected_asset_index = -1;
                 }
             }
         }
@@ -707,6 +714,26 @@ void draw_assets_ui(Editor& editor) {
     if (ImGui::IsMouseReleased(0)) {
         dragged_file_name.clear();
         drag_start_pos = ImVec2(0, 0);
+    }
+
+    if (show_dublicate_popup) {
+        ImGui::OpenPopup(("%s##DuplicateName", lang.word("move_error")));
+        show_dublicate_popup = false;
+    }
+
+    if (ImGui::BeginPopupModal(("%s##DuplicateName", lang.word("move_error")), nullptr, ImGuiWindowFlags_AlwaysAutoResize)) {
+        ImGui::Text(lang.word("unable_to_move"));
+        ImGui::TextColored(ImVec4(1, 0.4f, 0.4f, 1), "%s", dublicate_name.c_str());
+        ImGui::Spacing();
+        ImGui::Text(lang.word("path_already_exists"));
+
+        ImGui::Spacing();
+
+        if (ImGui::Button(lang.word("ok"), ImVec2(120, 0))) {
+            ImGui::CloseCurrentPopup();
+        }
+
+        ImGui::EndPopup();
     }
 
     ImGui::EndChild();

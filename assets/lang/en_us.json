@@ -60,9 +60,11 @@
 
     "enabled": "Enabled",
     
+    "components": "Components",
     "add_component": "Add Component",
     "remove_component": "Remove Component",
 
+    "entity": "Entity",
     "cube": "Cube",
     "sphere": "Sphere",
     "cone": "Cone",
@@ -115,6 +117,9 @@
 
     "no_projects": "No projects yet. Click \"+ Create Project\" to get started.",
     "delete_project_ask": "Delete \"%s\"? This cannot be undone.",
+    "unable_to_move": "Move operation failed:",
+    "path_already_exists": "A file or folder with this name already exists in the destination.",
+    "move_error": "Move Error",
 
     "version_mismatch": "Version Mismatch",
     "version_mismatch_msg": "This project was saved with engine version %s,\nbut the current engine version is %s.\n\nOpening it may cause issues or data loss."
