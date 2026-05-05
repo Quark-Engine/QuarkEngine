@@ -59,7 +59,8 @@ jobs:
           }
           New-Item -ItemType Directory -Force -Path dist
           Copy-Item "$src/QuarkEngine.exe" dist/
-          Copy-Item "$src/*.dll"            dist/
+          Copy-Item "$src/*.dll"            dist/ -ErrorAction SilentlyContinue
+          Copy-Item "build/bin/*.dll"       dist/ -ErrorAction SilentlyContinue
           Copy-Item "build/bin/assets"      dist/assets -Recurse -ErrorAction SilentlyContinue
 
       - name: Collect artifacts (Linux/macOS)
