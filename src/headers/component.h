@@ -22,6 +22,7 @@ enum TextureSource {
 enum ComponentType {
     COMPONENT_TRANSFORM,
     COMPONENT_MESH,
+    COMPONENT_MATERIAL,
     COMPONENT_LIGHT,
     COMPONENT_CUSTOM
 };
@@ -89,24 +90,8 @@ public:
     bool mesh_triangles_detached = false;
     std::vector<std::vector<float>> mesh_vertex_overrides;
 
-    Texture2D texture = {0};
-    TextureSource texture_source = TEXTURE_NONE;
-    std::string texture_name;
-    std::vector<Texture2D> original_material_textures;
-
-    bool auto_uv = false;
-    bool texture_stretch = true;
-    float texture_repeat_u = 1.0f;
-    float texture_repeat_v = 1.0f;
-    Vector2 uv_scale_vec = {1, 1};
-    float uv_scale = 1.0f;
-    std::vector<std::vector<float>> original_texcoords;
-
     int segments = 16;
     ObjectType type = CUBE;
-
-    Color color = WHITE;
-    Color outline_color = LIGHTGRAY;
 
     bool shader_assigned = false;
     bool owns_materials = false;
@@ -123,6 +108,70 @@ public:
 
     void serialize(nlohmann::json& json) const override;
     void deserialize(const nlohmann::json& json) override;
+};
+
+class MaterialComponent : public Component {
+public:
+    Texture2D texture = {0};
+    TextureSource texture_source = TEXTURE_NONE;
+    std::string texture_name;
+
+    Color color = WHITE;
+    Color outline_color = LIGHTGRAY;
+
+    bool auto_uv = false;
+    bool texture_stretch = true;
+    float texture_repeat_u = 1.0f;
+    float texture_repeat_v = 1.0f;
+
+    Vector2 uv_scale = {1, 1};
+    std::vector<std::vector<float>> original_texcoords;
+
+    MaterialComponent() {
+        name = "Material";
+        type = COMPONENT_MATERIAL;
+    }
+
+    ComponentType get_type() const override { return COMPONENT_MATERIAL; };
+    std::string get_type_name() const override { return "Material"; };
+
+    void serialize(nlohmann::json& json) const override {
+        json["color"] = { color.r, color.g, color.b, color.a };
+        json["outline_color"] = { outline_color.r, outline_color.g, outline_color.b, outline_color.a };
+
+        json["texture_source"] = static_cast<int>(texture_source);
+        json["texture_name"] = texture_name;
+        json["texture_stretch"] = texture_stretch;
+
+        json["auto_uv"] = auto_uv;
+        json["repeat_u"] = texture_repeat_u;
+        json["repeat_v"] = texture_repeat_v;
+        json["uv_scale"] = { uv_scale.x, uv_scale.y };
+    }
+
+    void deserialize(const nlohmann::json& json) override {
+        if (json.contains("color")) {
+            auto& c = json["color"];
+            color = { c[0], c[1], c[2], c[3] };
+        }
+
+        if (json.contains("outline_color")) {
+            auto& c = json["outline_color"];
+            outline_color = { c[0], c[1], c[2], c[3] };
+        }
+
+        if (json.contains("texture_source")) texture_source = static_cast<TextureSource>(json["texture_source"].get<int>());
+        if (json.contains("texture_name")) texture_name = json["texture_name"];
+        if (json.contains("texture_stretch")) texture_stretch = json["texture_stretch"];
+        
+        if (json.contains("auto_uv")) auto_uv = json["auto_uv"];
+        if (json.contains("repeat_u")) texture_repeat_u = json["repeat_u"];
+        if (json.contains("repeat_v")) texture_repeat_v = json["repeat_v"];
+        if (json.contains("uv_scale")) {
+            auto& scale = json["uv_scale"];
+            uv_scale = { scale[0], scale[1] };
+        }
+    }
 };
 
 class LightComponent : public Component {
@@ -186,6 +235,11 @@ public:
 
     LightComponent* get_light() {
         auto comp = get_component_of_type<LightComponent>();
+        return comp ? comp.get() : nullptr;
+    }
+
+    MaterialComponent* get_material() {
+        auto comp = get_component_of_type<MaterialComponent>();
         return comp ? comp.get() : nullptr;
     }
 

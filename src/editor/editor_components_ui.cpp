@@ -40,15 +40,10 @@ void ComponentUIHelper::draw_entity_inspector(Editor& editor, Entity& entity, Sh
 
                 ImGui::Spacing();
 
-                if (auto transform = std::dynamic_pointer_cast<TransformComponent>(comp)) {
-                    draw_transform_component(editor, entity, transform.get());
-                }
-                else if (auto mesh = std::dynamic_pointer_cast<MeshComponent>(comp)) {
-                    draw_mesh_component(editor, entity, mesh.get());
-                }
-                else if (auto light = std::dynamic_pointer_cast<LightComponent>(comp)) {
-                    draw_light_component(editor, entity, light.get(), shader);
-                }
+                if (auto transform = std::dynamic_pointer_cast<TransformComponent>(comp)) draw_transform_component(editor, entity, transform.get());
+                else if (auto mesh = std::dynamic_pointer_cast<MeshComponent>(comp)) draw_mesh_component(editor, entity, mesh.get());
+                else if (auto light = std::dynamic_pointer_cast<LightComponent>(comp)) draw_light_component(editor, entity, light.get(), shader);
+                else if (auto material = std::dynamic_pointer_cast<MaterialComponent>(comp)) draw_material_component(editor, entity, material.get());
 
                 ImGui::Spacing();
 
@@ -82,6 +77,25 @@ void ComponentUIHelper::draw_entity_inspector(Editor& editor, Entity& entity, Sh
 
         if (ImGui::BeginPopup("AddComponentPopup")) {
             auto components_manager = entity.get_components();
+
+            if (ImGui::MenuItem(lang.word("material"))) {
+                editor.save_state();
+                bool already_exists = false;
+                
+                for (size_t j = 0; j < components_manager->get_component_count(); ++j) {
+                    auto existing = components_manager->get_component(j);
+                    if (existing && existing->get_type() == COMPONENT_MATERIAL) {
+                        already_exists = true;
+                        break;
+                    }
+                }
+
+                if (!already_exists) {
+                    components_manager->add_component(std::make_shared<MaterialComponent>());
+                }
+
+                else { editor.undo(); }
+            }
 
             if (ImGui::MenuItem(lang.word("light"))) {
                 editor.save_state();
@@ -248,6 +262,135 @@ void ComponentUIHelper::draw_mesh_component(Editor& editor, Entity& entity, Mesh
             g_mesh_edit_state.enabled = false;
         }
     }
+}
+
+void ComponentUIHelper::draw_material_component(Editor& editor, Entity& entity, MaterialComponent* material) {
+    if (!material) return;
+
+    ImGui::Text(lang.word("material_properties"));
+    ImGui::Spacing();
+
+    bool changed = false;
+
+    int current_texture_index = 0;
+    std::vector<const char*> texture_names;
+    std::vector<TextureSource> texture_types;
+    std::vector<std::string> texture_sources;
+
+    MaterialComponent* mat = entity.get_material_component();
+    MeshComponent* mesh = entity.get_mesh_component();
+
+    texture_names.push_back("None");
+    texture_types.push_back(TEXTURE_NONE);
+    texture_sources.push_back("");
+
+    for (int i = 1; i < static_cast<int>(texture_options.size()); i++) {
+        texture_names.push_back(texture_options[i].name.c_str());
+        texture_types.push_back(TEXTURE_EXTERNAL);
+        texture_sources.push_back(texture_options[i].name);
+    }
+
+    for (int i = 0; i < static_cast<int>(texture_types.size()); i++) {
+        if (texture_types[i] == mat->texture_source) {
+            if (mat->texture_source == TEXTURE_EXTERNAL && mat->texture_name == texture_sources[i]) {
+                current_texture_index = i;
+                break;
+            }
+
+            if (mat->texture_source != TEXTURE_EXTERNAL) {
+                current_texture_index = i;
+                break;
+            }
+        }
+    }
+
+    if (current_texture_index >= static_cast<int>(texture_names.size()))
+        current_texture_index = 0;
+
+    // Textures Combo
+    if (ImGui::Combo(lang.word("texture"), &current_texture_index, texture_names.data(), static_cast<int>(texture_names.size()))) {
+        editor.save_state();
+
+        TextureSource selected_type = texture_types[current_texture_index];
+        if (selected_type == TEXTURE_NONE) {
+            mat->texture_source = TEXTURE_NONE;
+            mat->texture_name.clear();
+            mat->texture = {0};
+            clear_material_textures(&entity);
+        } 
+        
+        else if (selected_type == TEXTURE_EXTERNAL) {
+            mat->texture_source = TEXTURE_EXTERNAL;
+            mat->texture_name = texture_sources[current_texture_index];
+            mat->texture = {0};
+
+            for (int i = 1; i < static_cast<int>(texture_options.size()); i++) {
+                if (texture_options[i].name == mat->texture_name) {
+                    mat->texture = texture_options[i].texture;
+                    break;
+                }
+            }
+
+            for (int i = 0; i < mesh->model.materialCount; i++) {
+                mesh->model.materials[i].maps[MATERIAL_MAP_DIFFUSE].texture = mat->texture;
+            }
+        } 
+        
+        else if (selected_type == TEXTURE_MODEL) {
+            mat->texture_source = TEXTURE_MODEL;
+            mat->texture_name = "";
+            mat->texture = {0};
+            restore_model_textures(&entity);
+        }
+    }
+
+    // Stretch Texture
+    static bool last_stretch_texture = false;
+    if (ImGui::Checkbox(lang.word("stretch_texture"), &mat->texture_stretch)) {
+        editor.save_state();
+        last_stretch_texture = mat->texture_stretch;
+    }
+
+    if (!mat->texture_stretch) {
+        static bool last_auto_uv = false;
+        if (ImGui::Checkbox(lang.word("auto_uv"), &mat->auto_uv)) {
+            if (last_auto_uv != mat->auto_uv) {
+                editor.save_state();
+                last_auto_uv = mat->auto_uv;
+            }
+        }
+
+        if (mat->auto_uv) {
+            static Vector2 last_uv_scale = {0, 0};
+            if (ImGui::InputFloat(lang.word("scale_x"), &mat->uv_scale.x, 0.1f, 1.0f, "%.2f")) {
+                if (last_uv_scale.x != mat->uv_scale.x) {
+                    editor.save_state();
+                    last_uv_scale.x = mat->uv_scale.x;
+                }
+
+                if (mat->uv_scale.x < 0.01f) mat->uv_scale.x = 0.01f;
+            }
+
+            if (ImGui::InputFloat(lang.word("scale_y"), &mat->uv_scale.y, 0.1f, 1.0f, "%.2f")) {
+                if (last_uv_scale.y != mat->uv_scale.y) {
+                    editor.save_state();
+                    last_uv_scale.y = mat->uv_scale.y;
+                }
+
+                if (mat->uv_scale.y < 0.01f) mat->uv_scale.y = 0.01f;
+            }
+        }
+
+        else {
+            static float last_repeat_u = 0;
+            static float last_repeat_v = 0;
+
+            // write repeat_u, repeat_v code   
+        }
+
+    }
+
+    // write color, outline_color code
 }
 
 void ComponentUIHelper::draw_light_component(Editor& editor, Entity& entity, LightComponent* light, Shader shader) {

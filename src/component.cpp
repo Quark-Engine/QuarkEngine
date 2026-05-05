@@ -7,74 +7,18 @@
 void MeshComponent::serialize(nlohmann::json& json) const {
     json["segments"] = segments;
     json["type"] = static_cast<int>(type);
-    json["auto_uv"] = auto_uv;
-    json["texture_stretch"] = texture_stretch;
-    json["texture_repeat_u"] = texture_repeat_u;
-    json["texture_repeat_v"] = texture_repeat_v;
-    json["uv_scale"] = uv_scale;
-    json["uv_scale_vec"] = {uv_scale_vec.x, uv_scale_vec.y};
-    
-    char color_buf[16];
-    sprintf(color_buf, "%02X%02X%02X%02X", color.r, color.g, color.b, color.a);
-    json["color"] = std::string(color_buf);
-    
-    sprintf(color_buf, "%02X%02X%02X%02X", outline_color.r, outline_color.g, outline_color.b, outline_color.a);
-    json["outline_color"] = std::string(color_buf);
     
     if (!asset_name.empty()) {
         json["asset_name"] = asset_name;
-    }
-    
-    if (texture_source != TEXTURE_NONE) {
-        json["texture_source"] = static_cast<int>(texture_source);
-        json["texture_name"] = texture_name;
     }
 }
 
 void MeshComponent::deserialize(const nlohmann::json& json) {
     if (json.contains("segments")) segments = json["segments"];
     if (json.contains("type")) type = static_cast<ObjectType>(json["type"].get<int>());
-    if (json.contains("auto_uv")) auto_uv = json["auto_uv"];
-    if (json.contains("texture_stretch")) texture_stretch = json["texture_stretch"];
-    if (json.contains("texture_repeat_u")) texture_repeat_u = json["texture_repeat_u"];
-    if (json.contains("texture_repeat_v")) texture_repeat_v = json["texture_repeat_v"];
-    if (json.contains("uv_scale")) uv_scale = json["uv_scale"];
-    if (json.contains("uv_scale_vec")) {
-        auto& uv = json["uv_scale_vec"];
-        uv_scale_vec = {uv[0], uv[1]};
-    }
-    
-    if (json.contains("color")) {
-        std::string hex = json["color"];
-        unsigned int rgba = std::stoul(hex, nullptr, 16);
-        color = {
-            static_cast<unsigned char>((rgba >> 24) & 0xFF),
-            static_cast<unsigned char>((rgba >> 16) & 0xFF),
-            static_cast<unsigned char>((rgba >> 8) & 0xFF),
-            static_cast<unsigned char>(rgba & 0xFF)
-        };
-    }
-    
-    if (json.contains("outline_color")) {
-        std::string hex = json["outline_color"];
-        unsigned int rgba = std::stoul(hex, nullptr, 16);
-        outline_color = {
-            static_cast<unsigned char>((rgba >> 24) & 0xFF),
-            static_cast<unsigned char>((rgba >> 16) & 0xFF),
-            static_cast<unsigned char>((rgba >> 8) & 0xFF),
-            static_cast<unsigned char>(rgba & 0xFF)
-        };
-    }
     
     if (json.contains("asset_name")) {
         asset_name = json["asset_name"];
-    }
-    
-    if (json.contains("texture_source")) {
-        texture_source = static_cast<TextureSource>(json["texture_source"].get<int>());
-        if (json.contains("texture_name")) {
-            texture_name = json["texture_name"];
-        }
     }
 }
 
@@ -200,4 +144,8 @@ LightComponent* Entity::get_light_component() {
 
 const LightComponent* Entity::get_light_component() const {
     return components ? components->get_light() : nullptr;
+}
+
+MaterialComponent* Entity::get_material_component() {
+    return components ? components->get_material() : nullptr;
 }

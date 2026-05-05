@@ -12,6 +12,7 @@ public:
     static void draw_transform_component(Editor& editor, Entity& entity, TransformComponent* transform);
     static void draw_mesh_component(Editor& editor, Entity& entity, MeshComponent* mesh);
     static void draw_light_component(Editor& editor, Entity& entity, LightComponent* light, Shader shader);
+    static void draw_material_component(Editor& editor, Entity& entity, MaterialComponent* material);
     
 private:
     static bool should_show_component_menu;

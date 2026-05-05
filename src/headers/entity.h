@@ -58,4 +58,6 @@ struct Entity {
     const MeshComponent* get_mesh_component() const;
     LightComponent* get_light_component();
     const LightComponent* get_light_component() const;
+    MaterialComponent* get_material_component();
+    const MaterialComponent* get_material_component() const;
 };

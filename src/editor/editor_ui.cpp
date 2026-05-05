@@ -389,7 +389,7 @@ void draw_gizmo(Editor& editor, FlyCamera camera) {
         transform->scale = { next_scale[0], next_scale[1], next_scale[2] };
 
         mark_entity_bounds_dirty(entity);
-        if (!mesh->texture_stretch) mark_entity_uv_dirty(entity);
+        if (!entity->get_material_component()->texture_stretch) mark_entity_uv_dirty(entity);
     }
 
     was_using = ImGuizmo::IsUsing();
@@ -599,6 +599,7 @@ void draw_ui(Editor& editor, Shader shader, FlyCamera camera) {
                 const MeshComponent* clipboard_mesh = clipboard_data.get_mesh_component();
                 const TransformComponent* clipboard_transform = clipboard_data.get_transform_component();
                 const LightComponent* clipboard_light = clipboard_data.get_light_component();
+                const MaterialComponent* clipboard_mat = clipboard_data.get_material_component();
                 ModelAsset* asset = (clipboard_mesh && !clipboard_mesh->asset_name.empty())
                     ? find_asset_by_name(clipboard_mesh->asset_name)
                     : nullptr;
@@ -610,18 +611,21 @@ void draw_ui(Editor& editor, Shader shader, FlyCamera camera) {
                         pasted_transform->rotation = clipboard_transform->rotation;
                         pasted_transform->scale = clipboard_transform->scale;
                     }
-                    if (auto pasted_mesh = pasted.get_mesh_component(); pasted_mesh && clipboard_mesh) {
-                        pasted_mesh->color = clipboard_mesh->color;
-                        pasted_mesh->outline_color = clipboard_mesh->outline_color;
-                        pasted_mesh->texture_source = clipboard_mesh->texture_source;
-                        pasted_mesh->texture_name = clipboard_mesh->texture_name;
-                        pasted_mesh->texture = clipboard_mesh->texture;
-                        pasted_mesh->texture_stretch = clipboard_mesh->texture_stretch;
-                        pasted_mesh->auto_uv = clipboard_mesh->auto_uv;
-                        pasted_mesh->texture_repeat_u = clipboard_mesh->texture_repeat_u;
-                        pasted_mesh->texture_repeat_v = clipboard_mesh->texture_repeat_v;
-                        pasted_mesh->uv_scale_vec = clipboard_mesh->uv_scale_vec;
-                        pasted_mesh->uv_scale = clipboard_mesh->uv_scale;
+
+                    auto pasted_mesh = pasted.get_mesh_component();
+                    auto pasted_mat  = pasted.get_material_component();
+
+                    if (pasted_mesh && clipboard_mesh) {
+                        pasted_mat->color = clipboard_mat->color;
+                        pasted_mat->outline_color = clipboard_mat->outline_color;
+                        pasted_mat->texture_source = clipboard_mat->texture_source;
+                        pasted_mat->texture_name = clipboard_mat->texture_name;
+                        pasted_mat->texture = clipboard_mat->texture;
+                        pasted_mat->texture_stretch = clipboard_mat->texture_stretch;
+                        pasted_mat->auto_uv = clipboard_mat->auto_uv;
+                        pasted_mat->texture_repeat_u = clipboard_mat->texture_repeat_u;
+                        pasted_mat->texture_repeat_v = clipboard_mat->texture_repeat_v;
+                        pasted_mat->uv_scale = clipboard_mat->uv_scale;
                         pasted_mesh->mesh_triangles_detached = clipboard_mesh->mesh_triangles_detached;
                         pasted_mesh->mesh_vertex_overrides = clipboard_mesh->mesh_vertex_overrides;
                         apply_mesh_overrides(pasted);
