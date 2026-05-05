@@ -37,13 +37,13 @@ target_include_directories(imgui PUBLIC
 )
 
 if(WIN32)
-    target_compile_definitions(imgui
-        PRIVATE BUILD_LIBTYPE_SHARED
-        PRIVATE IMGUI_API=__declspec\(dllexport\)
+    target_compile_definitions(${PROJECT_NAME}
+        PRIVATE USE_LIBTYPE_SHARED
+        PRIVATE IMGUI_API=__declspec\(dllimport\)
     )
 else()
-    target_compile_definitions(imgui
-        PRIVATE BUILD_LIBTYPE_SHARED
+    target_compile_definitions(${PROJECT_NAME}
+        PRIVATE USE_LIBTYPE_SHARED
         PRIVATE "IMGUI_API=__attribute__((visibility(\"default\")))"
     )
 endif()
@@ -90,10 +90,17 @@ if(BUILD_ENGINE)
 
     add_executable(${PROJECT_NAME} ${SOURCE_FILES} ${EDITOR_FILES})
 
-    target_compile_definitions(${PROJECT_NAME}
-        PRIVATE USE_LIBTYPE_SHARED
-        PRIVATE IMGUI_API=__declspec\(dllimport\)
-    )
+    if(WIN32)
+        target_compile_definitions(${PROJECT_NAME}
+            PRIVATE USE_LIBTYPE_SHARED
+            PRIVATE IMGUI_API=__declspec\(dllimport\)
+        )
+    else()
+        target_compile_definitions(${PROJECT_NAME}
+            PRIVATE USE_LIBTYPE_SHARED
+            PRIVATE "IMGUI_API=__attribute__((visibility(\"default\")))"
+        )
+    endif()
 
     target_link_libraries(${PROJECT_NAME} PRIVATE raylib imgui)
 
