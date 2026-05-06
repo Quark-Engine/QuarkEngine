@@ -254,6 +254,10 @@ void draw_assets_ui(Editor& editor) {
     static bool show_duplicate_popup = false;
     static std::string duplicate_name;
 
+    static bool show_create_new_item = false;
+    static bool creating_folder = false;
+    static char new_item_name[128] = "";
+
     if (editor.current_asset_path.empty() && !editor.project_path.empty()) {
         editor.current_asset_path = fs::path(editor.project_path) / "resources";
         std::error_code ec;
@@ -376,27 +380,15 @@ void draw_assets_ui(Editor& editor) {
 
         if (ImGui::BeginPopupContextWindow("AssetBgContext", ImGuiPopupFlags_MouseButtonRight | ImGuiPopupFlags_NoOpenOverItems)) {
             if (ImGui::MenuItem(lang.word("new_file"))) {
-                fs::path new_file = editor.current_asset_path / ("%s.txt", lang.word("new_file"));
-                int suffix = 1;
-
-                while (fs::exists(new_file))
-                    new_file = editor.current_asset_path / (("%s ", lang.word("new_file")) + std::to_string(suffix++) + ".txt");
-
-                std::ofstream f(new_file);
-                f.close();
-                refresh_assets(editor.project_path);
+                creating_folder = false;
+                new_item_name[0] = '\0';
+                show_create_new_item = true;
             }
 
             if (ImGui::MenuItem(lang.word("new_folder"))) {
-                fs::path new_folder = editor.current_asset_path / lang.word("new_folder");
-                int suffix = 1;
-
-                while (fs::exists(new_folder))
-                    new_folder = editor.current_asset_path / (("%s ", lang.word("new_folder")) + std::to_string(suffix++));
-
-                std::error_code ec;
-                fs::create_directory(new_folder, ec);
-                refresh_assets(editor.project_path);
+                creating_folder = true;
+                new_item_name[0] = '\0';
+                show_create_new_item = true;
             }
 
             ImGui::EndPopup();
@@ -486,33 +478,21 @@ void draw_assets_ui(Editor& editor) {
                 rename_target = i;
                 const size_t copied = entry.filename.copy(editor_internal::rename_buf, sizeof(editor_internal::rename_buf) - 1);
                 editor_internal::rename_buf[copied] = '\0';
-                ImGui::OpenPopup("RenameAsset");
+                ImGui::OpenPopup(("%s##RenameAsset", lang.word("rename_asset")));
             }
 
             ImGui::Separator();
 
             if (ImGui::MenuItem(lang.word("new_file"))) {
-                fs::path new_file = editor.current_asset_path / ("%s.txt", lang.word("new_file"));
-                int suffix = 1;
-                
-                while (fs::exists(new_file))
-                    new_file = editor.current_asset_path / (lang.word("new_file") + std::to_string(suffix++) + ".txt");
-
-                std::ofstream f(new_file);
-                f.close();
-                refresh_assets(editor.project_path);
+                creating_folder = false;
+                new_item_name[0] = '\0';
+                show_create_new_item = true;
             }
 
             if (ImGui::MenuItem(lang.word("new_folder"))) {
-                fs::path new_folder = editor.current_asset_path / lang.word("new_folder");
-                int suffix = 1;
-
-                while (fs::exists(new_folder))
-                    new_folder = editor.current_asset_path / (("%s", lang.word("new_folder")) + std::to_string(suffix++));
-
-                std::error_code ec;
-                fs::create_directory(new_folder, ec);
-                refresh_assets(editor.project_path);
+                creating_folder = true;
+                new_item_name[0] = '\0';
+                show_create_new_item = true;
             }
 
             ImGui::EndPopup();
@@ -689,12 +669,12 @@ void draw_assets_ui(Editor& editor) {
     }
 
     if (rename_target >= 0) {
-        ImGui::OpenPopup("RenameAsset");
+        ImGui::OpenPopup(("%s##RenameAsset", lang.word("rename_asset")));
         rename_target = -2;
     }
 
     static std::string last_filename;
-    if (rename_target == -2 && ImGui::BeginPopupModal("RenameAsset", nullptr, ImGuiWindowFlags_AlwaysAutoResize)) {
+    if (rename_target == -2 && ImGui::BeginPopupModal(("%s##RenameAsset", lang.word("rename_asset")), nullptr, ImGuiWindowFlags_AlwaysAutoResize)) {
         ImGui::InputText("##rename", editor_internal::rename_buf, IM_ARRAYSIZE(editor_internal::rename_buf));
 
         if (ImGui::Button(lang.word("ok"))) {
@@ -735,27 +715,15 @@ void draw_assets_ui(Editor& editor) {
 
     if (ImGui::BeginPopupContextWindow("AssetBgContext", ImGuiPopupFlags_MouseButtonRight | ImGuiPopupFlags_NoOpenOverItems)) {
         if (ImGui::MenuItem(lang.word("new_file"))) {
-            fs::path new_file = editor.current_asset_path / ("%s.txt", lang.word("new_file"));
-            int suffix = 1;
-
-            while (fs::exists(new_file))
-                new_file = editor.current_asset_path / (("%s ", lang.word("new_file")) + std::to_string(suffix++) + ".txt");
-
-            std::ofstream f(new_file);
-            f.close();
-            refresh_assets(editor.project_path);
+            creating_folder = false;
+            new_item_name[0] = '\0';
+            show_create_new_item = true;
         }
 
         if (ImGui::MenuItem(lang.word("new_folder"))) {
-            fs::path new_folder = editor.current_asset_path / lang.word("new_folder");
-            int suffix = 1;
-
-            while (fs::exists(new_folder))
-                new_folder = editor.current_asset_path / (("%s ", lang.word("new_folder")) + std::to_string(suffix++));
-
-            std::error_code ec;
-            fs::create_directory(new_folder, ec);
-            refresh_assets(editor.project_path);
+            creating_folder = true;
+            new_item_name[0] = '\0';
+            show_create_new_item = true;
         }
 
         ImGui::EndPopup();
@@ -771,6 +739,11 @@ void draw_assets_ui(Editor& editor) {
         show_duplicate_popup = false;
     }
 
+    if (show_create_new_item) {
+        ImGui::OpenPopup(("%s##CreateNew", lang.word("create_new")));
+        show_create_new_item = false;
+    }
+
     if (ImGui::BeginPopupModal(("%s##DuplicateName", lang.word("move_error")), nullptr, ImGuiWindowFlags_AlwaysAutoResize)) {
         ImGui::Text(lang.word("unable_to_move"));
         ImGui::TextColored(ImVec4(1, 0.4f, 0.4f, 1), "%s", duplicate_name.c_str());
@@ -780,6 +753,57 @@ void draw_assets_ui(Editor& editor) {
         ImGui::Spacing();
 
         if (ImGui::Button(lang.word("ok"), ImVec2(120, 0))) {
+            ImGui::CloseCurrentPopup();
+        }
+
+        ImGui::EndPopup();
+    }
+
+    if (ImGui::BeginPopupModal(("%s##CreateNew", lang.word("create_new")), nullptr, ImGuiWindowFlags_AlwaysAutoResize)) {
+        ImGui::TextUnformatted(creating_folder ? lang.word("new_folder") : lang.word("new_file"));
+        ImGui::InputText(lang.word("name"), new_item_name, IM_ARRAYSIZE(new_item_name));
+        ImGui::Spacing();
+
+        if (ImGui::Button(lang.word("ok"), ImVec2(120, 0))) {
+            if (new_item_name[0] != '\0') {
+                fs::path path;
+
+                if (creating_folder) {
+                    path = editor.current_asset_path / new_item_name;
+
+                    int suffix = 1;
+                    while (fs::exists(path)) {
+                        path = editor.current_asset_path / (std::string(new_item_name) + "_" + std::to_string(suffix++));
+                    }
+
+                    std::error_code ec;
+                    fs::create_directory(path, ec);
+                }
+
+                else {
+                    std::string filename = new_item_name;
+                    if (filename.find('.') == std::string::npos) filename += ".txt";
+
+                    path = editor.current_asset_path / filename;
+
+                    int suffix = 1;
+                    while (fs::exists(path)) {
+                        path = editor.current_asset_path / (std::string(new_item_name) + "_" + std::to_string(suffix++) + ".txt");
+                    }
+
+                    std::ofstream f(path);
+                    f.close();
+                }
+
+                refresh_assets(editor.project_path);
+            }
+
+            ImGui::CloseCurrentPopup();
+        }
+
+        ImGui::SameLine();
+
+        if (ImGui::Button("Cancel", ImVec2(120, 0))) {
             ImGui::CloseCurrentPopup();
         }
 

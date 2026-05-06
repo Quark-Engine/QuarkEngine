@@ -58,6 +58,8 @@
     "new_file": "New File",
     "empty_folder": "Empty Folder",
     "new_folder": "New Folder",
+    "create_new": "Create New Item",
+    "rename_asset": "Rename Item",
 
     "spawn": "Spawn %s",
 

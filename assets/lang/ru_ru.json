@@ -58,6 +58,8 @@
     "new_file": "Новый файл",
     "empty_folder": "Пустая папка",
     "new_folder": "Новая папка",
+    "create_new": "Создать новый элемент",
+    "rename_asset": "Переименовать элемент",
 
     "spawn": "Создать %s",
 
@@ -126,7 +128,7 @@
 
     "select_project_loc": "Выберите расположение проекта",
     "project_manager": "Менеджер проектов",
-    "import_project": "Импортировать проект",
+    "import_project": "Импорт проекта",
     "create_project": "Создать проект",
     "delete_project": "Удалить проект",
     "rename_project": "Переименовать проект",
