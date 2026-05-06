@@ -36,11 +36,13 @@
     "layout": "Макет",
     "reset_layout": "Сбросить макет",
 
-    "help": "Помощь",
+    "help": "Справка",
     "about": "О программе",
     "about_quark_engine": "О Quark Engine",
     "raylib_version": "Версия Raylib: %s",
     "imgui_version": "Версия ImGui: %s",
+    "open_docs": "Открыть документацию",
+    "api_docs": "Документация API",
 
     "model": "Модель",
     "model_preview": "Предпросмотр модели",
@@ -49,6 +51,7 @@
     "albedo": "Альбедо",
     "brightness": "Яркость",
     "primitive": "Примитив",
+    "current": "Текущая",
 
     "file": "Файл",
     "folder": "Папка",
@@ -64,7 +67,7 @@
     "add_component": "Добавить компонент",
     "remove_component": "Удалить компонент",
 
-    "entity": "Сущность",
+    "entity": "Объект",
     "cube": "Куб",
     "sphere": "Сфера",
     "cone": "Конус",
@@ -75,11 +78,11 @@
 
     "mesh": "Сетка",
     "mesh_config": "Настройки сетки",
-    "mesh_type": "Тип сетки: %s (загруженная)",
+    "mesh_type": "Тип сетки: %s (загруженная сетка)",
     "mesh_type_combo": "Тип сетки",
     "mesh_index": "Индекс сетки: %d",
     "triangle_index": "Индекс треугольника: %d",
-    "vertex_corner": "Угол вершины: %d",
+    "vertex_corner": "Вершина угла: %d",
     "reset_mesh": "Сбросить изменения сетки",
     "segments": "Сегменты",
     "segments_loaded": "Сегменты: %d (недоступно для загруженных моделей)",
@@ -99,16 +102,22 @@
     "point": "Точечный",
     "spot": "Прожектор",
 
+    "material_file": "Файл Материала",
+    "save_material": "Сохранить материал",
     "material_properties": "Свойства материала",
+
     "texture": "Текстура",
+    "textures_in_directory": "Текстуры в папке материала:",
+    "select_texture": "Выбрать текстуру",
     "stretch_texture": "Растянуть текстуру",
+    "uv_settings": "Настройки UV",
     "auto_uv": "Авто UV",
-    "scale_x": "Масштаб X",
-    "scale_y": "Масштаб Y",
+    "uv_scale_x": "Масштаб UV по X",
+    "uv_scale_y": "Масштаб UV по Y",
     "repeat_u": "Повтор U",
     "repeat_v": "Повтор V",
     "color": "Цвет",
-    "outline_color": "Цвет контура",
+    "outline_color": "Цвет обводки",
     
     "position": "Позиция",
     "rotation": "Вращение",
@@ -117,21 +126,23 @@
 
     "select_project_loc": "Выберите расположение проекта",
     "project_manager": "Менеджер проектов",
-    "import_project": "Импорт проекта",
+    "import_project": "Импортировать проект",
     "create_project": "Создать проект",
     "delete_project": "Удалить проект",
     "rename_project": "Переименовать проект",
 
-    "project_name": "Имя проекта",
+    "project_name": "Название проекта",
     "project_location": "Расположение",
     "browse": "Обзор",
 
+    "no_textures_found": "Текстуры в папке не найдены",
+    "no_materials_found": "В проекте не найдено материалов",
     "no_projects": "Пока нет проектов. Нажмите \"+ Создать проект\", чтобы начать.",
     "delete_project_ask": "Удалить \"%s\"? Это действие нельзя отменить.",
-    "unable_to_move": "Ошибка перемещения:",
-    "path_already_exists": "Файл или папка с таким именем уже существует в месте назначения.",
+    "unable_to_move": "Не удалось переместить:",
+    "path_already_exists": "Файл или папка с таким именем уже существует в целевом месте.",
     "move_error": "Ошибка перемещения",
 
-    "version_mismatch": "Несовпадение версий",
+    "version_mismatch": "Несоответствие версии",
     "version_mismatch_msg": "Этот проект был сохранён в версии движка %s,\nно текущая версия движка — %s.\n\nОткрытие может привести к ошибкам или потере данных."
 }

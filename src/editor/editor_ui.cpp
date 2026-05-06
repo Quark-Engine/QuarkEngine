@@ -56,6 +56,18 @@ int find_index(const char* value) {
     return 0;
 }
 
+void open_url(const char* url) {
+    #ifdef _WIN32
+        system((std::string("start ") + url).c_str());
+    #elif __linux__
+        system((std::string("open ") + url).c_str());
+    #elif __APPLE__
+        system((std::string("xdg-open ") + url).c_str());
+    #else
+        TraceLog(LOG_ERROR, ("Cannot open URL: %s", url));
+    #endif
+}
+
 Matrix compose_entity_transform_matrix(const Entity& entity) {
     const TransformComponent* transform = entity.get_transform_component();
     if (!transform) return MatrixIdentity();
@@ -1037,6 +1049,16 @@ void draw_ui(Editor& editor, Shader shader, FlyCamera camera) {
         ImGui::Separator();
         ImGui::Text(lang.word("raylib_version"), RAYLIB_VERSION);
         ImGui::Text(lang.word("imgui_version"), IMGUI_VERSION);
+        ImGui::Spacing();
+
+        ImGui::TextColored(ImVec4(0.2f, 0.6f, 1.0f, 1.0f), lang.word("api_docs"));
+        if (ImGui::IsItemHovered()) {
+            ImGui::SetTooltip(lang.word("open_docs"));
+            if (ImGui::IsMouseClicked(0)) {
+                open_url("https://quark-engine.gitbook.io/quark-engine-docs");
+            }
+        }
+
         ImGui::Spacing();
         if (ImGui::Button(lang.word("close"), ImVec2(120, 0))) ImGui::CloseCurrentPopup();
         ImGui::EndPopup();

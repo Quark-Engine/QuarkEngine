@@ -41,6 +41,8 @@
     "about_quark_engine": "About Quark Engine",
     "raylib_version": "Raylib Version: %s",
     "imgui_version": "ImGui Version: %s",
+    "open_docs": "Open Documentation",
+    "api_docs": "API Documentation",
 
     "model": "Model",
     "model_preview": "Model Preview",
@@ -49,6 +51,7 @@
     "albedo": "Albedo",
     "brightness": "Brightness",
     "primitive": "Primitive",
+    "current": "Current",
 
     "file": "File",
     "folder": "Folder",
@@ -99,12 +102,18 @@
     "point": "Point",
     "spot": "Spot",
 
+    "save_material": "Save Material",
+    "material_file": "Material File",
     "material_properties": "Material Properties",
+    
     "texture": "Texture",
+    "textures_in_directory": "Textures in material directory:",
+    "select_texture": "Select Texture",
     "stretch_texture": "Stretch Texture",
+    "uv_settings": "UV Settings",
     "auto_uv": "Auto UV",
-    "scale_x": "Scale X",
-    "scale_y": "Scale Y",
+    "uv_scale_x": "UV Scale X",
+    "uv_scale_y": "UV Scale Y",
     "repeat_u": "Repeat U",
     "repeat_v": "Repeat V",
     "color": "Color",
@@ -126,6 +135,8 @@
     "project_location": "Location",
     "browse": "Browse",
 
+    "no_textures_found": "No textures found in directory",
+    "no_materials_found": "No materials found in project",
     "no_projects": "No projects yet. Click \"+ Create Project\" to get started.",
     "delete_project_ask": "Delete \"%s\"? This cannot be undone.",
     "unable_to_move": "Move operation failed:",

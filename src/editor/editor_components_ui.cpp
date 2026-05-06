@@ -314,14 +314,14 @@ void ComponentUIHelper::draw_material_component(Editor& editor, Entity& entity, 
             }
         }
     } else {
-        ImGui::Text("No materials found in project");
+        ImGui::Text(lang.word("no_materials_found"));
     }
 
     if (!mat->texture_name.empty() && mat->texture_name.length() > 4 && 
         mat->texture_name.substr(mat->texture_name.length() - 4) == ".mtl") {
-        ImGui::TextDisabled("Current: %s", mat->texture_name.c_str());
+        ImGui::TextDisabled("%s: %s", lang.word("current"), mat->texture_name.c_str());
     } else {
-        ImGui::TextDisabled("Current: None");
+        ImGui::TextDisabled("%s: %s", lang.word("current"), lang.word("none"));
     }
 }
 

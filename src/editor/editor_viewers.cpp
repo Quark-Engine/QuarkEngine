@@ -467,37 +467,37 @@ void draw_material_viewer_window(Entity* selected_entity) {
         ImGui::Separator();
 
         ImGui::Text(lang.word("texture"));
-        ImGui::Text("Current: %s", material_texture_path.empty() ? "None" : material_texture_path.c_str());
+        ImGui::Text("%s: %s", lang.word("current"), material_texture_path.empty() ? lang.word("none") : material_texture_path.c_str());
 
-        if (ImGui::Button("Select Texture")) {
+        if (ImGui::Button(lang.word("select_texture"))) {
             load_textures_in_directory();
             show_texture_picker = !show_texture_picker;
         }
 
         ImGui::Separator();
 
-        ImGui::Text("UV Settings");
+        ImGui::Text(lang.word("uv_settings"));
 
-        if (ImGui::Checkbox("Texture Stretch", &material_texture_stretch)) {
+        if (ImGui::Checkbox(lang.word("stretch_texture"), &material_texture_stretch)) {
         }
 
         if (!material_texture_stretch) {
-            if (ImGui::SliderFloat("Repeat U", &material_texture_repeat_u, 0.1f, 10.0f)) {
+            if (ImGui::SliderFloat(lang.word("repeat_u"), &material_texture_repeat_u, 0.1f, 10.0f)) {
             }
 
-            if (ImGui::SliderFloat("Repeat V", &material_texture_repeat_v, 0.1f, 10.0f)) {
+            if (ImGui::SliderFloat(lang.word("repeat_v"), &material_texture_repeat_v, 0.1f, 10.0f)) {
             }
 
-            if (ImGui::SliderFloat("UV Scale X", &material_uv_scale_x, 0.1f, 5.0f)) {
+            if (ImGui::SliderFloat(lang.word("uv_scale_x"), &material_uv_scale_x, 0.1f, 5.0f)) {
             }
 
-            if (ImGui::SliderFloat("UV Scale Y", &material_uv_scale_y, 0.1f, 5.0f)) {
+            if (ImGui::SliderFloat(lang.word("uv_scale_y"), &material_uv_scale_y, 0.1f, 5.0f)) {
             }
         }
 
         ImGui::Separator();
 
-        if (ImGui::ColorEdit4("Outline Color", material_outline_color_f)) {
+        if (ImGui::ColorEdit4(lang.word("outline_color"), material_outline_color_f)) {
             material_outline_color = {
                 (unsigned char)(material_outline_color_f[0] * 255),
                 (unsigned char)(material_outline_color_f[1] * 255),
@@ -517,7 +517,7 @@ void draw_material_viewer_window(Entity* selected_entity) {
 
         ImGui::Separator();
 
-        if (ImGui::Button("Save Material", ImVec2(-1, 0))) {
+        if (ImGui::Button(lang.word("save_material"), ImVec2(-1, 0))) {
             save_material_to_file();
         }
 
@@ -609,8 +609,8 @@ void draw_material_viewer_window(Entity* selected_entity) {
 
     if (show_texture_picker) {
         ImGui::SetNextWindowSize(ImVec2(400, 500), ImGuiCond_FirstUseEver);
-        if (ImGui::Begin("Select Texture", &show_texture_picker)) {
-            ImGui::Text("Textures in material directory:");
+        if (ImGui::Begin(lang.word("select_texture"), &show_texture_picker)) {
+            ImGui::Text(lang.word("textures_in_directory"));
             ImGui::Separator();
             
             for (const auto& texture_name : texture_files_in_dir) {
@@ -622,7 +622,7 @@ void draw_material_viewer_window(Entity* selected_entity) {
             }
 
             if (texture_files_in_dir.empty()) {
-                ImGui::TextDisabled("No textures found in directory");
+                ImGui::TextDisabled(lang.word("no_textures_found"));
             }
 
             ImGui::End();
