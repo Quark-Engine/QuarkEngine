@@ -98,6 +98,17 @@
     "directional": "Directional",
     "point": "Point",
     "spot": "Spot",
+
+    "material_properties": "Material Properties",
+    "texture": "Texture",
+    "stretch_texture": "Stretch Texture",
+    "auto_uv": "Auto UV",
+    "scale_x": "Scale X",
+    "scale_y": "Scale Y",
+    "repeat_u": "Repeat U",
+    "repeat_v": "Repeat V",
+    "color": "Color",
+    "outline_color": "Outline Color",
     
     "position": "Position",
     "rotation": "Rotation",

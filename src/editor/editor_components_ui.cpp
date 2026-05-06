@@ -280,7 +280,7 @@ void ComponentUIHelper::draw_material_component(Editor& editor, Entity& entity, 
     MaterialComponent* mat = entity.get_material_component();
     MeshComponent* mesh = entity.get_mesh_component();
 
-    texture_names.push_back("None");
+    texture_names.push_back(lang.word("none"));
     texture_types.push_back(TEXTURE_NONE);
     texture_sources.push_back("");
 
@@ -385,12 +385,62 @@ void ComponentUIHelper::draw_material_component(Editor& editor, Entity& entity, 
             static float last_repeat_u = 0;
             static float last_repeat_v = 0;
 
-            // write repeat_u, repeat_v code   
+            if (ImGui::InputFloat(lang.word("repeat_u"), &mat->texture_repeat_u, 0.1f, 1.0f, "%.2f")) {
+                if (last_repeat_u != mat->texture_repeat_u) {
+                    editor.save_state();
+                    last_repeat_u = mat->texture_repeat_u;
+                }
+
+                if (mat->texture_repeat_u < 0.01f) mat->texture_repeat_u = 0.01f;
+            }
+
+            if (ImGui::InputFloat(lang.word("repeat_v"), &mat->texture_repeat_v, 0.1f, 1.0f, "%.2f")) {
+                if (last_repeat_v != mat->texture_repeat_v) {
+                    editor.save_state();
+                    last_repeat_v = mat->texture_repeat_v;
+                }
+
+                if (mat->texture_repeat_v < 0.01f) mat->texture_repeat_v = 0.01f;
+            }
         }
 
     }
 
-    // write color, outline_color code
+    float color[4] = { mat->color.r / 255.f, mat->color.g / 255.f, mat->color.b / 255.f, mat->color.a / 255.f };
+    static Color last_color;
+
+    if (ImGui::ColorEdit4(lang.word("color"), color)) {
+        Color new_color = {
+            (unsigned char)(color[0]*255),
+            (unsigned char)(color[1]*255),
+            (unsigned char)(color[2]*255),
+            (unsigned char)(color[3]*255),
+        };
+
+        if (last_color.r != new_color.r || last_color.g != new_color.g || last_color.b != new_color.b || last_color.a != new_color.a) {
+            editor.save_state();
+            last_color = new_color;
+            mat->color = new_color;
+        }
+    }
+
+    float outline[4] = { mat->outline_color.r / 255.f, mat->outline_color.g / 255.f, mat->outline_color.b / 255.f, mat->outline_color.a / 255.f };
+    static Color last_outline;
+
+    if (ImGui::ColorEdit4(lang.word("outline_color"), outline)) {
+        Color new_outline = {
+            (unsigned char)(color[0]*255),
+            (unsigned char)(color[1]*255),
+            (unsigned char)(color[2]*255),
+            (unsigned char)(color[3]*255),
+        };
+
+        if (last_outline.r != new_outline.r || last_outline.g != new_outline.g || last_outline.b != new_outline.b || last_outline.a != new_outline.a) {
+            editor.save_state();
+            last_outline = new_outline;
+            mat->outline_color = new_outline;
+        }
+    }
 }
 
 void ComponentUIHelper::draw_light_component(Editor& editor, Entity& entity, LightComponent* light, Shader shader) {

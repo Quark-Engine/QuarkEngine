@@ -62,6 +62,11 @@ Entity::Entity(const Entity& other)
                 auto dst = std::make_shared<LightComponent>(*src);
                 cloned = dst;
             }
+            else if(comp->get_type() == COMPONENT_MATERIAL) {
+                auto src = std::dynamic_pointer_cast<MaterialComponent>(comp);
+                auto dst = std::make_shared<MaterialComponent>(*src);
+                cloned = dst;
+            }
             
             if (cloned) {
                 components->add_component(cloned);
@@ -98,6 +103,11 @@ Entity& Entity::operator=(const Entity& other) {
             else if (comp->get_type() == COMPONENT_LIGHT) {
                 auto src = std::dynamic_pointer_cast<LightComponent>(comp);
                 auto dst = std::make_shared<LightComponent>(*src);
+                cloned = dst;
+            }
+            else if(comp->get_type() == COMPONENT_MATERIAL) {
+                auto src = std::dynamic_pointer_cast<MaterialComponent>(comp);
+                auto dst = std::make_shared<MaterialComponent>(*src);
                 cloned = dst;
             }
             

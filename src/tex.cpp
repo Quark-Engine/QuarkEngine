@@ -85,8 +85,9 @@ void unload_textures() {
 
 void apply_texture_repeat(Entity &e) {
     MeshComponent* mesh_component = e.get_mesh_component();
+    MaterialComponent* mat_component = e.get_material_component();
     const TransformComponent* transform = e.get_transform_component();
-    if (!mesh_component || !transform) return;
+    if (!mesh_component || !transform || !mat_component) return;
 
     for (int m = 0; m < mesh_component->model.meshCount; m++) {
         Mesh &mesh = mesh_component->model.meshes[m];
@@ -95,7 +96,7 @@ void apply_texture_repeat(Entity &e) {
         for (int i = 0; i < mesh.vertexCount; i++) {
             float u, v;
 
-            if (mesh_component->auto_uv) {
+            if (mat_component->auto_uv) {
                 Vector3 pos = {
                     mesh.vertices[i*3+0],
                     mesh.vertices[i*3+1],
@@ -131,14 +132,14 @@ void apply_texture_repeat(Entity &e) {
                     v = pos.y * sy;
                 }
 
-                u *= mesh_component->uv_scale_vec.x;
-                v *= mesh_component->uv_scale_vec.y;
+                u *= mat_component->uv_scale.x;
+                v *= mat_component->uv_scale.y;
             } else {
-                if (m >= mesh_component->original_texcoords.size()) continue;
-                auto& base = mesh_component->original_texcoords[m];
+                if (m >= mat_component->original_texcoords.size()) continue;
+                auto& base = mat_component->original_texcoords[m];
 
-                u = base[i*2+0] * mesh_component->texture_repeat_u * transform->scale.x;
-                v = base[i*2+1] * mesh_component->texture_repeat_v * transform->scale.y;
+                u = base[i*2+0] * mat_component->texture_repeat_u * transform->scale.x;
+                v = base[i*2+1] * mat_component->texture_repeat_v * transform->scale.y;
             }
 
             mesh.texcoords[i*2+0] = u;
@@ -152,21 +153,22 @@ void apply_texture_repeat(Entity &e) {
 void store_uv(Entity* e) {
     if (!e) return;
     MeshComponent* mesh_component = e->get_mesh_component();
-    if (!mesh_component) return;
-    mesh_component->original_texcoords.clear();
+    MaterialComponent* mat_component = e->get_material_component();
+    if (!mesh_component || !mat_component) return;
+    mat_component->original_texcoords.clear();
 
     for (int m = 0; m < mesh_component->model.meshCount; m++) {
         Mesh& mesh = mesh_component->model.meshes[m];
 
         if (!mesh.texcoords) {
-            mesh_component->original_texcoords.push_back({});
+            mat_component->original_texcoords.push_back({});
             continue;
         }
 
         std::vector<float> uv(mesh.vertexCount * 2);
         memcpy(uv.data(), mesh.texcoords, uv.size() * sizeof(float));
 
-        mesh_component->original_texcoords.push_back(uv);
+        mat_component->original_texcoords.push_back(uv);
     }
 
     mesh_component->uv_dirty = true;
@@ -188,12 +190,13 @@ void mark_entity_bounds_dirty(Entity* e) {
 void store_material_textures(Entity* e) {
     if (!e) return;
     MeshComponent* mesh = e->get_mesh_component();
-    if (!mesh) return;
-    mesh->original_material_textures.clear();
-    mesh->original_material_textures.reserve(mesh->model.materialCount);
+    MaterialComponent* mat = e->get_material_component();
+    if (!mesh || !mat) return;
+    mat->original_material_textures.clear();
+    mat->original_material_textures.reserve(mesh->model.materialCount);
 
     for (int i = 0; i < mesh->model.materialCount; i++) {
-        mesh->original_material_textures.push_back(
+        mat->original_material_textures.push_back(
             mesh->model.materials[i].maps[MATERIAL_MAP_DIFFUSE].texture
         );
     }
@@ -202,11 +205,12 @@ void store_material_textures(Entity* e) {
 void restore_model_textures(Entity* e) {
     if (!e) return;
     MeshComponent* mesh = e->get_mesh_component();
+    MaterialComponent* mat = e->get_material_component();
     if (!mesh) return;
-    if (mesh->original_material_textures.size() != static_cast<size_t>(mesh->model.materialCount)) return;
+    if (mat->original_material_textures.size() != static_cast<size_t>(mesh->model.materialCount)) return;
 
     for (int i = 0; i < mesh->model.materialCount; i++) {
-        mesh->model.materials[i].maps[MATERIAL_MAP_DIFFUSE].texture = mesh->original_material_textures[i];
+        mesh->model.materials[i].maps[MATERIAL_MAP_DIFFUSE].texture = mat->original_material_textures[i];
     }
 }
 
@@ -221,20 +225,21 @@ void clear_material_textures(Entity* e) {
 
 void refresh_entity_render_state(Entity& e) {
     MeshComponent* mesh = e.get_mesh_component();
-    if (!mesh || !mesh->uv_dirty) return;
+    MaterialComponent* mat = e.get_material_component();
+    if (!mesh || !mesh->uv_dirty || !mat) return;
 
-    if (mesh->texture.id != 0) {
+    if (mat->texture.id != 0) {
         for (int i = 0; i < mesh->model.materialCount; i++) {
-            mesh->model.materials[i].maps[MATERIAL_MAP_DIFFUSE].texture = mesh->texture;
+            mesh->model.materials[i].maps[MATERIAL_MAP_DIFFUSE].texture = mat->texture;
         }
     }
 
-    if (mesh->texture_stretch) {
+    if (mat->texture_stretch) {
         for (int m = 0; m < mesh->model.meshCount; m++) {
             Mesh& model_mesh = mesh->model.meshes[m];
-            if (!model_mesh.texcoords || m >= mesh->original_texcoords.size()) continue;
+            if (!model_mesh.texcoords || m >= mat->original_texcoords.size()) continue;
 
-            memcpy(model_mesh.texcoords, mesh->original_texcoords[m].data(), model_mesh.vertexCount * 2 * sizeof(float));
+            memcpy(model_mesh.texcoords, mat->original_texcoords[m].data(), model_mesh.vertexCount * 2 * sizeof(float));
             UpdateMeshBuffer(model_mesh, 1, model_mesh.texcoords, model_mesh.vertexCount * 2 * sizeof(float), 0);
         }
     } else {
@@ -247,8 +252,9 @@ void refresh_entity_render_state(Entity& e) {
 void draw_entity_with_texture(Entity& e) {
     refresh_entity_render_state(e);
     const MeshComponent* mesh = e.get_mesh_component();
+    const MaterialComponent* mat = e.get_material_component();
     const TransformComponent* transform = e.get_transform_component();
-    if (!mesh || !transform) return;
+    if (!mesh || !transform || !mat) return;
 
     rlPushMatrix();
     rlTranslatef(transform->position.x, transform->position.y, transform->position.z);
@@ -262,8 +268,8 @@ void draw_entity_with_texture(Entity& e) {
     const bool edited_mesh_is_double_sided = entity_has_mesh_overrides(e) || mesh->mesh_triangles_detached;
     if (edited_mesh_is_double_sided) rlDisableBackfaceCulling();
 
-    DrawModel(mesh->model, {0,0,0}, 1.0f, mesh->color);
-    if (mesh->outline_color.a > 0) DrawModelWires(mesh->model, {0,0,0}, 1.0f, mesh->outline_color);
+    DrawModel(mesh->model, {0,0,0}, 1.0f, mat->color);
+    if (mat->outline_color.a > 0) DrawModelWires(mesh->model, {0,0,0}, 1.0f, mat->outline_color);
 
     if (edited_mesh_is_double_sided) rlEnableBackfaceCulling();
 
@@ -303,8 +309,9 @@ void refresh_textures(Scene* scene, const std::string& project_path) {
         for (const auto& [_, removed_tex] : old_by_name) {
             for (auto& entity : scene->entities) {
                 MeshComponent* mesh = entity.get_mesh_component();
-                if (mesh && mesh->texture.id == removed_tex.id) {
-                    mesh->texture = {0};
+                MaterialComponent* mat = entity.get_material_component();
+                if (mesh && mat->texture.id == removed_tex.id) {
+                    mat->texture = {0};
                 }
             }
         }

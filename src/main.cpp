@@ -7,6 +7,7 @@
 #include "headers/lighting.h"
 #include "headers/language_manager.h"
 #include "editor/editor.h"
+#include "editor/editor_entity.h"
 #include "headers/camera.h"
 #include "headers/project.h"
 #include "headers/hub.h"
@@ -24,27 +25,6 @@ RenderTexture2D scene_rt = {0};
 extern bool g_is_scene_hovered;
 extern bool g_is_scene_active;
 static Shader shadowcaster_shader = {0};
-
-static Entity make_entity_from_asset(Scene& scene, ModelAsset* asset) {
-    Entity entity;
-    MeshComponent* mesh = entity.get_mesh_component();
-    if (!mesh) return entity;
-    entity.id = static_cast<int>(scene.entities.size());
-    mesh->type = asset->type;
-    mesh->asset = asset;
-    mesh->segments = 16;
-    entity.name = scene.make_default_name_for(entity);
-
-    if (asset->is_procedural) {
-        mesh->model = asset->generator(mesh->segments);
-        store_uv(&entity);
-    } else {
-        mesh->model = asset->loaded_model;
-    }
-
-    mesh->texture = {0};
-    return entity;
-}
 
 static void update_plugins(PluginManager& plugin_manager, Editor& editor) {
     static Editor* s_editor = nullptr;
@@ -70,19 +50,19 @@ static void update_plugins(PluginManager& plugin_manager, Editor& editor) {
     ctx.entity_get_position = [](int i, float* x, float* y, float* z) { if (auto* t = s_editor->scene.entities[i].get_transform_component()) { *x = t->position.x; *y = t->position.y; *z = t->position.z; } };
     ctx.entity_get_rotation = [](int i, float* x, float* y, float* z) { if (auto* t = s_editor->scene.entities[i].get_transform_component()) { *x = t->rotation.x; *y = t->rotation.y; *z = t->rotation.z; } };
     ctx.entity_get_scale    = [](int i, float* x, float* y, float* z) { if (auto* t = s_editor->scene.entities[i].get_transform_component()) { *x = t->scale.x; *y = t->scale.y; *z = t->scale.z; } };
-    ctx.entity_get_color    = [](int i, unsigned char* r, unsigned char* g, unsigned char* b, unsigned char* a) { if (auto* m = s_editor->scene.entities[i].get_mesh_component()) { *r = m->color.r; *g = m->color.g; *b = m->color.b; *a = m->color.a; } };
+    ctx.entity_get_color    = [](int i, unsigned char* r, unsigned char* g, unsigned char* b, unsigned char* a) { if (auto* m = s_editor->scene.entities[i].get_material_component()) { *r = m->color.r; *g = m->color.g; *b = m->color.b; *a = m->color.a; } };
 
     ctx.entity_set_position = [](int i, float x, float y, float z) { if (auto* t = s_editor->scene.entities[i].get_transform_component()) t->position = {x, y, z}; };
     ctx.entity_set_rotation = [](int i, float x, float y, float z) { if (auto* t = s_editor->scene.entities[i].get_transform_component()) t->rotation = {x, y, z}; };
     ctx.entity_set_scale    = [](int i, float x, float y, float z) { if (auto* t = s_editor->scene.entities[i].get_transform_component()) t->scale = {x, y, z}; };
-    ctx.entity_set_color    = [](int i, unsigned char r, unsigned char g, unsigned char b, unsigned char a) { if (auto* m = s_editor->scene.entities[i].get_mesh_component()) m->color = {r, g, b, a}; };
+    ctx.entity_set_color    = [](int i, unsigned char r, unsigned char g, unsigned char b, unsigned char a) { if (auto* m = s_editor->scene.entities[i].get_material_component()) m->color = {r, g, b, a}; };
     ctx.entity_set_name     = [](int i, const char* name) { s_editor->scene.entities[i].name = name; };
 
     ctx.scene_save = []() { project_save(s_editor->project_path, s_editor->scene); };
     ctx.scene_spawn = [](const char* asset_name) -> int {
         for (auto& a : assets) {
             if (a.name == asset_name) {
-                Entity e = make_entity_from_asset(s_editor->scene, &a);
+                Entity e = make_entity_from_asset(s_editor->scene, a);
                 const MeshComponent* mesh = e.get_mesh_component();
                 if (!mesh || !mesh->model.meshCount) return -1;
                 s_editor->scene.entities.push_back(e);
@@ -381,6 +361,7 @@ int main(int argc, char* argv[]) {
             for (auto& e : editor.scene.entities) {
                 MeshComponent* mesh = e.get_mesh_component();
                 TransformComponent* transform = e.get_transform_component();
+                MaterialComponent* mat = e.get_material_component();
                 LightComponent* light = e.get_light_component();
                 if (!mesh || !transform) continue;
 
@@ -407,7 +388,7 @@ int main(int argc, char* argv[]) {
                     update_lighting(shadowmap_shader, light->light);
                 }
 
-                int use = (mesh->texture.id != 0) ? 1 : 0;
+                int use = (mat && mat->texture.id != 0) ? 1 : 0;
                 SetShaderValue(shadowmap_shader, use_tex_loc, &use, SHADER_UNIFORM_INT);
                 draw_entity_with_texture(e);
             }

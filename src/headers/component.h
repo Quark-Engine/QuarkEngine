@@ -126,6 +126,7 @@ public:
 
     Vector2 uv_scale = {1, 1};
     std::vector<std::vector<float>> original_texcoords;
+    std::vector<Texture2D> original_material_textures;
 
     MaterialComponent() {
         name = "Material";

@@ -37,6 +37,7 @@ void Scene::release_resources() {
 
     for (auto& entity : entities) {
         MeshComponent* mesh = entity.get_mesh_component();
+        MaterialComponent* mat = entity.get_material_component();
         if (!mesh) continue;
 
         const bool owns_model = entity_owns_model(entity);
@@ -61,7 +62,7 @@ void Scene::release_resources() {
             }
         }
         mesh->model = {0};
-        mesh->texture = {0};
+        if (mat) mat->texture = {0};
     }
 
     entities.clear();

@@ -39,7 +39,7 @@ MeshEditState g_mesh_edit_state;
 
 static const char* language_labels[] = {
     "English",
-    "Russian"
+    "Русский"
 };
 
 static const char* language_codes[] = {
@@ -388,8 +388,8 @@ void draw_gizmo(Editor& editor, FlyCamera camera) {
         transform->rotation = { next_rotation[0], next_rotation[1], next_rotation[2] };
         transform->scale = { next_scale[0], next_scale[1], next_scale[2] };
 
-        mark_entity_bounds_dirty(entity);
-        if (!entity->get_material_component()->texture_stretch) mark_entity_uv_dirty(entity);
+        MaterialComponent* mat = entity->get_material_component();
+        if (mat && !mat->texture_stretch) mark_entity_uv_dirty(entity);
     }
 
     was_using = ImGuizmo::IsUsing();

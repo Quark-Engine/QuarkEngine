@@ -25,14 +25,18 @@ Entity make_entity_from_asset(Scene& scene, ModelAsset& asset) {
     const std::string base_name = asset.is_procedural ? object_type_name(asset.type) : fs::path(asset.name).stem().string();
     entity.name = scene.make_unique_name(base_name.empty() ? "Model" : base_name);
 
+    auto mat_comp = std::make_shared<MaterialComponent>();
+    entity.get_components()->add_component(mat_comp);
+    MaterialComponent* mat = mat_comp.get();
+
     if (asset.is_procedural) {
         mesh->model = asset.generator(mesh->segments);
         mesh->owns_model_instance = true;
         clear_mesh_overrides(entity);
         store_uv(&entity);
         store_material_textures(&entity);
-        mesh->texture_source = TEXTURE_NONE;
-        mesh->texture_name.clear();
+        mat->texture_source = TEXTURE_NONE;
+        mat->texture_name.clear();
     } 
     else {
         if (!load_model_instance(asset, mesh->model)) {
@@ -55,10 +59,9 @@ Entity make_entity_from_asset(Scene& scene, ModelAsset& asset) {
             }
         }
 
-        if (has_embedded) mesh->texture_source = TEXTURE_MODEL;
-        else mesh->texture_source = TEXTURE_NONE;
+        mat->texture_source = has_embedded ? TEXTURE_MODEL : TEXTURE_NONE;
     }
 
-    mesh->texture = {0};
+    mat->texture = {0};
     return entity;
 }

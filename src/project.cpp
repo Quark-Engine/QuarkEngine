@@ -264,6 +264,7 @@ bool project_load(const std::string& folder_path, Scene& scene, Shader shader) {
 
         MeshComponent* mesh = e.get_mesh_component();
         TransformComponent* transform = e.get_transform_component();
+        MaterialComponent* mat = e.get_material_component();
         LightComponent* light = e.get_light_component();
         if (!mesh || !transform) continue;
 
@@ -291,14 +292,14 @@ bool project_load(const std::string& folder_path, Scene& scene, Shader shader) {
                 store_material_textures(&e);
                 apply_mesh_overrides(e);
 
-                if (mesh->texture_source == TEXTURE_EXTERNAL && !mesh->texture_name.empty()) {
+                if (mat->texture_source == TEXTURE_EXTERNAL && !mat->texture_name.empty()) {
                     for (auto& opt : texture_options) {
-                        if (opt.name == mesh->texture_name) {
-                            mesh->texture = opt.texture;
+                        if (opt.name == mat->texture_name) {
+                            mat->texture = opt.texture;
                             break;
                         }
                     }
-                } else if (mesh->texture_source == TEXTURE_MODEL) {
+                } else if (mat->texture_source == TEXTURE_MODEL) {
                     restore_model_textures(&e);
                 } else {
                     clear_material_textures(&e);
@@ -314,8 +315,8 @@ bool project_load(const std::string& folder_path, Scene& scene, Shader shader) {
 
         for (int i = 0; i < mesh->model.materialCount; i++) {
             mesh->model.materials[i].maps[MATERIAL_MAP_DIFFUSE].color = WHITE;
-            if (mesh->texture.id != 0) {
-                mesh->model.materials[i].maps[MATERIAL_MAP_DIFFUSE].texture = mesh->texture;
+            if (mat->texture.id != 0) {
+                mesh->model.materials[i].maps[MATERIAL_MAP_DIFFUSE].texture = mat->texture;
             }
             mesh->model.materials[i].shader = shader;
         }
