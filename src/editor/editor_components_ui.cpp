@@ -406,6 +406,7 @@ void ComponentUIHelper::draw_material_component(Editor& editor, Entity& entity, 
 
     }
 
+    // Color
     float color[4] = { mat->color.r / 255.f, mat->color.g / 255.f, mat->color.b / 255.f, mat->color.a / 255.f };
     static Color last_color;
 
@@ -429,10 +430,10 @@ void ComponentUIHelper::draw_material_component(Editor& editor, Entity& entity, 
 
     if (ImGui::ColorEdit4(lang.word("outline_color"), outline)) {
         Color new_outline = {
-            (unsigned char)(color[0]*255),
-            (unsigned char)(color[1]*255),
-            (unsigned char)(color[2]*255),
-            (unsigned char)(color[3]*255),
+            (unsigned char)(outline[0]*255),
+            (unsigned char)(outline[1]*255),
+            (unsigned char)(outline[2]*255),
+            (unsigned char)(outline[3]*255),
         };
 
         if (last_outline.r != new_outline.r || last_outline.g != new_outline.g || last_outline.b != new_outline.b || last_outline.a != new_outline.a) {
