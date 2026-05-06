@@ -21,8 +21,13 @@ static Color material_albedo = WHITE;
 static float material_albedo_f[4] = {1,1,1,1};
 static float material_brightness = 1.0f;
 static Texture2D material_texture = {0};
+static std::string material_texture_path = "";
 static Model viewer_mat_sphere = { 0 };
 static RenderTexture2D viewer_mat_rt = { 0 };
+static std::filesystem::path current_material_path = "";
+static bool show_texture_picker = false;
+static std::vector<std::string> texture_files_in_dir;
+static std::string selected_texture_preview = "";
 
 static Vector3 viewer_target = { 0, 0, 0 };
 static Vector3 viewer_model_center = { 0, 0, 0 };
@@ -57,6 +62,9 @@ bool open_model_viewer_for_asset(const ModelAsset& asset) {
 bool open_material_viewer_for_path(const std::filesystem::path& material_path, std::unordered_map<std::string, Texture>& texture_cache) {
     std::ifstream material_file(material_path);
     if (!material_file.is_open()) return false;
+
+    current_material_path = material_path;
+    material_texture_path = "";
 
     if (viewer_mat_sphere.meshCount > 0) {
         UnloadModel(viewer_mat_sphere);
@@ -102,6 +110,7 @@ bool open_material_viewer_for_path(const std::filesystem::path& material_path, s
             std::string texture_name;
             if (!(stream >> texture_name)) continue;
 
+            material_texture_path = texture_name;
             const std::filesystem::path texture_path = material_path.parent_path() / texture_name;
             const std::string cache_key = texture_path.string();
             if (!texture_cache.count(cache_key) && std::filesystem::exists(texture_path)) {
@@ -182,6 +191,62 @@ void rebuild_material_preview_mesh() {
     }
 
     viewer_mat_sphere = LoadModelFromMesh(mesh);
+    apply_material_settings();
+}
+
+void save_material_to_file() {
+    if (current_material_path.empty()) return;
+
+    std::ofstream material_file(current_material_path);
+    if (!material_file.is_open()) return;
+
+    material_file << "# Material exported from QuarkEngine\n";
+    material_file << "Kd " << (material_albedo_f[0]) << " " << (material_albedo_f[1]) << " " << (material_albedo_f[2]) << "\n";
+    
+    if (!material_texture_path.empty()) {
+        material_file << "map_Kd " << material_texture_path << "\n";
+    }
+
+    material_file.close();
+}
+
+void load_textures_in_directory() {
+    texture_files_in_dir.clear();
+    if (current_material_path.empty()) return;
+
+    const auto material_dir = current_material_path.parent_path();
+    if (!std::filesystem::exists(material_dir)) return;
+
+    const std::vector<std::string> image_extensions = {".png", ".jpg", ".jpeg", ".bmp", ".tga", ".dds"};
+
+    try {
+        for (const auto& entry : std::filesystem::directory_iterator(material_dir)) {
+            if (entry.is_regular_file()) {
+                auto ext = entry.path().extension().string();
+                std::transform(ext.begin(), ext.end(), ext.begin(), ::tolower);
+                
+                if (std::find(image_extensions.begin(), image_extensions.end(), ext) != image_extensions.end()) {
+                    texture_files_in_dir.push_back(entry.path().filename().string());
+                }
+            }
+        }
+    } catch (...) {}
+}
+
+void load_material_texture(const std::string& texture_name) {
+    if (current_material_path.empty()) return;
+
+    const auto material_dir = current_material_path.parent_path();
+    const auto texture_full_path = material_dir / texture_name;
+
+    if (!std::filesystem::exists(texture_full_path)) return;
+
+    if (material_texture.id != 0) {
+        UnloadTexture(material_texture);
+    }
+
+    material_texture = LoadTexture(texture_full_path.string().c_str());
+    material_texture_path = texture_name;
     apply_material_settings();
 }
 
@@ -274,7 +339,7 @@ void draw_material_viewer_window() {
         return;
     }
 
-    ImGui::SetNextWindowSize(ImVec2(800, 500), ImGuiCond_FirstUseEver);
+    ImGui::SetNextWindowSize(ImVec2(1000, 600), ImGuiCond_FirstUseEver);
 
     if (ImGui::Begin(lang.word("material_editor"), &show_material_viewer)) {
 
@@ -301,11 +366,27 @@ void draw_material_viewer_window() {
 
         ImGui::Separator();
 
+        ImGui::Text(lang.word("texture"));
+        ImGui::Text("Current: %s", material_texture_path.empty() ? "None" : material_texture_path.c_str());
+
+        if (ImGui::Button("Select Texture")) {
+            load_textures_in_directory();
+            show_texture_picker = !show_texture_picker;
+        }
+
+        ImGui::Separator();
+
         ImGui::Text(lang.word("primitive"));
 
         const char* primitives[] = { lang.word("sphere"), lang.word("cube"), lang.word("plane") };
         if (ImGui::Combo(lang.word("mesh"), &material_preview_primitive, primitives, 3)) {
             rebuild_material_preview_mesh();
+        }
+
+        ImGui::Separator();
+
+        if (ImGui::Button("Save Material", ImVec2(-1, 0))) {
+            save_material_to_file();
         }
 
         ImGui::EndChild();
@@ -393,6 +474,28 @@ void draw_material_viewer_window() {
     }
 
     ImGui::End();
+
+    if (show_texture_picker) {
+        ImGui::SetNextWindowSize(ImVec2(400, 500), ImGuiCond_FirstUseEver);
+        if (ImGui::Begin("Select Texture", &show_texture_picker)) {
+            ImGui::Text("Textures in material directory:");
+            ImGui::Separator();
+            
+            for (const auto& texture_name : texture_files_in_dir) {
+                if (ImGui::Selectable(texture_name.c_str(), selected_texture_preview == texture_name)) {
+                    selected_texture_preview = texture_name;
+                    load_material_texture(texture_name);
+                    show_texture_picker = false;
+                }
+            }
+
+            if (texture_files_in_dir.empty()) {
+                ImGui::TextDisabled("No textures found in directory");
+            }
+
+            ImGui::End();
+        }
+    }
 }
 
 void cleanup_viewers() {

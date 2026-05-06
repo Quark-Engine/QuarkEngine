@@ -12,6 +12,9 @@ bool open_model_viewer_for_asset(const ModelAsset& asset);
 void draw_material_viewer_window();
 void apply_material_settings();
 void rebuild_material_preview_mesh();
+void save_material_to_file();
+void load_textures_in_directory();
+void load_material_texture(const std::string& texture_name);
 bool open_material_viewer_for_path(const std::filesystem::path& material_path, std::unordered_map<std::string, Texture>& texture_cache);
 
 bool is_model_viewer_visible();
