@@ -37,6 +37,8 @@ namespace {
 
 std::unordered_map<std::string, Texture> model_preview_cache;
 std::unordered_map<std::string, RenderTexture2D> model_render_cache;
+static std::unordered_map<std::string, Texture> material_preview_cache;
+static std::unordered_map<std::string, RenderTexture2D> material_render_cache;
 Texture icon_file_tex = {0};
 Texture icon_folder_tex = {0};
 Texture icon_full_folder_tex = {0};
@@ -234,6 +236,94 @@ bool import_path_to_resources(const fs::path& src, const fs::path& resource_dir)
 
     TraceLog(LOG_WARNING, "Unsupported dropped path: %s", src.string().c_str());
     return false;
+}
+
+Texture create_material_preview(const std::string& mtl_path)
+{
+    if (material_preview_cache.count(mtl_path))
+        return material_preview_cache[mtl_path];
+
+    std::ifstream file(mtl_path);
+    if (!file.is_open()) return {0};
+
+    Model sphere = LoadModelFromMesh(GenMeshSphere(1.0f, 64, 64));
+
+    Color albedo = WHITE;
+    float brightness = 1.0f;
+    Texture2D tex = {0};
+    std::string tex_path;
+
+    std::string line;
+    while (std::getline(file, line))
+    {
+        if (line.empty() || line[0] == '#') continue;
+
+        std::istringstream ss(line);
+        std::string type;
+        ss >> type;
+
+        if (type == "Kd")
+        {
+            float r=1,g=1,b=1;
+            ss >> r >> g >> b;
+            albedo = {
+                (unsigned char)(r * 255),
+                (unsigned char)(g * 255),
+                (unsigned char)(b * 255),
+                255
+            };
+        }
+        else if (type == "map_Kd")
+        {
+            ss >> tex_path;
+        }
+    }
+
+    Material& mat = sphere.materials[0];
+
+    Color finalColor = {
+        (unsigned char)(albedo.r * brightness),
+        (unsigned char)(albedo.g * brightness),
+        (unsigned char)(albedo.b * brightness),
+        255
+    };
+
+    mat.maps[MATERIAL_MAP_DIFFUSE].color = finalColor;
+
+    if (!tex_path.empty())
+    {
+        std::filesystem::path full = std::filesystem::path(mtl_path).parent_path() / tex_path;
+        if (std::filesystem::exists(full))
+        {
+            tex = LoadTexture(full.string().c_str());
+            mat.maps[MATERIAL_MAP_DIFFUSE].texture = tex;
+        }
+    }
+
+    RenderTexture2D rt = LoadRenderTexture(128, 128);
+    Camera3D cam = { 0 };
+    cam.fovy = 45;
+    cam.projection = CAMERA_PERSPECTIVE;
+    cam.target = {0,0,0};
+    cam.up = {0,1,0};
+    cam.position = {2,2,2};
+
+    BeginTextureMode(rt);
+    ClearBackground({40,40,45,255});
+    BeginMode3D(cam);
+
+    DrawModel(sphere, {0,0,0}, 1.0f, WHITE);
+    DrawModelWires(sphere, {0,0,0}, 1.0f, DARKGRAY);
+
+    EndMode3D();
+    EndTextureMode();
+
+    Texture result = rt.texture;
+
+    material_preview_cache[mtl_path] = result;
+    material_render_cache[mtl_path] = rt;
+
+    return result;
 }
 
 void draw_assets_ui(Editor& editor) {
@@ -522,7 +612,9 @@ void draw_assets_ui(Editor& editor) {
                 editor_internal::tex_cache[full] = LoadTexture(full.c_str());
             }
             ImGui::Image((void*)(intptr_t)editor_internal::tex_cache[full].id, ImVec2(kIconSize, kIconSize));
-        } else if (entry.is_model) {
+        } 
+        
+        else if (entry.is_model) {
             const std::string full = (editor.current_asset_path / entry.filename).string();
             Texture preview_texture = {0};
             bool load_failed = false;
@@ -550,7 +642,22 @@ void draw_assets_ui(Editor& editor) {
                     draw_list->AddLine(ImVec2(pos.x + kIconSize - 10, pos.y + 10), ImVec2(pos.x + 10, pos.y + kIconSize - 10), IM_COL32(255, 100, 100, 200), 2.0f);
                 }
             }
-        } else {
+        } 
+
+        else if (entry.is_material)
+        {
+            const std::string full = (editor.current_asset_path / entry.filename).string();
+
+            Texture preview = {0};
+
+            if (material_preview_cache.count(full)) preview = material_preview_cache[full];
+            else preview = create_material_preview(full);
+
+            if (preview.id != 0) ImGui::Image((void*)(intptr_t)preview.id, ImVec2(kIconSize, kIconSize));
+            else ImGui::Button("MAT", ImVec2(kIconSize, kIconSize));
+        }
+        
+        else {
             if (icon_file_tex.id != 0) ImGui::Image((void*)(intptr_t)icon_file_tex.id, ImVec2(kIconSize, kIconSize));
             else ImGui::Button(entry.extension.empty() ? "file" : entry.extension.c_str(), ImVec2(kIconSize, kIconSize));
         }
@@ -803,7 +910,7 @@ void draw_assets_ui(Editor& editor) {
 
         ImGui::SameLine();
 
-        if (ImGui::Button("Cancel", ImVec2(120, 0))) {
+        if (ImGui::Button(lang.word("cancel"), ImVec2(120, 0))) {
             ImGui::CloseCurrentPopup();
         }
 
@@ -819,9 +926,15 @@ void Editor::draw_assets_ui() {
 }
 
 void cleanup_assets_ui() {
-    for (auto& pair : model_render_cache) {
+    for (auto& pair : model_render_cache)
         UnloadRenderTexture(pair.second);
-    }
+
+    for (auto& p : material_render_cache)
+        UnloadRenderTexture(p.second);
+
+    material_render_cache.clear();
+    material_preview_cache.clear();
+
     model_render_cache.clear();
     model_preview_cache.clear();
     editor_internal::tex_cache.clear();
