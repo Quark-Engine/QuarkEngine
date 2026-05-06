@@ -1,12 +1,14 @@
 #include "editor_components_ui.h"
 #include "editor_utils.h"
 #include "editor_ui.h"
+#include "editor_viewers.h"
 #include "imgui.h"
 #include "headers/models.h"
 #include "headers/entity.h"
 #include "editor/editor_ui.h"
 #include "editor/editor.h"
 #include <language_manager.h>
+#include <filesystem>
 
 #define lang LanguageManager::get()
 
@@ -270,177 +272,56 @@ void ComponentUIHelper::draw_material_component(Editor& editor, Entity& entity, 
     ImGui::Text(lang.word("material_properties"));
     ImGui::Spacing();
 
-    bool changed = false;
-
-    int current_texture_index = 0;
-    std::vector<const char*> texture_names;
-    std::vector<TextureSource> texture_types;
-    std::vector<std::string> texture_sources;
-
     MaterialComponent* mat = entity.get_material_component();
     MeshComponent* mesh = entity.get_mesh_component();
 
-    texture_names.push_back(lang.word("none"));
-    texture_types.push_back(TEXTURE_NONE);
-    texture_sources.push_back("");
+    static std::vector<std::string> available_materials;
+    static std::vector<const char*> material_names_cstr;
+    static int selected_material_index = -1;
+    static bool materials_list_needs_update = true;
 
-    for (int i = 1; i < static_cast<int>(texture_options.size()); i++) {
-        texture_names.push_back(texture_options[i].name.c_str());
-        texture_types.push_back(TEXTURE_EXTERNAL);
-        texture_sources.push_back(texture_options[i].name);
-    }
-
-    for (int i = 0; i < static_cast<int>(texture_types.size()); i++) {
-        if (texture_types[i] == mat->texture_source) {
-            if (mat->texture_source == TEXTURE_EXTERNAL && mat->texture_name == texture_sources[i]) {
-                current_texture_index = i;
-                break;
-            }
-
-            if (mat->texture_source != TEXTURE_EXTERNAL) {
-                current_texture_index = i;
-                break;
-            }
-        }
-    }
-
-    if (current_texture_index >= static_cast<int>(texture_names.size()))
-        current_texture_index = 0;
-
-    // Textures Combo
-    if (ImGui::Combo(lang.word("texture"), &current_texture_index, texture_names.data(), static_cast<int>(texture_names.size()))) {
-        editor.save_state();
-
-        TextureSource selected_type = texture_types[current_texture_index];
-        if (selected_type == TEXTURE_NONE) {
-            mat->texture_source = TEXTURE_NONE;
-            mat->texture_name.clear();
-            mat->texture = {0};
-            clear_material_textures(&entity);
-        } 
+    if (materials_list_needs_update) {
+        available_materials = get_all_materials_in_project();
+        material_names_cstr.clear();
         
-        else if (selected_type == TEXTURE_EXTERNAL) {
-            mat->texture_source = TEXTURE_EXTERNAL;
-            mat->texture_name = texture_sources[current_texture_index];
-            mat->texture = {0};
-
-            for (int i = 1; i < static_cast<int>(texture_options.size()); i++) {
-                if (texture_options[i].name == mat->texture_name) {
-                    mat->texture = texture_options[i].texture;
+        for (const auto& mat_path : available_materials) {
+            material_names_cstr.push_back(mat_path.c_str());
+        }
+        
+        selected_material_index = -1;
+        if (!mat->texture_name.empty()) {
+            for (int i = 0; i < static_cast<int>(available_materials.size()); ++i) {
+                if (available_materials[i] == mat->texture_name) {
+                    selected_material_index = i;
                     break;
                 }
             }
-
-            for (int i = 0; i < mesh->model.materialCount; i++) {
-                mesh->model.materials[i].maps[MATERIAL_MAP_DIFFUSE].texture = mat->texture;
-            }
-        } 
+        }
         
-        else if (selected_type == TEXTURE_MODEL) {
-            mat->texture_source = TEXTURE_MODEL;
-            mat->texture_name = "";
-            mat->texture = {0};
-            restore_model_textures(&entity);
-        }
+        materials_list_needs_update = false;
     }
 
-    // Stretch Texture
-    static bool last_stretch_texture = false;
-    if (ImGui::Checkbox(lang.word("stretch_texture"), &mat->texture_stretch)) {
-        editor.save_state();
-        last_stretch_texture = mat->texture_stretch;
+    ImGui::Text(lang.word("material_file"));
+    if (!material_names_cstr.empty()) {
+        if (ImGui::Combo("##material_combo", &selected_material_index, material_names_cstr.data(), 
+                         static_cast<int>(material_names_cstr.size()))) {
+            if (selected_material_index >= 0 && selected_material_index < static_cast<int>(available_materials.size())) {
+                const std::string& selected_path = available_materials[selected_material_index];
+                if (std::filesystem::exists(selected_path)) {
+                    load_material_to_entity(&entity, selected_path);
+                    editor.save_state();
+                }
+            }
+        }
+    } else {
+        ImGui::Text("No materials found in project");
     }
 
-    if (!mat->texture_stretch) {
-        static bool last_auto_uv = false;
-        if (ImGui::Checkbox(lang.word("auto_uv"), &mat->auto_uv)) {
-            if (last_auto_uv != mat->auto_uv) {
-                editor.save_state();
-                last_auto_uv = mat->auto_uv;
-            }
-        }
-
-        if (mat->auto_uv) {
-            static Vector2 last_uv_scale = {0, 0};
-            if (ImGui::InputFloat(lang.word("scale_x"), &mat->uv_scale.x, 0.1f, 1.0f, "%.2f")) {
-                if (last_uv_scale.x != mat->uv_scale.x) {
-                    editor.save_state();
-                    last_uv_scale.x = mat->uv_scale.x;
-                }
-
-                if (mat->uv_scale.x < 0.01f) mat->uv_scale.x = 0.01f;
-            }
-
-            if (ImGui::InputFloat(lang.word("scale_y"), &mat->uv_scale.y, 0.1f, 1.0f, "%.2f")) {
-                if (last_uv_scale.y != mat->uv_scale.y) {
-                    editor.save_state();
-                    last_uv_scale.y = mat->uv_scale.y;
-                }
-
-                if (mat->uv_scale.y < 0.01f) mat->uv_scale.y = 0.01f;
-            }
-        }
-
-        else {
-            static float last_repeat_u = 0;
-            static float last_repeat_v = 0;
-
-            if (ImGui::InputFloat(lang.word("repeat_u"), &mat->texture_repeat_u, 0.1f, 1.0f, "%.2f")) {
-                if (last_repeat_u != mat->texture_repeat_u) {
-                    editor.save_state();
-                    last_repeat_u = mat->texture_repeat_u;
-                }
-
-                if (mat->texture_repeat_u < 0.01f) mat->texture_repeat_u = 0.01f;
-            }
-
-            if (ImGui::InputFloat(lang.word("repeat_v"), &mat->texture_repeat_v, 0.1f, 1.0f, "%.2f")) {
-                if (last_repeat_v != mat->texture_repeat_v) {
-                    editor.save_state();
-                    last_repeat_v = mat->texture_repeat_v;
-                }
-
-                if (mat->texture_repeat_v < 0.01f) mat->texture_repeat_v = 0.01f;
-            }
-        }
-
-    }
-
-    // Color
-    float color[4] = { mat->color.r / 255.f, mat->color.g / 255.f, mat->color.b / 255.f, mat->color.a / 255.f };
-    static Color last_color;
-
-    if (ImGui::ColorEdit4(lang.word("color"), color)) {
-        Color new_color = {
-            (unsigned char)(color[0]*255),
-            (unsigned char)(color[1]*255),
-            (unsigned char)(color[2]*255),
-            (unsigned char)(color[3]*255),
-        };
-
-        if (last_color.r != new_color.r || last_color.g != new_color.g || last_color.b != new_color.b || last_color.a != new_color.a) {
-            editor.save_state();
-            last_color = new_color;
-            mat->color = new_color;
-        }
-    }
-
-    float outline[4] = { mat->outline_color.r / 255.f, mat->outline_color.g / 255.f, mat->outline_color.b / 255.f, mat->outline_color.a / 255.f };
-    static Color last_outline;
-
-    if (ImGui::ColorEdit4(lang.word("outline_color"), outline)) {
-        Color new_outline = {
-            (unsigned char)(outline[0]*255),
-            (unsigned char)(outline[1]*255),
-            (unsigned char)(outline[2]*255),
-            (unsigned char)(outline[3]*255),
-        };
-
-        if (last_outline.r != new_outline.r || last_outline.g != new_outline.g || last_outline.b != new_outline.b || last_outline.a != new_outline.a) {
-            editor.save_state();
-            last_outline = new_outline;
-            mat->outline_color = new_outline;
-        }
+    if (!mat->texture_name.empty() && mat->texture_name.length() > 4 && 
+        mat->texture_name.substr(mat->texture_name.length() - 4) == ".mtl") {
+        ImGui::TextDisabled("Current: %s", mat->texture_name.c_str());
+    } else {
+        ImGui::TextDisabled("Current: None");
     }
 }
 

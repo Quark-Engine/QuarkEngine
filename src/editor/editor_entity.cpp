@@ -1,6 +1,7 @@
 #include "editor_entity.h"
 #include "editor_assets.h"
 #include "editor_utils.h"
+#include "editor_viewers.h"
 #include "../headers/models.h"
 #include "../headers/entity.h"
 #include <filesystem>
@@ -60,6 +61,16 @@ Entity make_entity_from_asset(Scene& scene, ModelAsset& asset) {
         }
 
         mat->texture_source = has_embedded ? TEXTURE_MODEL : TEXTURE_NONE;
+
+        if (!asset.filepath.empty()) {
+            std::filesystem::path model_path(asset.filepath);
+            std::filesystem::path mtl_path = model_path.parent_path() / (model_path.stem().string() + ".mtl");
+            
+            if (std::filesystem::exists(mtl_path)) {
+                load_material_to_entity(&entity, mtl_path);
+                return entity;
+            }
+        }
     }
 
     mat->texture = {0};

@@ -2,12 +2,15 @@
 #include "editor_utils.h"
 #include "../headers/language_manager.h"
 #include "../headers/tex.h"
+#include "../headers/entity.h"
 #include "rlImGui.h"
 #include "imgui.h"
 #include "raymath.h"
 #include <cmath>
 #include <fstream>
 #include <sstream>
+#include <cstdlib>
+#include <algorithm>
 
 #define lang LanguageManager::get()
 
@@ -28,6 +31,15 @@ static std::filesystem::path current_material_path = "";
 static bool show_texture_picker = false;
 static std::vector<std::string> texture_files_in_dir;
 static std::string selected_texture_preview = "";
+
+static bool material_auto_uv = false;
+static bool material_texture_stretch = true;
+static float material_texture_repeat_u = 1.0f;
+static float material_texture_repeat_v = 1.0f;
+static float material_uv_scale_x = 1.0f;
+static float material_uv_scale_y = 1.0f;
+static Color material_outline_color = LIGHTGRAY;
+static float material_outline_color_f[4] = {0.827f, 0.827f, 0.827f, 1.0f};
 
 static Vector3 viewer_target = { 0, 0, 0 };
 static Vector3 viewer_model_center = { 0, 0, 0 };
@@ -132,6 +144,92 @@ bool open_material_viewer_for_path(const std::filesystem::path& material_path, s
     viewer_target = { 0, 0, 0 };
     viewer_model_rotation = { 0, 0, 0 };
     return true;
+}
+
+void load_material_to_entity(Entity* entity, const std::filesystem::path& mtl_path) {
+    if (!entity || !std::filesystem::exists(mtl_path)) return;
+
+    std::ifstream material_file(mtl_path);
+    if (!material_file.is_open()) return;
+
+    MeshComponent* mesh = entity->get_mesh_component();
+    MaterialComponent* mat_comp = entity->get_material_component();
+    if (!mesh || !mat_comp) return;
+
+    Color albedo = WHITE;
+    std::string texture_name;
+    
+    std::string line;
+    while (std::getline(material_file, line)) {
+        if (line.empty() || line[0] == '#') continue;
+
+        std::istringstream stream(line);
+        std::string type;
+        stream >> type;
+
+        if (type == "Kd") {
+            float r = 1.0f, g = 1.0f, b = 1.0f;
+            if (stream >> r >> g >> b) {
+                albedo = {
+                    static_cast<unsigned char>(r * 255),
+                    static_cast<unsigned char>(g * 255),
+                    static_cast<unsigned char>(b * 255),
+                    255
+                };
+            }
+        } 
+        else if (type == "map_Kd") {
+            if (!(stream >> texture_name)) texture_name.clear();
+        }
+    }
+
+    material_file.close();
+
+    mat_comp->color = albedo;
+    if (mesh->model.materials) {
+        for (int i = 0; i < mesh->model.materialCount; i++) {
+            mesh->model.materials[i].maps[MATERIAL_MAP_DIFFUSE].color = albedo;
+        }
+    }
+
+    if (!texture_name.empty()) {
+        std::filesystem::path texture_path = mtl_path.parent_path() / texture_name;
+        if (std::filesystem::exists(texture_path)) {
+            Texture2D tex = LoadTexture(texture_path.string().c_str());
+            if (tex.id != 0) {
+                mat_comp->texture = tex;
+                mat_comp->texture_name = texture_name;
+                mat_comp->texture_source = TEXTURE_EXTERNAL;
+                
+                if (mesh->model.materials) {
+                    for (int i = 0; i < mesh->model.materialCount; i++) {
+                        mesh->model.materials[i].maps[MATERIAL_MAP_DIFFUSE].texture = tex;
+                    }
+                }
+            }
+        }
+    }
+    
+    mat_comp->texture_name = mtl_path.string();
+}
+
+std::vector<std::string> get_all_materials_in_project() {
+    std::vector<std::string> materials;
+    try {
+        std::filesystem::path current_path = std::filesystem::current_path();
+        
+        for (const auto& entry : std::filesystem::recursive_directory_iterator(current_path)) {
+            if (entry.is_regular_file() && entry.path().extension() == ".mtl") {
+                std::filesystem::path rel_path = std::filesystem::relative(entry.path(), current_path);
+                materials.push_back(rel_path.string());
+            }
+        }
+        
+        std::sort(materials.begin(), materials.end());
+    } catch (const std::exception&) {
+    }
+    
+    return materials;
 }
 
 bool is_model_viewer_visible() {
@@ -250,6 +348,8 @@ void load_material_texture(const std::string& texture_name) {
     apply_material_settings();
 }
 
+
+
 void draw_model_viewer_window() {
     if (!show_model_viewer) {
         if (viewer_model.meshCount > 0) {
@@ -328,7 +428,7 @@ void draw_model_viewer_window() {
     ImGui::End();
 }
 
-void draw_material_viewer_window() {
+void draw_material_viewer_window(Entity* selected_entity) {
     if (!show_material_viewer) {
         material_preview_primitive = 0;
 
@@ -372,6 +472,38 @@ void draw_material_viewer_window() {
         if (ImGui::Button("Select Texture")) {
             load_textures_in_directory();
             show_texture_picker = !show_texture_picker;
+        }
+
+        ImGui::Separator();
+
+        ImGui::Text("UV Settings");
+
+        if (ImGui::Checkbox("Texture Stretch", &material_texture_stretch)) {
+        }
+
+        if (!material_texture_stretch) {
+            if (ImGui::SliderFloat("Repeat U", &material_texture_repeat_u, 0.1f, 10.0f)) {
+            }
+
+            if (ImGui::SliderFloat("Repeat V", &material_texture_repeat_v, 0.1f, 10.0f)) {
+            }
+
+            if (ImGui::SliderFloat("UV Scale X", &material_uv_scale_x, 0.1f, 5.0f)) {
+            }
+
+            if (ImGui::SliderFloat("UV Scale Y", &material_uv_scale_y, 0.1f, 5.0f)) {
+            }
+        }
+
+        ImGui::Separator();
+
+        if (ImGui::ColorEdit4("Outline Color", material_outline_color_f)) {
+            material_outline_color = {
+                (unsigned char)(material_outline_color_f[0] * 255),
+                (unsigned char)(material_outline_color_f[1] * 255),
+                (unsigned char)(material_outline_color_f[2] * 255),
+                (unsigned char)(material_outline_color_f[3] * 255)
+            };
         }
 
         ImGui::Separator();
