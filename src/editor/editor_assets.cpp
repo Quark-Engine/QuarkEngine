@@ -13,6 +13,8 @@
 #include <cfloat>
 #include <cmath>
 #include <cctype>
+#include <sstream>
+#include <string>
 
 #ifdef _WIN32
 #define NOMINMAX 1
