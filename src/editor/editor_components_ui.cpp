@@ -46,6 +46,7 @@ void ComponentUIHelper::draw_entity_inspector(Editor& editor, Entity& entity, Sh
                 else if (auto mesh = std::dynamic_pointer_cast<MeshComponent>(comp)) draw_mesh_component(editor, entity, mesh.get());
                 else if (auto light = std::dynamic_pointer_cast<LightComponent>(comp)) draw_light_component(editor, entity, light.get(), shader);
                 else if (auto material = std::dynamic_pointer_cast<MaterialComponent>(comp)) draw_material_component(editor, entity, material.get());
+                else if (auto collision = std::dynamic_pointer_cast<CollisionComponent>(comp)) draw_collision_component(editor, entity, collision.get());
 
                 ImGui::Spacing();
 
@@ -97,6 +98,23 @@ void ComponentUIHelper::draw_entity_inspector(Editor& editor, Entity& entity, Sh
                 }
 
                 else { editor.undo(); }
+            }
+
+            if (ImGui::MenuItem(lang.word("collision"))) {
+                editor.save_state();
+                bool already_exists = false;
+
+                for (size_t j = 0; j < components_manager->get_component_count(); ++j) {
+                    auto existing = components_manager->get_component(j);
+                    if (existing && existing->get_type() == COMPONENT_COLLISION) {
+                        already_exists = true;
+                        break;
+                    }
+                }
+
+                if (!already_exists) {
+                    components_manager->add_component(std::make_shared<CollisionComponent>());
+                }
             }
 
             if (ImGui::MenuItem(lang.word("light"))) {
@@ -363,5 +381,91 @@ void ComponentUIHelper::draw_light_component(Editor& editor, Entity& entity, Lig
 
         if (light->light.id != -1)
             update_lighting(shader, light->light);
+    }
+}
+
+void ComponentUIHelper::draw_collision_component(Editor& editor, Entity& entity, CollisionComponent* collision) {
+    if (!collision) return;
+
+    ImGui::Text(lang.word("collision_properties"));
+    ImGui::Spacing();
+
+    bool changed = false;
+
+    const char* collider_types[] = {
+        lang.word("cube"),
+        lang.word("sphere"),
+        lang.word("capsule"),
+        lang.word("mesh")
+    };
+
+    int collider_type = static_cast<int>(collision->collider_type);
+
+    if (ImGui::Combo(lang.word("collider_type"), &collider_type, collider_types, IM_ARRAYSIZE(collider_types))) {
+        editor.save_state();
+
+        collision->collider_type = static_cast<ColliderType>(collider_type);
+        collision->dirty = true;
+        changed = true;
+    }
+
+    if (ImGui::Checkbox(lang.word("visualize"), &collision->visualize)) {
+        editor.save_state();
+        changed = true;
+    }
+
+    if (ImGui::DragFloat3(lang.word("center"), (float*)&collision->center, 0.1f)) {
+        editor.save_state();
+
+        collision->dirty = true;
+        changed = true;
+    }
+
+    ImGui::Spacing();
+
+    switch (collision->collider_type) {
+        case COLLIDER_BOX: {
+            if (ImGui::DragFloat3(lang.word("size"), (float*)&collision->size, 0.1f, 0.01f, 1000.0f)) {
+                editor.save_state();
+
+                collision->dirty = true;
+                changed = true;
+            }
+
+            break;
+        }
+
+        case COLLIDER_SPHERE: {
+            if (ImGui::DragFloat3(lang.word("radius"), (float*)&collision->radius, 0.1f, 0.01f, 1000.0f)) {
+                editor.save_state();
+
+                collision->dirty = true;
+                changed = true;
+            }
+
+            break;
+        }
+
+        case COLLIDER_CAPSULE: {
+            if (ImGui::DragFloat3(lang.word("radius"), (float*)&collision->radius, 0.1f, 0.01f, 1000.0f)) {
+                editor.save_state();
+
+                collision->dirty = true;
+                changed = true;
+            }
+
+            if (ImGui::DragFloat3(lang.word("height"), (float*)&collision->height, 0.1f, 0.1f, 1000.0f)) {
+                editor.save_state();
+
+                collision->dirty = true;
+                changed = true;
+            }
+
+            break;
+        }
+    }
+
+    if (changed) {
+        mark_entity_bounds_dirty(&entity);
     }
 }

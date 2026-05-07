@@ -60,4 +60,6 @@ struct Entity {
     const LightComponent* get_light_component() const;
     MaterialComponent* get_material_component();
     const MaterialComponent* get_material_component() const;
+    CollisionComponent* get_collision_component();
+    const CollisionComponent* get_collision_component() const;
 };

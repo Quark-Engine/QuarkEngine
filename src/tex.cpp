@@ -249,6 +249,160 @@ void refresh_entity_render_state(Entity& e) {
     mesh->uv_dirty = false;
 }
 
+void draw_collision_debug(Entity& entity) {
+    CollisionComponent* collision = entity.get_collision_component();
+    MeshComponent* mesh_component = entity.get_mesh_component();
+    TransformComponent* transform = entity.get_transform_component();
+
+    if (!collision || !transform) return;
+    if (!collision->visualize) return;
+
+    Vector3 pos = Vector3Add(transform->position, collision->center);
+
+    rlPushMatrix();
+
+    rlTranslatef(pos.x, pos.y, pos.z);
+
+    rlRotatef(transform->rotation.x, 1, 0, 0);
+    rlRotatef(transform->rotation.y, 0, 1, 0);
+    rlRotatef(transform->rotation.z, 0, 0, 1);
+
+    rlScalef(transform->scale.x, transform->scale.y, transform->scale.z);
+
+    rlDisableBackfaceCulling();
+
+    switch (collision->collider_type) {
+
+        case COLLIDER_BOX: {
+            DrawCubeWires(
+                {0, 0, 0},
+                collision->size.x,
+                collision->size.y,
+                collision->size.z,
+                GREEN
+            );
+            break;
+        }
+
+        case COLLIDER_SPHERE: {
+            DrawSphereWires(
+                {0, 0, 0},
+                collision->radius,
+                16,
+                16,
+                GREEN
+            );
+            break;
+        }
+
+        case COLLIDER_CAPSULE: {
+            float radius = collision->radius;
+            float height = collision->height;
+
+            Vector3 top = {0, height * 0.5f - radius, 0};
+            Vector3 bottom = {0, -height * 0.5f + radius, 0};
+
+            DrawCylinderWires(
+                {0, 0, 0},
+                radius,
+                radius,
+                height - radius * 2.0f,
+                16,
+                GREEN
+            );
+
+            DrawSphereWires(top, radius, 16, 16, GREEN);
+            DrawSphereWires(bottom, radius, 16, 16, GREEN);
+
+            break;
+        }
+
+        case COLLIDER_MESH: {
+            if (!mesh_component) break;
+
+            Model& model = mesh_component->model;
+
+            Color lineColor = GREEN;
+            Color pointColor = LIME;
+
+            for (int m = 0; m < model.meshCount; m++) {
+                Mesh& mesh = model.meshes[m];
+
+                if (!mesh.vertices) continue;
+
+                if (mesh.indices) {
+                    for (int t = 0; t < mesh.triangleCount; t++) {
+
+                        unsigned short i0 = mesh.indices[t * 3 + 0];
+                        unsigned short i1 = mesh.indices[t * 3 + 1];
+                        unsigned short i2 = mesh.indices[t * 3 + 2];
+
+                        Vector3 v0 = {
+                            mesh.vertices[i0 * 3 + 0],
+                            mesh.vertices[i0 * 3 + 1],
+                            mesh.vertices[i0 * 3 + 2]
+                        };
+
+                        Vector3 v1 = {
+                            mesh.vertices[i1 * 3 + 0],
+                            mesh.vertices[i1 * 3 + 1],
+                            mesh.vertices[i1 * 3 + 2]
+                        };
+
+                        Vector3 v2 = {
+                            mesh.vertices[i2 * 3 + 0],
+                            mesh.vertices[i2 * 3 + 1],
+                            mesh.vertices[i2 * 3 + 2]
+                        };
+
+                        DrawLine3D(v0, v1, lineColor);
+                        DrawLine3D(v1, v2, lineColor);
+                        DrawLine3D(v2, v0, lineColor);
+
+                        DrawSphere(v0, 0.025f, pointColor);
+                        DrawSphere(v1, 0.025f, pointColor);
+                        DrawSphere(v2, 0.025f, pointColor);
+                    }
+                } else {
+                    for (int v = 0; v < mesh.vertexCount; v += 3) {
+
+                        Vector3 v0 = {
+                            mesh.vertices[(v + 0) * 3 + 0],
+                            mesh.vertices[(v + 0) * 3 + 1],
+                            mesh.vertices[(v + 0) * 3 + 2]
+                        };
+
+                        Vector3 v1 = {
+                            mesh.vertices[(v + 1) * 3 + 0],
+                            mesh.vertices[(v + 1) * 3 + 1],
+                            mesh.vertices[(v + 1) * 3 + 2]
+                        };
+
+                        Vector3 v2 = {
+                            mesh.vertices[(v + 2) * 3 + 0],
+                            mesh.vertices[(v + 2) * 3 + 1],
+                            mesh.vertices[(v + 2) * 3 + 2]
+                        };
+
+                        DrawLine3D(v0, v1, lineColor);
+                        DrawLine3D(v1, v2, lineColor);
+                        DrawLine3D(v2, v0, lineColor);
+
+                        DrawSphere(v0, 0.025f, pointColor);
+                        DrawSphere(v1, 0.025f, pointColor);
+                        DrawSphere(v2, 0.025f, pointColor);
+                    } 
+                }
+            }
+
+            break;
+        }
+    }
+
+    rlEnableBackfaceCulling();
+    rlPopMatrix();
+}
+
 void draw_entity_with_texture(Entity& e) {
     refresh_entity_render_state(e);
     const MeshComponent* mesh = e.get_mesh_component();
@@ -274,6 +428,7 @@ void draw_entity_with_texture(Entity& e) {
     if (edited_mesh_is_double_sided) rlEnableBackfaceCulling();
 
     rlPopMatrix();
+    draw_collision_debug(e);
 }
 
 void refresh_textures(Scene* scene, const std::string& project_path) {

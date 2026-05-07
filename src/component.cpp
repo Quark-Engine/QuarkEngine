@@ -72,7 +72,41 @@ void LightComponent::deserialize(const nlohmann::json& json) {
     if (json.contains("light_type")) light.light.type = json["light_type"];
 }
 
-void LightComponent::on_entity_transform_changed() {
+void LightComponent::on_entity_transform_changed() {}
+
+void CollisionComponent::serialize(nlohmann::json& json) const {
+    json["collider_type"] = static_cast<int>(collider_type);
+    json["is_trigger"] = is_trigger;
+
+    json["size"] = {size.x, size.y, size.z};
+    json["radius"] = radius;
+    json["height"] = height;
+
+    json["center"] = {center.x, center.y, center.z};
+}
+
+void CollisionComponent::deserialize(const nlohmann::json& json) {
+    if (json.contains("collider_type")) collider_type = static_cast<ColliderType>(json["collider_type"].get<int>());
+    if (json.contains("is_trigger")) is_trigger = json["is_trigger"];
+
+    if (json.contains("size")) {
+        auto& s = json["size"];
+        size = {s[0], s[1], s[2]};
+    }
+
+    if (json.contains("radius")) radius = json["radius"];
+    if (json.contains("height")) height = json["height"];
+    
+    if (json.contains("center")) {
+        auto& c = json["size"];
+        center = {c[0], c[1], c[2]};
+    }
+
+    dirty = true;
+}
+
+void CollisionComponent::on_entity_transform_changed() {
+    dirty = true;
 }
 
 void ComponentManager::deserialize(const nlohmann::json& json) {
@@ -99,6 +133,13 @@ void ComponentManager::deserialize(const nlohmann::json& json) {
             }
             comp = mesh;
         }
+        else if (type_name == "Material") {
+            auto mat = std::make_shared<MaterialComponent>();
+            if (comp_json.contains("data")) {
+                mat->deserialize(comp_json["data"]);
+            }
+            comp = mat;
+        }
         else if (type_name == "Light") {
             auto light = std::make_shared<LightComponent>();
             if (comp_json.contains("data")) {
@@ -122,30 +163,17 @@ const ComponentManager* Entity::get_components() const {
     return components.get();
 }
 
-TransformComponent* Entity::get_transform_component() {
-    return components ? components->get_transform() : nullptr;
-}
+TransformComponent* Entity::get_transform_component() { return components ? components->get_transform() : nullptr; }
+const TransformComponent* Entity::get_transform_component() const { return components ? components->get_transform() : nullptr; }
 
-const TransformComponent* Entity::get_transform_component() const {
-    return components ? components->get_transform() : nullptr;
-}
+MeshComponent* Entity::get_mesh_component() { return components ? components->get_mesh() : nullptr; }
+const MeshComponent* Entity::get_mesh_component() const { return components ? components->get_mesh() : nullptr; }
 
-MeshComponent* Entity::get_mesh_component() {
-    return components ? components->get_mesh() : nullptr;
-}
+LightComponent* Entity::get_light_component() { return components ? components->get_light() : nullptr; }
+const LightComponent* Entity::get_light_component() const { return components ? components->get_light() : nullptr; }
 
-const MeshComponent* Entity::get_mesh_component() const {
-    return components ? components->get_mesh() : nullptr;
-}
+MaterialComponent* Entity::get_material_component() { return components ? components->get_material() : nullptr; }
+const MaterialComponent* Entity::get_material_component() const { return components ? components->get_material() : nullptr; }
 
-LightComponent* Entity::get_light_component() {
-    return components ? components->get_light() : nullptr;
-}
-
-const LightComponent* Entity::get_light_component() const {
-    return components ? components->get_light() : nullptr;
-}
-
-MaterialComponent* Entity::get_material_component() {
-    return components ? components->get_material() : nullptr;
-}
+CollisionComponent* Entity::get_collision_component() { return components ? components->get_collision() : nullptr; }
+const CollisionComponent* Entity::get_collision_component() const { return components ? components->get_collision() : nullptr; }

@@ -13,6 +13,7 @@ public:
     static void draw_mesh_component(Editor& editor, Entity& entity, MeshComponent* mesh);
     static void draw_light_component(Editor& editor, Entity& entity, LightComponent* light, Shader shader);
     static void draw_material_component(Editor& editor, Entity& entity, MaterialComponent* material);
+    static void draw_collision_component(Editor& editor, Entity& entity, CollisionComponent* collision);
     
 private:
     static bool should_show_component_menu;

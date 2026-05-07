@@ -74,9 +74,20 @@
     "sphere": "Sphere",
     "cone": "Cone",
     "cylinder": "Cylinder",
+    "capsule": "Capsule",
     "hemisphere": "HemiSphere",
     "torus": "Torus",
     "plane": "Plane",
+
+    "collision": "Collision",
+    "collision_properties": "Collision Properties",
+    "collider_type": "Collider Type",
+    "visualize": "Visualize",
+    "center": "Center",
+    "size": "Size",
+    "radius": "Radius",
+    "height": "Height",
+
 
     "mesh": "Mesh",
     "mesh_config": "Mesh Configuration",

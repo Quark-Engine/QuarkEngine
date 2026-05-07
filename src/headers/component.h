@@ -24,7 +24,15 @@ enum ComponentType {
     COMPONENT_MESH,
     COMPONENT_MATERIAL,
     COMPONENT_LIGHT,
+    COMPONENT_COLLISION,
     COMPONENT_CUSTOM
+};
+
+enum ColliderType {
+    COLLIDER_BOX,
+    COLLIDER_SPHERE,
+    COLLIDER_CAPSULE,
+    COLLIDER_MESH
 };
 
 class Component {
@@ -189,6 +197,38 @@ public:
     void on_entity_transform_changed() override;
 };
 
+class CollisionComponent : public Component {
+public:
+    ColliderType collider_type = COLLIDER_BOX;
+
+    bool is_trigger = false;
+    bool visualize = true;
+
+    // box
+    Vector3 size = {1, 1, 1};
+
+    // sphere/capsule
+    float radius = 0.5f;
+    float height = 2.0f;
+
+    Vector3 center = {0, 0, 0};
+
+    BoundingBox world_bounds = {{0, 0, 0}, {0, 0, 0}};
+    bool dirty = true;
+
+    CollisionComponent() {
+        name = "Collision";
+        type = COMPONENT_COLLISION;
+    }
+
+    ComponentType get_type() const override { return COMPONENT_COLLISION; }
+    std::string get_type_name() const override { return "Collision"; }
+
+    void serialize(nlohmann::json& json) const override;
+    void deserialize(const nlohmann::json& json) override;
+    void on_entity_transform_changed() override;
+};
+
 class ComponentManager {
 private:
     std::vector<std::shared_ptr<Component>> components;
@@ -241,6 +281,11 @@ public:
 
     MaterialComponent* get_material() {
         auto comp = get_component_of_type<MaterialComponent>();
+        return comp ? comp.get() : nullptr;
+    }
+
+    CollisionComponent* get_collision() {
+        auto comp = get_component_of_type<CollisionComponent>();
         return comp ? comp.get() : nullptr;
     }
 
