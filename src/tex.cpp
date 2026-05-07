@@ -256,17 +256,28 @@ void draw_collision_debug(Entity& entity) {
 
     if (!collision || !transform || !collision->visualize) return;
 
-    Vector3 pos = Vector3Add(transform->position, collision->center);
+    Vector3 worldPos = Vector3Add(transform->position, collision->center);
+
+    Matrix matScale = MatrixScale(transform->scale.x, transform->scale.y, transform->scale.z);
+    Matrix matRotX  = MatrixRotateX(DEG2RAD * transform->rotation.x);
+    Matrix matRotY  = MatrixRotateY(DEG2RAD * transform->rotation.y);
+    Matrix matRotZ  = MatrixRotateZ(DEG2RAD * transform->rotation.z);
+    Matrix matTrans = MatrixTranslate(worldPos.x, worldPos.y, worldPos.z);
+
+    Matrix world =
+        MatrixMultiply(
+            MatrixMultiply(
+                MatrixMultiply(matScale, matRotX),
+                MatrixMultiply(matRotY, matRotZ)
+            ),
+            matTrans
+        );
+
+    Color lineColor = GREEN;
+    Color pointColor = LIME;
 
     rlPushMatrix();
-
-    rlTranslatef(pos.x, pos.y, pos.z);
-    rlRotatef(transform->rotation.x, 1, 0, 0);
-    rlRotatef(transform->rotation.y, 0, 1, 0);
-    rlRotatef(transform->rotation.z, 0, 0, 1);
-    rlScalef(transform->scale.x, transform->scale.y, transform->scale.z);
-
-    Color c = GREEN;
+    rlMultMatrixf(MatrixToFloat(world));
 
     switch (collision->collider_type) {
 
@@ -275,14 +286,15 @@ void draw_collision_debug(Entity& entity) {
                 collision->size.x,
                 collision->size.y,
                 collision->size.z,
-                c);
+                lineColor);
             break;
         }
 
         case COLLIDER_SPHERE: {
             DrawSphereWires({0,0,0},
                 collision->radius,
-                12, 12, c);
+                16, 16,
+                lineColor);
             break;
         }
 
@@ -290,13 +302,12 @@ void draw_collision_debug(Entity& entity) {
             float r = collision->radius;
             float h = collision->height;
 
-            DrawCylinderWires(
-                {0,0,0},
-                r, r,
-                h - r * 2.0f,
-                12, c
-            );
+            float cylinderH = std::max(0.0f, h - r * 2.0f);
 
+            DrawCylinderWires({0,0,0}, r, r, cylinderH, 16, lineColor);
+
+            DrawSphereWires({0, cylinderH * 0.5f, 0}, r, 12, 12, lineColor);
+            DrawSphereWires({0,-cylinderH * 0.5f, 0}, r, 12, 12, lineColor);
             break;
         }
 
@@ -307,49 +318,47 @@ void draw_collision_debug(Entity& entity) {
 
             rlDisableBackfaceCulling();
 
-            rlBegin(RL_LINES);
-            rlColor3f(0, 1, 0);
-
             for (int m = 0; m < model.meshCount; m++) {
                 Mesh& mesh = model.meshes[m];
-                if (!mesh.vertices || !mesh.indices) continue;
+                if (!mesh.vertices) continue;
 
-                for (int i = 0; i < mesh.triangleCount; i++) {
+                if (mesh.indices && mesh.triangleCount > 0) {
 
-                    unsigned short i0 = mesh.indices[i * 3];
-                    unsigned short i1 = mesh.indices[i * 3 + 1];
-                    unsigned short i2 = mesh.indices[i * 3 + 2];
+                    for (int i = 0; i < mesh.triangleCount; i++) {
+                        int i0 = mesh.indices[i * 3 + 0];
+                        int i1 = mesh.indices[i * 3 + 1];
+                        int i2 = mesh.indices[i * 3 + 2];
 
-                    Vector3 v0 = {
-                        mesh.vertices[i0 * 3 + 0],
-                        mesh.vertices[i0 * 3 + 1],
-                        mesh.vertices[i0 * 3 + 2]
-                    };
+                        Vector3 v0 = { mesh.vertices[i0*3+0], mesh.vertices[i0*3+1], mesh.vertices[i0*3+2] };
+                        Vector3 v1 = { mesh.vertices[i1*3+0], mesh.vertices[i1*3+1], mesh.vertices[i1*3+2] };
+                        Vector3 v2 = { mesh.vertices[i2*3+0], mesh.vertices[i2*3+1], mesh.vertices[i2*3+2] };
 
-                    Vector3 v1 = {
-                        mesh.vertices[i1 * 3 + 0],
-                        mesh.vertices[i1 * 3 + 1],
-                        mesh.vertices[i1 * 3 + 2]
-                    };
+                        DrawLine3D(v0, v1, lineColor);
+                        DrawLine3D(v1, v2, lineColor);
+                        DrawLine3D(v2, v0, lineColor);
 
-                    Vector3 v2 = {
-                        mesh.vertices[i2 * 3 + 0],
-                        mesh.vertices[i2 * 3 + 1],
-                        mesh.vertices[i2 * 3 + 2]
-                    };
+                        DrawSphere(v0, 0.02f, pointColor);
+                        DrawSphere(v1, 0.02f, pointColor);
+                        DrawSphere(v2, 0.02f, pointColor);
+                    }
 
-                    rlVertex3f(v0.x, v0.y, v0.z);
-                    rlVertex3f(v1.x, v1.y, v1.z);
+                } else {
 
-                    rlVertex3f(v1.x, v1.y, v1.z);
-                    rlVertex3f(v2.x, v2.y, v2.z);
+                    for (int v = 0; v < mesh.vertexCount; v += 3) {
+                        Vector3 v0 = { mesh.vertices[(v+0)*3+0], mesh.vertices[(v+0)*3+1], mesh.vertices[(v+0)*3+2] };
+                        Vector3 v1 = { mesh.vertices[(v+1)*3+0], mesh.vertices[(v+1)*3+1], mesh.vertices[(v+1)*3+2] };
+                        Vector3 v2 = { mesh.vertices[(v+2)*3+0], mesh.vertices[(v+2)*3+1], mesh.vertices[(v+2)*3+2] };
 
-                    rlVertex3f(v2.x, v2.y, v2.z);
-                    rlVertex3f(v0.x, v0.y, v0.z);
+                        DrawLine3D(v0, v1, lineColor);
+                        DrawLine3D(v1, v2, lineColor);
+                        DrawLine3D(v2, v0, lineColor);
+
+                        DrawSphere(v0, 0.02f, pointColor);
+                        DrawSphere(v1, 0.02f, pointColor);
+                        DrawSphere(v2, 0.02f, pointColor);
+                    }
                 }
             }
-
-            rlEnd();
 
             rlEnableBackfaceCulling();
             break;
