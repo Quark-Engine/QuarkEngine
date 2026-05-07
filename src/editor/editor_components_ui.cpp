@@ -465,6 +465,16 @@ void ComponentUIHelper::draw_collision_component(Editor& editor, Entity& entity,
         }
     }
 
+    ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.8f, 0.2f, 0.2f, 1.0f));
+    ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImVec4(1.0f, 0.3f, 0.3f, 1.0f));
+    if (ImGui::Button(lang.word("reset"), ImVec2(-1, 0))) {
+        collision->size = Vector3One();
+        collision->radius = 0.5f;
+        collision->height = 2.0f;
+        collision->center = Vector3Zero();
+    }
+    ImGui::PopStyleColor(2);
+
     if (changed) {
         mark_entity_bounds_dirty(&entity);
     }
