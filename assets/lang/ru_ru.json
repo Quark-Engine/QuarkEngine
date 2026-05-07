@@ -51,7 +51,7 @@
     "albedo": "Альбедо",
     "brightness": "Яркость",
     "primitive": "Примитив",
-    "current": "Текущий",
+    "current": "Текущая",
 
     "file": "Файл",
     "folder": "Папка",
@@ -69,7 +69,7 @@
     "add_component": "Добавить компонент",
     "remove_component": "Удалить компонент",
 
-    "entity": "Сущность",
+    "entity": "Объект",
     "cube": "Куб",
     "sphere": "Сфера",
     "cone": "Конус",

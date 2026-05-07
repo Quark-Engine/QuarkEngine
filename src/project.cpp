@@ -11,6 +11,7 @@
 #include <fstream>
 #include <filesystem>
 #include <iostream>
+#include "editor/editor_viewers.h"
 
 namespace fs = std::filesystem;
 using json = nlohmann::json;
@@ -255,12 +256,9 @@ bool project_load(const std::string& folder_path, Scene& scene, Shader shader) {
             continue;
         }
 
-        if (!e.components->get_transform()) {
-            e.components->add_component(std::make_shared<TransformComponent>());
-        }
-        if (!e.components->get_mesh()) {
-            e.components->add_component(std::make_shared<MeshComponent>());
-        }
+        if (!e.components->get_transform()) e.components->add_component(std::make_shared<TransformComponent>());
+        if (!e.components->get_mesh()) e.components->add_component(std::make_shared<MeshComponent>());
+        if (!e.components->get_material()) e.components->add_component(std::make_shared<MaterialComponent>());
 
         MeshComponent* mesh = e.get_mesh_component();
         TransformComponent* transform = e.get_transform_component();
@@ -277,7 +275,9 @@ bool project_load(const std::string& folder_path, Scene& scene, Shader shader) {
                 if (a.is_procedural) {
                     mesh->model = a.generator(mesh->segments);
                     mesh->owns_model_instance = true;
-                } else {
+                } 
+                
+                else {
                     if (!load_model_instance(a, mesh->model)) {
                         mesh->asset = nullptr;
                         mesh->asset_name.clear();
@@ -292,16 +292,16 @@ bool project_load(const std::string& folder_path, Scene& scene, Shader shader) {
                 store_material_textures(&e);
                 apply_mesh_overrides(e);
 
-                if (mat->texture_source == TEXTURE_EXTERNAL && !mat->texture_name.empty()) {
-                    for (auto& opt : texture_options) {
-                        if (opt.name == mat->texture_name) {
-                            mat->texture = opt.texture;
-                            break;
-                        }
-                    }
-                } else if (mat->texture_source == TEXTURE_MODEL) {
+                if (mat && !mat->texture_name.empty()) {
+                    load_material_to_entity(&e, mat->texture_name);
+                    mat->texture_source = TEXTURE_EXTERNAL;
+                }
+
+                else if (mat && mat->texture_source == TEXTURE_MODEL) {
                     restore_model_textures(&e);
-                } else {
+                }
+
+                else {
                     clear_material_textures(&e);
                 }
 
