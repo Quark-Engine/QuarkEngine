@@ -1,4 +1,9 @@
 {
+    "_meta": {
+        "editor_font": "MS-Pgothic-Regular.ttf",
+        "editor_font_merge": "Rubik-Regular.ttf"
+    },
+
     "language": "언어",
 
     "hierarchy": "Hierarchy",

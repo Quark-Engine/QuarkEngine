@@ -46,9 +46,21 @@ static void reload_editor_fonts(const std::string& language_code) {
     ImGuiIO& io = ImGui::GetIO();
     io.Fonts->Clear();
 
-    ImFont* default_font = io.Fonts->AddFontFromFileTTF("assets/Rubik-Regular.ttf", 16.0f);
+    const std::string base_font_path = LanguageManager::get().editor_font_path();
+    const std::string merge_font_path = LanguageManager::get().editor_font_merge_path();
+    ImFont* default_font = io.Fonts->AddFontFromFileTTF(base_font_path.c_str(), 16.0f);
 
-    if (language_uses_ms_pgothic(language_code)) {
+    if (!merge_font_path.empty()) {
+        ImFontConfig merge_config = {};
+        merge_config.MergeMode = true;
+        merge_config.PixelSnapH = true;
+        io.Fonts->AddFontFromFileTTF(
+            merge_font_path.c_str(),
+            16.0f,
+            &merge_config,
+            nullptr
+        );
+    } else if (language_uses_ms_pgothic(language_code) && base_font_path != "assets/MS-Pgothic-Regular.ttf") {
         ImFontConfig merge_config = {};
         merge_config.MergeMode = true;
         merge_config.PixelSnapH = true;
