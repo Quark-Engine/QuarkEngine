@@ -6,6 +6,11 @@ using json = nlohmann::json;
 
 static std::unordered_map<std::string, std::string> word_cache;
 
+static std::string normalize_language_code(const std::string& code) {
+    if (code == "ru_ru") return "russian";
+    return code;
+}
+
 bool LanguageManager::load(const std::string& path) {
     std::ifstream f(path);
     if (!f.is_open()) return false;
@@ -15,8 +20,8 @@ bool LanguageManager::load(const std::string& path) {
 }
 
 void LanguageManager::set_lang(const std::string& code) {
-    current = code;
-    load("assets/lang/" + code + ".json");
+    current = normalize_language_code(code);
+    load("assets/lang/" + current + ".json");
 
     const std::string path = "config.json";
     json j;
@@ -24,7 +29,7 @@ void LanguageManager::set_lang(const std::string& code) {
         std::ifstream in(path);
         try { in >> j; } catch (...) {}
     }
-    j["language"] = code;
+    j["language"] = current;
     std::ofstream out(path);
     out << j.dump(4);
 }
@@ -82,7 +87,7 @@ std::string load_or_create_config() {
     }
 
     if (j.contains("language")) {
-        return j["language"].get<std::string>();
+        return normalize_language_code(j["language"].get<std::string>());
     }
 
     return "en_us";

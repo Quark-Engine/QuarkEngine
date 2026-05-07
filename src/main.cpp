@@ -27,6 +27,43 @@ extern bool g_is_scene_hovered;
 extern bool g_is_scene_active;
 static Shader shadowcaster_shader = {0};
 
+static bool language_uses_ms_pgothic(const std::string& language_code) {
+    return language_code == "japanese" ||
+        language_code == "korean" ||
+        language_code == "simplified_chinese" ||
+        language_code == "traditional_chinese";
+}
+
+static const ImWchar* get_ms_pgothic_glyph_ranges(ImGuiIO& io, const std::string& language_code) {
+    if (language_code == "japanese") return io.Fonts->GetGlyphRangesJapanese();
+    if (language_code == "korean") return io.Fonts->GetGlyphRangesKorean();
+    if (language_code == "simplified_chinese") return io.Fonts->GetGlyphRangesChineseSimplifiedCommon();
+    if (language_code == "traditional_chinese") return io.Fonts->GetGlyphRangesChineseFull();
+    return nullptr;
+}
+
+static void reload_editor_fonts(const std::string& language_code) {
+    ImGuiIO& io = ImGui::GetIO();
+    io.Fonts->Clear();
+
+    ImFont* default_font = io.Fonts->AddFontFromFileTTF("assets/Rubik-Regular.ttf", 16.0f);
+
+    if (language_uses_ms_pgothic(language_code)) {
+        ImFontConfig merge_config = {};
+        merge_config.MergeMode = true;
+        merge_config.PixelSnapH = true;
+        io.Fonts->AddFontFromFileTTF(
+            "assets/MS-Pgothic-Regular.ttf",
+            16.0f,
+            &merge_config,
+            get_ms_pgothic_glyph_ranges(io, language_code)
+        );
+    }
+
+    io.FontDefault = default_font;
+    io.Fonts->Build();
+}
+
 static void update_plugins(PluginManager& plugin_manager, Editor& editor) {
     static Editor* s_editor = nullptr;
     s_editor = &editor;
@@ -329,11 +366,7 @@ int main(int argc, char* argv[]) {
     InitWindow(1280, 720, "Quark Engine");
     SetTargetFPS(GetMonitorRefreshRate(GetCurrentMonitor()));
     rlImGuiSetup(true);
-
-    ImGuiIO& io = ImGui::GetIO();
-    io.Fonts->Clear();
-    io.Fonts->AddFontFromFileTTF("assets/Rubik-Regular.ttf", 16.0f);
-    io.Fonts->Build();
+    reload_editor_fonts(LanguageManager::get().current);
 
     ApplyCustomImGuiTheme();
     SetExitKey(0);
@@ -404,8 +437,14 @@ int main(int argc, char* argv[]) {
 
     PluginManager plugin_manager;
     plugin_manager.load_all("plugins");
+    std::string active_font_language = LanguageManager::get().current;
 
     while (!WindowShouldClose()) {
+        if (active_font_language != LanguageManager::get().current) {
+            active_font_language = LanguageManager::get().current;
+            reload_editor_fonts(active_font_language);
+        }
+
         SetWindowTitle(TextFormat("Quark Engine | %s | FPS: %d",
             fs::path(project_path).filename().string().c_str(), GetFPS()));
 
