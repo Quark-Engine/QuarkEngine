@@ -341,6 +341,46 @@ void ComponentUIHelper::draw_material_component(Editor& editor, Entity& entity, 
     } else {
         ImGui::TextDisabled("%s: %s", lang.word("current"), lang.word("none"));
     }
+
+    ImGui::Spacing();
+    ImGui::Separator();
+    ImGui::Text(lang.word("uv_settings"));
+    ImGui::Spacing();
+
+    bool uv_changed = false;
+
+    if (ImGui::Checkbox(lang.word("stretch_texture"), &mat->texture_stretch)) {
+        editor.save_state();
+        uv_changed = true;
+    }
+
+    if (!mat->texture_stretch) {
+        if (ImGui::DragFloat(lang.word("repeat_u"), &mat->texture_repeat_u, 0.1f, 0.1f, 10.0f)) {
+            editor.save_state();
+            uv_changed = true;
+        }
+
+        if (ImGui::DragFloat(lang.word("repeat_v"), &mat->texture_repeat_v, 0.1f, 0.1f, 10.0f)) {
+            editor.save_state();
+            uv_changed = true;
+        }
+
+        float uv_scale[2] = {mat->uv_scale.x, mat->uv_scale.y};
+        if (ImGui::DragFloat2(lang.word("uv_scale_x"), uv_scale, 0.1f, 0.1f, 5.0f)) {
+            editor.save_state();
+            mat->uv_scale = {uv_scale[0], uv_scale[1]};
+            uv_changed = true;
+        }
+    }
+
+    if (ImGui::Checkbox(lang.word("auto_uv"), &mat->auto_uv)) {
+        editor.save_state();
+        uv_changed = true;
+    }
+
+    if (uv_changed) {
+        mark_entity_uv_dirty(&entity);
+    }
 }
 
 void ComponentUIHelper::draw_light_component(Editor& editor, Entity& entity, LightComponent* light, Shader shader) {
