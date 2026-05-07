@@ -436,7 +436,7 @@ void ComponentUIHelper::draw_collision_component(Editor& editor, Entity& entity,
         }
 
         case COLLIDER_SPHERE: {
-            if (ImGui::DragFloat3(lang.word("radius"), (float*)&collision->radius, 0.1f, 0.01f, 1000.0f)) {
+            if (ImGui::DragFloat(lang.word("radius"), (float*)&collision->radius, 0.1f, 0.01f, 1000.0f)) {
                 editor.save_state();
 
                 collision->dirty = true;
@@ -447,14 +447,14 @@ void ComponentUIHelper::draw_collision_component(Editor& editor, Entity& entity,
         }
 
         case COLLIDER_CAPSULE: {
-            if (ImGui::DragFloat3(lang.word("radius"), (float*)&collision->radius, 0.1f, 0.01f, 1000.0f)) {
+            if (ImGui::DragFloat(lang.word("radius"), (float*)&collision->radius, 0.1f, 0.01f, 1000.0f)) {
                 editor.save_state();
 
                 collision->dirty = true;
                 changed = true;
             }
 
-            if (ImGui::DragFloat3(lang.word("height"), (float*)&collision->height, 0.1f, 0.1f, 1000.0f)) {
+            if (ImGui::DragFloat(lang.word("height"), (float*)&collision->height, 0.1f, 0.1f, 1000.0f)) {
                 editor.save_state();
 
                 collision->dirty = true;

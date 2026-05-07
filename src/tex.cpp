@@ -254,65 +254,48 @@ void draw_collision_debug(Entity& entity) {
     MeshComponent* mesh_component = entity.get_mesh_component();
     TransformComponent* transform = entity.get_transform_component();
 
-    if (!collision || !transform) return;
-    if (!collision->visualize) return;
+    if (!collision || !transform || !collision->visualize) return;
 
     Vector3 pos = Vector3Add(transform->position, collision->center);
 
     rlPushMatrix();
 
     rlTranslatef(pos.x, pos.y, pos.z);
-
     rlRotatef(transform->rotation.x, 1, 0, 0);
     rlRotatef(transform->rotation.y, 0, 1, 0);
     rlRotatef(transform->rotation.z, 0, 0, 1);
-
     rlScalef(transform->scale.x, transform->scale.y, transform->scale.z);
 
-    rlDisableBackfaceCulling();
+    Color c = GREEN;
 
     switch (collision->collider_type) {
 
         case COLLIDER_BOX: {
-            DrawCubeWires(
-                {0, 0, 0},
+            DrawCubeWires({0,0,0},
                 collision->size.x,
                 collision->size.y,
                 collision->size.z,
-                GREEN
-            );
+                c);
             break;
         }
 
         case COLLIDER_SPHERE: {
-            DrawSphereWires(
-                {0, 0, 0},
+            DrawSphereWires({0,0,0},
                 collision->radius,
-                16,
-                16,
-                GREEN
-            );
+                12, 12, c);
             break;
         }
 
         case COLLIDER_CAPSULE: {
-            float radius = collision->radius;
-            float height = collision->height;
-
-            Vector3 top = {0, height * 0.5f - radius, 0};
-            Vector3 bottom = {0, -height * 0.5f + radius, 0};
+            float r = collision->radius;
+            float h = collision->height;
 
             DrawCylinderWires(
-                {0, 0, 0},
-                radius,
-                radius,
-                height - radius * 2.0f,
-                16,
-                GREEN
+                {0,0,0},
+                r, r,
+                h - r * 2.0f,
+                12, c
             );
-
-            DrawSphereWires(top, radius, 16, 16, GREEN);
-            DrawSphereWires(bottom, radius, 16, 16, GREEN);
 
             break;
         }
@@ -322,84 +305,57 @@ void draw_collision_debug(Entity& entity) {
 
             Model& model = mesh_component->model;
 
-            Color lineColor = GREEN;
-            Color pointColor = LIME;
+            rlDisableBackfaceCulling();
+
+            rlBegin(RL_LINES);
+            rlColor3f(0, 1, 0);
 
             for (int m = 0; m < model.meshCount; m++) {
                 Mesh& mesh = model.meshes[m];
+                if (!mesh.vertices || !mesh.indices) continue;
 
-                if (!mesh.vertices) continue;
+                for (int i = 0; i < mesh.triangleCount; i++) {
 
-                if (mesh.indices) {
-                    for (int t = 0; t < mesh.triangleCount; t++) {
+                    unsigned short i0 = mesh.indices[i * 3];
+                    unsigned short i1 = mesh.indices[i * 3 + 1];
+                    unsigned short i2 = mesh.indices[i * 3 + 2];
 
-                        unsigned short i0 = mesh.indices[t * 3 + 0];
-                        unsigned short i1 = mesh.indices[t * 3 + 1];
-                        unsigned short i2 = mesh.indices[t * 3 + 2];
+                    Vector3 v0 = {
+                        mesh.vertices[i0 * 3 + 0],
+                        mesh.vertices[i0 * 3 + 1],
+                        mesh.vertices[i0 * 3 + 2]
+                    };
 
-                        Vector3 v0 = {
-                            mesh.vertices[i0 * 3 + 0],
-                            mesh.vertices[i0 * 3 + 1],
-                            mesh.vertices[i0 * 3 + 2]
-                        };
+                    Vector3 v1 = {
+                        mesh.vertices[i1 * 3 + 0],
+                        mesh.vertices[i1 * 3 + 1],
+                        mesh.vertices[i1 * 3 + 2]
+                    };
 
-                        Vector3 v1 = {
-                            mesh.vertices[i1 * 3 + 0],
-                            mesh.vertices[i1 * 3 + 1],
-                            mesh.vertices[i1 * 3 + 2]
-                        };
+                    Vector3 v2 = {
+                        mesh.vertices[i2 * 3 + 0],
+                        mesh.vertices[i2 * 3 + 1],
+                        mesh.vertices[i2 * 3 + 2]
+                    };
 
-                        Vector3 v2 = {
-                            mesh.vertices[i2 * 3 + 0],
-                            mesh.vertices[i2 * 3 + 1],
-                            mesh.vertices[i2 * 3 + 2]
-                        };
+                    rlVertex3f(v0.x, v0.y, v0.z);
+                    rlVertex3f(v1.x, v1.y, v1.z);
 
-                        DrawLine3D(v0, v1, lineColor);
-                        DrawLine3D(v1, v2, lineColor);
-                        DrawLine3D(v2, v0, lineColor);
+                    rlVertex3f(v1.x, v1.y, v1.z);
+                    rlVertex3f(v2.x, v2.y, v2.z);
 
-                        DrawSphere(v0, 0.025f, pointColor);
-                        DrawSphere(v1, 0.025f, pointColor);
-                        DrawSphere(v2, 0.025f, pointColor);
-                    }
-                } else {
-                    for (int v = 0; v < mesh.vertexCount; v += 3) {
-
-                        Vector3 v0 = {
-                            mesh.vertices[(v + 0) * 3 + 0],
-                            mesh.vertices[(v + 0) * 3 + 1],
-                            mesh.vertices[(v + 0) * 3 + 2]
-                        };
-
-                        Vector3 v1 = {
-                            mesh.vertices[(v + 1) * 3 + 0],
-                            mesh.vertices[(v + 1) * 3 + 1],
-                            mesh.vertices[(v + 1) * 3 + 2]
-                        };
-
-                        Vector3 v2 = {
-                            mesh.vertices[(v + 2) * 3 + 0],
-                            mesh.vertices[(v + 2) * 3 + 1],
-                            mesh.vertices[(v + 2) * 3 + 2]
-                        };
-
-                        DrawLine3D(v0, v1, lineColor);
-                        DrawLine3D(v1, v2, lineColor);
-                        DrawLine3D(v2, v0, lineColor);
-
-                        DrawSphere(v0, 0.025f, pointColor);
-                        DrawSphere(v1, 0.025f, pointColor);
-                        DrawSphere(v2, 0.025f, pointColor);
-                    } 
+                    rlVertex3f(v2.x, v2.y, v2.z);
+                    rlVertex3f(v0.x, v0.y, v0.z);
                 }
             }
 
+            rlEnd();
+
+            rlEnableBackfaceCulling();
             break;
         }
     }
 
-    rlEnableBackfaceCulling();
     rlPopMatrix();
 }
 
