@@ -391,14 +391,25 @@ void ComponentUIHelper::draw_light_component(Editor& editor, Entity& entity, Lig
 
     bool changed = false;
 
-    changed |= ImGui::DragFloat3(lang.word("position"), (float*)&light->light.position, 0.1f);
+    TransformComponent* transform = entity.get_transform_component();
+    float light_position[3] = {
+        transform ? transform->position.x : light->light.position.x,
+        transform ? transform->position.y : light->light.position.y,
+        transform ? transform->position.z : light->light.position.z
+    };
+    if (ImGui::DragFloat3(lang.word("position"), light_position, 0.1f)) {
+        if (transform) {
+            transform->position = { light_position[0], light_position[1], light_position[2] };
+            mark_entity_bounds_dirty(&entity);
+        }
+        light->light.position = { light_position[0], light_position[1], light_position[2] };
+        changed = true;
+    }
     changed |= ImGui::DragFloat3(lang.word("target"), (float*)&light->light.target, 0.1f);
 
     changed |= ImGui::DragFloat(lang.word("intensity"), &light->light.intensity, 0.1f, 0.0f, 10.0f);
     changed |= ImGui::DragFloat(lang.word("range"), &light->light.range, 0.1f, 0.1f, 100.0f);
     changed |= ImGui::DragFloat(lang.word("spot_angle"), &light->light.spot_angle, 1.0f, 5.0f, 180.0f);
-
-    int light_type = light->light.light.type;
 
     const char* light_types[] = {
         lang.word("directional"),
@@ -406,8 +417,22 @@ void ComponentUIHelper::draw_light_component(Editor& editor, Entity& entity, Lig
         lang.word("spot")
     };
 
-    if (ImGui::Combo(lang.word("light_type"), &light_type, light_types, IM_ARRAYSIZE(light_types))) {
-        light->light.light.type = light_type;
+    const int light_type_values[] = {
+        LIGHT_DIRECTIONAL,
+        LIGHT_POINT,
+        LIGHT_SPOT
+    };
+
+    int light_type_index = 0;
+    for (int i = 0; i < IM_ARRAYSIZE(light_type_values); i++) {
+        if (light->light.light.type == light_type_values[i]) {
+            light_type_index = i;
+            break;
+        }
+    }
+
+    if (ImGui::Combo(lang.word("light_type"), &light_type_index, light_types, IM_ARRAYSIZE(light_types))) {
+        light->light.light.type = light_type_values[light_type_index];
         changed = true;
     }
 
@@ -417,6 +442,9 @@ void ComponentUIHelper::draw_light_component(Editor& editor, Entity& entity, Lig
 
     if (changed) {
         editor.save_state();
+        if (transform) {
+            light->light.position = transform->position;
+        }
         light->light.enabled = light->enabled;
 
         if (light->light.id != -1)

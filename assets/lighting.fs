@@ -11,6 +11,8 @@ uniform int useTexture;
 uniform sampler2D shadowMap;
 uniform mat4 lightVP;
 uniform int shadowMapResolution;
+uniform vec3 shadowLightDir;
+uniform int shadowsEnabled;
 
 out vec4 finalColor;
 
@@ -37,13 +39,16 @@ uniform vec3 viewPos;
 uniform vec3 emissionColor;
 uniform float emissionPower;
 
-float ShadowCalc(vec3 fragPos) {
+float ShadowCalc(vec3 fragPos, vec3 normal) {
+    if (shadowsEnabled != 1) return 0.0;
+
     vec4 fragPosLS = lightVP * vec4(fragPos, 1.0);
     vec3 proj = fragPosLS.xyz / fragPosLS.w;
     proj = proj * 0.5 + 0.5;
     if (proj.z > 1.0) return 0.0;
+    if (proj.x < 0.0 || proj.x > 1.0 || proj.y < 0.0 || proj.y > 1.0) return 0.0;
 
-    float bias = 0.0002;
+    float bias = max(0.0002 * (1.0 - dot(normal, normalize(shadowLightDir))), 0.00002) + 0.00001;
     int shadowCounter = 0;
     vec2 texelSize = vec2(1.0 / float(shadowMapResolution));
 
@@ -111,9 +116,10 @@ void main() {
         }
     }
 
-    float shadow = ShadowCalc(fragPosition);
+    float shadow = ShadowCalc(fragPosition, normal);
     vec3 ambientLight = ambient.rgb;
     vec3 color = texelColor.rgb * tint.rgb * (ambientLight + lightAccum * (1.0 - shadow * 0.8)) + specular * (1.0 - shadow);
+    color += texelColor.rgb * tint.rgb * (ambientLight / 10.0);
     color += emissionColor * emissionPower;
 
     finalColor = vec4(color, texelColor.a * tint.a);
