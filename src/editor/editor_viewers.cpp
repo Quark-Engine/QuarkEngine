@@ -11,6 +11,7 @@
 #include <sstream>
 #include <cstdlib>
 #include <algorithm>
+#include "editor_assets.h"
 
 #define lang LanguageManager::get()
 
@@ -292,7 +293,7 @@ void rebuild_material_preview_mesh() {
     apply_material_settings();
 }
 
-void save_material_to_file() {
+void save_material_to_file(Editor& editor) {
     if (current_material_path.empty()) return;
 
     std::ofstream material_file(current_material_path);
@@ -306,6 +307,7 @@ void save_material_to_file() {
     }
 
     material_file.close();
+    invalidate_material_previews();
 }
 
 void load_textures_in_directory() {
@@ -428,7 +430,7 @@ void draw_model_viewer_window() {
     ImGui::End();
 }
 
-void draw_material_viewer_window(Entity* selected_entity) {
+void draw_material_viewer_window(Editor& editor, Entity* selected_entity) {
     if (!show_material_viewer) {
         material_preview_primitive = 0;
 
@@ -518,7 +520,7 @@ void draw_material_viewer_window(Entity* selected_entity) {
         ImGui::Separator();
 
         if (ImGui::Button(lang.word("save_material"), ImVec2(-1, 0))) {
-            save_material_to_file();
+            save_material_to_file(editor);
         }
 
         ImGui::EndChild();

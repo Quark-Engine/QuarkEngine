@@ -941,3 +941,11 @@ void cleanup_assets_ui() {
     model_preview_cache.clear();
     editor_internal::tex_cache.clear();
 }
+
+void invalidate_material_previews() {
+    for (auto& p : material_render_cache)
+        UnloadRenderTexture(p.second);
+
+    material_render_cache.clear();
+    material_preview_cache.clear();
+}

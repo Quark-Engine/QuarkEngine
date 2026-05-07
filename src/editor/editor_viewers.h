@@ -1,5 +1,6 @@
 #pragma once
 
+#include "editor.h"
 #include "../headers/models.h"
 #include "raylib.h"
 #include <filesystem>
@@ -11,10 +12,10 @@ void draw_model_viewer_window();
 void set_model_viewer_model(const Model& model);
 bool open_model_viewer_for_asset(const ModelAsset& asset);
 
-void draw_material_viewer_window(Entity* selected_entity = nullptr);
+void draw_material_viewer_window(Editor& editor, Entity* selected_entity = nullptr);
 void apply_material_settings();
 void rebuild_material_preview_mesh();
-void save_material_to_file();
+void save_material_to_file(Editor& editor);
 void load_textures_in_directory();
 void load_material_texture(const std::string& texture_name);
 void load_material_to_entity(Entity* entity, const std::filesystem::path& mtl_path);

@@ -29,3 +29,4 @@ void draw_assets_ui(Editor& editor);
 bool import_path_to_resources(const fs::path& src, const fs::path& resource_dir);
 
 void cleanup_assets_ui();
+void invalidate_material_previews();

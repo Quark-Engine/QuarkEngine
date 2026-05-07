@@ -1037,7 +1037,7 @@ void draw_ui(Editor& editor, Shader shader, FlyCamera camera) {
 
     if (show_assets) draw_assets_ui(editor);
     draw_model_viewer_window();
-    draw_material_viewer_window(editor.scene.get_selected());
+    draw_material_viewer_window(editor, editor.scene.get_selected());
 
     if (show_about_window) {
         ImGui::OpenPopup(lang.word("about_quark_engine"));
