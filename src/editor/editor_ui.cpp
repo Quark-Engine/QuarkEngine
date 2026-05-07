@@ -265,7 +265,8 @@ void reset_editor_layout(ImGuiID dockspace_id) {
 
 void draw_gizmo(Editor& editor, FlyCamera camera) {
     sync_mesh_edit_state(editor);
-    ImGuizmo::Enable(!camera.active);
+    
+    if (camera.active) return;
 
     Entity* entity = editor.scene.get_selected();
     if (!entity) return;
