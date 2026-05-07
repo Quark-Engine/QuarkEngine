@@ -314,53 +314,7 @@ void draw_collision_debug(Entity& entity) {
         case COLLIDER_MESH: {
             if (!mesh_component) break;
 
-            Model& model = mesh_component->model;
-
-            rlDisableBackfaceCulling();
-
-            for (int m = 0; m < model.meshCount; m++) {
-                Mesh& mesh = model.meshes[m];
-                if (!mesh.vertices) continue;
-
-                if (mesh.indices && mesh.triangleCount > 0) {
-
-                    for (int i = 0; i < mesh.triangleCount; i++) {
-                        int i0 = mesh.indices[i * 3 + 0];
-                        int i1 = mesh.indices[i * 3 + 1];
-                        int i2 = mesh.indices[i * 3 + 2];
-
-                        Vector3 v0 = { mesh.vertices[i0*3+0], mesh.vertices[i0*3+1], mesh.vertices[i0*3+2] };
-                        Vector3 v1 = { mesh.vertices[i1*3+0], mesh.vertices[i1*3+1], mesh.vertices[i1*3+2] };
-                        Vector3 v2 = { mesh.vertices[i2*3+0], mesh.vertices[i2*3+1], mesh.vertices[i2*3+2] };
-
-                        DrawLine3D(v0, v1, lineColor);
-                        DrawLine3D(v1, v2, lineColor);
-                        DrawLine3D(v2, v0, lineColor);
-
-                        DrawSphere(v0, 0.02f, pointColor);
-                        DrawSphere(v1, 0.02f, pointColor);
-                        DrawSphere(v2, 0.02f, pointColor);
-                    }
-
-                } else {
-
-                    for (int v = 0; v < mesh.vertexCount; v += 3) {
-                        Vector3 v0 = { mesh.vertices[(v+0)*3+0], mesh.vertices[(v+0)*3+1], mesh.vertices[(v+0)*3+2] };
-                        Vector3 v1 = { mesh.vertices[(v+1)*3+0], mesh.vertices[(v+1)*3+1], mesh.vertices[(v+1)*3+2] };
-                        Vector3 v2 = { mesh.vertices[(v+2)*3+0], mesh.vertices[(v+2)*3+1], mesh.vertices[(v+2)*3+2] };
-
-                        DrawLine3D(v0, v1, lineColor);
-                        DrawLine3D(v1, v2, lineColor);
-                        DrawLine3D(v2, v0, lineColor);
-
-                        DrawSphere(v0, 0.02f, pointColor);
-                        DrawSphere(v1, 0.02f, pointColor);
-                        DrawSphere(v2, 0.02f, pointColor);
-                    }
-                }
-            }
-
-            rlEnableBackfaceCulling();
+            DrawModelWires(mesh_component->model, {0,0,0}, 1.0f, lineColor);
             break;
         }
     }
