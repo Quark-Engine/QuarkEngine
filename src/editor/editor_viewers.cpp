@@ -9,6 +9,7 @@
 #include <cmath>
 #include <fstream>
 #include <sstream>
+#include <iostream>
 #include <cstdlib>
 #include <algorithm>
 #include "editor_assets.h"
@@ -308,6 +309,18 @@ void save_material_to_file(Editor& editor) {
 
     material_file.close();
     invalidate_material_previews();
+
+    for (Entity& entity : editor.scene.entities) {
+        if (!&entity) continue;
+
+        MaterialComponent* mat = entity.get_material_component();
+        if (!mat) continue;
+
+        if (std::filesystem::absolute(mat->texture_name) == std::filesystem::absolute(current_material_path))
+        {
+            load_material_to_entity(&entity, current_material_path);
+        }
+    }
 }
 
 void load_textures_in_directory() {
