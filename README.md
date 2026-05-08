@@ -1,4 +1,4 @@
-# Quark Engine
+# Quark Engine OpenGL rewrite branch
 
 Quark Engine is a lightweight, world-class 3D game engine and editor built using **C++**, **Raylib**, and **Dear ImGui**. It is designed for rapid 3D scene prototyping, featuring a modern editor interface, a robust lighting system, and flexible asset management.
 
