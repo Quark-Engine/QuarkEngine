@@ -11,6 +11,13 @@ static std::string normalize_language_code(const std::string& code) {
     return code;
 }
 
+static std::string resolve_font_path(const std::string& font_value) {
+    if (font_value.empty()) return "assets/Rubik-Regular.ttf";
+    if (font_value.find('/') != std::string::npos || font_value.find('\\') != std::string::npos)
+        return font_value;
+    return "assets/" + font_value;
+}
+
 bool LanguageManager::load(const std::string& path) {
     std::ifstream f(path);
     if (!f.is_open()) return false;
@@ -59,6 +66,26 @@ const char* LanguageManager::word(const std::string& key) const {
 
         start = dot + 1;
     }
+}
+
+std::string LanguageManager::editor_font_path() const {
+    if (data.contains("_meta") && data["_meta"].is_object()) {
+        const auto& meta = data["_meta"];
+        if (meta.contains("editor_font") && meta["editor_font"].is_string())
+            return resolve_font_path(meta["editor_font"].get<std::string>());
+    }
+
+    return "assets/Rubik-Regular.ttf";
+}
+
+std::string LanguageManager::editor_font_merge_path() const {
+    if (data.contains("_meta") && data["_meta"].is_object()) {
+        const auto& meta = data["_meta"];
+        if (meta.contains("editor_font_merge") && meta["editor_font_merge"].is_string())
+            return resolve_font_path(meta["editor_font_merge"].get<std::string>());
+    }
+
+    return "";
 }
 
 std::string load_or_create_config() {

@@ -16,6 +16,8 @@ public:
     bool load(const std::string& path);
     void set_lang(const std::string& lang);
     const char* word(const std::string& key) const;
+    std::string editor_font_path() const;
+    std::string editor_font_merge_path() const;
 
 private:
     nlohmann::json data;

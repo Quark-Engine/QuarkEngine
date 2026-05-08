@@ -1,5 +1,10 @@
 {
-    "language":  "è¨€èªž",
+    "_meta": {
+        "editor_font": "MS-Pgothic-Regular.ttf",
+        "editor_font_merge": "Rubik-Regular.ttf"
+    },
+
+    "language":  "言語",
     "hierarchy":  "Hierarchy",
     "inspector":  "Inspector",
     "assets":  "Assets",
