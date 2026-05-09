@@ -335,6 +335,8 @@ void draw_assets_ui(Editor& editor) {
     if (icon_folder_tex.id == 0) icon_folder_tex = LoadTexture("assets/folder.png");
     if (icon_full_folder_tex.id == 0) icon_full_folder_tex = LoadTexture("assets/full_folder.png");
 
+    std::string popup_name = std::string(lang.word("create_new")) + "##CreateNew";
+
     static ImVec2 selection_start = {};
     static ImVec2 selection_end = {};
     static bool selecting = false;
@@ -343,10 +345,10 @@ void draw_assets_ui(Editor& editor) {
     static std::string dragged_file_name;
     static ImVec2 drag_start_pos;
 
+    static bool show_create_popup = false;
     static bool show_duplicate_popup = false;
     static std::string duplicate_name;
 
-    static bool show_create_new_item = false;
     static bool creating_folder = false;
     static char new_item_name[128] = "";
 
@@ -474,13 +476,13 @@ void draw_assets_ui(Editor& editor) {
             if (ImGui::MenuItem(lang.word("new_file"))) {
                 creating_folder = false;
                 new_item_name[0] = '\0';
-                show_create_new_item = true;
+                show_create_popup = true;
             }
 
             if (ImGui::MenuItem(lang.word("new_folder"))) {
                 creating_folder = true;
                 new_item_name[0] = '\0';
-                show_create_new_item = true;
+                show_create_popup = true;
             }
 
             ImGui::EndPopup();
@@ -506,6 +508,7 @@ void draw_assets_ui(Editor& editor) {
 
     editor_internal::dragged_target_folder_index = -1;
 
+    bool navigated = false;
     for (int i = 0; i < static_cast<int>(entries.size()); i++) {
         auto& entry = entries[i];
         ImGui::PushID(i);
@@ -525,10 +528,13 @@ void draw_assets_ui(Editor& editor) {
             editor.selected_asset_index = -1;
             editor_internal::tex_cache.clear();
             model_preview_cache.clear();
+
             for (auto& pair : model_render_cache) UnloadRenderTexture(pair.second);
+            
             model_render_cache.clear();
             ImGui::EndGroup();
             ImGui::PopID();
+            navigated = true;
             break;
         }
 
@@ -578,13 +584,13 @@ void draw_assets_ui(Editor& editor) {
             if (ImGui::MenuItem(lang.word("new_file"))) {
                 creating_folder = false;
                 new_item_name[0] = '\0';
-                show_create_new_item = true;
+                show_create_popup = true;
             }
 
             if (ImGui::MenuItem(lang.word("new_folder"))) {
                 creating_folder = true;
                 new_item_name[0] = '\0';
-                show_create_new_item = true;
+                show_create_popup = true;
             }
 
             ImGui::EndPopup();
@@ -690,6 +696,11 @@ void draw_assets_ui(Editor& editor) {
             if (fabsf(delta.x) > 5.0f || fabsf(delta.y) > 5.0f) {
                 editor_internal::file_dragging = true;
                 editor_internal::dragged_file_index = i;
+
+                if (entry.is_material) {
+                    editor_internal::scene_asset_dragging = true;
+                    editor_internal::dragged_scene_asset_name = (editor.current_asset_path / entry.filename).string();
+                }
                 
                 if (is_model_file(fs::path(entry.filename))) {
                     const std::string asset_name = get_asset_name_for_path(fs::path(editor.project_path), editor.current_asset_path / entry.filename);
@@ -710,10 +721,11 @@ void draw_assets_ui(Editor& editor) {
             }
         }
 
-        if (!entry.is_directory && is_model_file(fs::path(entry.filename))) {
+        if (!entry.is_directory && (is_model_file(fs::path(entry.filename)) || entry.is_material)) {
             const std::string asset_name = get_asset_name_for_path(fs::path(editor.project_path), editor.current_asset_path / entry.filename);
+
             if (editor_internal::scene_asset_dragging && editor_internal::dragged_scene_asset_name == asset_name) {
-                ImGui::SetTooltip(lang.word("spawn"), editor_internal::dragged_scene_asset_name.c_str());
+                if (is_model_file(fs::path(entry.filename))) ImGui::SetTooltip(lang.word("spawn"), editor_internal::dragged_scene_asset_name.c_str());
             }
         }
 
@@ -772,9 +784,6 @@ void draw_assets_ui(Editor& editor) {
         editor_internal::dragged_target_folder_index = -1;
         dragged_file_name.clear();
         drag_start_pos = ImVec2(0, 0);
-        
-        editor_internal::scene_asset_dragging = false;
-        editor_internal::dragged_scene_asset_name.clear();
     }
 
     if (rename_target >= 0) {
@@ -826,13 +835,13 @@ void draw_assets_ui(Editor& editor) {
         if (ImGui::MenuItem(lang.word("new_file"))) {
             creating_folder = false;
             new_item_name[0] = '\0';
-            show_create_new_item = true;
+            show_create_popup = true;
         }
 
         if (ImGui::MenuItem(lang.word("new_folder"))) {
             creating_folder = true;
             new_item_name[0] = '\0';
-            show_create_new_item = true;
+            show_create_popup = true;
         }
 
         ImGui::EndPopup();
@@ -846,11 +855,6 @@ void draw_assets_ui(Editor& editor) {
     if (show_duplicate_popup) {
         ImGui::OpenPopup(("%s##DuplicateName", lang.word("move_error")));
         show_duplicate_popup = false;
-    }
-
-    if (show_create_new_item) {
-        ImGui::OpenPopup(("%s##CreateNew", lang.word("create_new")));
-        show_create_new_item = false;
     }
 
     if (ImGui::BeginPopupModal(("%s##DuplicateName", lang.word("move_error")), nullptr, ImGuiWindowFlags_AlwaysAutoResize)) {
@@ -868,7 +872,14 @@ void draw_assets_ui(Editor& editor) {
         ImGui::EndPopup();
     }
 
-    if (ImGui::BeginPopupModal(("%s##CreateNew", lang.word("create_new")), nullptr, ImGuiWindowFlags_AlwaysAutoResize)) {
+    ImGui::EndChild();
+
+    if (show_create_popup && !navigated) {
+        ImGui::OpenPopup(popup_name.c_str());
+        show_create_popup = false;
+    }
+
+    if (ImGui::BeginPopupModal(popup_name.c_str(), nullptr, ImGuiWindowFlags_AlwaysAutoResize)) {
         ImGui::TextUnformatted(creating_folder ? lang.word("new_folder") : lang.word("new_file"));
         ImGui::InputText(lang.word("name"), new_item_name, IM_ARRAYSIZE(new_item_name));
         ImGui::Spacing();
@@ -919,7 +930,6 @@ void draw_assets_ui(Editor& editor) {
         ImGui::EndPopup();
     }
 
-    ImGui::EndChild();
     ImGui::End();
 }
 

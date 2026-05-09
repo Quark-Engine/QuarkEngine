@@ -141,18 +141,33 @@ void Editor::handle_input() {
     }
 
     ImGuiIO& io = ImGui::GetIO();
-    const bool ctrl = IsKeyDown(KEY_LEFT_CONTROL) || IsKeyDown(KEY_RIGHT_CONTROL);
+    const bool ctrl = (IsKeyDown(KEY_LEFT_CONTROL) || IsKeyDown(KEY_RIGHT_CONTROL)) && !io.WantCaptureKeyboard;
 
-    if (!io.WantCaptureKeyboard && ctrl && IsKeyPressed(KEY_S)) {
+    if (ctrl && IsKeyPressed(KEY_S)) {
         project_save(project_path, scene);
     }
 
     static float last_undo_time = 0.0f;
     static float last_redo_time = 0.0f;
+    static float last_copy_time = 0.0f;
+    static float last_paste_time = 0.0f;
+    static float last_dublicate_time = 0.0f;
+    static float last_delete_time = 0.0f;
+
     static bool undo_key_was_pressed = false;
     static bool redo_key_was_pressed = false;
+    static bool copy_key_was_pressed = false;
+    static bool paste_key_was_pressed = false;
+    static bool dubl_key_was_pressed = false;
+    static bool del_key_was_pressed = false;
+
     static float undo_hold_start = 0.0f;
     static float redo_hold_start = 0.0f;
+    static float copy_hold_start = 0.0f;
+    static float paste_hold_start = 0.0f;
+    static float dubl_hold_start = 0.0f;
+    static float del_hold_start = 0.0f;
+
     const float now = static_cast<float>(GetTime());
 
     if (ctrl && IsKeyDown(KEY_Z)) {
@@ -183,6 +198,60 @@ void Editor::handle_input() {
     } else {
         redo_key_was_pressed = false;
         redo_hold_start = 0.0f;
+    }
+
+    Entity* entity = scene.get_selected();
+
+    if (ctrl && IsKeyDown(KEY_C)) {
+        if (!copy_key_was_pressed) {
+            copy_entity(entity);
+
+            copy_key_was_pressed = true;
+            copy_hold_start = now;
+            last_copy_time = now;
+        } else if (now - copy_hold_start > 0.5f && now - last_copy_time > 0.15f) {
+            copy_entity(entity);
+            last_copy_time = now;
+        }
+    }
+
+    if (ctrl && IsKeyDown(KEY_V)) {
+        if (!paste_key_was_pressed){
+            paste_entity(*this);
+
+            paste_key_was_pressed = true;
+            paste_hold_start = now;
+            last_paste_time = now;
+        } else if (now - paste_hold_start > 0.5f && now - last_paste_time > 0.15f) {
+            paste_entity(*this);
+            last_paste_time = now;
+        }
+    }
+
+    if (ctrl && IsKeyDown(KEY_D)) {
+        if (!dubl_key_was_pressed) {
+            dublicate_entity(*this, entity);
+
+            dubl_key_was_pressed = true;
+            dubl_hold_start = now;
+            last_dublicate_time = now;
+        } else if (now - dubl_hold_start > 0.5f && now - last_dublicate_time > 0.15f) {
+            dublicate_entity(*this, entity);
+            last_dublicate_time = now;
+        }
+    }
+
+    if (IsKeyDown(KEY_DELETE)) {
+        if (!del_key_was_pressed) {
+            delete_entity(*this, entity, shadowmap_shader);
+
+            del_key_was_pressed = true;
+            del_hold_start = now;
+            last_delete_time = now;
+        } else if (now - del_hold_start > 0.5f && now - last_delete_time > 0.15f) {
+            delete_entity(*this, entity, shadowmap_shader);
+            last_delete_time = now;
+        }
     }
 
     static double last_asset_poll = 0.0;
