@@ -9,7 +9,10 @@ $ErrorActionPreference = "Stop"
 
 function Load-JsonOrdered {
     param([string]$Path)
-    $raw = Get-Content -LiteralPath $Path -Raw | ConvertFrom-Json
+
+    $rawText = Get-Content -LiteralPath $Path -Raw -Encoding UTF8
+    $raw = $rawText | ConvertFrom-Json
+
     return ConvertTo-OrderedHashtable -Value $raw
 }
 
@@ -41,14 +44,15 @@ function ConvertTo-OrderedHashtable {
 
 function Merge-MissingKeys {
     param(
-        [hashtable]$SourceData,
-        [hashtable]$TargetData
+        [System.Collections.IDictionary]$SourceData,
+        [System.Collections.IDictionary]$TargetData
     )
 
     $added = 0
 
     foreach ($key in $SourceData.Keys) {
-        if (-not $TargetData.ContainsKey($key)) {
+
+        if (-not $TargetData.Contains($key)) {
             $TargetData[$key] = $SourceData[$key]
             $added++
             continue
@@ -57,8 +61,13 @@ function Merge-MissingKeys {
         $sourceValue = $SourceData[$key]
         $targetValue = $TargetData[$key]
 
-        if ($sourceValue -is [hashtable] -and $targetValue -is [hashtable]) {
-            $added += Merge-MissingKeys -SourceData $sourceValue -TargetData $targetValue
+        if (
+            $sourceValue -is [System.Collections.IDictionary] -and
+            $targetValue -is [System.Collections.IDictionary]
+        ) {
+            $added += Merge-MissingKeys `
+                -SourceData $sourceValue `
+                -TargetData $targetValue
         }
     }
 
