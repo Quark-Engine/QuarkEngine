@@ -1,5 +1,5 @@
 param(
-    [string]$Source = "assets/lang/en_us.json",
+    [string]$Source = "assets/lang/english.json",
     [string]$LangDir = "assets/lang",
     [string[]]$Targets
 )

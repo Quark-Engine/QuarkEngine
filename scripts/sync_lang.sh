@@ -2,7 +2,7 @@
 
 set -euo pipefail
 
-SOURCE="assets/lang/en_us.json"
+SOURCE="assets/lang/english.json"
 LANG_DIR="assets/lang"
 TARGETS=()
 

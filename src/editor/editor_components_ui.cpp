@@ -270,22 +270,9 @@ void ComponentUIHelper::draw_mesh_component(Editor& editor, Entity& entity, Mesh
         ImGui::Text(lang.word("segments_loaded"), mesh->segments);
     }
 
-    ImGui::Checkbox(lang.word("vertex_gizmo"), &g_mesh_edit_state.enabled);
-    if (g_mesh_edit_state.enabled) {
-        ImGui::Text(lang.word("mesh_index"), g_mesh_edit_state.mesh_index);
-        ImGui::Text(lang.word("triangle_index"), g_mesh_edit_state.triangle_index);
-        ImGui::Text(lang.word("vertex_corner"), g_mesh_edit_state.vertex_corner);
-
-        if (ImGui::Button(lang.word("reset_mesh"))) {
-            editor.save_state();
-            reset_mesh_edit_model(entity);
-            g_mesh_edit_state.enabled = false;
-        }
-    }
-
     ImGui::Separator();
 
-    if (ImGui::Checkbox(lang.word("editable_mesh"), &mesh->editable_mode)) {
+    if (ImGui::Checkbox(lang.word("vertex_gizmo"), &mesh->editable_mode)) {
         if (mesh->editable_mode && mesh->editable_mesh.vertices.empty() && has_valid_model_data(mesh->model)) {
             mesh->editable_mesh.vertices.clear();
             mesh->editable_mesh.triangles.clear();
