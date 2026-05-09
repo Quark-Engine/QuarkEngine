@@ -11,6 +11,27 @@ void MeshComponent::serialize(nlohmann::json& json) const {
     if (!asset_name.empty()) {
         json["asset_name"] = asset_name;
     }
+
+    json["editable_mode"] = editable_mode;
+    json["editable_vertices"] = nlohmann::json::array();
+
+    for (auto& v : editable_mesh.vertices) {
+        json["editable_vertices"].push_back({
+            v.position.x,
+            v.position.y,
+            v.position.z
+        });
+    }
+
+    json["editable_triangles"] = nlohmann::json::array();
+
+    for (auto& t : editable_mesh.triangles) {
+        json["editable_triangles"].push_back({
+            t.a,
+            t.b,
+            t.c
+        });
+    }
 }
 
 void MeshComponent::deserialize(const nlohmann::json& json) {
@@ -19,6 +40,42 @@ void MeshComponent::deserialize(const nlohmann::json& json) {
     
     if (json.contains("asset_name")) {
         asset_name = json["asset_name"];
+    }
+
+    if (json.contains("editable_mode"))
+    {
+        editable_mode = json["editable_mode"];
+    }
+
+    if (json.contains("editable_vertices"))
+    {
+        editable_mesh.vertices.clear();
+        for (auto& v : json["editable_vertices"])
+        {
+            EditableVertex vert;
+            vert.position = {
+                v[0],
+                v[1],
+                v[2]
+            };
+
+            editable_mesh.vertices.push_back(vert);
+        }
+    }
+
+    if (json.contains("editable_triangles"))
+    {
+        editable_mesh.triangles.clear();
+        for (auto& t : json["editable_triangles"])
+        {
+            EditableTriangle tri;
+
+            tri.a = t[0];
+            tri.b = t[1];
+            tri.c = t[2];
+
+            editable_mesh.triangles.push_back(tri);
+        }
     }
 }
 
@@ -98,7 +155,7 @@ void CollisionComponent::deserialize(const nlohmann::json& json) {
     if (json.contains("height")) height = json["height"];
     
     if (json.contains("center")) {
-        auto& c = json["size"];
+        auto& c = json["center"];
         center = {c[0], c[1], c[2]};
     }
 

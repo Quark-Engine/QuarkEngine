@@ -2,6 +2,7 @@
 #include "raylib.h"
 #include "lighting.h"
 #include "nlohmann/json.hpp"
+#include "editable_mesh.h"
 #include <string>
 #include <vector>
 #include <memory>
@@ -106,6 +107,9 @@ public:
     bool uv_dirty = true;
     bool bounds_dirty = true;
     BoundingBox cached_local_bounds = {{0, 0, 0}, {0, 0, 0}};
+
+    EditableMesh editable_mesh;
+    bool editable_mode = false;
 
     MeshComponent() {
         name = "Mesh";

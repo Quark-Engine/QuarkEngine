@@ -75,6 +75,7 @@ if(BUILD_ENGINE)
     set(SOURCE_FILES
         src/camera.cpp
         src/component.cpp
+        src/editable_mesh.cpp
         src/entity.cpp
         src/hub.cpp
         src/language_manager.cpp

@@ -16,9 +16,13 @@ FlyCamera::FlyCamera() {
     pitch = asinf(dir.y / sqrtf(dir.x*dir.x + dir.y*dir.y + dir.z*dir.z));
 }
 
-void FlyCamera::update() {
+void FlyCamera::update(Scene& scene) {
     if (!active && ImGuizmo::IsUsing())
         return;
+
+    Entity* selected = scene.get_selected();
+    MeshComponent* sel_mesh = selected ? selected->get_mesh_component() : nullptr;
+    if (sel_mesh && sel_mesh->editable_mode) return;
 
     if (IsMouseButtonPressed(MOUSE_LEFT_BUTTON) && !ImGuizmo::IsOver()) {
         DisableCursor();

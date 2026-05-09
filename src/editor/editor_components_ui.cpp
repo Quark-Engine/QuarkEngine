@@ -270,17 +270,83 @@ void ComponentUIHelper::draw_mesh_component(Editor& editor, Entity& entity, Mesh
         ImGui::Text(lang.word("segments_loaded"), mesh->segments);
     }
 
-    ImGui::Checkbox(lang.word("vertex_gizmo"), &g_mesh_edit_state.enabled);
-    if (g_mesh_edit_state.enabled) {
-        ImGui::Text(lang.word("mesh_index"), g_mesh_edit_state.mesh_index);
-        ImGui::Text(lang.word("triangle_index"), g_mesh_edit_state.triangle_index);
-        ImGui::Text(lang.word("vertex_corner"), g_mesh_edit_state.vertex_corner);
+    ImGui::Separator();
 
-        if (ImGui::Button(lang.word("reset_mesh"))) {
-            editor.save_state();
-            reset_mesh_edit_model(entity);
-            g_mesh_edit_state.enabled = false;
+    if (ImGui::Checkbox(lang.word("vertex_gizmo"), &mesh->editable_mode)) {
+        if (mesh->editable_mode && mesh->editable_mesh.vertices.empty() && has_valid_model_data(mesh->model)) {
+            mesh->editable_mesh.vertices.clear();
+            mesh->editable_mesh.triangles.clear();
+
+            const Mesh& m = mesh->model.meshes[0];
+
+            std::vector<int> remap(m.vertexCount, -1);
+            for (int i = 0; i < m.vertexCount; i++) {
+                Vector3 pos = {
+                    m.vertices[i*3+0],
+                    m.vertices[i*3+1],
+                    m.vertices[i*3+2]
+                };
+
+                int found = -1;
+                for (int j = 0; j < (int)mesh->editable_mesh.vertices.size(); j++) {
+                    Vector3 existing = mesh->editable_mesh.vertices[j].position;
+                    if (fabsf(existing.x - pos.x) < 0.0001f &&
+                        fabsf(existing.y - pos.y) < 0.0001f &&
+                        fabsf(existing.z - pos.z) < 0.0001f) {
+                        found = j;
+                        break;
+                    }
+                }
+
+                if (found >= 0) {
+                    remap[i] = found;
+                }
+
+                else {
+                    remap[i] = (int)mesh->editable_mesh.vertices.size();
+                    EditableVertex ev;
+                    ev.position = pos;
+                    mesh->editable_mesh.vertices.push_back(ev);
+                }
+            }
+
+            for (int t = 0; t < m.triangleCount; t++) {
+                int ia, ib, ic;
+                if (m.indices) {
+                    ia = m.indices[t*3+0];
+                    ib = m.indices[t*3+1];
+                    ic = m.indices[t*3+2];
+                }
+
+                else {
+                    ia = t*3+0;
+                    ib = t*3+1;
+                    ic = t*3+2;
+                }
+
+                if (ia >= m.vertexCount || ib >= m.vertexCount || ic >= m.vertexCount) continue;
+
+                EditableTriangle tri;
+                tri.a = remap[ia];
+                tri.b = remap[ib];
+                tri.c = remap[ic];
+
+                if (tri.a == tri.b || tri.b == tri.c || tri.a == tri.c) {
+                    continue;
+                }
+
+                mesh->editable_mesh.triangles.push_back(tri);
+            }
         }
+    }
+
+    if (mesh->editable_mode) {
+        if (ImGui::Button(lang.word("polygon_create"))) g_poly_mode = POLY_CREATE;
+        ImGui::SameLine();
+        if (ImGui::Button(lang.word("polygon_none"))) g_poly_mode = POLY_NONE;
+
+        ImGui::Text(lang.word("vertices"), (int)mesh->editable_mesh.vertices.size());
+        ImGui::Text(lang.word("triangles"), (int)mesh->editable_mesh.triangles.size());
     }
 }
 

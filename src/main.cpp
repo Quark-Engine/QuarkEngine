@@ -580,7 +580,7 @@ int main(int argc, char* argv[]) {
 
             const bool gizmo_busy = ImGuizmo::IsOver() || ImGuizmo::IsUsing();
             if (!gizmo_busy && (IsCursorHidden() || g_is_scene_hovered)) {
-                camera.update();
+                camera.update(editor.scene);
             }
 
             editor.handle_input();
