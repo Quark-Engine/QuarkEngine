@@ -868,6 +868,95 @@ void draw_polygon_editor(Editor& editor, Camera3D camera) {
     }
 }
 
+void copy_entity(Entity* entity) {
+    using namespace editor_internal;
+
+    clipboard_data = *entity;
+    has_clipboard = true;
+}
+
+void paste_entity(Editor& editor) {
+    using namespace editor_internal;
+
+    const MeshComponent* clipboard_mesh = clipboard_data.get_mesh_component();
+    const TransformComponent* clipboard_transform = clipboard_data.get_transform_component();
+    const LightComponent* clipboard_light = clipboard_data.get_light_component();
+    const MaterialComponent* clipboard_mat = clipboard_data.get_material_component();
+    ModelAsset* asset = (clipboard_mesh && !clipboard_mesh->asset_name.empty())
+        ? find_asset_by_name(clipboard_mesh->asset_name)
+        : nullptr;
+
+    if (asset) {
+        editor.save_state();
+        Entity pasted = make_entity_from_asset(editor.scene, *asset);
+        if (auto pasted_transform = pasted.get_transform_component(); pasted_transform && clipboard_transform) {
+            pasted_transform->position = clipboard_transform->position;
+            pasted_transform->rotation = clipboard_transform->rotation;
+            pasted_transform->scale = clipboard_transform->scale;
+        }
+
+        auto pasted_mesh = pasted.get_mesh_component();
+        auto pasted_mat  = pasted.get_material_component();
+
+        if (pasted_mesh && clipboard_mesh) {
+            pasted_mat->color = clipboard_mat->color;
+            pasted_mat->outline_color = clipboard_mat->outline_color;
+            pasted_mat->texture_source = clipboard_mat->texture_source;
+            pasted_mat->texture_name = clipboard_mat->texture_name;
+            pasted_mat->texture = clipboard_mat->texture;
+            pasted_mat->texture_stretch = clipboard_mat->texture_stretch;
+            pasted_mat->auto_uv = clipboard_mat->auto_uv;
+            pasted_mat->texture_repeat_u = clipboard_mat->texture_repeat_u;
+            pasted_mat->texture_repeat_v = clipboard_mat->texture_repeat_v;
+            pasted_mat->uv_scale = clipboard_mat->uv_scale;
+            pasted_mesh->mesh_triangles_detached = clipboard_mesh->mesh_triangles_detached;
+            pasted_mesh->mesh_vertex_overrides = clipboard_mesh->mesh_vertex_overrides;
+            apply_mesh_overrides(pasted);
+        }
+        if (clipboard_light) {
+            auto light_copy = std::make_shared<LightComponent>(*clipboard_light);
+            const int light_type = light_copy->light.light.type;
+            light_copy->created = false;
+            light_copy->light.id = -1;
+            light_copy->light.light = {0};
+            light_copy->light.light.type = light_type;
+            pasted.get_components()->add_component(light_copy);
+        }
+        editor.scene.entities.push_back(pasted);
+        editor.scene.selected = static_cast<int>(editor.scene.entities.size()) - 1;
+    }
+}
+
+void dublicate_entity(Editor& editor, Entity* entity) {
+    editor.save_state();
+    Entity copy = *entity;
+
+    copy.id = static_cast<int>(editor.scene.entities.size());
+    copy.name = editor.scene.make_default_name_for(copy);
+    if (auto light = copy.get_light_component()) {
+        const int light_type = light->light.light.type;
+        light->created = false;
+        light->light.id = -1;
+        light->light.light = {0};
+        light->light.light.type = light_type;
+    }
+    editor.scene.entities.push_back(copy);
+    editor.scene.selected = static_cast<int>(editor.scene.entities.size()) - 1;
+}
+
+void delete_entity(Editor& editor, Entity* entity, Shader shader) {
+    editor.save_state();
+    const int index = editor.scene.selected;
+    if (auto light = entity->get_light_component(); light && light->created) {
+        light->light.enabled = false;
+        if (light->light.id != -1) update_lighting(shader, light->light);
+        free_light_id(light->light.id);
+    }
+    
+    editor.scene.entities.erase(editor.scene.entities.begin() + index);
+    editor.scene.selected = -1;
+}
+
 void draw_ui(Editor& editor, Shader shader, FlyCamera camera) {
     using namespace editor_internal;
 
@@ -898,87 +987,21 @@ void draw_ui(Editor& editor, Shader shader, FlyCamera camera) {
 
             Entity* entity = editor.scene.get_selected();
             if (ImGui::MenuItem(lang.word("copy"), "Ctrl+C", false, entity != nullptr)) {
-                clipboard_data = *entity;
-                has_clipboard = true;
+                copy_entity(entity);
             }
 
             if (ImGui::MenuItem(lang.word("paste"), "Ctrl+V", false, has_clipboard)) {
-                const MeshComponent* clipboard_mesh = clipboard_data.get_mesh_component();
-                const TransformComponent* clipboard_transform = clipboard_data.get_transform_component();
-                const LightComponent* clipboard_light = clipboard_data.get_light_component();
-                const MaterialComponent* clipboard_mat = clipboard_data.get_material_component();
-                ModelAsset* asset = (clipboard_mesh && !clipboard_mesh->asset_name.empty())
-                    ? find_asset_by_name(clipboard_mesh->asset_name)
-                    : nullptr;
-                if (asset) {
-                    editor.save_state();
-                    Entity pasted = make_entity_from_asset(editor.scene, *asset);
-                    if (auto pasted_transform = pasted.get_transform_component(); pasted_transform && clipboard_transform) {
-                        pasted_transform->position = clipboard_transform->position;
-                        pasted_transform->rotation = clipboard_transform->rotation;
-                        pasted_transform->scale = clipboard_transform->scale;
-                    }
-
-                    auto pasted_mesh = pasted.get_mesh_component();
-                    auto pasted_mat  = pasted.get_material_component();
-
-                    if (pasted_mesh && clipboard_mesh) {
-                        pasted_mat->color = clipboard_mat->color;
-                        pasted_mat->outline_color = clipboard_mat->outline_color;
-                        pasted_mat->texture_source = clipboard_mat->texture_source;
-                        pasted_mat->texture_name = clipboard_mat->texture_name;
-                        pasted_mat->texture = clipboard_mat->texture;
-                        pasted_mat->texture_stretch = clipboard_mat->texture_stretch;
-                        pasted_mat->auto_uv = clipboard_mat->auto_uv;
-                        pasted_mat->texture_repeat_u = clipboard_mat->texture_repeat_u;
-                        pasted_mat->texture_repeat_v = clipboard_mat->texture_repeat_v;
-                        pasted_mat->uv_scale = clipboard_mat->uv_scale;
-                        pasted_mesh->mesh_triangles_detached = clipboard_mesh->mesh_triangles_detached;
-                        pasted_mesh->mesh_vertex_overrides = clipboard_mesh->mesh_vertex_overrides;
-                        apply_mesh_overrides(pasted);
-                    }
-                    if (clipboard_light) {
-                        auto light_copy = std::make_shared<LightComponent>(*clipboard_light);
-                        const int light_type = light_copy->light.light.type;
-                        light_copy->created = false;
-                        light_copy->light.id = -1;
-                        light_copy->light.light = {0};
-                        light_copy->light.light.type = light_type;
-                        pasted.get_components()->add_component(light_copy);
-                    }
-                    editor.scene.entities.push_back(pasted);
-                    editor.scene.selected = static_cast<int>(editor.scene.entities.size()) - 1;
-                }
+                paste_entity(editor);
             }
 
             if (ImGui::MenuItem(lang.word("dublicate"), "Ctrl+D", false, entity != nullptr)) {
-                editor.save_state();
-                Entity copy = *entity;
-                copy.id = static_cast<int>(editor.scene.entities.size());
-                copy.name = editor.scene.make_default_name_for(copy);
-                if (auto light = copy.get_light_component()) {
-                    const int light_type = light->light.light.type;
-                    light->created = false;
-                    light->light.id = -1;
-                    light->light.light = {0};
-                    light->light.light.type = light_type;
-                }
-                editor.scene.entities.push_back(copy);
-                editor.scene.selected = static_cast<int>(editor.scene.entities.size()) - 1;
+                dublicate_entity(editor, entity);
             }
 
             ImGui::Separator();
 
             if (ImGui::MenuItem(lang.word("delete"), "Del", false, entity != nullptr)) {
-                editor.save_state();
-                const int index = editor.scene.selected;
-                if (auto light = entity->get_light_component(); light && light->created) {
-                    light->light.enabled = false;
-                    if (light->light.id != -1) update_lighting(shader, light->light);
-                    free_light_id(light->light.id);
-                }
-                editor.scene.entities.erase(editor.scene.entities.begin() + index);
-                editor.scene.selected = -1;
+                delete_entity(editor, entity, shader);
             }
 
             ImGui::Separator();

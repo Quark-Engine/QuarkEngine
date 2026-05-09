@@ -26,6 +26,11 @@ extern MeshEditState g_mesh_edit_state;
 extern PolygonEditMode g_poly_mode;
 extern std::vector<int> g_selected_vertices;
 
+void copy_entity(Entity* entity);
+void paste_entity(Editor& editor);
+void dublicate_entity(Editor& editor, Entity* entity);
+void delete_entity(Editor& editor, Entity* entity, Shader shader);
+
 void draw_ui(Editor& editor, Shader shader, FlyCamera camera);
 
 void draw_gizmo(Editor& editor, FlyCamera camera);
