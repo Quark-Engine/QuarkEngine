@@ -125,6 +125,9 @@ static const char* language_codes[] = {
     "ukrainian"
 };
 
+PolygonEditMode g_poly_mode = POLY_NONE;
+static std::vector<int> g_selected_vertices;
+static int g_drag_vertex = -1;
 
 int find_index(const char* value) {
     int n = sizeof(language_codes) / sizeof(language_codes[0]);
@@ -137,9 +140,9 @@ int find_index(const char* value) {
 void open_url(const char* url) {
     #ifdef _WIN32
         system((std::string("start ") + url).c_str());
-    #elif __linux__
-        system((std::string("open ") + url).c_str());
     #elif __APPLE__
+        system((std::string("open ") + url).c_str());
+    #elif __linux__
         system((std::string("xdg-open ") + url).c_str());
     #else
         TraceLog(LOG_ERROR, ("Cannot open URL: %s", url));
@@ -153,6 +156,20 @@ Matrix compose_entity_transform_matrix(const Entity& entity) {
     Matrix matRotation = MatrixRotateXYZ({transform->rotation.x * DEG2RAD, transform->rotation.y * DEG2RAD, transform->rotation.z * DEG2RAD});
     Matrix matTranslation = MatrixTranslate(transform->position.x, transform->position.y, transform->position.z);
     return MatrixMultiply(MatrixMultiply(matTranslation, matRotation), matScale);
+}
+
+Vector3 ray_plane_hit(Ray ray) {
+    if (fabsf(ray.direction.y) < 0.0001f) {
+        return ray.position;
+    }
+
+    float t = -ray.position.y / ray.direction.y;
+
+    return {
+        ray.position.x + ray.direction.x * t,
+        0.0f,
+        ray.position.z + ray.direction.z * t
+    };
 }
 
 void sync_mesh_edit_state(const Editor& editor) {
@@ -299,7 +316,9 @@ void reset_mesh_edit_model(Entity& entity) {
 
     if (mesh->asset && mesh->asset->is_procedural) {
         update_model(&entity);
-    } else if (mesh->asset) {
+    } 
+    
+    else if (mesh->asset) {
         if (entity_owns_model(entity) && mesh->model.meshCount > 0) {
             UnloadModel(mesh->model);
         }
@@ -309,7 +328,9 @@ void reset_mesh_edit_model(Entity& entity) {
             mesh->asset = nullptr;
             mesh->asset_name.clear();
             mesh->owns_model_instance = false;
-        } else {
+        } 
+        
+        else {
             mesh->owns_model_instance = true;
         }
     }
@@ -351,7 +372,7 @@ void draw_gizmo(Editor& editor, FlyCamera camera) {
     TransformComponent* transform = entity->get_transform_component();
     MeshComponent* mesh = entity->get_mesh_component();
     if (!transform || !mesh) return;
-
+    if (mesh->editable_mode) return;
     if (g_scene_window_size.x <= 0 || g_scene_window_size.y <= 0) return;
 
     ImGuizmo::SetDrawlist(ImGui::GetWindowDrawList());
@@ -488,20 +509,14 @@ void draw_gizmo(Editor& editor, FlyCamera camera) {
 }
 
 static Vector2 world_to_scene_screen(const Vector3& world, const Camera3D& camera) {
-    Camera3D cam = camera;
-    
-    float aspect = g_scene_window_size.x / g_scene_window_size.y;
-    float fovy_rad = cam.fovy * DEG2RAD;
-    
-    Matrix view = GetCameraMatrix(cam);
-    Vector3 view_pos = Vector3Transform(world, view);
-    
-    float proj_x = view_pos.x / (-view_pos.z * tanf(fovy_rad * 0.5f) * aspect);
-    float proj_y = view_pos.y / (-view_pos.z * tanf(fovy_rad * 0.5f));
-    
+    float rt_w = (float)GetScreenWidth();
+    float rt_h = (float)GetScreenHeight();
+    Vector2 fb = GetWorldToScreen(world, camera);
+    float nx = fb.x / rt_w;
+    float ny = fb.y / rt_h;
     return {
-        g_scene_window_pos.x + (proj_x * 0.5f + 0.5f) * g_scene_window_size.x,
-        g_scene_window_pos.y + (1.0f - (proj_y * 0.5f + 0.5f)) * g_scene_window_size.y
+        g_scene_window_pos.x + nx * g_scene_window_size.x,
+        g_scene_window_pos.y + ny * g_scene_window_size.y
     };
 }
 
@@ -559,22 +574,6 @@ void draw_mesh_vertex_overlay(Editor& editor, Camera3D camera) {
     for (int i = 0; i < 3; i++) {
         Vector3 wp = get_mesh_vertex_world_position(*entity, g_mesh_edit_state.mesh_index, triangle_vertices[i]);
         screen_points[i] = world_to_scene_screen(wp, camera);
-    }
-
-    // debug
-    for (int i = 0; i < 3; i++) {
-        Vector3 wp = get_mesh_vertex_world_position(*entity, g_mesh_edit_state.mesh_index, triangle_vertices[i]);
-        Vector2 raylib_screen = GetWorldToScreen(wp, camera);
-        draw_list->AddLine(
-            ImVec2(raylib_screen.x - 10, raylib_screen.y),
-            ImVec2(raylib_screen.x + 10, raylib_screen.y),
-            IM_COL32(255, 0, 0, 255), 2.0f
-        );
-        draw_list->AddLine(
-            ImVec2(raylib_screen.x, raylib_screen.y - 10),
-            ImVec2(raylib_screen.x, raylib_screen.y + 10),
-            IM_COL32(255, 0, 0, 255), 2.0f
-        );
     }
 
     for (int i = 0; i < 3; i++) {
@@ -650,6 +649,212 @@ void handle_scene_asset_drop(Editor& editor, Camera3D camera, bool is_hovered) {
 
     editor.scene.entities.push_back(entity);
     editor.scene.selected = static_cast<int>(editor.scene.entities.size()) - 1;
+}
+
+bool polygon_create_vertex(Entity& entity, const Vector3& world_position) {
+    MeshComponent* mesh = entity.get_mesh_component();
+    if (!mesh) return false;
+
+    EditableVertex vert;
+    vert.position = world_position;
+    mesh->editable_mesh.vertices.push_back(vert);
+    return true;
+}
+
+void polygon_create_triangle(Entity& entity, int a, int b, int c) {
+    MeshComponent* mesh = entity.get_mesh_component();
+    mesh->editable_mesh.triangles.push_back({a, b, c});
+
+    rebuild_mesh_from_editable(mesh->model, mesh->editable_mesh);
+}
+
+void draw_polygon_editor(Editor& editor, Camera3D camera) {
+    Entity* entity = editor.scene.get_selected();
+    if (!entity) return;
+
+    MeshComponent* mesh = entity->get_mesh_component();
+    if (!mesh || !mesh->editable_mode) return;
+
+    EditableMesh& e_mesh = mesh->editable_mesh;
+    ImDrawList* draw = ImGui::GetForegroundDrawList();
+
+    for (const auto& tri : e_mesh.triangles) {
+        if (tri.a >= (int)e_mesh.vertices.size()) continue;
+        if (tri.b >= (int)e_mesh.vertices.size()) continue;
+        if (tri.c >= (int)e_mesh.vertices.size()) continue;
+
+        Vector2 p1 = world_to_scene_screen(e_mesh.vertices[tri.a].position, camera);
+        Vector2 p2 = world_to_scene_screen(e_mesh.vertices[tri.b].position, camera);
+        Vector2 p3 = world_to_scene_screen(e_mesh.vertices[tri.c].position, camera);
+
+        draw->AddLine({p1.x,p1.y}, {p2.x,p2.y}, IM_COL32(0,255,0,255), 2.0f);
+        draw->AddLine({p2.x,p2.y}, {p3.x,p3.y}, IM_COL32(0,255,0,255), 2.0f);
+        draw->AddLine({p3.x,p3.y}, {p1.x,p1.y}, IM_COL32(0,255,0,255), 2.0f);
+    }
+
+    for (int i = 0; i < (int)e_mesh.vertices.size(); i++) {
+        Vector2 screen = world_to_scene_screen(e_mesh.vertices[i].position, camera);
+
+        bool selected = false;
+        for (int si : g_selected_vertices)
+            if (si == i) { selected = true; break; }
+
+        ImU32 fill = selected ? IM_COL32(255,180,60,255) : IM_COL32(0,220,0,255);
+        float radius = selected ? 9.0f : 6.0f;
+        draw->AddCircleFilled({screen.x,screen.y}, radius, fill);
+        draw->AddCircle({screen.x,screen.y}, radius, IM_COL32(20,20,20,255), 0, 2.0f);
+    }
+
+    // Gizmo for selected vertex
+    if (g_selected_vertices.size() == 1 && g_poly_mode != POLY_CREATE) {
+        int sel = g_selected_vertices[0];
+        if (sel >= 0 && sel < (int)e_mesh.vertices.size()) {
+            Vector3 world_pos = e_mesh.vertices[sel].position;
+
+            float view_matrix[16] = {};
+            float projection_matrix[16] = {};
+            float transform_matrix[16] = {};
+
+            Matrix view = MatrixTranspose(GetCameraMatrix(camera));
+            Matrix projection = MatrixTranspose(MatrixPerspective(
+                camera.fovy * DEG2RAD,
+                g_scene_window_size.x / g_scene_window_size.y,
+                0.1f, 1000.0f
+            ));
+
+            memcpy(view_matrix, &view, sizeof(view_matrix));
+            memcpy(projection_matrix, &projection, sizeof(projection_matrix));
+
+            float t[3] = {world_pos.x, world_pos.y, world_pos.z};
+            float r[3] = {0,0,0};
+            float s[3] = {1,1,1};
+
+            ImGuizmo::SetDrawlist(ImGui::GetWindowDrawList());
+            ImGuizmo::SetRect(g_scene_window_pos.x, g_scene_window_pos.y, g_scene_window_size.x, g_scene_window_size.y);
+            ImGuizmo::RecomposeMatrixFromComponents(t, r, s, transform_matrix);
+
+            static bool was_using_poly_gizmo = false;
+            ImGuizmo::Manipulate(view_matrix, projection_matrix, ImGuizmo::TRANSLATE, ImGuizmo::WORLD, transform_matrix);
+
+            if (ImGuizmo::IsUsing() && !was_using_poly_gizmo)
+                editor.save_state();
+
+            if (ImGuizmo::IsUsing()) {
+                float nt[3]={}, nr[3]={}, ns[3]={};
+                ImGuizmo::DecomposeMatrixToComponents(transform_matrix, nt, nr, ns);
+                e_mesh.vertices[sel].position = {nt[0], nt[1], nt[2]};
+                rebuild_mesh_from_editable(mesh->model, e_mesh);
+                mark_entity_bounds_dirty(entity);
+                mark_entity_uv_dirty(entity);
+            }
+
+            was_using_poly_gizmo = ImGuizmo::IsUsing();
+        }
+    }
+
+    if (!g_is_scene_hovered) return;
+    // KEY FIX: only block clicks when gizmo is actively being USED (dragged),
+    // not just hovered — IsOver() was preventing vertex selection clicks
+    if (ImGuizmo::IsUsing()) return;
+
+    const Vector2 mouse = GetMousePosition();
+
+    if (IsMouseButtonPressed(MOUSE_LEFT_BUTTON) && g_poly_mode != POLY_CREATE) {
+        float best_dist = 16.0f;
+        int best_vert = -1;
+
+        for (int i = 0; i < (int)e_mesh.vertices.size(); i++) {
+            Vector2 sp = world_to_scene_screen(e_mesh.vertices[i].position, camera);
+            float dx = mouse.x - sp.x, dy = mouse.y - sp.y;
+            float d = sqrtf(dx*dx + dy*dy);
+            if (d < best_dist) { best_dist = d; best_vert = i; }
+        }
+
+        if (best_vert >= 0) {
+            bool ctrl = IsKeyDown(KEY_LEFT_CONTROL) || IsKeyDown(KEY_RIGHT_CONTROL);
+            if (ctrl) {
+                auto it = std::find(g_selected_vertices.begin(), g_selected_vertices.end(), best_vert);
+                if (it != g_selected_vertices.end()) g_selected_vertices.erase(it);
+                else g_selected_vertices.push_back(best_vert);
+            } else {
+                g_selected_vertices = {best_vert};
+            }
+        } else {
+            // Clicked empty space — try triangle face pick
+            Ray ray = scene_screen_to_world_ray(mouse, camera);
+            float best_hit_dist = FLT_MAX;
+            int picked_triangle = -1;
+            int picked_corner = 0;
+
+            for (int t = 0; t < (int)e_mesh.triangles.size(); t++) {
+                const auto& tri = e_mesh.triangles[t];
+                if (tri.a >= (int)e_mesh.vertices.size()) continue;
+                if (tri.b >= (int)e_mesh.vertices.size()) continue;
+                if (tri.c >= (int)e_mesh.vertices.size()) continue;
+
+                Vector3 va = e_mesh.vertices[tri.a].position;
+                Vector3 vb = e_mesh.vertices[tri.b].position;
+                Vector3 vc = e_mesh.vertices[tri.c].position;
+
+                RayCollision hit = GetRayCollisionTriangle(ray, va, vb, vc);
+                if (!hit.hit || hit.distance >= best_hit_dist) continue;
+                best_hit_dist = hit.distance;
+                picked_triangle = t;
+
+                float cd[3] = {
+                    Vector3Distance(hit.point, va),
+                    Vector3Distance(hit.point, vb),
+                    Vector3Distance(hit.point, vc)
+                };
+                picked_corner = (cd[0]<cd[1]) ? (cd[0]<cd[2]?0:2) : (cd[1]<cd[2]?1:2);
+            }
+
+            if (picked_triangle >= 0) {
+                const auto& tri = e_mesh.triangles[picked_triangle];
+                int verts[3] = {tri.a, tri.b, tri.c};
+                bool ctrl = IsKeyDown(KEY_LEFT_CONTROL) || IsKeyDown(KEY_RIGHT_CONTROL);
+                if (!ctrl) g_selected_vertices.clear();
+                int pick = verts[picked_corner];
+                if (std::find(g_selected_vertices.begin(), g_selected_vertices.end(), pick) == g_selected_vertices.end())
+                    g_selected_vertices.push_back(pick);
+            } else if (!IsKeyDown(KEY_LEFT_CONTROL) && !IsKeyDown(KEY_RIGHT_CONTROL)) {
+                g_selected_vertices.clear();
+            }
+        }
+    }
+
+    if (g_poly_mode == POLY_CREATE && IsMouseButtonPressed(MOUSE_LEFT_BUTTON)) {
+        Ray ray = scene_screen_to_world_ray(mouse, camera);
+        Vector3 place_pos = {};
+        bool hit_mesh = false;
+
+        for (int t = 0; t < (int)e_mesh.triangles.size(); t++) {
+            const auto& tri = e_mesh.triangles[t];
+            if (tri.a >= (int)e_mesh.vertices.size()) continue;
+            if (tri.b >= (int)e_mesh.vertices.size()) continue;
+            if (tri.c >= (int)e_mesh.vertices.size()) continue;
+
+            RayCollision hit = GetRayCollisionTriangle(ray,
+                e_mesh.vertices[tri.a].position,
+                e_mesh.vertices[tri.b].position,
+                e_mesh.vertices[tri.c].position);
+
+            if (hit.hit) { place_pos = hit.point; hit_mesh = true; break; }
+        }
+
+        if (!hit_mesh) place_pos = ray_plane_hit(ray);
+
+        editor.save_state();
+        polygon_create_vertex(*entity, place_pos);
+
+        int new_index = (int)e_mesh.vertices.size() - 1;
+        g_selected_vertices.push_back(new_index);
+
+        if ((int)g_selected_vertices.size() == 3) {
+            polygon_create_triangle(*entity, g_selected_vertices[0], g_selected_vertices[1], g_selected_vertices[2]);
+            g_selected_vertices.clear();
+        }
+    }
 }
 
 void draw_ui(Editor& editor, Shader shader, FlyCamera camera) {
@@ -1084,10 +1289,11 @@ void draw_ui(Editor& editor, Shader shader, FlyCamera camera) {
                     );
                 }
 
-                g_is_scene_hovered = ImGui::IsWindowHovered(ImGuiHoveredFlags_AllowWhenBlockedByActiveItem);
+                g_is_scene_hovered = ImGui::IsWindowHovered();
                 g_is_scene_active  = ImGui::IsWindowFocused();
 
                 draw_gizmo(editor, camera);
+                draw_polygon_editor(editor, camera.get_camera());
                 handle_scene_asset_drop(editor, camera.get_camera(), g_is_scene_hovered);
             }
         }

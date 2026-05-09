@@ -16,7 +16,14 @@ struct MeshEditState {
     bool was_using_gizmo = false;
 };
 
+enum PolygonEditMode {
+    POLY_NONE,
+    POLY_CREATE,
+    POLY_MOVE
+};
+
 extern MeshEditState g_mesh_edit_state;
+extern PolygonEditMode g_poly_mode;
 
 void draw_ui(Editor& editor, Shader shader, FlyCamera camera);
 

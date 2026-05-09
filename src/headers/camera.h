@@ -1,5 +1,6 @@
 #pragma once
 #include "raylib.h"
+#include "scene.h"
 
 class FlyCamera {
 public:
@@ -11,6 +12,6 @@ public:
     bool active = false;
     
     FlyCamera();
-    void update();
+    void update(Scene& scene);
     Camera3D &get_camera();
 };

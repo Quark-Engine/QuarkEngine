@@ -807,17 +807,45 @@ void load_models() {
     assets.push_back(torus_asset);
 }
 
-void update_model(Entity* e) {
+void update_model(Entity* e)
+{
     if (!e) return;
+
     MeshComponent* mesh = e->get_mesh_component();
-    if (!mesh || !mesh->asset || !mesh->asset->is_procedural || !mesh->asset->generator) return;
+
+    if (!mesh) return;
+
     if (mesh->model.meshCount > 0 && entity_owns_model(*e)) UnloadModel(mesh->model);
+    if (mesh->editable_mode)
+    {
+        mesh->model = {};
+
+        rebuild_mesh_from_editable(
+            mesh->model,
+            mesh->editable_mesh
+        );
+
+        mesh->owns_model_instance = true;
+        apply_negative_scale_winding(e);
+
+        return;
+    }
+
+    if (!mesh->asset || !mesh->asset->is_procedural || !mesh->asset->generator)
+        return;
+    
 
     int max_seg = 125;
-    if (mesh->type == SPHERE || mesh->type == HEMISPHERE) max_seg = 100;
 
-    if (mesh->segments < 3)        mesh->segments = 3;
-    if (mesh->segments > max_seg)  mesh->segments = max_seg;
+    if (mesh->type == SPHERE || mesh->type == HEMISPHERE)
+        max_seg = 100;
+    
+
+    if (mesh->segments < 3)
+        mesh->segments = 3;
+
+    if (mesh->segments > max_seg)
+        mesh->segments = max_seg;
 
     mesh->model = mesh->asset->generator(mesh->segments);
     mesh->owns_model_instance = true;
