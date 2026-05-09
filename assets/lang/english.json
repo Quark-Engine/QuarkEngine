@@ -102,8 +102,8 @@
     "segments_loaded": "Segments: %d (N/A for loaded models)",
     "polygon_create": "Polygon Create",
     "polygon_none": "Polygon None",
-    "vertices": "Vertices: ",
-    "triangles": "Triangles: ",
+    "vertices": "Vertices",
+    "triangles": "Triangles",
 
     "vertex_gizmo": "Vertex Gizmo",
 
