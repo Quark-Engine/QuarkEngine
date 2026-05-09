@@ -347,6 +347,30 @@ void ComponentUIHelper::draw_mesh_component(Editor& editor, Entity& entity, Mesh
 
         ImGui::Text(lang.word("vertices"), (int)mesh->editable_mesh.vertices.size());
         ImGui::Text(lang.word("triangles"), (int)mesh->editable_mesh.triangles.size());
+
+        if (!g_selected_vertices.empty()) {
+            EditableVertex& selected_vertex = mesh->editable_mesh.vertices[g_selected_vertices[0]];
+            float vertex_pos[3] = { selected_vertex.position.x, selected_vertex.position.y, selected_vertex.position.z };
+
+            ImGui::Separator();
+
+            if (ImGui::DragFloat3("##vertex_position", vertex_pos, 0.1f)) {
+                editor.save_state();
+
+                selected_vertex.position = {
+                    vertex_pos[0],
+                    vertex_pos[1],
+                    vertex_pos[2]
+                };
+
+                rebuild_mesh_from_editable(mesh->model, mesh->editable_mesh);
+
+                mark_entity_bounds_dirty(&entity);
+                mark_entity_uv_dirty(&entity);
+            }
+
+            ImGui::Text(lang.word("vertex_position"));
+        }
     }
 }
 
