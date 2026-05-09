@@ -24,6 +24,7 @@ enum PolygonEditMode {
 
 extern MeshEditState g_mesh_edit_state;
 extern PolygonEditMode g_poly_mode;
+extern std::vector<int> g_selected_vertices;
 
 void draw_ui(Editor& editor, Shader shader, FlyCamera camera);
 

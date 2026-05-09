@@ -93,7 +93,7 @@ static const char* language_codes[] = {
     "czech",
     "danish",
     "dutch",
-    "english",
+    "en_us",
     "esperanto",
     "estonian",
     "finnish",
@@ -126,7 +126,7 @@ static const char* language_codes[] = {
 };
 
 PolygonEditMode g_poly_mode = POLY_NONE;
-static std::vector<int> g_selected_vertices;
+std::vector<int> g_selected_vertices;
 static int g_drag_vertex = -1;
 
 int find_index(const char* value) {
@@ -705,7 +705,6 @@ void draw_polygon_editor(Editor& editor, Camera3D camera) {
         draw->AddCircle({screen.x,screen.y}, radius, IM_COL32(20,20,20,255), 0, 2.0f);
     }
 
-    // Gizmo for selected vertex
     if (g_selected_vertices.size() == 1 && g_poly_mode != POLY_CREATE) {
         int sel = g_selected_vertices[0];
         if (sel >= 0 && sel < (int)e_mesh.vertices.size()) {
@@ -753,8 +752,6 @@ void draw_polygon_editor(Editor& editor, Camera3D camera) {
     }
 
     if (!g_is_scene_hovered) return;
-    // KEY FIX: only block clicks when gizmo is actively being USED (dragged),
-    // not just hovered — IsOver() was preventing vertex selection clicks
     if (ImGuizmo::IsUsing()) return;
 
     const Vector2 mouse = GetMousePosition();
@@ -776,11 +773,14 @@ void draw_polygon_editor(Editor& editor, Camera3D camera) {
                 auto it = std::find(g_selected_vertices.begin(), g_selected_vertices.end(), best_vert);
                 if (it != g_selected_vertices.end()) g_selected_vertices.erase(it);
                 else g_selected_vertices.push_back(best_vert);
-            } else {
+            } 
+            
+            else {
                 g_selected_vertices = {best_vert};
             }
-        } else {
-            // Clicked empty space — try triangle face pick
+        } 
+        
+        else {
             Ray ray = scene_screen_to_world_ray(mouse, camera);
             float best_hit_dist = FLT_MAX;
             int picked_triangle = -1;
@@ -806,6 +806,7 @@ void draw_polygon_editor(Editor& editor, Camera3D camera) {
                     Vector3Distance(hit.point, vb),
                     Vector3Distance(hit.point, vc)
                 };
+
                 picked_corner = (cd[0]<cd[1]) ? (cd[0]<cd[2]?0:2) : (cd[1]<cd[2]?1:2);
             }
 
@@ -813,11 +814,15 @@ void draw_polygon_editor(Editor& editor, Camera3D camera) {
                 const auto& tri = e_mesh.triangles[picked_triangle];
                 int verts[3] = {tri.a, tri.b, tri.c};
                 bool ctrl = IsKeyDown(KEY_LEFT_CONTROL) || IsKeyDown(KEY_RIGHT_CONTROL);
+
                 if (!ctrl) g_selected_vertices.clear();
                 int pick = verts[picked_corner];
                 if (std::find(g_selected_vertices.begin(), g_selected_vertices.end(), pick) == g_selected_vertices.end())
                     g_selected_vertices.push_back(pick);
-            } else if (!IsKeyDown(KEY_LEFT_CONTROL) && !IsKeyDown(KEY_RIGHT_CONTROL)) {
+
+            }
+            
+            else if (!IsKeyDown(KEY_LEFT_CONTROL) && !IsKeyDown(KEY_RIGHT_CONTROL)) {
                 g_selected_vertices.clear();
             }
         }
