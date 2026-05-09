@@ -625,7 +625,7 @@ void draw_mesh_vertex_overlay(Editor& editor, Camera3D camera) {
     }
 }
 
-void handle_scene_asset_drop(Editor& editor, Camera3D camera, bool is_hovered) {
+void handle_scene_asset_drop(Editor& editor, Camera3D camera) {
     if (!editor_internal::scene_asset_dragging) return;
     if (!IsMouseButtonReleased(MOUSE_BUTTON_LEFT)) return;
 
@@ -634,7 +634,13 @@ void handle_scene_asset_drop(Editor& editor, Camera3D camera, bool is_hovered) {
     editor_internal::dragged_scene_asset_name.clear();
 
     if (ImGuizmo::IsUsing()) return;
-    if (!is_hovered) return;
+
+    const ImVec2 mouse = { (float)GetMouseX(), (float)GetMouseY() };
+    const bool mouse_over_scene = 
+        mouse.x >= g_scene_window_pos.x && mouse.x <= g_scene_window_pos.x + g_scene_window_size.x &&
+        mouse.y >= g_scene_window_pos.y && mouse.y <= g_scene_window_pos.y + g_scene_window_size.y;
+
+    if (!mouse_over_scene) return;
 
     ModelAsset* asset = find_asset_by_name(asset_name);
     if (!asset) return;
@@ -1299,7 +1305,7 @@ void draw_ui(Editor& editor, Shader shader, FlyCamera camera) {
 
                 draw_gizmo(editor, camera);
                 draw_polygon_editor(editor, camera.get_camera());
-                handle_scene_asset_drop(editor, camera.get_camera(), g_is_scene_hovered);
+                handle_scene_asset_drop(editor, camera.get_camera());
             }
         }
         ImGui::End();

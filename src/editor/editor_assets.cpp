@@ -776,9 +776,6 @@ void draw_assets_ui(Editor& editor) {
         editor_internal::dragged_target_folder_index = -1;
         dragged_file_name.clear();
         drag_start_pos = ImVec2(0, 0);
-        
-        editor_internal::scene_asset_dragging = false;
-        editor_internal::dragged_scene_asset_name.clear();
     }
 
     if (rename_target >= 0) {

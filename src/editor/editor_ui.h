@@ -29,7 +29,7 @@ extern std::vector<int> g_selected_vertices;
 void draw_ui(Editor& editor, Shader shader, FlyCamera camera);
 
 void draw_gizmo(Editor& editor, FlyCamera camera);
-void handle_scene_asset_drop(Editor& editor, Camera3D camera, bool is_hovered);
+void handle_scene_asset_drop(Editor& editor, Camera3D camera);
 
 void draw_mesh_vertex_overlay(Editor& editor, Camera3D camera);
 void reset_mesh_edit_model(Entity& entity);
