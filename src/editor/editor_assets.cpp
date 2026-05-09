@@ -528,7 +528,9 @@ void draw_assets_ui(Editor& editor) {
             editor.selected_asset_index = -1;
             editor_internal::tex_cache.clear();
             model_preview_cache.clear();
+
             for (auto& pair : model_render_cache) UnloadRenderTexture(pair.second);
+            
             model_render_cache.clear();
             ImGui::EndGroup();
             ImGui::PopID();
@@ -694,6 +696,11 @@ void draw_assets_ui(Editor& editor) {
             if (fabsf(delta.x) > 5.0f || fabsf(delta.y) > 5.0f) {
                 editor_internal::file_dragging = true;
                 editor_internal::dragged_file_index = i;
+
+                if (entry.is_material) {
+                    editor_internal::scene_asset_dragging = true;
+                    editor_internal::dragged_scene_asset_name = (editor.current_asset_path / entry.filename).string();
+                }
                 
                 if (is_model_file(fs::path(entry.filename))) {
                     const std::string asset_name = get_asset_name_for_path(fs::path(editor.project_path), editor.current_asset_path / entry.filename);
@@ -714,10 +721,11 @@ void draw_assets_ui(Editor& editor) {
             }
         }
 
-        if (!entry.is_directory && is_model_file(fs::path(entry.filename))) {
+        if (!entry.is_directory && (is_model_file(fs::path(entry.filename)) || entry.is_material)) {
             const std::string asset_name = get_asset_name_for_path(fs::path(editor.project_path), editor.current_asset_path / entry.filename);
+
             if (editor_internal::scene_asset_dragging && editor_internal::dragged_scene_asset_name == asset_name) {
-                ImGui::SetTooltip(lang.word("spawn"), editor_internal::dragged_scene_asset_name.c_str());
+                if (is_model_file(fs::path(entry.filename))) ImGui::SetTooltip(lang.word("spawn"), editor_internal::dragged_scene_asset_name.c_str());
             }
         }
 

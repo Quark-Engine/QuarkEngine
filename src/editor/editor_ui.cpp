@@ -309,6 +309,46 @@ bool pick_mesh_triangle(
     return true;
 }
 
+bool raycast_entity(const Entity& entity, Ray ray, float& out_distance) {
+    const MeshComponent* mesh = entity.get_mesh_component();
+    if (!mesh || !has_valid_model_data(mesh->model)) return false;
+
+    const Matrix transform = compose_entity_transform_matrix(entity);
+
+    bool hit_any = false;
+    float best_distance = FLT_MAX;
+
+    for (int i = 0; i < mesh->model.meshCount; i++) {
+        const Mesh& m = mesh->model.meshes[i];
+        
+        for (int j = 0; j < m.triangleCount; j++) {
+            int indices[3] = {};
+            if (!get_mesh_triangle_vertex_indices(m, j, indices)) continue;
+
+            Vector3 verts[3];
+
+            for (int k = 0; k < 3; k++) {
+                verts[k] = Vector3Transform({
+                    m.vertices[indices[k] * 3 + 0],
+                    m.vertices[indices[k] * 3 + 1],
+                    m.vertices[indices[k] * 3 + 2],
+                }, transform);
+            }
+
+            RayCollision hit = GetRayCollisionTriangle(ray, verts[0], verts[1], verts[2]);
+
+            if (hit.hit && hit.distance < best_distance) {
+                best_distance = hit.distance;
+                hit_any = true;
+            }
+        }
+    }
+
+    out_distance = best_distance;
+    return hit_any;
+
+}
+
 void reset_mesh_edit_model(Entity& entity) {
     MeshComponent* mesh = entity.get_mesh_component();
     if (!mesh) return;
@@ -625,7 +665,8 @@ void draw_mesh_vertex_overlay(Editor& editor, Camera3D camera) {
     }
 }
 
-void handle_scene_asset_drop(Editor& editor, Camera3D camera) {
+void handle_scene_asset_drop(Editor& editor, Camera3D camera)
+{
     if (!editor_internal::scene_asset_dragging) return;
     if (!IsMouseButtonReleased(MOUSE_BUTTON_LEFT)) return;
 
@@ -636,11 +677,132 @@ void handle_scene_asset_drop(Editor& editor, Camera3D camera) {
     if (ImGuizmo::IsUsing()) return;
 
     const ImVec2 mouse = { (float)GetMouseX(), (float)GetMouseY() };
-    const bool mouse_over_scene = 
+
+    const bool mouse_over_scene =
         mouse.x >= g_scene_window_pos.x && mouse.x <= g_scene_window_pos.x + g_scene_window_size.x &&
         mouse.y >= g_scene_window_pos.y && mouse.y <= g_scene_window_pos.y + g_scene_window_size.y;
 
     if (!mouse_over_scene) return;
+
+    const bool is_material =
+        asset_name.size() >= 4 &&
+        asset_name.substr(asset_name.size() - 4) == ".mtl";
+
+    if (is_material)
+    {
+        Ray ray = GetScreenToWorldRay({ mouse.x, mouse.y }, camera);
+
+        Entity* hit_entity = nullptr;
+        float best_distance = FLT_MAX;
+
+        for (Entity& entity : editor.scene.entities)
+        {
+            const MeshComponent* mesh_comp = entity.get_mesh_component();
+            if (!mesh_comp || !has_valid_model_data(mesh_comp->model)) continue;
+
+            Matrix transform_mat = compose_entity_transform_matrix(entity);
+
+            for (int i = 0; i < mesh_comp->model.meshCount; i++)
+            {
+                const Mesh& mesh = mesh_comp->model.meshes[i];
+
+                BoundingBox box = GetMeshBoundingBox(mesh);
+
+                Vector3 corners[8] = {
+                    { box.min.x, box.min.y, box.min.z },
+                    { box.max.x, box.min.y, box.min.z },
+                    { box.min.x, box.max.y, box.min.z },
+                    { box.max.x, box.max.y, box.min.z },
+                    { box.min.x, box.min.y, box.max.z },
+                    { box.max.x, box.min.y, box.max.z },
+                    { box.min.x, box.max.y, box.max.z },
+                    { box.max.x, box.max.y, box.max.z }
+                };
+
+                BoundingBox world_box = {
+                    { FLT_MAX, FLT_MAX, FLT_MAX },
+                    { -FLT_MAX, -FLT_MAX, -FLT_MAX }
+                };
+
+                for (int c = 0; c < 8; c++)
+                {
+                    Vector3 p = Vector3Transform(corners[c], transform_mat);
+
+                    world_box.min.x = std::min(world_box.min.x, p.x);
+                    world_box.min.y = std::min(world_box.min.y, p.y);
+                    world_box.min.z = std::min(world_box.min.z, p.z);
+
+                    world_box.max.x = std::max(world_box.max.x, p.x);
+                    world_box.max.y = std::max(world_box.max.y, p.y);
+                    world_box.max.z = std::max(world_box.max.z, p.z);
+                }
+
+                if (!GetRayCollisionBox(ray, world_box).hit)
+                    continue;
+
+                // 💥 ПРАВИЛЬНЫЙ RAYCAST ПО ТРЕУГОЛЬНИКАМ
+                float mesh_best = FLT_MAX;
+                bool mesh_hit = false;
+
+                for (int t = 0; t < mesh.triangleCount; t++)
+                {
+                    int indices[3];
+                    if (!get_mesh_triangle_vertex_indices(mesh, t, indices))
+                        continue;
+
+                    Vector3 v0 = Vector3Transform(
+                        {
+                            mesh.vertices[indices[0] * 3 + 0],
+                            mesh.vertices[indices[0] * 3 + 1],
+                            mesh.vertices[indices[0] * 3 + 2]
+                        },
+                        transform_mat
+                    );
+
+                    Vector3 v1 = Vector3Transform(
+                        {
+                            mesh.vertices[indices[1] * 3 + 0],
+                            mesh.vertices[indices[1] * 3 + 1],
+                            mesh.vertices[indices[1] * 3 + 2]
+                        },
+                        transform_mat
+                    );
+
+                    Vector3 v2 = Vector3Transform(
+                        {
+                            mesh.vertices[indices[2] * 3 + 0],
+                            mesh.vertices[indices[2] * 3 + 1],
+                            mesh.vertices[indices[2] * 3 + 2]
+                        },
+                        transform_mat
+                    );
+
+                    RayCollision hit = GetRayCollisionTriangle(ray, v0, v1, v2);
+
+                    if (hit.hit && hit.distance < mesh_best)
+                    {
+                        mesh_best = hit.distance;
+                        mesh_hit = true;
+                    }
+                }
+
+                if (mesh_hit && mesh_best < best_distance)
+                {
+                    best_distance = mesh_best;
+                    hit_entity = &entity;
+                }
+            }
+        }
+
+        if (hit_entity && hit_entity->get_material_component())
+        {
+            editor.save_state();
+            load_material_to_entity(hit_entity, asset_name);
+            mark_entity_uv_dirty(hit_entity);
+        }
+
+        return;
+    }
 
     ModelAsset* asset = find_asset_by_name(asset_name);
     if (!asset) return;
@@ -648,13 +810,14 @@ void handle_scene_asset_drop(Editor& editor, Camera3D camera) {
     Entity entity = make_entity_from_asset(editor.scene, *asset);
     MeshComponent* mesh = entity.get_mesh_component();
     TransformComponent* transform = entity.get_transform_component();
+
     if (!mesh || !transform || !has_valid_model_data(mesh->model)) return;
 
     editor.save_state();
     transform->position = get_scene_drop_position(camera);
 
     editor.scene.entities.push_back(entity);
-    editor.scene.selected = static_cast<int>(editor.scene.entities.size()) - 1;
+    editor.scene.selected = (int)editor.scene.entities.size() - 1;
 }
 
 bool polygon_create_vertex(Entity& entity, const Vector3& world_position) {

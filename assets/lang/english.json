@@ -62,6 +62,7 @@
     "rename_asset": "Rename Item",
 
     "spawn": "Spawn %s",
+    "drag_n_drop_material": "Drag the material to an entity",
 
     "enabled": "Enabled",
     
