@@ -14,6 +14,8 @@ set(GLFW_BUILD_SHARED_LIBS ON CACHE BOOL "" FORCE)
 
 add_subdirectory(quark-libs/QuarkCore)
 
+target_compile_definitions(QuarkCore PUBLIC USE_IMGUI)
+
 include_directories(
     ${CMAKE_SOURCE_DIR}/quark-libs/QuarkCore/include
     ${CMAKE_SOURCE_DIR}/quark-libs/imgui/include
@@ -127,11 +129,6 @@ if(BUILD_ENGINE)
     )
 
     if(WIN32)
-        add_custom_command(TARGET ${PROJECT_NAME} POST_BUILD
-            COMMAND ${CMAKE_COMMAND} -E copy_if_different
-                $<TARGET_FILE:raylib>
-                ${CMAKE_RUNTIME_OUTPUT_DIRECTORY}
-        )
         add_custom_command(TARGET ${PROJECT_NAME} POST_BUILD
             COMMAND ${CMAKE_COMMAND} -E copy_if_different
                 $<TARGET_FILE:imgui>
