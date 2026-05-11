@@ -12,9 +12,10 @@ set(BUILD_GAMES    OFF CACHE BOOL "" FORCE)
 set(BUILD_SHARED_LIBS    ON CACHE BOOL "" FORCE)
 set(GLFW_BUILD_SHARED_LIBS ON CACHE BOOL "" FORCE)
 
-add_subdirectory(quark-libs/raylib)
+add_subdirectory(quark-libs/QuarkCore)
 
 include_directories(
+    ${CMAKE_SOURCE_DIR}/quark-libs/QuarkCore/include
     ${CMAKE_SOURCE_DIR}/quark-libs/imgui/include
     ${CMAKE_SOURCE_DIR}/src/headers
     ${CMAKE_SOURCE_DIR}/src/plugins
@@ -48,7 +49,7 @@ else()
     )
 endif()
 
-target_link_libraries(imgui PRIVATE raylib)
+target_link_libraries(imgui PRIVATE QuarkCore)
 
 set_target_properties(imgui PROPERTIES
     PREFIX ""
@@ -103,7 +104,7 @@ if(BUILD_ENGINE)
         )
     endif()
 
-    target_link_libraries(${PROJECT_NAME} PRIVATE raylib imgui)
+    target_link_libraries(${PROJECT_NAME} PRIVATE QuarkCore imgui)
 
     if(WIN32)
         target_link_libraries(${PROJECT_NAME} PRIVATE winmm gdi32 opengl32)
