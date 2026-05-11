@@ -2,11 +2,10 @@
 #include "editor_assets.h"
 #include "editor_utils.h"
 #include "editor_viewers.h"
+#include "../nlohmann/json.hpp"
 #include "../headers/models.h"
 #include "../headers/entity.h"
-#include <filesystem>
-
-namespace fs = std::filesystem;
+#include <fstream>
 
 void assign_entity_name(Entity& entity, const char* new_name) {
     if (!new_name || new_name[0] == '\0') return;
@@ -75,4 +74,26 @@ Entity make_entity_from_asset(Scene& scene, ModelAsset& asset) {
 
     mat->texture = {0};
     return entity;
+}
+
+void make_prefab(Entity entity, const fs::path path) {
+    nlohmann::json j;
+
+    j["name"] = entity.name;
+    j["is_group"] = entity.is_group;
+    j["parent_id"] = entity.parent_id;
+
+    if (entity.components) {
+        entity.components->serialize(j);
+    }
+
+    std::ofstream f(path / (entity.name + ".prefab"));
+
+    if (!f.is_open()) {
+        TraceLog(LOG_ERROR, "Failed to open %s.prefab ", entity.name.c_str());
+        return;
+    }
+
+    f << j.dump(4);
+    f.close();
 }
