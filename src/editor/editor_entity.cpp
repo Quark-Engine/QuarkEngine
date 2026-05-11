@@ -124,5 +124,12 @@ Entity make_entity_from_prefab(Scene& scene, const fs::path filename) {
         load_model_instance(*find_asset_by_name(mesh->asset_name), mesh->model);
     }
 
+    auto mat = entity.get_material_component();
+    if (mat && !mat->texture_name.empty()) {
+        load_material_to_entity(&entity, mat->texture_name);
+    }
+
+    TraceLog(LOG_INFO, "[TEXTURE_NAME] %s", mat->texture_name.c_str());
+
     return entity;
 }

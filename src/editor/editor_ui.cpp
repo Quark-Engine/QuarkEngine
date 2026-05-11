@@ -809,12 +809,6 @@ void handle_scene_asset_drop(Editor& editor, Camera3D camera)
         MeshComponent* mesh = e.get_mesh_component();
         TransformComponent* transform = e.get_transform_component();
 
-        printf(
-            "[HAS_MESH] %s\n[HAS_TRANSFORM] %s\n[HAS_VALID_MODEL] %s\n",
-            mesh ? "true" : "false",
-            transform ? "true" : "false",
-            has_valid_model_data(mesh->model) ? "true" : "false"
-        );
         if (!mesh || !transform || !has_valid_model_data(mesh->model)) return;
 
         editor.save_state();
