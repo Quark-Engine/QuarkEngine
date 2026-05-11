@@ -487,9 +487,6 @@ void draw_assets_ui(Editor& editor) {
 
             ImGui::EndPopup();
         }
-
-        ImGui::End();
-        return;
     }
 
     ImGui::BeginChild("AssetScroll", ImVec2(0, 0), false, ImGuiWindowFlags_AlwaysVerticalScrollbar);

@@ -1227,6 +1227,7 @@ void draw_ui(Editor& editor, Shader shader, FlyCamera camera) {
         
         if (ImGui::BeginDragDropSource(ImGuiDragDropFlags_None)) {
             ImGui::SetDragDropPayload("ENTITY_INDEX", &entity_index, sizeof(int));
+            ImGui::SetDragDropPayload("ENTITY_TO_ASSETS", &entity_index, sizeof(int));
             ImGui::Text("%s", entity.name.c_str());
             ImGui::EndDragDropSource();
         }
