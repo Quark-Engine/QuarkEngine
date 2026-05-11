@@ -466,13 +466,35 @@ void draw_assets_ui(Editor& editor) {
     entries.insert(entries.end(), files.begin(), files.end());
 
     if (entries.empty()) {
-        const char* text = lang.word("empty_folder");
-        const ImVec2 text_size = ImGui::CalcTextSize(text);
-        ImGui::SetCursorPosX((window_size.x - text_size.x) * 0.5f);
-        ImGui::SetCursorPosY((window_size.y - text_size.y) * 0.5f);
-        ImGui::TextUnformatted(text);
+        ImGui::BeginChild("AssetScrollEmpty", ImVec2(0, 0), false, ImGuiWindowFlags_AlwaysVerticalScrollbar);
 
-        if (ImGui::BeginPopupContextWindow("AssetBgContext", ImGuiPopupFlags_MouseButtonRight | ImGuiPopupFlags_NoOpenOverItems)) {
+        ImVec2 avail = ImGui::GetContentRegionAvail();
+        if (avail.x < 1.0f) avail.x = 1.0f;
+        if (avail.y < 1.0f) avail.y = 1.0f;
+
+        ImGui::InvisibleButton("##empty_drop_zone", avail);
+        if (ImGui::BeginDragDropTarget()) {
+            if (const ImGuiPayload* payload = ImGui::AcceptDragDropPayload("ENTITY_TO_ASSETS")) {
+                int idx = *(const int*)payload->Data;
+                Entity e = editor.scene.entities[idx];
+
+                make_prefab(e, editor.current_asset_path);
+            }
+
+            ImGui::EndDragDropTarget();
+        }
+
+        const char* text = lang.word("empty_folder");
+        const ImVec2 ts   = ImGui::CalcTextSize(text);
+        const ImVec2 wp   = ImGui::GetWindowPos();
+        const ImVec2 ws   = ImGui::GetWindowSize();
+        ImGui::GetWindowDrawList()->AddText(
+            ImVec2(wp.x + (ws.x - ts.x) * 0.5f, wp.y + (ws.y - ts.y) * 0.5f),
+            IM_COL32(255, 255, 255, 255), 
+            text
+        );
+
+        if (ImGui::BeginPopupContextItem("AssetBgContext", ImGuiPopupFlags_MouseButtonRight | ImGuiPopupFlags_NoOpenOverItems)) {
             if (ImGui::MenuItem(lang.word("new_file"))) {
                 creating_folder = false;
                 new_item_name[0] = '\0';
@@ -488,8 +510,7 @@ void draw_assets_ui(Editor& editor) {
             ImGui::EndPopup();
         }
 
-        ImGui::End();
-        return;
+        ImGui::EndChild();
     }
 
     ImGui::BeginChild("AssetScroll", ImVec2(0, 0), false, ImGuiWindowFlags_AlwaysVerticalScrollbar);
@@ -543,12 +564,16 @@ void draw_assets_ui(Editor& editor) {
             if (entry.is_model) {
                 ModelAsset* asset = find_asset_by_path(full_path, editor.project_path);
                 if (asset) open_model_viewer_for_asset(*asset);
-            } else if (entry.is_material) {
+            } 
+            
+            else if (entry.is_material) {
                 open_material_viewer_for_path(full_path, editor_internal::tex_cache);
-            } else {
-#ifdef _WIN32
-                ShellExecuteA(nullptr, "open", full_path.string().c_str(), nullptr, nullptr, SW_SHOWNORMAL);
-#endif
+            } 
+            
+            else {
+                #ifdef _WIN32
+                    ShellExecuteA(nullptr, "open", full_path.string().c_str(), nullptr, nullptr, SW_SHOWNORMAL);
+                #endif
             }
         }
 
@@ -701,6 +726,11 @@ void draw_assets_ui(Editor& editor) {
                     editor_internal::scene_asset_dragging = true;
                     editor_internal::dragged_scene_asset_name = (editor.current_asset_path / entry.filename).string();
                 }
+
+                if (entry.extension == "prefab") {
+                    editor_internal::scene_asset_dragging = true;
+                    editor_internal::dragged_scene_asset_name = (editor.current_asset_path / entry.filename).string();
+                }
                 
                 if (is_model_file(fs::path(entry.filename))) {
                     const std::string asset_name = get_asset_name_for_path(fs::path(editor.project_path), editor.current_asset_path / entry.filename);
@@ -739,6 +769,25 @@ void draw_assets_ui(Editor& editor) {
         const float next_x2 = ImGui::GetItemRectMax().x + ImGui::GetStyle().ItemSpacing.x + kIconSize;
         if (i + 1 < static_cast<int>(entries.size()) && next_x2 < window_visible_x2) ImGui::SameLine();
         ImGui::PopID();
+    }
+
+    ImGui::SetNextItemAllowOverlap();
+    ImGui::SetCursorPos(ImVec2(0, 0));
+
+    ImVec2 bg_size = ImGui::GetContentRegionMax();
+    if (bg_size.x < 1.f) bg_size.x = 1.f;
+    if (bg_size.y < 1.f) bg_size.y = 1.f;
+
+    ImGui::InvisibleButton("##bg_drop_zone", bg_size);
+
+    if (ImGui::BeginDragDropTarget()) {
+        if (const ImGuiPayload* payload = ImGui::AcceptDragDropPayload("ENTITY_TO_ASSETS")) {
+            int idx = *(const int*)payload->Data;
+            Entity e = editor.scene.entities[idx];
+
+            make_prefab(e, editor.current_asset_path);
+        }
+        ImGui::EndDragDropTarget();
     }
 
     if (selecting && (fabsf(selection_start.x - selection_end.x) > 5.0f || fabsf(selection_start.y - selection_end.y) > 5.0f)) {
@@ -831,7 +880,7 @@ void draw_assets_ui(Editor& editor) {
         ImGui::EndPopup();
     }
 
-    if (ImGui::BeginPopupContextWindow("AssetBgContext", ImGuiPopupFlags_MouseButtonRight | ImGuiPopupFlags_NoOpenOverItems)) {
+    if (ImGui::BeginPopupContextItem("AssetBgContext", ImGuiPopupFlags_MouseButtonRight | ImGuiPopupFlags_NoOpenOverItems)) {
         if (ImGui::MenuItem(lang.word("new_file"))) {
             creating_folder = false;
             new_item_name[0] = '\0';

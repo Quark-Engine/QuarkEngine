@@ -740,7 +740,6 @@ void handle_scene_asset_drop(Editor& editor, Camera3D camera)
                 if (!GetRayCollisionBox(ray, world_box).hit)
                     continue;
 
-                // 💥 ПРАВИЛЬНЫЙ RAYCAST ПО ТРЕУГОЛЬНИКАМ
                 float mesh_best = FLT_MAX;
                 bool mesh_hit = false;
 
@@ -800,6 +799,23 @@ void handle_scene_asset_drop(Editor& editor, Camera3D camera)
             load_material_to_entity(hit_entity, asset_name);
             mark_entity_uv_dirty(hit_entity);
         }
+
+        return;
+    }
+
+    if (asset_name.size() >= 7 && asset_name.substr(asset_name.size() - 7) == ".prefab") {
+        Entity e = make_entity_from_prefab(editor.scene, asset_name);
+        
+        MeshComponent* mesh = e.get_mesh_component();
+        TransformComponent* transform = e.get_transform_component();
+
+        if (!mesh || !transform || !has_valid_model_data(mesh->model)) return;
+
+        editor.save_state();
+        transform->position = get_scene_drop_position(camera);
+
+        editor.scene.entities.push_back(e);
+        editor.scene.selected = (int)editor.scene.entities.size() - 1;
 
         return;
     }
@@ -1227,6 +1243,7 @@ void draw_ui(Editor& editor, Shader shader, FlyCamera camera) {
         
         if (ImGui::BeginDragDropSource(ImGuiDragDropFlags_None)) {
             ImGui::SetDragDropPayload("ENTITY_INDEX", &entity_index, sizeof(int));
+            ImGui::SetDragDropPayload("ENTITY_TO_ASSETS", &entity_index, sizeof(int));
             ImGui::Text("%s", entity.name.c_str());
             ImGui::EndDragDropSource();
         }
