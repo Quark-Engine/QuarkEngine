@@ -97,3 +97,32 @@ void make_prefab(Entity entity, const fs::path path) {
     f << j.dump(4);
     f.close();
 }
+
+Entity make_entity_from_prefab(Scene& scene, const fs::path filename) {
+    std::ifstream f(filename);
+    if (!f.is_open()) {
+        TraceLog(LOG_ERROR, "Failed to open prefab %s", filename.string().c_str());
+        return {};
+    }
+
+    nlohmann::json j;
+    f >> j;
+
+    Entity entity;
+    
+    entity.name = j.value("name", "Entity");
+    entity.is_group = j.value("is_group", false);
+    entity.parent_id = j.value("parent_id", -1);
+    entity.id = scene.entities.size();
+
+    if (j.contains("components")) {
+        entity.components->deserialize(j);
+    }
+
+    auto mesh = entity.get_mesh_component();
+    if (mesh && !mesh->asset_name.empty()) {
+        load_model_instance(*find_asset_by_name(mesh->asset_name), mesh->model);
+    }
+
+    return entity;
+}

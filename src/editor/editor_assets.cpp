@@ -564,12 +564,16 @@ void draw_assets_ui(Editor& editor) {
             if (entry.is_model) {
                 ModelAsset* asset = find_asset_by_path(full_path, editor.project_path);
                 if (asset) open_model_viewer_for_asset(*asset);
-            } else if (entry.is_material) {
+            } 
+            
+            else if (entry.is_material) {
                 open_material_viewer_for_path(full_path, editor_internal::tex_cache);
-            } else {
-#ifdef _WIN32
-                ShellExecuteA(nullptr, "open", full_path.string().c_str(), nullptr, nullptr, SW_SHOWNORMAL);
-#endif
+            } 
+            
+            else {
+                #ifdef _WIN32
+                    ShellExecuteA(nullptr, "open", full_path.string().c_str(), nullptr, nullptr, SW_SHOWNORMAL);
+                #endif
             }
         }
 
@@ -719,6 +723,11 @@ void draw_assets_ui(Editor& editor) {
                 editor_internal::dragged_file_index = i;
 
                 if (entry.is_material) {
+                    editor_internal::scene_asset_dragging = true;
+                    editor_internal::dragged_scene_asset_name = (editor.current_asset_path / entry.filename).string();
+                }
+
+                if (entry.extension == "prefab") {
                     editor_internal::scene_asset_dragging = true;
                     editor_internal::dragged_scene_asset_name = (editor.current_asset_path / entry.filename).string();
                 }
