@@ -8,11 +8,18 @@ option(BUILD_ENGINE "Build Quark Engine" ON)
 option(BUILD_PLUGIN "Build Plugin" OFF)
 
 set(BUILD_EXAMPLES OFF CACHE BOOL "" FORCE)
-set(BUILD_GAMES OFF CACHE BOOL "" FORCE)
-set(BUILD_SHARED_LIBS ON CACHE BOOL "" FORCE)
+set(BUILD_GAMES    OFF CACHE BOOL "" FORCE)
+set(BUILD_SHARED_LIBS    ON CACHE BOOL "" FORCE)
 set(GLFW_BUILD_SHARED_LIBS ON CACHE BOOL "" FORCE)
 
 add_subdirectory(quark-libs/raylib)
+
+include_directories(
+    ${CMAKE_SOURCE_DIR}/quark-libs/imgui/include
+    ${CMAKE_SOURCE_DIR}/src/headers
+    ${CMAKE_SOURCE_DIR}/src/plugins
+    ${CMAKE_SOURCE_DIR}/src
+)
 
 add_library(imgui SHARED
     quark-libs/imgui/include/imgui.cpp
@@ -24,17 +31,21 @@ add_library(imgui SHARED
 )
 
 target_include_directories(imgui PUBLIC
-    quark-libs/imgui/include
-    src
-    src/headers
+    ${CMAKE_SOURCE_DIR}/quark-libs/imgui/include
+    ${CMAKE_SOURCE_DIR}/src
+    ${CMAKE_SOURCE_DIR}/src/headers
 )
 
-target_compile_definitions(imgui PRIVATE BUILD_LIBTYPE_SHARED)
-
 if(WIN32)
-    target_compile_definitions(imgui PRIVATE IMGUI_API=__declspec(dllexport))
+    target_compile_definitions(imgui
+        PRIVATE BUILD_LIBTYPE_SHARED
+        PRIVATE IMGUI_API=__declspec\(dllexport\)
+    )
 else()
-    target_compile_definitions(imgui PRIVATE "IMGUI_API=__attribute__((visibility(\"default\")))")
+    target_compile_definitions(imgui
+        PRIVATE BUILD_LIBTYPE_SHARED
+        PRIVATE "IMGUI_API=__attribute__((visibility(\"default\")))"
+    )
 endif()
 
 target_link_libraries(imgui PRIVATE raylib)
@@ -46,8 +57,20 @@ set_target_properties(imgui PROPERTIES
     ARCHIVE_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/bin
 )
 
-
 if(BUILD_ENGINE)
+    set(CMAKE_RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/bin)
+
+    set(EDITOR_FILES
+        src/editor/editor_assets.cpp
+        src/editor/editor_components_ui.cpp
+        src/editor/editor_entity.cpp
+        src/editor/editor_ui.cpp
+        src/editor/editor_utils.cpp
+        src/editor/editor_viewers.cpp
+        src/editor/editor.cpp
+        src/editor/editor_hierarchy_utils.cpp
+        src/editor/editor_file_utils.cpp
+    )
 
     set(SOURCE_FILES
         src/camera.cpp
@@ -66,37 +89,18 @@ if(BUILD_ENGINE)
         src/tex.cpp
     )
 
-    set(EDITOR_FILES
-        src/editor/editor_assets.cpp
-        src/editor/editor_components_ui.cpp
-        src/editor/editor_entity.cpp
-        src/editor/editor_ui.cpp
-        src/editor/editor_utils.cpp
-        src/editor/editor_viewers.cpp
-        src/editor/editor.cpp
-        src/editor/editor_hierarchy_utils.cpp
-        src/editor/editor_file_utils.cpp
-    )
-
     add_executable(${PROJECT_NAME} ${SOURCE_FILES} ${EDITOR_FILES})
 
     if(WIN32)
-        target_compile_definitions(${PROJECT_NAME} PRIVATE NOMINMAX WIN32_LEAN_AND_MEAN)
-    endif()
-
-    target_include_directories(${PROJECT_NAME} PRIVATE
-        quark-libs/imgui/include
-        src
-        src/headers
-        src/plugins
-    )
-
-    target_compile_definitions(${PROJECT_NAME} PRIVATE USE_LIBTYPE_SHARED)
-
-    if(WIN32)
-        target_compile_definitions(${PROJECT_NAME} PRIVATE IMGUI_API=__declspec(dllimport))
+        target_compile_definitions(${PROJECT_NAME}
+            PRIVATE USE_LIBTYPE_SHARED
+            PRIVATE IMGUI_API=__declspec\(dllimport\)
+        )
     else()
-        target_compile_definitions(${PROJECT_NAME} PRIVATE "IMGUI_API=__attribute__((visibility(\"default\")))")
+        target_compile_definitions(${PROJECT_NAME}
+            PRIVATE USE_LIBTYPE_SHARED
+            PRIVATE "IMGUI_API=__attribute__((visibility(\"default\")))"
+        )
     endif()
 
     target_link_libraries(${PROJECT_NAME} PRIVATE raylib imgui)
@@ -115,33 +119,34 @@ if(BUILD_ENGINE)
         )
     endif()
 
-    set(CMAKE_RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/bin)
-
     add_custom_command(TARGET ${PROJECT_NAME} POST_BUILD
         COMMAND ${CMAKE_COMMAND} -E copy_directory
-        ${CMAKE_SOURCE_DIR}/assets
-        ${CMAKE_BINARY_DIR}/bin/assets
+            ${CMAKE_SOURCE_DIR}/assets
+            ${CMAKE_BINARY_DIR}/bin/assets
     )
 
     if(WIN32)
         add_custom_command(TARGET ${PROJECT_NAME} POST_BUILD
             COMMAND ${CMAKE_COMMAND} -E copy_if_different
-            $<TARGET_FILE:raylib>
-            ${CMAKE_RUNTIME_OUTPUT_DIRECTORY}
+                $<TARGET_FILE:raylib>
+                ${CMAKE_RUNTIME_OUTPUT_DIRECTORY}
         )
         add_custom_command(TARGET ${PROJECT_NAME} POST_BUILD
             COMMAND ${CMAKE_COMMAND} -E copy_if_different
-            $<TARGET_FILE:imgui>
-            ${CMAKE_RUNTIME_OUTPUT_DIRECTORY}
+                $<TARGET_FILE:imgui>
+                ${CMAKE_RUNTIME_OUTPUT_DIRECTORY}
         )
     endif()
-
 endif()
 
 if(BUILD_PLUGIN)
+    add_library(MyPlugin SHARED
+        plugins/MyPlugin/plugin.cpp
+    )
 
-    add_library(MyPlugin SHARED plugins/MyPlugin/plugin.cpp)
-    target_include_directories(MyPlugin PRIVATE src/plugins)
+    target_include_directories(MyPlugin PRIVATE
+        ${CMAKE_SOURCE_DIR}/src/plugins
+    )
 
     if(WIN32)
         target_link_options(MyPlugin PRIVATE -Wl,--allow-shlib-undefined)
@@ -153,5 +158,4 @@ if(BUILD_PLUGIN)
         LIBRARY_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/bin/plugins
         ARCHIVE_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/bin/plugins
     )
-
 endif()
