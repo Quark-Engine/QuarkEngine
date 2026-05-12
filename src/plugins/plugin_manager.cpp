@@ -1,10 +1,12 @@
 #define NOMINMAX
 
-#include "raylib.h"
+#include "QuarkCore/QuarkCore.hpp"
 #include "plugin_manager.h"
 #include <filesystem>
 #include <iostream>
 #include <imgui.h>
+
+using namespace qc;
 
 namespace fs = std::filesystem;
 

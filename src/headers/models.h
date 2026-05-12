@@ -1,5 +1,4 @@
 #pragma once
-#include "raylib.h"
 #include "entity.h"
 #include <functional>
 #include <filesystem>

@@ -1,10 +1,11 @@
 #pragma once
 
-#include "raylib.h"
+#include "QuarkCore/QuarkCore.hpp"
+using namespace qc;
 #include <vector>
 
 struct EditableVertex {
-    Vector3 position;
+    Vec3 position;
 };
 
 struct EditableTriangle {

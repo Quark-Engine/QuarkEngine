@@ -12,9 +12,10 @@ set(BUILD_GAMES    OFF CACHE BOOL "" FORCE)
 set(BUILD_SHARED_LIBS    ON CACHE BOOL "" FORCE)
 set(GLFW_BUILD_SHARED_LIBS ON CACHE BOOL "" FORCE)
 
-add_subdirectory(quark-libs/raylib)
+add_subdirectory(quark-libs/QuarkCore)
 
 include_directories(
+    ${CMAKE_SOURCE_DIR}/quark-libs/QuarkCore/include
     ${CMAKE_SOURCE_DIR}/quark-libs/imgui/include
     ${CMAKE_SOURCE_DIR}/src/headers
     ${CMAKE_SOURCE_DIR}/src/plugins
@@ -26,7 +27,6 @@ add_library(imgui SHARED
     quark-libs/imgui/include/imgui_draw.cpp
     quark-libs/imgui/include/imgui_widgets.cpp
     quark-libs/imgui/include/imgui_tables.cpp
-    quark-libs/imgui/include/rlImGui.cpp
     src/ImGuizmo.cpp
 )
 
@@ -47,8 +47,6 @@ else()
         PRIVATE "IMGUI_API=__attribute__((visibility(\"default\")))"
     )
 endif()
-
-target_link_libraries(imgui PRIVATE raylib)
 
 set_target_properties(imgui PROPERTIES
     PREFIX ""
@@ -83,6 +81,8 @@ if(BUILD_ENGINE)
         src/main.cpp
         src/models.cpp
         src/project.cpp
+        src/quark_imgui.cpp
+        src/quark_imgui.h
         src/plugins/plugin_manager.cpp
         src/rlights.cpp
         src/scene.cpp
@@ -103,7 +103,10 @@ if(BUILD_ENGINE)
         )
     endif()
 
-    target_link_libraries(${PROJECT_NAME} PRIVATE raylib imgui)
+    target_link_libraries(${PROJECT_NAME} PRIVATE
+        QuarkCore
+        imgui
+    )
 
     if(WIN32)
         target_link_libraries(${PROJECT_NAME} PRIVATE winmm gdi32 opengl32)
@@ -126,11 +129,6 @@ if(BUILD_ENGINE)
     )
 
     if(WIN32)
-        add_custom_command(TARGET ${PROJECT_NAME} POST_BUILD
-            COMMAND ${CMAKE_COMMAND} -E copy_if_different
-                $<TARGET_FILE:raylib>
-                ${CMAKE_RUNTIME_OUTPUT_DIRECTORY}
-        )
         add_custom_command(TARGET ${PROJECT_NAME} POST_BUILD
             COMMAND ${CMAKE_COMMAND} -E copy_if_different
                 $<TARGET_FILE:imgui>

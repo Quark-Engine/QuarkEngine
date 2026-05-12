@@ -1,6 +1,8 @@
 #pragma once
-#include "raylib.h"
+#include "QuarkCore/QuarkCore.hpp"
 #include "scene.h"
+
+using namespace qc;
 
 class FlyCamera {
 public:

@@ -48,10 +48,10 @@ void free_light_id(int id) {
     if (id >= 0 && id < MAX_LIGHTS) used[id] = false;
 }
 
-Lighting create_lighting(Vector3 pos, Color color) {
+Lighting create_lighting(Vec3 pos, Color color) {
     Lighting l = {};
     l.position  = pos;
-    l.target    = Vector3Zero();
+    l.target    = Vec3(0,0,0);
     l.color     = color;
     l.enabled   = true;
     l.intensity = 1.0f;
@@ -60,7 +60,7 @@ Lighting create_lighting(Vector3 pos, Color color) {
     return l;
 }
 
-Light create_light_at_slot(int slot, int type, Vector3 position, Vector3 target, Color color, Shader shader) {
+Light create_light_at_slot(int slot, int type, Vec3 position, Vec3 target, Color color, Shader shader) {
     Light light       = { 0 };
     light.enabled     = true;
     light.type        = type;

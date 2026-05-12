@@ -1,7 +1,6 @@
 #pragma once
 #include "scene.h"
 #include "camera.h"
-#include "raylib.h"
 #include "tex.h"
 #include "models.h"
 #include <stack>
