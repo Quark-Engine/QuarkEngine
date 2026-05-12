@@ -6,10 +6,6 @@
 #ifdef _WIN32
     #define WIN32_LEAN_AND_MEAN
 
-    #define CloseWindow WinCloseWindow
-    #define ShowCursor WinShowCursor
-    #define Rectangle WinRectangle
-
     #include <windows.h>
 
     #undef CloseWindow
