@@ -284,12 +284,12 @@ static void draw_entity_shadow_caster(const Entity& entity) {
     Scale(transform->scale.x, transform->scale.y, transform->scale.z);
 
     const bool edited_mesh_is_double_sided = entity_has_mesh_overrides(entity) || mesh->mesh_triangles_detached;
-    if (edited_mesh_is_double_sided) rlDisableBackfaceCulling();
+    if (edited_mesh_is_double_sided) DisableBackfaceCulling();
 
     DrawModel(mesh->model, {0, 0, 0}, 1.0f, WHITE);
 
-    if (edited_mesh_is_double_sided) rlEnableBackfaceCulling();
-    rlPopMatrix();
+    if (edited_mesh_is_double_sided) EnableBackfaceCulling();
+    PopMatrix();
 }
 
 void ApplyCustomImGuiTheme()
@@ -381,7 +381,6 @@ int main(int argc, char* argv[]) {
     reload_editor_fonts(LanguageManager::get().current);
 
     ApplyCustomImGuiTheme();
-    SetExitKey(0);
 
     std::string project_path = "";
     if (argc > 1)
@@ -389,7 +388,7 @@ int main(int argc, char* argv[]) {
     else {
         project_path = run_hub();
         if (project_path.empty()) {
-            rlImGuiShutdown();
+            ImGuiShutdown();
             CloseWindow();
             return 0;
         }
@@ -411,7 +410,7 @@ int main(int argc, char* argv[]) {
     
     scene_rt = LoadRenderTexture(GetScreenWidth(), GetScreenHeight());
 
-    Camera3D light_cam = {0};
+    Camera3D light_cam;
     light_cam.projection = CAMERA_ORTHOGRAPHIC;
     light_cam.up         = {0.0f, 1.0f, 0.0f};
     light_cam.fovy       = 20.0f;
@@ -434,8 +433,8 @@ int main(int argc, char* argv[]) {
     SetShaderValue(shadowmap_shader, GetShaderLocation(shadowmap_shader, "shadowMapResolution"), &shadow_map_res, SHADER_UNIFORM_INT);
     SetShaderValue(shadowmap_shader, ambient_loc, ambient, SHADER_UNIFORM_VEC4);
 
-    Matrix light_view = {0};
-    Matrix light_proj = {0};
+    Mat4 light_view = {0};
+    Mat4 light_proj = {0};
 
     load_models();
     load_textures(project_path);
@@ -475,8 +474,8 @@ int main(int argc, char* argv[]) {
         if (scene_radius < 10.0f) scene_radius = 10.0f;
 
         Vec3 active_shadow_target = scene_center;
-        Vec3 active_shadow_pos = Vec3Add(scene_center, { 6.0f, 10.0f, 6.0f });
-        Vec3 active_shadow_dir = Vec3Normalize(Vec3Subtract(active_shadow_pos, active_shadow_target));
+        Vec3 active_shadow_pos = scene_center + { 6.0f, 10.0f, 6.0f };
+        Vec3 active_shadow_dir = (active_shadow_pos - active_shadow_target).normalized();
         bool has_shadow_light = false;
         int active_shadow_type = LIGHT_DIRECTIONAL;
 
@@ -488,11 +487,11 @@ int main(int argc, char* argv[]) {
             active_shadow_pos = transform->position;
 
             active_shadow_target = light->light.target;
-            if (Vec3LengthSqr(Vec3Subtract(active_shadow_pos, active_shadow_target)) <= 0.000001f) {
+            if ((active_shadow_pos - active_shadow_target).length() <= 0.000001f) {
                 active_shadow_target = scene_center;
             }
 
-            active_shadow_dir = Vec3Normalize(Vec3Subtract(active_shadow_pos, active_shadow_target));
+            active_shadow_dir = (active_shadow_pos - active_shadow_target).normalized();
             active_shadow_type = light->light.light.type;
 
             if (active_shadow_type == LIGHT_DIRECTIONAL) {
@@ -500,8 +499,8 @@ int main(int argc, char* argv[]) {
                 light_cam.up = {0.0f, 1.0f, 0.0f};
                 light_cam.fovy = scene_radius * 2.0f;
                 light_cam.target = scene_center;
-                light_cam.position = Vec3Add(scene_center, Vec3Scale(active_shadow_dir, fmaxf(scene_radius * 2.0f, 15.0f)));
-                active_shadow_dir = Vec3Normalize(Vec3Subtract(light_cam.position, light_cam.target));
+                light_cam.position = scene_center + (active_shadow_dir * fmaxf(scene_radius * 2.0f, 15.0f));
+                active_shadow_dir = (light_cam.position - light_cam.target).normalized();
             } else {
                 light_cam.projection = CAMERA_PERSPECTIVE;
                 light_cam.up = {0.0f, 0.0f, -1.0f};
@@ -519,8 +518,8 @@ int main(int argc, char* argv[]) {
             light_cam.up = {0.0f, 1.0f, 0.0f};
             light_cam.fovy = scene_radius * 2.0f;
             light_cam.target = active_shadow_target;
-            light_cam.position = Vec3Add(scene_center, Vec3Scale(active_shadow_dir, fmaxf(scene_radius * 2.0f, 15.0f)));
-            active_shadow_dir = Vec3Normalize(Vec3Subtract(light_cam.position, light_cam.target));
+            light_cam.position = scene_center + (active_shadow_dir * fmaxf(scene_radius * 2.0f, 15.0f)));
+            active_shadow_dir = (light_cam.position - light_cam.target).normalized();
         }
 
         Vec3 cam_pos = camera.get_camera().position;

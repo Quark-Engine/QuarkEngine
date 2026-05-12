@@ -51,7 +51,7 @@ void free_light_id(int id) {
 Lighting create_lighting(Vec3 pos, Color color) {
     Lighting l = {};
     l.position  = pos;
-    l.target    = Vec3Zero();
+    l.target    = Vec3(0,0,0);
     l.color     = color;
     l.enabled   = true;
     l.intensity = 1.0f;
