@@ -70,7 +70,7 @@ void PluginManager::load(const std::string& filepath) {
         TraceLog(LOG_INFO, "PLUGIN: Loaded '%s' v%s", plugin->name, plugin->version);
 }
 
-void PluginManager::load_all(const std::string& plugin_dir) {
+void PluginManager::load_all(const std::string& plugin_dir, PluginContext* ctx) {
     if (!fs::exists(plugin_dir)) {
         fs::create_directories(plugin_dir);
         return;
@@ -89,11 +89,10 @@ void PluginManager::load_all(const std::string& plugin_dir) {
     }
 
     for (auto& lp : plugins) {
-        PluginContext ctx;
-        ctx.delta_time   = 0.0f;
-        ctx.entity_count = 0;
-        ctx.selected     = nullptr;
-        if (lp.plugin->on_load) lp.plugin->on_load(&ctx);
+        ctx->delta_time   = 0.0f;
+        ctx->entity_count = 0;
+        ctx->selected     = nullptr;
+        if (lp.plugin->on_load) lp.plugin->on_load(ctx);
     }
 }
 
@@ -114,5 +113,16 @@ void PluginManager::update_all(PluginContext& ctx) {
 void PluginManager::draw_ui_all(PluginContext& ctx) {
     for (auto& lp : plugins) {
         if (lp.plugin->on_draw_ui) lp.plugin->on_draw_ui(&ctx);
+    }
+}
+
+void PluginManager::register_ui_callback(UIRegion region, PluginUICallback callback) {
+    ui_callbacks.push_back({region, callback});
+}
+
+void PluginManager::draw_ui_region(UIRegion region, PluginContext& ctx) {
+    for (RegisteredUICallback cb : ui_callbacks) {
+        if (cb.region == region)
+            cb.callback(&ctx);
     }
 }

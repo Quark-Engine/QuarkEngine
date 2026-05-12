@@ -1136,7 +1136,7 @@ void delete_entity(Editor& editor, Entity* entity, Shader shader) {
     editor.scene.selected = -1;
 }
 
-void draw_ui(Editor& editor, Shader shader, FlyCamera camera) {
+void draw_ui(Editor& editor, Shader shader, FlyCamera camera, PluginContext* plugin_ctx) {
     using namespace editor_internal;
 
     ImGuizmo::BeginFrame();
@@ -1152,6 +1152,8 @@ void draw_ui(Editor& editor, Shader shader, FlyCamera camera) {
 
     if (ImGui::BeginMainMenuBar()) {
         if (ImGui::BeginMenu(lang.word("file"))) {
+            editor.plugin_manager->draw_ui_region(UI_MENU_FILE, *plugin_ctx);
+
             if (ImGui::MenuItem(lang.word("save"), "Ctrl+S")) project_save(editor.project_path, editor.scene);
             ImGui::Separator();
             if (ImGui::MenuItem(lang.word("exit"))) CloseWindow();
@@ -1159,6 +1161,8 @@ void draw_ui(Editor& editor, Shader shader, FlyCamera camera) {
         }
 
         if (ImGui::BeginMenu(lang.word("edit"))) {
+            editor.plugin_manager->draw_ui_region(UI_MENU_EDIT, *plugin_ctx);
+
             if (ImGui::MenuItem(lang.word("undo"), "Ctrl+Z")) editor.undo();
             if (ImGui::MenuItem(lang.word("redo"), "Ctrl+Y")) editor.redo();
 
@@ -1219,6 +1223,8 @@ void draw_ui(Editor& editor, Shader shader, FlyCamera camera) {
         }
 
         if (ImGui::BeginMenu(lang.word("help"))) {
+            editor.plugin_manager->draw_ui_region(UI_MENU_HELP, *plugin_ctx);
+
             if (ImGui::MenuItem(lang.word("about"))) show_about_window = true;
             ImGui::EndMenu();
         }
@@ -1230,6 +1236,7 @@ void draw_ui(Editor& editor, Shader shader, FlyCamera camera) {
 
     if (show_hierarchy) {
         ImGui::Begin(lang.word("hierarchy"), &show_hierarchy);
+        editor.plugin_manager->draw_ui_region(UI_HIERARCHY, *plugin_ctx);
 
     auto draw_entity_item = [&](int entity_index) {
         Entity& entity = editor.scene.entities[entity_index];
@@ -1434,6 +1441,7 @@ void draw_ui(Editor& editor, Shader shader, FlyCamera camera) {
 
     if (show_inspector) {
         ImGui::Begin(lang.word("inspector"), &show_inspector);
+        editor.plugin_manager->draw_ui_region(UI_INSPECTOR, *plugin_ctx);
         
         ImGui::Text(lang.word("mode"));
         ImGui::SameLine();
@@ -1484,6 +1492,7 @@ void draw_ui(Editor& editor, Shader shader, FlyCamera camera) {
     if (show_scene) {
         ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(0, 0));
         if (ImGui::Begin(lang.word("scene"), &show_scene)) {
+            editor.plugin_manager->draw_ui_region(UI_INSPECTOR, *plugin_ctx);
             g_scene_window_pos = ImGui::GetCursorScreenPos();
             g_scene_window_size = ImGui::GetContentRegionAvail();
 
@@ -1585,6 +1594,6 @@ void draw_ui(Editor& editor, Shader shader, FlyCamera camera) {
     }
 }
 
-void Editor::draw_ui(Shader shader, FlyCamera camera) {
-    ::draw_ui(*this, shader, camera);
+void Editor::draw_ui(Shader shader, FlyCamera camera, PluginContext* ctx) {
+    ::draw_ui(*this, shader, camera, ctx);
 }

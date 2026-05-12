@@ -39,4 +39,4 @@ static Plugin info {
     on_load, on_unload, on_update, on_draw_ui
 };
 
-extern "C" __declspec(dllexport) Plugin* get_plugin() { return &info; }
+PLUGIN_EXPORT Plugin* get_plugin() { return &info; }

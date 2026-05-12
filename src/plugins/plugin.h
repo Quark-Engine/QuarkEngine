@@ -6,15 +6,47 @@
  *
  * On Windows expands to `extern "C" __declspec(dllexport)`, which marks the
  * symbol for export from the DLL and suppresses C++ name-mangling.
- * On all other platforms expands to `extern "C"` for C linkage only.
+ * On all other platforms expands to
+ * `extern "C" __attribute__((visibility("default")))`, which enables C linkage
+ * and explicitly exports the symbol from the shared library.
+ *
  * Apply to every symbol that must be discovered at runtime via
  * LoadLibrary / dlopen.
  */
 #ifdef _WIN32
     #define PLUGIN_EXPORT extern "C" __declspec(dllexport)
 #else
-    #define PLUGIN_EXPORT extern "C"
+    #define PLUGIN_EXPORT extern "C" __attribute__((visibility("default")))
 #endif
+
+struct PluginContext;
+struct Scene;
+
+/**
+ * @enum UIRegion
+ * @brief Logical zones of the editor UI where plugins can inject custom UI.
+ * 
+ * Used to reigster callbacks that will be called only when the corresponding
+ * part of the interface is being drawn.
+ */
+enum UIRegion {
+    UI_MENU_FILE,
+    UI_MENU_EDIT,
+    UI_MENU_HELP,
+    UI_HIERARCHY,
+    UI_INSPECTOR,
+    UI_SCENE
+};
+
+/**
+ * @typedef PluginUICallback
+ * @param ctx Pointer to the host-provided plugin context.
+ * @brief Function pointer type for UI callbacks executed in a specific UIRegion.
+ * 
+ * Called by the host when rendering a registered UI region. Receives the
+ * current PluginContext for accessing UI and engine state.
+ */
+using PluginUICallback = void(*)(PluginContext*);
 
 /**
  * @struct PluginContext
@@ -57,6 +89,27 @@ struct PluginContext {
      * @brief Closes the window opened by the most recent ui_begin() call.
      */
     void (*ui_end)();
+
+    /**
+     * @brief Begins a menu section in the UI (e.g. top menu bar entry).
+     * @param label Menu name.
+     * @return true if the menu is open and its items should be drawn.
+     */
+    bool (*ui_begin_menu)(const char* label);
+    
+    /**
+     * @brief Ends the most recently opened menu section.
+     */
+    void (*ui_end_menu)();
+
+    /**
+     * @brief Creates a clickable item inside a menu.
+     * @param label Item text.
+     * @return true when the item is clicked.
+     */
+    bool (*ui_menu_item)(const char* label);
+
+    void (*register_ui_callback)(UIRegion region, PluginUICallback callback);
 
     /**
      * @brief Renders a read-only text label inside the current window.
@@ -204,6 +257,11 @@ struct PluginContext {
     // -------------------------------------------------------------------------
     // Scene management
     // -------------------------------------------------------------------------
+
+    /**
+     * @brief Current scene state owned by the host.
+     */
+    Scene* scene;
 
     /**
      * @brief Serialises the current scene to disk using the host's default

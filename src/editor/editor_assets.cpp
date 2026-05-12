@@ -16,19 +16,6 @@
 #include <sstream>
 #include <string>
 
-#ifdef _WIN32
-#define NOMINMAX 1
-#define WIN32_LEAN_AND_MEAN
-#define CloseWindow WinAPICloseWindow
-#define ShowCursor WinAPIShowCursor
-#define Rectangle WinAPIRectangle
-#include <windows.h>
-#include <shellapi.h>
-#undef CloseWindow
-#undef ShowCursor
-#undef Rectangle
-#endif
-
 #define lang LanguageManager::get()
 
 namespace fs = std::filesystem;
@@ -572,7 +559,7 @@ void draw_assets_ui(Editor& editor) {
             
             else {
                 #ifdef _WIN32
-                    ShellExecuteA(nullptr, "open", full_path.string().c_str(), nullptr, nullptr, SW_SHOWNORMAL);
+                    ShellExecuteA(nullptr, "open", full_path.string().c_str(), nullptr, nullptr, 1);
                 #endif
             }
         }
