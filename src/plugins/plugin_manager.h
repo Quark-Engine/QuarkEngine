@@ -11,6 +11,7 @@
     #define NOUSER
 
     #include <windows.h>
+    #include <shellapi.h>
 
     #undef CloseWindow
     #undef ShowCursor
