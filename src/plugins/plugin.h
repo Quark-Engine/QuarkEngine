@@ -1,4 +1,5 @@
 #pragma once
+#include "../headers/scene.h"
 
 /**
  * @def PLUGIN_EXPORT
