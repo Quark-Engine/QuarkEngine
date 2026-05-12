@@ -31,7 +31,7 @@ void paste_entity(Editor& editor);
 void dublicate_entity(Editor& editor, Entity* entity);
 void delete_entity(Editor& editor, Entity* entity, Shader shader);
 
-void draw_ui(Editor& editor, Shader shader, FlyCamera camera);
+void draw_ui(Editor& editor, Shader shader, FlyCamera camera, PluginContext* ctx);
 
 void draw_gizmo(Editor& editor, FlyCamera camera);
 void handle_scene_asset_drop(Editor& editor, Camera3D camera);

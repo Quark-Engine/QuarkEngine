@@ -6,6 +6,7 @@
 #include "models.h"
 #include <stack>
 #include <filesystem>
+#include <plugin_manager.h>
 
 struct SceneState {
     std::vector<Entity> entities;
@@ -20,9 +21,11 @@ struct Editor {
     std::stack<SceneState> undo_stack;
     std::stack<SceneState> redo_stack;
 
+    PluginManager* plugin_manager = nullptr;
+
     std::filesystem::path current_asset_path;
     
-    void draw_ui(Shader shader, FlyCamera camera);
+    void draw_ui(Shader shader, FlyCamera camera, PluginContext* ctx);
     void draw_assets_ui();
     void handle_input();
     void draw_entity_with_texture(Entity& e);

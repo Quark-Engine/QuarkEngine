@@ -15,10 +15,12 @@ ImGuizmo::OPERATION gizmo_mode = ImGuizmo::TRANSLATE;
 int renaming_index = -1;
 char rename_buf[128] = "";
 bool scene_asset_dragging = false;
+
 std::string dragged_scene_asset_name;
 bool file_dragging = false;
 int dragged_file_index = -1;
 int dragged_target_folder_index = -1;
+
 std::unordered_map<std::string, Texture> tex_cache;
 bool show_about_window = false;
 bool has_clipboard = false;

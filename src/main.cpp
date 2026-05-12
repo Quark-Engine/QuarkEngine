@@ -23,6 +23,9 @@ Shader shadowmap_shader = {0};
 RenderTexture2D shadow_map = {0};
 RenderTexture2D scene_rt = {0};
 
+PluginManager* g_plugin_manager = nullptr;
+PluginContext* ctx = nullptr;
+
 extern bool g_is_scene_hovered;
 extern bool g_is_scene_active;
 static Shader shadowcaster_shader = {0};
@@ -76,40 +79,64 @@ static void reload_editor_fonts(const std::string& language_code) {
     io.Fonts->Build();
 }
 
+static void init_plugin_context(PluginContext* ctx) {
+    ctx->ui_begin        = [](const char* t)             { return ImGui::Begin(t); };
+    ctx->ui_end          = []()                           { ImGui::End(); };
+    ctx->ui_begin_menu   = [](const char* l)             { return ImGui::BeginMenu(l); };
+    ctx->ui_end_menu     = []()                           { ImGui::EndMenu(); };
+    ctx->ui_menu_item    = [](const char* l)             { return ImGui::MenuItem(l); };
+    ctx->ui_text         = [](const char* t)             { ImGui::Text("%s", t); };
+    ctx->ui_button       = [](const char* l)             { return ImGui::Button(l); };
+    ctx->ui_checkbox     = [](const char* l, bool* v)    { return ImGui::Checkbox(l, v); };
+    ctx->ui_slider_float = [](const char* l, float* v, float mn, float mx) { return ImGui::SliderFloat(l, v, mn, mx); };
+    ctx->ui_input_float  = [](const char* l, float* v)   { return ImGui::InputFloat(l, v); };
+    ctx->ui_color_edit3  = [](const char* l, float c[3]) { return ImGui::ColorEdit3(l, c); };
+    ctx->ui_separator    = []()                           { ImGui::Separator(); };
+    ctx->ui_same_line    = []()                           { ImGui::SameLine(); };
+
+    ctx->register_ui_callback = [](UIRegion region, PluginUICallback callback) {
+        if (g_plugin_manager) g_plugin_manager->register_ui_callback(region, callback);
+    };
+}
+
 static void update_plugins(PluginManager& plugin_manager, Editor& editor) {
     static Editor* s_editor = nullptr;
     s_editor = &editor;
 
-    PluginContext ctx;
-    ctx.delta_time      = GetFrameTime();
-    ctx.entity_count    = (int)s_editor->scene.entities.size();
-    ctx.selected        = &s_editor->scene.selected;
+    ctx->scene           = s_editor->scene;
 
-    ctx.ui_begin            = [](const char* t) { return ImGui::Begin(t); };
-    ctx.ui_end              = []() { ImGui::End(); };
-    ctx.ui_text             = [](const char* t) { ImGui::Text("%s", t); };
-    ctx.ui_button           = [](const char* l) { return ImGui::Button(l); };
-    ctx.ui_checkbox         = [](const char* l, bool* v) { return ImGui::Checkbox(l, v); };
-    ctx.ui_slider_float     = [](const char* l, float* v, float mn, float mx) { return ImGui::SliderFloat(l, v, mn, mx); };
-    ctx.ui_input_float      = [](const char* l, float* v) { return ImGui::InputFloat(l, v); };
-    ctx.ui_color_edit3      = [](const char* l, float c[3]) { return ImGui::ColorEdit3(l, c); };
-    ctx.ui_separator        = []() { ImGui::Separator(); };
-    ctx.ui_same_line        = []() { ImGui::SameLine(); };
+    ctx->delta_time      = GetFrameTime();
+    ctx->entity_count    = (int)s_editor->scene.entities.size();
+    ctx->selected        = &s_editor->scene.selected;
 
-    ctx.entity_get_name     = [](int i) -> const char* { return s_editor->scene.entities[i].name.c_str(); };
-    ctx.entity_get_position = [](int i, float* x, float* y, float* z) { if (auto* t = s_editor->scene.entities[i].get_transform_component()) { *x = t->position.x; *y = t->position.y; *z = t->position.z; } };
-    ctx.entity_get_rotation = [](int i, float* x, float* y, float* z) { if (auto* t = s_editor->scene.entities[i].get_transform_component()) { *x = t->rotation.x; *y = t->rotation.y; *z = t->rotation.z; } };
-    ctx.entity_get_scale    = [](int i, float* x, float* y, float* z) { if (auto* t = s_editor->scene.entities[i].get_transform_component()) { *x = t->scale.x; *y = t->scale.y; *z = t->scale.z; } };
-    ctx.entity_get_color    = [](int i, unsigned char* r, unsigned char* g, unsigned char* b, unsigned char* a) { if (auto* m = s_editor->scene.entities[i].get_material_component()) { *r = m->color.r; *g = m->color.g; *b = m->color.b; *a = m->color.a; } };
+    ctx->ui_begin            = [](const char* t) { return ImGui::Begin(t); };
+    ctx->ui_end              = []() { ImGui::End(); };
+    ctx->ui_begin_menu       = [](const char* label) { return ImGui::BeginMenu(label); };
+    ctx->ui_end_menu         = []() { ImGui::EndMenu(); };
+    ctx->ui_menu_item        = [](const char* label) { return ImGui::MenuItem(label); };
+    ctx->ui_text             = [](const char* t) { ImGui::Text("%s", t); };
+    ctx->ui_button           = [](const char* l) { return ImGui::Button(l); };
+    ctx->ui_checkbox         = [](const char* l, bool* v) { return ImGui::Checkbox(l, v); };
+    ctx->ui_slider_float     = [](const char* l, float* v, float mn, float mx) { return ImGui::SliderFloat(l, v, mn, mx); };
+    ctx->ui_input_float      = [](const char* l, float* v) { return ImGui::InputFloat(l, v); };
+    ctx->ui_color_edit3      = [](const char* l, float c[3]) { return ImGui::ColorEdit3(l, c); };
+    ctx->ui_separator        = []() { ImGui::Separator(); };
+    ctx->ui_same_line        = []() { ImGui::SameLine(); };
 
-    ctx.entity_set_position = [](int i, float x, float y, float z) { if (auto* t = s_editor->scene.entities[i].get_transform_component()) t->position = {x, y, z}; };
-    ctx.entity_set_rotation = [](int i, float x, float y, float z) { if (auto* t = s_editor->scene.entities[i].get_transform_component()) t->rotation = {x, y, z}; };
-    ctx.entity_set_scale    = [](int i, float x, float y, float z) { if (auto* t = s_editor->scene.entities[i].get_transform_component()) t->scale = {x, y, z}; };
-    ctx.entity_set_color    = [](int i, unsigned char r, unsigned char g, unsigned char b, unsigned char a) { if (auto* m = s_editor->scene.entities[i].get_material_component()) m->color = {r, g, b, a}; };
-    ctx.entity_set_name     = [](int i, const char* name) { s_editor->scene.entities[i].name = name; };
+    ctx->entity_get_name     = [](int i) -> const char* { return s_editor->scene.entities[i].name.c_str(); };
+    ctx->entity_get_position = [](int i, float* x, float* y, float* z) { if (auto* t = s_editor->scene.entities[i].get_transform_component()) { *x = t->position.x; *y = t->position.y; *z = t->position.z; } };
+    ctx->entity_get_rotation = [](int i, float* x, float* y, float* z) { if (auto* t = s_editor->scene.entities[i].get_transform_component()) { *x = t->rotation.x; *y = t->rotation.y; *z = t->rotation.z; } };
+    ctx->entity_get_scale    = [](int i, float* x, float* y, float* z) { if (auto* t = s_editor->scene.entities[i].get_transform_component()) { *x = t->scale.x; *y = t->scale.y; *z = t->scale.z; } };
+    ctx->entity_get_color    = [](int i, unsigned char* r, unsigned char* g, unsigned char* b, unsigned char* a) { if (auto* m = s_editor->scene.entities[i].get_material_component()) { *r = m->color.r; *g = m->color.g; *b = m->color.b; *a = m->color.a; } };
 
-    ctx.scene_save = []() { project_save(s_editor->project_path, s_editor->scene); };
-    ctx.scene_spawn = [](const char* asset_name) -> int {
+    ctx->entity_set_position = [](int i, float x, float y, float z) { if (auto* t = s_editor->scene.entities[i].get_transform_component()) t->position = {x, y, z}; };
+    ctx->entity_set_rotation = [](int i, float x, float y, float z) { if (auto* t = s_editor->scene.entities[i].get_transform_component()) t->rotation = {x, y, z}; };
+    ctx->entity_set_scale    = [](int i, float x, float y, float z) { if (auto* t = s_editor->scene.entities[i].get_transform_component()) t->scale = {x, y, z}; };
+    ctx->entity_set_color    = [](int i, unsigned char r, unsigned char g, unsigned char b, unsigned char a) { if (auto* m = s_editor->scene.entities[i].get_material_component()) m->color = {r, g, b, a}; };
+    ctx->entity_set_name     = [](int i, const char* name) { s_editor->scene.entities[i].name = name; };
+
+    ctx->scene_save = []() { project_save(s_editor->project_path, s_editor->scene); };
+    ctx->scene_spawn = [](const char* asset_name) -> int {
         for (auto& a : assets) {
             if (a.name == asset_name) {
                 Entity e = make_entity_from_asset(s_editor->scene, a);
@@ -121,15 +148,20 @@ static void update_plugins(PluginManager& plugin_manager, Editor& editor) {
         }
         return -1;
     };
-    ctx.scene_delete = [](int i) {
+    ctx->scene_delete = [](int i) {
         if (i < 0 || i >= (int)s_editor->scene.entities.size()) return;
         s_editor->scene.entities.erase(s_editor->scene.entities.begin() + i);
         if (s_editor->scene.selected >= (int)s_editor->scene.entities.size())
             s_editor->scene.selected = -1;
     };
+    ctx->register_ui_callback = [](UIRegion region, PluginUICallback callback) {
+        if (g_plugin_manager) {
+            g_plugin_manager->register_ui_callback(region, callback);
+        }
+    };
 
-    plugin_manager.update_all(ctx);
-    plugin_manager.draw_ui_all(ctx);
+    plugin_manager.update_all(*ctx);
+    plugin_manager.draw_ui_all(*ctx);
 }
 
 static Matrix compose_entity_transform(const Entity& entity) {
@@ -437,6 +469,11 @@ int main(int argc, char* argv[]) {
     Matrix light_view = {0};
     Matrix light_proj = {0};
 
+    g_plugin_manager = new PluginManager();
+    ctx = new PluginContext{};
+
+    init_plugin_context(ctx);
+
     load_models();
     load_textures(project_path);
     refresh_assets(project_path);
@@ -447,8 +484,10 @@ int main(int argc, char* argv[]) {
     else
         project_new(project_path, editor.scene);
 
-    PluginManager plugin_manager;
-    plugin_manager.load_all("plugins");
+    
+    g_plugin_manager->load_all("plugins", ctx);
+    editor.plugin_manager = g_plugin_manager;
+
     std::string active_font_language = LanguageManager::get().current;
 
     while (!WindowShouldClose()) {
@@ -585,9 +624,9 @@ int main(int argc, char* argv[]) {
 
             editor.handle_input();
 
-            editor.draw_ui(shadowmap_shader, camera);
+            editor.draw_ui(shadowmap_shader, camera, ctx);
             
-            update_plugins(plugin_manager, editor);
+            update_plugins(*g_plugin_manager, editor);
 
             rlImGuiEnd();
         EndDrawing();
@@ -599,7 +638,7 @@ int main(int argc, char* argv[]) {
     UnloadShader(shadowcaster_shader);
     UnloadShader(shadowmap_shader);
     unload_shadowmap_render_texture(shadow_map);
-    plugin_manager.unload_all();
+    g_plugin_manager->unload_all();
     rlImGuiShutdown();
     CloseWindow();
     return 0;
