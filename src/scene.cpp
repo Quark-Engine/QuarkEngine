@@ -43,12 +43,12 @@ void Scene::release_resources() {
         const bool owns_model = entity_owns_model(entity);
         if (mesh->owns_materials) {
             if (mesh->model.materials) {
-                RL_FREE(mesh->model.materials);
+                free(mesh->model.materials);
                 mesh->model.materials = nullptr;
             }
 
             if (mesh->model.meshMaterial) {
-                RL_FREE(mesh->model.meshMaterial);
+                free(mesh->model.meshMaterial);
                 mesh->model.meshMaterial = nullptr;
             }
 

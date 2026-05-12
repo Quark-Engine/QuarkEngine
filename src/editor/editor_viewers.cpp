@@ -43,9 +43,9 @@ static float material_uv_scale_y = 1.0f;
 static Color material_outline_color = LIGHTGRAY;
 static float material_outline_color_f[4] = {0.827f, 0.827f, 0.827f, 1.0f};
 
-static Vector3 viewer_target = { 0, 0, 0 };
-static Vector3 viewer_model_center = { 0, 0, 0 };
-static Vector3 viewer_model_rotation = { 0, 0, 0 };
+static Vec3 viewer_target = { 0, 0, 0 };
+static Vec3 viewer_model_center = { 0, 0, 0 };
+static Vec3 viewer_model_rotation = { 0, 0, 0 };
 static float viewer_phi = 20.0f, viewer_theta = 45.0f, viewer_radius = 5.0f;
 
 bool open_model_viewer_for_asset(const ModelAsset& asset) {

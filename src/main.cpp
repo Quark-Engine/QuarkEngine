@@ -1,8 +1,6 @@
-#include "raylib.h"
-#include "rlImGui.h"
+#include "QuarkCore/QuarkCore.hpp"
 #include "imgui.h"
-#include "raymath.h"
-#include "rlgl.h"
+#include "quark_imgui.h"
 #include "plugins/plugin_manager.h"
 #include "headers/lighting.h"
 #include "headers/language_manager.h"
@@ -14,6 +12,8 @@
 #include "headers/tex.h"
 #include <iostream>
 #include <cfloat>
+
+using namespace qc;
 
 #define SHADOWMAP_RESOLUTION 1024
 
@@ -81,7 +81,7 @@ static void update_plugins(PluginManager& plugin_manager, Editor& editor) {
     s_editor = &editor;
 
     PluginContext ctx;
-    ctx.delta_time      = GetFrameTime();
+    ctx.delta_time      = GetDeltaTime();
     ctx.entity_count    = (int)s_editor->scene.entities.size();
     ctx.selected        = &s_editor->scene.selected;
 
@@ -141,7 +141,7 @@ static Matrix compose_entity_transform(const Entity& entity) {
     return MatrixMultiply(MatrixMultiply(matTranslation, matRotation), matScale);
 }
 
-static void expand_bounds_with_point(BoundingBox& bounds, const Vector3& point) {
+static void expand_bounds_with_point(BoundingBox& bounds, const Vec3& point) {
     bounds.min.x = fminf(bounds.min.x, point.x);
     bounds.min.y = fminf(bounds.min.y, point.y);
     bounds.min.z = fminf(bounds.min.z, point.z);
@@ -170,7 +170,7 @@ static BoundingBox compute_scene_bounds(const Scene& scene) {
         BoundingBox local_bounds = mutable_mesh->cached_local_bounds;
         Matrix transform = compose_entity_transform(entity);
 
-        const Vector3 corners[8] = {
+        const Vec3 corners[8] = {
             { local_bounds.min.x, local_bounds.min.y, local_bounds.min.z },
             { local_bounds.max.x, local_bounds.min.y, local_bounds.min.z },
             { local_bounds.min.x, local_bounds.max.y, local_bounds.min.z },
@@ -181,8 +181,8 @@ static BoundingBox compute_scene_bounds(const Scene& scene) {
             { local_bounds.max.x, local_bounds.max.y, local_bounds.max.z }
         };
 
-        for (const Vector3& corner : corners) {
-            expand_bounds_with_point(bounds, Vector3Transform(corner, transform));
+        for (const Vec3& corner : corners) {
+            expand_bounds_with_point(bounds, Vec3Transform(corner, transform));
         }
         has_bounds = true;
     }
@@ -213,7 +213,7 @@ static void disable_all_shader_lights(Shader shader) {
     }
 }
 
-static bool prepare_scene_light_uniforms(Scene& scene, Shader shader, const Vector3& scene_center) {
+static bool prepare_scene_light_uniforms(Scene& scene, Shader shader, const Vec3& scene_center) {
     disable_all_shader_lights(shader);
 
     bool has_active_scene_light = false;
@@ -239,7 +239,7 @@ static bool prepare_scene_light_uniforms(Scene& scene, Shader shader, const Vect
         light->light.position = transform->position;
 
         if (light->light.light.type == LIGHT_DIRECTIONAL &&
-            Vector3LengthSqr(Vector3Subtract(light->light.position, light->light.target)) <= 0.000001f) {
+            Vec3LengthSqr(Vec3Subtract(light->light.position, light->light.target)) <= 0.000001f) {
             light->light.target = scene_center;
         }
 
@@ -251,8 +251,8 @@ static bool prepare_scene_light_uniforms(Scene& scene, Shader shader, const Vect
     }
 
     if (!has_active_scene_light) {
-        Vector3 fallback_target = scene_center;
-        Vector3 fallback_position = Vector3Add(scene_center, { 6.0f, 10.0f, 6.0f });
+        Vec3 fallback_target = scene_center;
+        Vec3 fallback_position = Vec3Add(scene_center, { 6.0f, 10.0f, 6.0f });
         Light fallback_light = create_light_at_slot(0, LIGHT_DIRECTIONAL, fallback_position, fallback_target, WHITE, shader);
         Lighting fallback_lighting = {};
         fallback_lighting.id = 0;
@@ -276,12 +276,12 @@ static void draw_entity_shadow_caster(const Entity& entity) {
     const TransformComponent* transform = entity.get_transform_component();
     if (!mesh || !transform) return;
 
-    rlPushMatrix();
-    rlTranslatef(transform->position.x, transform->position.y, transform->position.z);
-    rlRotatef(transform->rotation.x, 1, 0, 0);
-    rlRotatef(transform->rotation.y, 0, 1, 0);
-    rlRotatef(transform->rotation.z, 0, 0, 1);
-    rlScalef(transform->scale.x, transform->scale.y, transform->scale.z);
+    PushMatrix();
+    Translate(transform->position.x, transform->position.y, transform->position.z);
+    Rotate(transform->rotation.x, Vec3(1.0f, 0.0f, 0.0f));
+    Rotate(transform->rotation.y, Vec3(0.0f, 1.0f, 0.0f));
+    Rotate(transform->rotation.z, Vec3(0.0f, 0.0f, 1.0f));
+    Scale(transform->scale.x, transform->scale.y, transform->scale.z);
 
     const bool edited_mesh_is_double_sided = entity_has_mesh_overrides(entity) || mesh->mesh_triangles_detached;
     if (edited_mesh_is_double_sided) rlDisableBackfaceCulling();
@@ -376,8 +376,8 @@ int main(int argc, char* argv[]) {
     LanguageManager::get().set_lang(lang_code);
 
     InitWindow(1280, 720, "Quark Engine");
-    SetTargetFPS(GetMonitorRefreshRate(GetCurrentMonitor()));
-    rlImGuiSetup(true);
+    SetTargetFPS(GetCurrentMonitorRefreshRate());
+    InitImGui();
     reload_editor_fonts(LanguageManager::get().current);
 
     ApplyCustomImGuiTheme();
@@ -415,7 +415,7 @@ int main(int argc, char* argv[]) {
     light_cam.projection = CAMERA_ORTHOGRAPHIC;
     light_cam.up         = {0.0f, 1.0f, 0.0f};
     light_cam.fovy       = 20.0f;
-    light_cam.target     = Vector3Zero();
+    light_cam.target     = Vec3Zero();
     light_cam.position   = {0.0f, 15.0f, 0.0f};
 
     int light_vp_loc      = GetShaderLocation(shadowmap_shader, "lightVP");
@@ -461,12 +461,12 @@ int main(int argc, char* argv[]) {
             fs::path(project_path).filename().string().c_str(), GetFPS()));
 
         BoundingBox scene_bounds = compute_scene_bounds(editor.scene);
-        Vector3 scene_center = {
+        Vec3 scene_center = {
             (scene_bounds.min.x + scene_bounds.max.x) * 0.5f,
             (scene_bounds.min.y + scene_bounds.max.y) * 0.5f,
             (scene_bounds.min.z + scene_bounds.max.z) * 0.5f
         };
-        Vector3 scene_extents = {
+        Vec3 scene_extents = {
             (scene_bounds.max.x - scene_bounds.min.x) * 0.5f,
             (scene_bounds.max.y - scene_bounds.min.y) * 0.5f,
             (scene_bounds.max.z - scene_bounds.min.z) * 0.5f
@@ -474,9 +474,9 @@ int main(int argc, char* argv[]) {
         float scene_radius = fmaxf(fmaxf(scene_extents.x, scene_extents.y), scene_extents.z);
         if (scene_radius < 10.0f) scene_radius = 10.0f;
 
-        Vector3 active_shadow_target = scene_center;
-        Vector3 active_shadow_pos = Vector3Add(scene_center, { 6.0f, 10.0f, 6.0f });
-        Vector3 active_shadow_dir = Vector3Normalize(Vector3Subtract(active_shadow_pos, active_shadow_target));
+        Vec3 active_shadow_target = scene_center;
+        Vec3 active_shadow_pos = Vec3Add(scene_center, { 6.0f, 10.0f, 6.0f });
+        Vec3 active_shadow_dir = Vec3Normalize(Vec3Subtract(active_shadow_pos, active_shadow_target));
         bool has_shadow_light = false;
         int active_shadow_type = LIGHT_DIRECTIONAL;
 
@@ -488,11 +488,11 @@ int main(int argc, char* argv[]) {
             active_shadow_pos = transform->position;
 
             active_shadow_target = light->light.target;
-            if (Vector3LengthSqr(Vector3Subtract(active_shadow_pos, active_shadow_target)) <= 0.000001f) {
+            if (Vec3LengthSqr(Vec3Subtract(active_shadow_pos, active_shadow_target)) <= 0.000001f) {
                 active_shadow_target = scene_center;
             }
 
-            active_shadow_dir = Vector3Normalize(Vector3Subtract(active_shadow_pos, active_shadow_target));
+            active_shadow_dir = Vec3Normalize(Vec3Subtract(active_shadow_pos, active_shadow_target));
             active_shadow_type = light->light.light.type;
 
             if (active_shadow_type == LIGHT_DIRECTIONAL) {
@@ -500,8 +500,8 @@ int main(int argc, char* argv[]) {
                 light_cam.up = {0.0f, 1.0f, 0.0f};
                 light_cam.fovy = scene_radius * 2.0f;
                 light_cam.target = scene_center;
-                light_cam.position = Vector3Add(scene_center, Vector3Scale(active_shadow_dir, fmaxf(scene_radius * 2.0f, 15.0f)));
-                active_shadow_dir = Vector3Normalize(Vector3Subtract(light_cam.position, light_cam.target));
+                light_cam.position = Vec3Add(scene_center, Vec3Scale(active_shadow_dir, fmaxf(scene_radius * 2.0f, 15.0f)));
+                active_shadow_dir = Vec3Normalize(Vec3Subtract(light_cam.position, light_cam.target));
             } else {
                 light_cam.projection = CAMERA_PERSPECTIVE;
                 light_cam.up = {0.0f, 0.0f, -1.0f};
@@ -519,11 +519,11 @@ int main(int argc, char* argv[]) {
             light_cam.up = {0.0f, 1.0f, 0.0f};
             light_cam.fovy = scene_radius * 2.0f;
             light_cam.target = active_shadow_target;
-            light_cam.position = Vector3Add(scene_center, Vector3Scale(active_shadow_dir, fmaxf(scene_radius * 2.0f, 15.0f)));
-            active_shadow_dir = Vector3Normalize(Vector3Subtract(light_cam.position, light_cam.target));
+            light_cam.position = Vec3Add(scene_center, Vec3Scale(active_shadow_dir, fmaxf(scene_radius * 2.0f, 15.0f)));
+            active_shadow_dir = Vec3Normalize(Vec3Subtract(light_cam.position, light_cam.target));
         }
 
-        Vector3 cam_pos = camera.get_camera().position;
+        Vec3 cam_pos = camera.get_camera().position;
         int shadows_enabled = 1;
         float shadow_light_dir[3] = { active_shadow_dir.x, active_shadow_dir.y, active_shadow_dir.z };
         SetShaderValue(shadowmap_shader, shadowmap_shader.locs[SHADER_LOC_VECTOR_VIEW], &cam_pos, SHADER_UNIFORM_VEC3);
@@ -533,8 +533,8 @@ int main(int argc, char* argv[]) {
         BeginTextureMode(shadow_map);
             ClearBackground(WHITE);
             BeginMode3D(light_cam);
-                light_view = rlGetMatrixModelview();
-                light_proj = rlGetMatrixProjection();
+                light_view = GetMatrixModelview();
+                light_proj = GetMatrixProjection();
                 for (auto& e : editor.scene.entities) {
                     MeshComponent* mesh = e.get_mesh_component();
                     if (!mesh || mesh->model.meshCount <= 0) continue;
@@ -576,7 +576,7 @@ int main(int argc, char* argv[]) {
 
         BeginDrawing();
             ClearBackground(DARKGRAY);
-            rlImGuiBegin();
+            BeginImGui();
 
             const bool gizmo_busy = ImGuizmo::IsOver() || ImGuizmo::IsUsing();
             if (!gizmo_busy && (IsCursorHidden() || g_is_scene_hovered)) {
@@ -589,7 +589,7 @@ int main(int argc, char* argv[]) {
             
             update_plugins(plugin_manager, editor);
 
-            rlImGuiEnd();
+            EndImGui();
         EndDrawing();
     }
 
@@ -600,7 +600,7 @@ int main(int argc, char* argv[]) {
     UnloadShader(shadowmap_shader);
     unload_shadowmap_render_texture(shadow_map);
     plugin_manager.unload_all();
-    rlImGuiShutdown();
+    ShutdownImGui();
     CloseWindow();
     return 0;
 }

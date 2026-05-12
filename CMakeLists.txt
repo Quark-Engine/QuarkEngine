@@ -14,8 +14,6 @@ set(GLFW_BUILD_SHARED_LIBS ON CACHE BOOL "" FORCE)
 
 add_subdirectory(quark-libs/QuarkCore)
 
-target_compile_definitions(QuarkCore PUBLIC USE_IMGUI)
-
 include_directories(
     ${CMAKE_SOURCE_DIR}/quark-libs/QuarkCore/include
     ${CMAKE_SOURCE_DIR}/quark-libs/imgui/include
@@ -29,7 +27,6 @@ add_library(imgui SHARED
     quark-libs/imgui/include/imgui_draw.cpp
     quark-libs/imgui/include/imgui_widgets.cpp
     quark-libs/imgui/include/imgui_tables.cpp
-    quark-libs/imgui/include/rlImGui.cpp
     src/ImGuizmo.cpp
 )
 
@@ -50,8 +47,6 @@ else()
         PRIVATE "IMGUI_API=__attribute__((visibility(\"default\")))"
     )
 endif()
-
-target_link_libraries(imgui PRIVATE QuarkCore)
 
 set_target_properties(imgui PROPERTIES
     PREFIX ""
@@ -86,6 +81,8 @@ if(BUILD_ENGINE)
         src/main.cpp
         src/models.cpp
         src/project.cpp
+        src/quark_imgui.cpp
+        src/quark_imgui.h
         src/plugins/plugin_manager.cpp
         src/rlights.cpp
         src/scene.cpp
@@ -106,7 +103,10 @@ if(BUILD_ENGINE)
         )
     endif()
 
-    target_link_libraries(${PROJECT_NAME} PRIVATE QuarkCore imgui)
+    target_link_libraries(${PROJECT_NAME} PRIVATE
+        QuarkCore
+        imgui
+    )
 
     if(WIN32)
         target_link_libraries(${PROJECT_NAME} PRIVATE winmm gdi32 opengl32)

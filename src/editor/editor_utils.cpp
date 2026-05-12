@@ -1,10 +1,12 @@
 #include "editor_utils.h"
-#include "raylib.h"
+#include "QuarkCore/QuarkCore.hpp"
 #include "headers/entity.h"
 #include "headers/models.h"
 #include <algorithm>
 #include <cmath>
 #include <filesystem>
+
+using namespace qc;
 
 namespace fs = std::filesystem;
 
@@ -20,7 +22,7 @@ std::string get_asset_name_for_path(const fs::path& project_path_value, const fs
     return asset_path.filename().generic_string();
 }
 
-Vector3 get_scene_drop_position(Camera3D camera) {
+Vec3 get_scene_drop_position(Camera3D camera) {
     Ray ray = GetScreenToWorldRay(GetMousePosition(), camera);
     const float epsilon = 0.0001f;
 

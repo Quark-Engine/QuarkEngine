@@ -1,6 +1,5 @@
 #pragma once
 
-#include "raylib.h"
 #include "../headers/editor.h"
 #include "../headers/camera.h"
 #include "../headers/entity.h"

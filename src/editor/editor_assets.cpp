@@ -113,8 +113,8 @@ Texture create_model_preview(const ModelAsset& asset, const std::string& cache_k
         return result;
     }
 
-    Vector3 min_bound = { FLT_MAX, FLT_MAX, FLT_MAX };
-    Vector3 max_bound = { -FLT_MAX, -FLT_MAX, -FLT_MAX };
+    Vec3 min_bound = { FLT_MAX, FLT_MAX, FLT_MAX };
+    Vec3 max_bound = { -FLT_MAX, -FLT_MAX, -FLT_MAX };
     bool has_vertices = false;
 
     for (int mesh_index = 0; mesh_index < preview_model.meshCount; mesh_index++) {
@@ -136,7 +136,7 @@ Texture create_model_preview(const ModelAsset& asset, const std::string& cache_k
         }
     }
 
-    Vector3 center = {0, 0, 0};
+    Vec3 center = {0, 0, 0};
     float distance = 3.0f;
     if (has_vertices) {
         center = {
@@ -145,7 +145,7 @@ Texture create_model_preview(const ModelAsset& asset, const std::string& cache_k
             (min_bound.z + max_bound.z) * 0.5f
         };
 
-        const Vector3 size = {
+        const Vec3 size = {
             max_bound.x - min_bound.x,
             max_bound.y - min_bound.y,
             max_bound.z - min_bound.z

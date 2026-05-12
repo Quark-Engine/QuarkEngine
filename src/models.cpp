@@ -106,7 +106,7 @@ static int resolve_obj_index(int idx, int count) {
     return -1;
 }
 
-static Vector3 safe_normalize(Vector3 value) {
+static Vec3 safe_normalize(Vec3 value) {
     const float length = sqrtf(value.x*value.x + value.y*value.y + value.z*value.z);
     if (length <= 0.000001f) return { 0.0f, 1.0f, 0.0f };
     return { value.x / length, value.y / length, value.z / length };
@@ -145,25 +145,25 @@ void rebuild_mesh_normals(Mesh& mesh) {
         int indices[3] = {};
         if (!get_mesh_triangle_vertex_indices(mesh, triangle_index, indices)) continue;
 
-        const Vector3 a = {
+        const Vec3 a = {
             mesh.vertices[indices[0] * 3 + 0],
             mesh.vertices[indices[0] * 3 + 1],
             mesh.vertices[indices[0] * 3 + 2]
         };
-        const Vector3 b = {
+        const Vec3 b = {
             mesh.vertices[indices[1] * 3 + 0],
             mesh.vertices[indices[1] * 3 + 1],
             mesh.vertices[indices[1] * 3 + 2]
         };
-        const Vector3 c = {
+        const Vec3 c = {
             mesh.vertices[indices[2] * 3 + 0],
             mesh.vertices[indices[2] * 3 + 1],
             mesh.vertices[indices[2] * 3 + 2]
         };
 
-        const Vector3 ab = Vector3Subtract(b, a);
-        const Vector3 ac = Vector3Subtract(c, a);
-        const Vector3 normal = safe_normalize(Vector3CrossProduct(ab, ac));
+        const Vec3 ab = Vec3Subtract(b, a);
+        const Vec3 ac = Vec3Subtract(c, a);
+        const Vec3 normal = safe_normalize(Vec3CrossProduct(ab, ac));
 
         for (int i = 0; i < 3; i++) {
             mesh.normals[indices[i] * 3 + 0] += normal.x;
@@ -173,12 +173,12 @@ void rebuild_mesh_normals(Mesh& mesh) {
     }
 
     for (int vertex_index = 0; vertex_index < mesh.vertexCount; vertex_index++) {
-        const Vector3 accumulated = {
+        const Vec3 accumulated = {
             mesh.normals[vertex_index * 3 + 0],
             mesh.normals[vertex_index * 3 + 1],
             mesh.normals[vertex_index * 3 + 2]
         };
-        const Vector3 normalized = safe_normalize(accumulated);
+        const Vec3 normalized = safe_normalize(accumulated);
         mesh.normals[vertex_index * 3 + 0] = normalized.x;
         mesh.normals[vertex_index * 3 + 1] = normalized.y;
         mesh.normals[vertex_index * 3 + 2] = normalized.z;
@@ -362,10 +362,10 @@ bool detach_mesh_triangles(Entity& entity) {
 
 static bool append_obj_vertex(
     const ObjVertexKey& key,
-    const std::vector<Vector3>& generated_normals,
-    const std::vector<Vector3>& positions,
-    const std::vector<Vector2>& texcoords,
-    const std::vector<Vector3>& normals,
+    const std::vector<Vec3>& generated_normals,
+    const std::vector<Vec3>& positions,
+    const std::vector<Vec2>& texcoords,
+    const std::vector<Vec3>& normals,
     std::vector<float>& out_vertices,
     std::vector<float>& out_texcoords,
     std::vector<float>& out_normals
@@ -373,12 +373,12 @@ static bool append_obj_vertex(
     const int v_index = resolve_obj_index(key.v, static_cast<int>(positions.size()));
     if (v_index < 0 || v_index >= static_cast<int>(positions.size())) return false;
 
-    const Vector3& position = positions[v_index];
+    const Vec3& position = positions[v_index];
     out_vertices.push_back(position.x);
     out_vertices.push_back(position.y);
     out_vertices.push_back(position.z);
 
-    Vector2 uv = { 0.0f, 0.0f };
+    Vec2 uv = { 0.0f, 0.0f };
     const int vt_index = resolve_obj_index(key.vt, static_cast<int>(texcoords.size()));
     if (vt_index >= 0 && vt_index < static_cast<int>(texcoords.size())) {
         uv = texcoords[vt_index];
@@ -386,7 +386,7 @@ static bool append_obj_vertex(
     out_texcoords.push_back(uv.x);
     out_texcoords.push_back(uv.y);
 
-    Vector3 normal = { 0.0f, 1.0f, 0.0f };
+    Vec3 normal = { 0.0f, 1.0f, 0.0f };
     const int vn_index = resolve_obj_index(key.vn, static_cast<int>(normals.size()));
     if (vn_index >= 0 && vn_index < static_cast<int>(normals.size())) {
         normal = normals[vn_index];
@@ -409,10 +409,10 @@ static Model load_obj_model_fallback(const std::string& filepath, bool& ok) {
         return {0};
     }
 
-    std::vector<Vector3> positions;
-    std::vector<Vector2> texcoords;
-    std::vector<Vector3> normals;
-    std::vector<Vector3> generated_normals;
+    std::vector<Vec3> positions;
+    std::vector<Vec2> texcoords;
+    std::vector<Vec3> normals;
+    std::vector<Vec3> generated_normals;
     std::vector<ObjTriangle> triangles;
     std::vector<float> out_vertices;
     std::vector<float> out_texcoords;
@@ -431,16 +431,16 @@ static Model load_obj_model_fallback(const std::string& filepath, bool& ok) {
         iss >> type;
 
         if (type == "v") {
-            Vector3 v = {0};
+            Vec3 v = {0};
             iss >> v.x >> v.y >> v.z;
             positions.push_back(v);
             generated_normals.push_back({ 0.0f, 0.0f, 0.0f });
         } else if (type == "vt") {
-            Vector2 vt = {0};
+            Vec2 vt = {0};
             iss >> vt.x >> vt.y;
             texcoords.push_back(vt);
         } else if (type == "vn") {
-            Vector3 vn = {0};
+            Vec3 vn = {0};
             iss >> vn.x >> vn.y >> vn.z;
             normals.push_back(vn);
         } else if (type == "mtllib") {
@@ -470,21 +470,21 @@ static Model load_obj_model_fallback(const std::string& filepath, bool& ok) {
                     continue;
                 }
 
-                const Vector3& a = positions[ia];
-                const Vector3& b = positions[ib];
-                const Vector3& c = positions[ic];
-                const Vector3 ab = { b.x - a.x, b.y - a.y, b.z - a.z };
-                const Vector3 ac = { c.x - a.x, c.y - a.y, c.z - a.z };
-                const Vector3 face_normal = safe_normalize(Vector3CrossProduct(ab, ac));
+                const Vec3& a = positions[ia];
+                const Vec3& b = positions[ib];
+                const Vec3& c = positions[ic];
+                const Vec3 ab = { b.x - a.x, b.y - a.y, b.z - a.z };
+                const Vec3 ac = { c.x - a.x, c.y - a.y, c.z - a.z };
+                const Vec3 face_normal = safe_normalize(Vec3CrossProduct(ab, ac));
 
                 if (face[0].vn == -1) {
-                    generated_normals[ia] = Vector3Add(generated_normals[ia], face_normal);
+                    generated_normals[ia] = Vec3Add(generated_normals[ia], face_normal);
                 }
                 if (face[i].vn == -1) {
-                    generated_normals[ib] = Vector3Add(generated_normals[ib], face_normal);
+                    generated_normals[ib] = Vec3Add(generated_normals[ib], face_normal);
                 }
                 if (face[i + 1].vn == -1) {
-                    generated_normals[ic] = Vector3Add(generated_normals[ic], face_normal);
+                    generated_normals[ic] = Vec3Add(generated_normals[ic], face_normal);
                 }
 
                 triangles.push_back({ face[0], face[i], face[i + 1] });
@@ -492,7 +492,7 @@ static Model load_obj_model_fallback(const std::string& filepath, bool& ok) {
         }
     }
 
-    for (Vector3& normal : generated_normals) {
+    for (Vec3& normal : generated_normals) {
         normal = safe_normalize(normal);
     }
 

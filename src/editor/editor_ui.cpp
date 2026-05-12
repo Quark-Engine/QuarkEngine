@@ -158,7 +158,7 @@ Matrix compose_entity_transform_matrix(const Entity& entity) {
     return MatrixMultiply(MatrixMultiply(matTranslation, matRotation), matScale);
 }
 
-Vector3 ray_plane_hit(Ray ray) {
+Vec3 ray_plane_hit(Ray ray) {
     if (fabsf(ray.direction.y) < 0.0001f) {
         return ray.position;
     }
@@ -200,7 +200,7 @@ bool get_selected_vertex_index(const Entity& entity, int mesh_index, int triangl
     return true;
 }
 
-Vector3 get_mesh_vertex_local_position(const Entity& entity, int mesh_index, int vertex_index) {
+Vec3 get_mesh_vertex_local_position(const Entity& entity, int mesh_index, int vertex_index) {
     const MeshComponent* mesh_component = entity.get_mesh_component();
     const Mesh& mesh = mesh_component->model.meshes[mesh_index];
     return {
@@ -210,9 +210,9 @@ Vector3 get_mesh_vertex_local_position(const Entity& entity, int mesh_index, int
     };
 }
 
-Vector3 get_mesh_vertex_world_position(const Entity& entity, int mesh_index, int vertex_index) {
+Vec3 get_mesh_vertex_world_position(const Entity& entity, int mesh_index, int vertex_index) {
     const Matrix transform = compose_entity_transform_matrix(entity);
-    return Vector3Transform(get_mesh_vertex_local_position(entity, mesh_index, vertex_index), transform);
+    return Vec3Transform(get_mesh_vertex_local_position(entity, mesh_index, vertex_index), transform);
 }
 
 bool ensure_mesh_edit_ready(Entity& entity) {
@@ -223,7 +223,7 @@ bool ensure_mesh_edit_ready(Entity& entity) {
     return entity_has_mesh_overrides(entity);
 }
 
-bool set_mesh_vertex_local_position(Entity& entity, int mesh_index, int vertex_index, const Vector3& local_position) {
+bool set_mesh_vertex_local_position(Entity& entity, int mesh_index, int vertex_index, const Vec3& local_position) {
     MeshComponent* mesh_component = entity.get_mesh_component();
     if (!mesh_component || !has_valid_model_data(mesh_component->model)) return false;
     if (mesh_index < 0 || mesh_index >= mesh_component->model.meshCount) return false;
@@ -248,9 +248,9 @@ bool set_mesh_vertex_local_position(Entity& entity, int mesh_index, int vertex_i
     return applied;
 }
 
-bool set_mesh_vertex_world_position(Entity& entity, int mesh_index, int vertex_index, const Vector3& world_position) {
+bool set_mesh_vertex_world_position(Entity& entity, int mesh_index, int vertex_index, const Vec3& world_position) {
     const Matrix inverse_transform = MatrixInvert(compose_entity_transform_matrix(entity));
-    const Vector3 local_position = Vector3Transform(world_position, inverse_transform);
+    const Vec3 local_position = Vec3Transform(world_position, inverse_transform);
     return set_mesh_vertex_local_position(entity, mesh_index, vertex_index, local_position);
 }
 
@@ -277,9 +277,9 @@ bool pick_mesh_triangle(
         int indices[3] = {};
         if (!get_mesh_triangle_vertex_indices(mesh, triangle_index, indices)) continue;
 
-        Vector3 vertices[3] = {};
+        Vec3 vertices[3] = {};
         for (int i = 0; i < 3; i++) {
-            vertices[i] = Vector3Transform({
+            vertices[i] = Vec3Transform({
                 mesh.vertices[indices[i] * 3 + 0],
                 mesh.vertices[indices[i] * 3 + 1],
                 mesh.vertices[indices[i] * 3 + 2]
@@ -294,7 +294,7 @@ bool pick_mesh_triangle(
 
         float closest_corner_distance = FLT_MAX;
         for (int i = 0; i < 3; i++) {
-            const float distance_to_corner = Vector3Distance(hit.point, vertices[i]);
+            const float distance_to_corner = Vec3Distance(hit.point, vertices[i]);
             if (distance_to_corner < closest_corner_distance) {
                 closest_corner_distance = distance_to_corner;
                 best_corner = i;
@@ -325,10 +325,10 @@ bool raycast_entity(const Entity& entity, Ray ray, float& out_distance) {
             int indices[3] = {};
             if (!get_mesh_triangle_vertex_indices(m, j, indices)) continue;
 
-            Vector3 verts[3];
+            Vec3 verts[3];
 
             for (int k = 0; k < 3; k++) {
-                verts[k] = Vector3Transform({
+                verts[k] = Vec3Transform({
                     m.vertices[indices[k] * 3 + 0],
                     m.vertices[indices[k] * 3 + 1],
                     m.vertices[indices[k] * 3 + 2],
@@ -447,7 +447,7 @@ void draw_gizmo(Editor& editor, FlyCamera camera) {
             g_mesh_edit_state.vertex_corner, 
             vertex_index)) {
             
-            const Vector3 vertex_world = get_mesh_vertex_world_position(
+            const Vec3 vertex_world = get_mesh_vertex_world_position(
                 *entity, 
                 g_mesh_edit_state.mesh_index, 
                 vertex_index
@@ -548,10 +548,10 @@ void draw_gizmo(Editor& editor, FlyCamera camera) {
     g_mesh_edit_state.was_using_gizmo = false;
 }
 
-static Vector2 world_to_scene_screen(const Vector3& world, const Camera3D& camera) {
+static Vec2 world_to_scene_screen(const Vec3& world, const Camera3D& camera) {
     float rt_w = (float)GetScreenWidth();
     float rt_h = (float)GetScreenHeight();
-    Vector2 fb = GetWorldToScreen(world, camera);
+    Vec2 fb = GetWorldToScreen(world, camera);
     float nx = fb.x / rt_w;
     float ny = fb.y / rt_h;
     return {
@@ -560,7 +560,7 @@ static Vector2 world_to_scene_screen(const Vector3& world, const Camera3D& camer
     };
 }
 
-static Ray scene_screen_to_world_ray(const Vector2& mouse, const Camera3D& camera) {
+static Ray scene_screen_to_world_ray(const Vec2& mouse, const Camera3D& camera) {
     float nx = (mouse.x - g_scene_window_pos.x) / g_scene_window_size.x;
     float ny = (mouse.y - g_scene_window_pos.y) / g_scene_window_size.y;
 
@@ -587,12 +587,12 @@ static Ray scene_screen_to_world_ray(const Vector2& mouse, const Camera3D& camer
     Vector4 near_w = mul(inv_vp, {ndcX, ndcY, -1.0f, 1.0f});
     Vector4 far_w  = mul(inv_vp, {ndcX, ndcY,  1.0f, 1.0f});
 
-    Vector3 near_pos = { near_w.x/near_w.w, near_w.y/near_w.w, near_w.z/near_w.w };
-    Vector3 far_pos  = { far_w.x/far_w.w,   far_w.y/far_w.w,   far_w.z/far_w.w  };
+    Vec3 near_pos = { near_w.x/near_w.w, near_w.y/near_w.w, near_w.z/near_w.w };
+    Vec3 far_pos  = { far_w.x/far_w.w,   far_w.y/far_w.w,   far_w.z/far_w.w  };
 
     Ray ray;
     ray.position  = near_pos;
-    ray.direction = Vector3Normalize(Vector3Subtract(far_pos, near_pos));
+    ray.direction = Vec3Normalize(Vec3Subtract(far_pos, near_pos));
     return ray;
 }
 
@@ -609,10 +609,10 @@ void draw_mesh_vertex_overlay(Editor& editor, Camera3D camera) {
     if (!get_selected_triangle_vertices(*entity, g_mesh_edit_state.mesh_index, g_mesh_edit_state.triangle_index, triangle_vertices)) return;
 
     ImDrawList* draw_list = ImGui::GetForegroundDrawList();
-    Vector2 screen_points[3] = {};
+    Vec2 screen_points[3] = {};
 
     for (int i = 0; i < 3; i++) {
-        Vector3 wp = get_mesh_vertex_world_position(*entity, g_mesh_edit_state.mesh_index, triangle_vertices[i]);
+        Vec3 wp = get_mesh_vertex_world_position(*entity, g_mesh_edit_state.mesh_index, triangle_vertices[i]);
         screen_points[i] = world_to_scene_screen(wp, camera);
     }
 
@@ -637,7 +637,7 @@ void draw_mesh_vertex_overlay(Editor& editor, Camera3D camera) {
     if (!g_is_scene_hovered) return;
     if (!IsMouseButtonPressed(MOUSE_BUTTON_LEFT)) return;
 
-    const Vector2 mouse = GetMousePosition();
+    const Vec2 mouse = GetMousePosition();
     float best_distance = 18.0f;
     int best_corner = -1;
 
@@ -708,7 +708,7 @@ void handle_scene_asset_drop(Editor& editor, Camera3D camera)
 
                 BoundingBox box = GetMeshBoundingBox(mesh);
 
-                Vector3 corners[8] = {
+                Vec3 corners[8] = {
                     { box.min.x, box.min.y, box.min.z },
                     { box.max.x, box.min.y, box.min.z },
                     { box.min.x, box.max.y, box.min.z },
@@ -726,7 +726,7 @@ void handle_scene_asset_drop(Editor& editor, Camera3D camera)
 
                 for (int c = 0; c < 8; c++)
                 {
-                    Vector3 p = Vector3Transform(corners[c], transform_mat);
+                    Vec3 p = Vec3Transform(corners[c], transform_mat);
 
                     world_box.min.x = std::min(world_box.min.x, p.x);
                     world_box.min.y = std::min(world_box.min.y, p.y);
@@ -749,7 +749,7 @@ void handle_scene_asset_drop(Editor& editor, Camera3D camera)
                     if (!get_mesh_triangle_vertex_indices(mesh, t, indices))
                         continue;
 
-                    Vector3 v0 = Vector3Transform(
+                    Vec3 v0 = Vec3Transform(
                         {
                             mesh.vertices[indices[0] * 3 + 0],
                             mesh.vertices[indices[0] * 3 + 1],
@@ -758,7 +758,7 @@ void handle_scene_asset_drop(Editor& editor, Camera3D camera)
                         transform_mat
                     );
 
-                    Vector3 v1 = Vector3Transform(
+                    Vec3 v1 = Vec3Transform(
                         {
                             mesh.vertices[indices[1] * 3 + 0],
                             mesh.vertices[indices[1] * 3 + 1],
@@ -767,7 +767,7 @@ void handle_scene_asset_drop(Editor& editor, Camera3D camera)
                         transform_mat
                     );
 
-                    Vector3 v2 = Vector3Transform(
+                    Vec3 v2 = Vec3Transform(
                         {
                             mesh.vertices[indices[2] * 3 + 0],
                             mesh.vertices[indices[2] * 3 + 1],
@@ -836,7 +836,7 @@ void handle_scene_asset_drop(Editor& editor, Camera3D camera)
     editor.scene.selected = (int)editor.scene.entities.size() - 1;
 }
 
-bool polygon_create_vertex(Entity& entity, const Vector3& world_position) {
+bool polygon_create_vertex(Entity& entity, const Vec3& world_position) {
     MeshComponent* mesh = entity.get_mesh_component();
     if (!mesh) return false;
 
@@ -868,9 +868,9 @@ void draw_polygon_editor(Editor& editor, Camera3D camera) {
         if (tri.b >= (int)e_mesh.vertices.size()) continue;
         if (tri.c >= (int)e_mesh.vertices.size()) continue;
 
-        Vector2 p1 = world_to_scene_screen(e_mesh.vertices[tri.a].position, camera);
-        Vector2 p2 = world_to_scene_screen(e_mesh.vertices[tri.b].position, camera);
-        Vector2 p3 = world_to_scene_screen(e_mesh.vertices[tri.c].position, camera);
+        Vec2 p1 = world_to_scene_screen(e_mesh.vertices[tri.a].position, camera);
+        Vec2 p2 = world_to_scene_screen(e_mesh.vertices[tri.b].position, camera);
+        Vec2 p3 = world_to_scene_screen(e_mesh.vertices[tri.c].position, camera);
 
         draw->AddLine({p1.x,p1.y}, {p2.x,p2.y}, IM_COL32(0,255,0,255), 2.0f);
         draw->AddLine({p2.x,p2.y}, {p3.x,p3.y}, IM_COL32(0,255,0,255), 2.0f);
@@ -878,7 +878,7 @@ void draw_polygon_editor(Editor& editor, Camera3D camera) {
     }
 
     for (int i = 0; i < (int)e_mesh.vertices.size(); i++) {
-        Vector2 screen = world_to_scene_screen(e_mesh.vertices[i].position, camera);
+        Vec2 screen = world_to_scene_screen(e_mesh.vertices[i].position, camera);
 
         bool selected = false;
         for (int si : g_selected_vertices)
@@ -893,7 +893,7 @@ void draw_polygon_editor(Editor& editor, Camera3D camera) {
     if (g_selected_vertices.size() == 1 && g_poly_mode != POLY_CREATE) {
         int sel = g_selected_vertices[0];
         if (sel >= 0 && sel < (int)e_mesh.vertices.size()) {
-            Vector3 world_pos = e_mesh.vertices[sel].position;
+            Vec3 world_pos = e_mesh.vertices[sel].position;
 
             float view_matrix[16] = {};
             float projection_matrix[16] = {};
@@ -939,14 +939,14 @@ void draw_polygon_editor(Editor& editor, Camera3D camera) {
     if (!g_is_scene_hovered) return;
     if (ImGuizmo::IsUsing()) return;
 
-    const Vector2 mouse = GetMousePosition();
+    const Vec2 mouse = GetMousePosition();
 
     if (IsMouseButtonPressed(MOUSE_LEFT_BUTTON) && g_poly_mode != POLY_CREATE) {
         float best_dist = 16.0f;
         int best_vert = -1;
 
         for (int i = 0; i < (int)e_mesh.vertices.size(); i++) {
-            Vector2 sp = world_to_scene_screen(e_mesh.vertices[i].position, camera);
+            Vec2 sp = world_to_scene_screen(e_mesh.vertices[i].position, camera);
             float dx = mouse.x - sp.x, dy = mouse.y - sp.y;
             float d = sqrtf(dx*dx + dy*dy);
             if (d < best_dist) { best_dist = d; best_vert = i; }
@@ -977,9 +977,9 @@ void draw_polygon_editor(Editor& editor, Camera3D camera) {
                 if (tri.b >= (int)e_mesh.vertices.size()) continue;
                 if (tri.c >= (int)e_mesh.vertices.size()) continue;
 
-                Vector3 va = e_mesh.vertices[tri.a].position;
-                Vector3 vb = e_mesh.vertices[tri.b].position;
-                Vector3 vc = e_mesh.vertices[tri.c].position;
+                Vec3 va = e_mesh.vertices[tri.a].position;
+                Vec3 vb = e_mesh.vertices[tri.b].position;
+                Vec3 vc = e_mesh.vertices[tri.c].position;
 
                 RayCollision hit = GetRayCollisionTriangle(ray, va, vb, vc);
                 if (!hit.hit || hit.distance >= best_hit_dist) continue;
@@ -987,9 +987,9 @@ void draw_polygon_editor(Editor& editor, Camera3D camera) {
                 picked_triangle = t;
 
                 float cd[3] = {
-                    Vector3Distance(hit.point, va),
-                    Vector3Distance(hit.point, vb),
-                    Vector3Distance(hit.point, vc)
+                    Vec3Distance(hit.point, va),
+                    Vec3Distance(hit.point, vb),
+                    Vec3Distance(hit.point, vc)
                 };
 
                 picked_corner = (cd[0]<cd[1]) ? (cd[0]<cd[2]?0:2) : (cd[1]<cd[2]?1:2);
@@ -1015,7 +1015,7 @@ void draw_polygon_editor(Editor& editor, Camera3D camera) {
 
     if (g_poly_mode == POLY_CREATE && IsMouseButtonPressed(MOUSE_LEFT_BUTTON)) {
         Ray ray = scene_screen_to_world_ray(mouse, camera);
-        Vector3 place_pos = {};
+        Vec3 place_pos = {};
         bool hit_mesh = false;
 
         for (int t = 0; t < (int)e_mesh.triangles.size(); t++) {

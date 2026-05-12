@@ -1,8 +1,8 @@
 #include "editable_mesh.h"
-#include "raylib.h"
-#include "raymath.h"
-#include "rlgl.h"
+#include "QuarkCore/QuarkCore.hpp"
 #include <config.h>
+
+using namespace qc;
 
 void rebuild_mesh_from_editable(Model& model, EditableMesh& editable) {
     if (model.meshCount <= 0) {
@@ -41,7 +41,7 @@ void rebuild_mesh_from_editable(Model& model, EditableMesh& editable) {
     mesh.indices   = (unsigned short*)MemAlloc(sizeof(unsigned short) * mesh.triangleCount * 3);
 
     for (int i = 0; i < mesh.vertexCount; i++) {
-        Vector3 p = editable.vertices[i].position;
+        Vec3 p = editable.vertices[i].position;
         mesh.vertices[i * 3 + 0] = p.x;
         mesh.vertices[i * 3 + 1] = p.y;
         mesh.vertices[i * 3 + 2] = p.z;
@@ -69,13 +69,13 @@ void rebuild_mesh_from_editable(Model& model, EditableMesh& editable) {
         int ib = mesh.indices[i * 3 + 1];
         int ic = mesh.indices[i * 3 + 2];
 
-        Vector3 a = { mesh.vertices[ia*3], mesh.vertices[ia*3+1], mesh.vertices[ia*3+2] };
-        Vector3 b = { mesh.vertices[ib*3], mesh.vertices[ib*3+1], mesh.vertices[ib*3+2] };
-        Vector3 c = { mesh.vertices[ic*3], mesh.vertices[ic*3+1], mesh.vertices[ic*3+2] };
+        Vec3 a = { mesh.vertices[ia*3], mesh.vertices[ia*3+1], mesh.vertices[ia*3+2] };
+        Vec3 b = { mesh.vertices[ib*3], mesh.vertices[ib*3+1], mesh.vertices[ib*3+2] };
+        Vec3 c = { mesh.vertices[ic*3], mesh.vertices[ic*3+1], mesh.vertices[ic*3+2] };
 
-        Vector3 n = Vector3Normalize(Vector3CrossProduct(
-            Vector3Subtract(b, a),
-            Vector3Subtract(c, a)
+        Vec3 n = Vec3Normalize(Vec3CrossProduct(
+            Vec3Subtract(b, a),
+            Vec3Subtract(c, a)
         ));
 
         for (int v : {ia, ib, ic}) {
@@ -86,7 +86,7 @@ void rebuild_mesh_from_editable(Model& model, EditableMesh& editable) {
     }
 
     for (int i = 0; i < mesh.vertexCount; i++) {
-        Vector3 n = Vector3Normalize({
+        Vec3 n = Vec3Normalize({
             mesh.normals[i*3+0],
             mesh.normals[i*3+1],
             mesh.normals[i*3+2]

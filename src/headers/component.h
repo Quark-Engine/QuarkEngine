@@ -1,5 +1,6 @@
 #pragma once
-#include "raylib.h"
+#include "QuarkCore/QuarkCore.hpp"
+using namespace qc;
 #include "lighting.h"
 #include "nlohmann/json.hpp"
 #include "editable_mesh.h"
@@ -56,9 +57,9 @@ public:
 
 class TransformComponent : public Component {
 public:
-    Vector3 position = {0, 0, 0};
-    Vector3 rotation = {0, 0, 0};
-    Vector3 scale = {1, 1, 1};
+    Vec3 position = {0, 0, 0};
+    Vec3 rotation = {0, 0, 0};
+    Vec3 scale = {1, 1, 1};
 
     TransformComponent() {
         name = "Transform";
@@ -136,7 +137,7 @@ public:
     float texture_repeat_u = 1.0f;
     float texture_repeat_v = 1.0f;
 
-    Vector2 uv_scale = {1, 1};
+    Vec2 uv_scale = {1, 1};
     std::vector<std::vector<float>> original_texcoords;
     std::vector<Texture2D> original_material_textures;
 
@@ -209,13 +210,13 @@ public:
     bool visualize = true;
 
     // box
-    Vector3 size = {1, 1, 1};
+    Vec3 size = {1, 1, 1};
 
     // sphere/capsule
     float radius = 0.5f;
     float height = 2.0f;
 
-    Vector3 center = {0, 0, 0};
+    Vec3 center = {0, 0, 0};
 
     BoundingBox world_bounds = {{0, 0, 0}, {0, 0, 0}};
     bool dirty = true;

@@ -1,6 +1,4 @@
 #pragma once
-#include "raylib.h"
-#include "rlgl.h"
 #include "lighting.h"
 #include "component.h"
 #include <string>
