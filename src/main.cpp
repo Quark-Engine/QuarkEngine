@@ -103,7 +103,7 @@ static void update_plugins(PluginManager& plugin_manager, Editor& editor) {
     static Editor* s_editor = nullptr;
     s_editor = &editor;
 
-    ctx->scene           = s_editor->scene;
+    ctx->scene           = &s_editor->scene;
 
     ctx->delta_time      = GetFrameTime();
     ctx->entity_count    = (int)s_editor->scene.entities.size();
