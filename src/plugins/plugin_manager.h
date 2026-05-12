@@ -1,10 +1,14 @@
 #pragma once
 #include "plugin.h"
 #include <vector>
+#include <algorithm>
 #include <string>
 
 #ifdef _WIN32
+   #define NOMINMAX
     #define WIN32_LEAN_AND_MEAN
+    #define NOGDI
+    #define NOUSER
 
     #include <windows.h>
 
