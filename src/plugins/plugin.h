@@ -1,5 +1,4 @@
 #pragma once
-#include "../headers/scene.h"
 
 /**
  * @def PLUGIN_EXPORT
@@ -21,6 +20,7 @@
 #endif
 
 struct PluginContext;
+struct Scene;
 
 /**
  * @enum UIRegion
@@ -261,7 +261,7 @@ struct PluginContext {
     /**
      * @brief Current scene state owned by the host.
      */
-    Scene scene;
+    Scene* scene;
 
     /**
      * @brief Serialises the current scene to disk using the host's default
