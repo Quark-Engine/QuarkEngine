@@ -161,9 +161,9 @@ void rebuild_mesh_normals(Mesh& mesh) {
             mesh.vertices[indices[2] * 3 + 2]
         };
 
-        const Vec3 ab = Vec3Subtract(b, a);
-        const Vec3 ac = Vec3Subtract(c, a);
-        const Vec3 normal = safe_normalize(Vec3CrossProduct(ab, ac));
+        const Vec3 ab = b - a;
+        const Vec3 ac = c - a;
+        const Vec3 normal = safe_normalize(ab.cross(ac));
 
         for (int i = 0; i < 3; i++) {
             mesh.normals[indices[i] * 3 + 0] += normal.x;
@@ -302,10 +302,10 @@ static bool detach_single_mesh_triangles(Mesh& mesh) {
 
     Mesh detached = mesh;
     detached.vertexCount = detached_vertex_count;
-    detached.vertices = static_cast<float*>(MemAlloc(vertices.size() * sizeof(float)));
-    detached.texcoords = mesh.texcoords ? static_cast<float*>(MemAlloc(texcoords.size() * sizeof(float))) : nullptr;
-    detached.normals = mesh.normals ? static_cast<float*>(MemAlloc(normals.size() * sizeof(float))) : nullptr;
-    detached.colors = mesh.colors ? static_cast<unsigned char*>(MemAlloc(colors.size() * sizeof(unsigned char))) : nullptr;
+    detached.vertices = static_cast<float*>(malloc(vertices.size() * sizeof(float)));
+    detached.texcoords = mesh.texcoords ? static_cast<float*>(malloc(texcoords.size() * sizeof(float))) : nullptr;
+    detached.normals = mesh.normals ? static_cast<float*>(malloc(normals.size() * sizeof(float))) : nullptr;
+    detached.colors = mesh.colors ? static_cast<unsigned char*>(malloc(colors.size() * sizeof(unsigned char))) : nullptr;
     detached.indices = nullptr;
     detached.animVertices = nullptr;
     detached.animNormals = nullptr;
@@ -320,10 +320,10 @@ static bool detach_single_mesh_triangles(Mesh& mesh) {
         (mesh.texcoords && !detached.texcoords) ||
         (mesh.normals && !detached.normals) ||
         (mesh.colors && !detached.colors)) {
-        if (detached.vertices) MemFree(detached.vertices);
-        if (detached.texcoords) MemFree(detached.texcoords);
-        if (detached.normals) MemFree(detached.normals);
-        if (detached.colors) MemFree(detached.colors);
+        if (detached.vertices) free(detached.vertices);
+        if (detached.texcoords) free(detached.texcoords);
+        if (detached.normals) free(detached.normals);
+        if (detached.colors) free(detached.colors);
         return false;
     }
 
@@ -405,7 +405,7 @@ static Model load_obj_model_fallback(const std::string& filepath, bool& ok) {
 
     std::ifstream input(filepath);
     if (!input.is_open()) {
-        TraceLog(LOG_WARNING, "Failed to open OBJ file: %s", filepath.c_str());
+        TraceLog(LogLevel::Warn, TextFormat("MODELS", "Failed to open OBJ file: %s", filepath.c_str()));
         return {0};
     }
 
@@ -503,7 +503,7 @@ static Model load_obj_model_fallback(const std::string& filepath, bool& ok) {
     }
 
     if (out_vertices.empty()) {
-        TraceLog(LOG_WARNING, "OBJ parser produced no triangles: %s", filepath.c_str());
+        TraceLog(LogLevel::Warn, TextFormat("MODELS", "OBJ parser produced no triangles: %s", filepath.c_str()));
         return {0};
     }
 
@@ -511,15 +511,15 @@ static Model load_obj_model_fallback(const std::string& filepath, bool& ok) {
     mesh.vertexCount = static_cast<int>(out_vertices.size() / 3);
     mesh.triangleCount = mesh.vertexCount / 3;
 
-    mesh.vertices = static_cast<float*>(MemAlloc(static_cast<unsigned int>(out_vertices.size()) * sizeof(float)));
-    mesh.texcoords = static_cast<float*>(MemAlloc(static_cast<unsigned int>(out_texcoords.size()) * sizeof(float)));
-    mesh.normals = static_cast<float*>(MemAlloc(static_cast<unsigned int>(out_normals.size()) * sizeof(float)));
+    mesh.vertices = static_cast<float*>(malloc(static_cast<size_t>(out_vertices.size()) * sizeof(float)));
+    mesh.texcoords = static_cast<float*>(malloc(static_cast<size_t>(out_texcoords.size()) * sizeof(float)));
+    mesh.normals = static_cast<float*>(malloc(static_cast<size_t>(out_normals.size()) * sizeof(float)));
 
     if (!mesh.vertices || !mesh.texcoords || !mesh.normals) {
-        if (mesh.vertices) MemFree(mesh.vertices);
-        if (mesh.texcoords) MemFree(mesh.texcoords);
-        if (mesh.normals) MemFree(mesh.normals);
-        TraceLog(LOG_WARNING, "Failed to allocate mesh buffers for OBJ: %s", filepath.c_str());
+        if (mesh.vertices) free(mesh.vertices);
+        if (mesh.texcoords) free(mesh.texcoords);
+        if (mesh.normals) free(mesh.normals);
+        TraceLog(LogLevel::Warn, TextFormat("MODELS", "Failed to allocate mesh buffers for OBJ: %s", filepath.c_str()));
         return {0};
     }
 
@@ -533,7 +533,7 @@ static Model load_obj_model_fallback(const std::string& filepath, bool& ok) {
 
     if (ok) {
         if (model.materialCount == 0) {
-            model.materials = static_cast<Material*>(MemAlloc(sizeof(Material)));
+            model.materials = static_cast<Material*>(malloc(sizeof(Material)));
             model.materials[0] = LoadMaterialDefault();
             model.materialCount = 1;
         }
@@ -544,7 +544,7 @@ static Model load_obj_model_fallback(const std::string& filepath, bool& ok) {
 
             std::ifstream mtl_input(mtl_path);
             if (mtl_input.is_open()) {
-                TraceLog(LOG_INFO, "Loading MTL file: %s", mtl_path.string().c_str());
+                TraceLog(LogLevel::Info, TextFormat("MODELS", "Loading MTL file: %s", mtl_path.string().c_str()));
                 
                 Color diffuse_color = WHITE;
                 Color ambient_color = WHITE;
@@ -609,26 +609,26 @@ static Model load_obj_model_fallback(const std::string& filepath, bool& ok) {
                         Texture2D loaded_tex = LoadTexture(tex_path.string().c_str());
                         if (loaded_tex.id > 0) {
                             model.materials[0].maps[MATERIAL_MAP_DIFFUSE].texture = loaded_tex;
-                            TraceLog(LOG_INFO, "Loaded texture for OBJ: %s", tex_path.string().c_str());
+                            TraceLog(LogLevel::Info, TextFormat("MODELS", "Loaded texture for OBJ: %s", tex_path.string().c_str()));
                         } else {
-                            TraceLog(LOG_WARNING, "Failed to load texture: %s", tex_path.string().c_str());
+                            TraceLog(LogLevel::Warn, TextFormat("MODELS", "Failed to load texture: %s", tex_path.string().c_str()));
                         }
                     } else {
-                        TraceLog(LOG_WARNING, "Texture file not found: %s", tex_path.string().c_str());
+                        TraceLog(LogLevel::Warn, TextFormat("MODELS", "Texture file not found: %s", tex_path.string().c_str()));
                     }
                 }
 
-                TraceLog(LOG_INFO, "Loaded MTL material: Kd=(%d,%d,%d), has_texture=%s", 
+                TraceLog(LogLevel::Info, TextFormat("MODELS", "Loaded MTL material: Kd=(%d,%d,%d), has_texture=%s", 
                     diffuse_color.r, diffuse_color.g, diffuse_color.b,
-                    !texture_filename.empty() ? "yes" : "no");
+                    !texture_filename.empty() ? "yes" : "no"));
             } else {
-                TraceLog(LOG_WARNING, "Failed to open MTL file: %s", mtl_path.string().c_str());
+                TraceLog(LogLevel::Warn, TextFormat("MODELS", "Failed to open MTL file: %s", mtl_path.string().c_str()));
             }
         }
         
-        TraceLog(LOG_INFO, "Loaded OBJ model via fallback parser: %s", filepath.c_str());
+        TraceLog(LogLevel::Info, TextFormat("MODELS", "Loaded OBJ model via fallback parser: %s", filepath.c_str()));
     } else {
-        TraceLog(LOG_WARNING, "Failed to build OBJ model: %s", filepath.c_str());
+        TraceLog(LogLevel::Warn, TextFormat("MODELS", "Failed to build OBJ model: %s", filepath.c_str()));
         return {0};
     }
     return model;
@@ -643,13 +643,13 @@ static Model try_load_model_native(const std::string& filepath, bool& ok) {
         model = LoadModel(filepath.c_str());
         ok = (model.meshCount > 0 && model.meshes != nullptr);
     } __except (EXCEPTION_EXECUTE_HANDLER) {
-        TraceLog(LOG_ERROR, "Model loader crashed while reading: %s", filepath.c_str());
+        TraceLog(LogLevel::Error, TextFormat("MODELS", "Model loader crashed while reading: %s", filepath.c_str()));
         model = {0};
         ok = false;
     }
 
     if (!ok) {
-        TraceLog(LOG_WARNING, "Failed to load model: %s", filepath.c_str());
+        TraceLog(LogLevel::Warn, TextFormat("MODELS", "Failed to load model: %s", filepath.c_str()));
         model = {0};
     }
 
@@ -666,14 +666,14 @@ static Model try_load_model_native(const std::string& filepath, bool& ok) {
         model = LoadModel(filepath.c_str());
         ok = (model.meshCount > 0 && model.meshes != nullptr);
     } else {
-        TraceLog(LOG_ERROR, "Model loader crashed with signal %d while reading: %s", signal_code, filepath.c_str());
+        TraceLog(LogLevel::Error, TextFormat("MODELS", "Model loader crashed with signal %d while reading: %s", signal_code, filepath.c_str()));
         model = {0};
         ok = false;
     }
     restore_model_load_signal_guards();
 
     if (!ok) {
-        TraceLog(LOG_WARNING, "Failed to load model: %s", filepath.c_str());
+        TraceLog(LogLevel::Warn, TextFormat("MODELS", "Failed to load model: %s", filepath.c_str()));
         model = {0};
     }
 
@@ -685,7 +685,7 @@ static Model try_load_model_native(const std::string& filepath, bool& ok) {
     ok = (model.meshCount > 0 && model.meshes != nullptr);
 
     if (!ok) {
-        TraceLog(LOG_WARNING, "Failed to load model: %s", filepath.c_str());
+        TraceLog(LogLevel::Warn, TextFormat("MODELS", "Failed to load model: %s", filepath.c_str()));
         model = {0};
     }
 
@@ -715,8 +715,6 @@ bool ensure_model_asset_loaded(ModelAsset& asset) {
 }
 
 bool load_model_instance(const ModelAsset& asset, Model& model) {
-    model = {0};
-
     if (asset.is_procedural) {
         if (!asset.generator) return false;
         model = asset.generator(16);

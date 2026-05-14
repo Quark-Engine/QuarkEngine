@@ -167,14 +167,14 @@ bool import_path_to_resources(const fs::path& src, const fs::path& resource_dir)
     std::error_code ec;
 
     if (!fs::exists(src, ec) || ec) {
-        TraceLog(LOG_WARNING, "Dropped path does not exist: %s", src.string().c_str());
+        TraceLog(LogLevel::Warn, "ASSETS", TextFormat("Dropped path does not exist: %s", src.string().c_str()));
         return false;
     }
 
     if (fs::is_regular_file(src, ec)) {
         fs::copy_file(src, resource_dir / src.filename(), fs::copy_options::overwrite_existing, ec);
         if (ec) {
-            TraceLog(LOG_WARNING, "Failed to import file: %s", src.string().c_str());
+            TraceLog(LogLevel::Warn, "ASSETS", TextFormat("Failed to import file: %s", src.string().c_str()));
             return false;
         }
         return true;
@@ -188,7 +188,7 @@ bool import_path_to_resources(const fs::path& src, const fs::path& resource_dir)
 
         fs::recursive_directory_iterator iterator(src, fs::directory_options::skip_permission_denied, ec);
         if (ec) {
-            TraceLog(LOG_WARNING, "Failed to open dropped directory: %s", src.string().c_str());
+            TraceLog(LogLevel::Warn, "ASSETS", TextFormat("Failed to open dropped directory: %s", src.string().c_str()));
             return false;
         }
 
@@ -223,7 +223,7 @@ bool import_path_to_resources(const fs::path& src, const fs::path& resource_dir)
         return imported_any;
     }
 
-    TraceLog(LOG_WARNING, "Unsupported dropped path: %s", src.string().c_str());
+    TraceLog(LogLevel::Warn, "ASSETS", TextFormat("Unsupported dropped path: %s", src.string().c_str()));
     return false;
 }
 

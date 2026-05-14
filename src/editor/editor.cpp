@@ -41,7 +41,7 @@ void restore_scene_entity_models(Scene& scene) {
             if (!load_model_instance(*mesh->asset, mesh->model)) {
                 mesh->asset = nullptr;
                 mesh->asset_name.clear();
-                mesh->model = {0};
+                mesh->model;
                 mesh->owns_model_instance = false;
                 continue;
             }
@@ -109,9 +109,9 @@ void Editor::redo() {
 void Editor::handle_input() {
     using namespace editor_internal;
 
-    if (IsKeyPressed(KEY_P)) gizmo_mode = ImGuizmo::TRANSLATE;
-    if (IsKeyPressed(KEY_R)) gizmo_mode = ImGuizmo::ROTATE;
-    if (IsKeyPressed(KEY_S)) gizmo_mode = ImGuizmo::SCALE;
+    if (IsKeyPressed(KeyboardKey::P)) gizmo_mode = ImGuizmo::TRANSLATE;
+    if (IsKeyPressed(KeyboardKey::R)) gizmo_mode = ImGuizmo::ROTATE;
+    if (IsKeyPressed(KeyboardKey::S)) gizmo_mode = ImGuizmo::SCALE;
 
     if (IsFileDropped()) {
         FilePathList dropped = LoadDroppedFiles();
@@ -143,9 +143,9 @@ void Editor::handle_input() {
     }
 
     ImGuiIO& io = ImGui::GetIO();
-    const bool ctrl = (IsKeyDown(KEY_LEFT_CONTROL) || IsKeyDown(KEY_RIGHT_CONTROL)) && !io.WantCaptureKeyboard;
+    const bool ctrl = (IsKeyDown(KeyboardKey::LeftControl) || IsKeyDown(KeyboardKey::RightControl)) && !io.WantCaptureKeyboard;
 
-    if (ctrl && IsKeyPressed(KEY_S)) {
+    if (ctrl && IsKeyPressed(KeyboardKey::S)) {
         project_save(project_path, scene);
     }
 
@@ -172,7 +172,7 @@ void Editor::handle_input() {
 
     const float now = static_cast<float>(GetTime());
 
-    if (ctrl && IsKeyDown(KEY_Z)) {
+    if (ctrl && IsKeyDown(KeyboardKey::Z)) {
         if (!undo_key_was_pressed) {
             undo();
             undo_key_was_pressed = true;
@@ -187,7 +187,7 @@ void Editor::handle_input() {
         undo_hold_start = 0.0f;
     }
 
-    if (ctrl && IsKeyDown(KEY_Y)) {
+    if (ctrl && IsKeyDown(KeyboardKey::Y)) {
         if (!redo_key_was_pressed) {
             redo();
             redo_key_was_pressed = true;
@@ -204,7 +204,7 @@ void Editor::handle_input() {
 
     Entity* entity = scene.get_selected();
 
-    if (ctrl && IsKeyDown(KEY_C)) {
+    if (ctrl && IsKeyDown(KeyboardKey::C)) {
         if (!copy_key_was_pressed) {
             copy_entity(entity);
 
@@ -217,7 +217,7 @@ void Editor::handle_input() {
         }
     }
 
-    if (ctrl && IsKeyDown(KEY_V)) {
+    if (ctrl && IsKeyDown(KeyboardKey::V)) {
         if (!paste_key_was_pressed){
             paste_entity(*this);
 
@@ -230,7 +230,7 @@ void Editor::handle_input() {
         }
     }
 
-    if (ctrl && IsKeyDown(KEY_D)) {
+    if (ctrl && IsKeyDown(KeyboardKey::D)) {
         if (!dubl_key_was_pressed) {
             dublicate_entity(*this, entity);
 
@@ -243,7 +243,7 @@ void Editor::handle_input() {
         }
     }
 
-    if (IsKeyDown(KEY_DELETE)) {
+    if (IsKeyDown(KeyboardKey::Delete)) {
         if (!del_key_was_pressed) {
             delete_entity(*this, entity, shadowmap_shader);
 

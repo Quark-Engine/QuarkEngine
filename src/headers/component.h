@@ -93,7 +93,7 @@ public:
 
 class MeshComponent : public Component {
 public:
-    Model model = {0};
+    Model model;
     bool owns_model_instance = false;
     ModelAsset* asset = nullptr;
     std::string asset_name;
