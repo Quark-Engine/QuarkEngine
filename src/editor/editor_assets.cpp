@@ -559,7 +559,13 @@ void draw_assets_ui(Editor& editor) {
             
             else {
                 #ifdef _WIN32
-                    ShellExecuteA(nullptr, "open", full_path.string().c_str(), nullptr, nullptr, 1);
+                    ShellExecuteA(nullptr, "open", full_path.string().c_str(), nullptr, nullptr, SW_SHOWNORMAL);
+                #elif defined(__APPLE__)
+                    std::string cmd = "open \"" + full_path.string() + "\"";
+                    std::system(cmd.c_str());
+                #elif defined(__linux__)
+                    std::string cmd = "xdg-open \"" + full_path.string() + "\"";
+                    std::system(cmd.c_str());
                 #endif
             }
         }
