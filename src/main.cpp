@@ -313,7 +313,7 @@ static void draw_entity_shadow_caster(const Entity& entity) {
     Rotate(transform->rotation.x, Vec3(1.0f, 0.0f, 0.0f));
     Rotate(transform->rotation.y, Vec3(0.0f, 1.0f, 0.0f));
     Rotate(transform->rotation.z, Vec3(0.0f, 0.0f, 1.0f));
-    Scale(transform->scale.x, transform->scale.y, transform->scale.z);
+    Scale(transform->scale);
 
     const bool edited_mesh_is_double_sided = entity_has_mesh_overrides(entity) || mesh->mesh_triangles_detached;
     if (edited_mesh_is_double_sided) DisableBackfaceCulling();
