@@ -138,5 +138,6 @@
   "polygon_create": "Polygon Create",
   "polygon_none": "Polygon None",
   "vertices": "Vertices",
-  "triangles": "Triangles"
+  "triangles": "Triangles",
+  "drag_n_drop_material": "Drag the material to an entity"
 }

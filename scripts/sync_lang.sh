@@ -38,7 +38,10 @@ if [[ ! -d "$LANG_DIR" ]]; then
 fi
 
 if ! command -v jq >/dev/null 2>&1; then
-    echo "jq is required but was not found in PATH" >&2
+    echo "Error: jq is required but was not found in PATH." >&2
+    echo "Install it:" >&2
+    echo "  Ubuntu/Debian: sudo apt-get install jq" >&2
+    echo "  macOS:         brew install jq" >&2
     exit 1
 fi
 
