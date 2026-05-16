@@ -243,7 +243,6 @@ bool set_mesh_vertex_local_position(Entity& entity, int mesh_index, int vertex_i
     const bool applied = apply_mesh_overrides(entity);
     if (applied) {
         mark_entity_bounds_dirty(&entity);
-        mark_entity_uv_dirty(&entity);
     }
     return applied;
 }
@@ -929,7 +928,6 @@ void draw_polygon_editor(Editor& editor, Camera3D camera) {
                 e_mesh.vertices[sel].position = {nt[0], nt[1], nt[2]};
                 rebuild_mesh_from_editable(mesh->model, e_mesh);
                 mark_entity_bounds_dirty(entity);
-                mark_entity_uv_dirty(entity);
             }
 
             was_using_poly_gizmo = ImGuizmo::IsUsing();
