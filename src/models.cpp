@@ -816,7 +816,7 @@ void update_model(Entity* e)
     if (!mesh) return;
 
     if (mesh->model.meshCount > 0 && entity_owns_model(*e)) UnloadModel(mesh->model);
-    if (mesh->editable_mode)
+    if (mesh->is_editable_mesh)
     {
         mesh->model = {};
 

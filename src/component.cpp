@@ -12,7 +12,7 @@ void MeshComponent::serialize(nlohmann::json& json) const {
         json["asset_name"] = asset_name;
     }
 
-    json["editable_mode"] = editable_mode;
+    json["is_editable_mesh"] = is_editable_mesh;
     json["editable_vertices"] = nlohmann::json::array();
 
     for (auto& v : editable_mesh.vertices) {
@@ -42,9 +42,8 @@ void MeshComponent::deserialize(const nlohmann::json& json) {
         asset_name = json["asset_name"];
     }
 
-    if (json.contains("editable_mode"))
-    {
-        editable_mode = json["editable_mode"];
+    if (json.contains("is_editable_mesh")) {
+        is_editable_mesh = json["is_editable_mesh"];
     }
 
     if (json.contains("editable_vertices"))

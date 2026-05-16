@@ -109,6 +109,7 @@ public:
     BoundingBox cached_local_bounds = {{0, 0, 0}, {0, 0, 0}};
 
     EditableMesh editable_mesh;
+    bool is_editable_mesh = false;
     bool vertex_gizmo = false;
 
     MeshComponent() {

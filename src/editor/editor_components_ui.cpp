@@ -276,6 +276,7 @@ void ComponentUIHelper::draw_mesh_component(Editor& editor, Entity& entity, Mesh
         if (mesh->vertex_gizmo && mesh->editable_mesh.vertices.empty() && has_valid_model_data(mesh->model)) {
             mesh->editable_mesh.vertices.clear();
             mesh->editable_mesh.triangles.clear();
+            mesh->is_editable_mesh = true;
 
             const Mesh& m = mesh->model.meshes[0];
 
