@@ -272,8 +272,8 @@ void ComponentUIHelper::draw_mesh_component(Editor& editor, Entity& entity, Mesh
 
     ImGui::Separator();
 
-    if (ImGui::Checkbox(lang.word("vertex_gizmo"), &mesh->editable_mode)) {
-        if (mesh->editable_mode && mesh->editable_mesh.vertices.empty() && has_valid_model_data(mesh->model)) {
+    if (ImGui::Checkbox(lang.word("vertex_gizmo"), &mesh->vertex_gizmo)) {
+        if (mesh->vertex_gizmo && mesh->editable_mesh.vertices.empty() && has_valid_model_data(mesh->model)) {
             mesh->editable_mesh.vertices.clear();
             mesh->editable_mesh.triangles.clear();
 
@@ -340,11 +340,7 @@ void ComponentUIHelper::draw_mesh_component(Editor& editor, Entity& entity, Mesh
         }
     }
 
-    if (mesh->editable_mode) {
-        if (ImGui::Button(lang.word("polygon_create"))) g_poly_mode = POLY_CREATE;
-        ImGui::SameLine();
-        if (ImGui::Button(lang.word("polygon_none"))) g_poly_mode = POLY_NONE;
-
+    if (mesh->vertex_gizmo) {
         ImGui::Text(lang.word("vertices"), (int)mesh->editable_mesh.vertices.size());
         ImGui::Text(lang.word("triangles"), (int)mesh->editable_mesh.triangles.size());
 
