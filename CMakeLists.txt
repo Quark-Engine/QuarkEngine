@@ -84,7 +84,6 @@ if(BUILD_ENGINE)
         src/quark_imgui.cpp
         src/quark_imgui.h
         src/plugins/plugin_manager.cpp
-        src/rlights.cpp
         src/scene.cpp
         src/tex.cpp
     )

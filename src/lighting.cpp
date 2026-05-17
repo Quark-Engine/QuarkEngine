@@ -1,5 +1,5 @@
 #include "headers/lighting.h"
-static bool used[MAX_LIGHTS] = {false};
+static bool used[QC_MAX_LIGHTS] = {false};
 
 void update_lighting(Shader shader, Lighting& l) {
     l.light.position = l.position;
@@ -32,20 +32,20 @@ void update_lighting(Shader shader, Lighting& l) {
 }
 
 void reset_light_registry() {
-    for (int i = 0; i < MAX_LIGHTS; i++) {
+    for (int i = 0; i < QC_MAX_LIGHTS; i++) {
         used[i] = false;
     }
 }
 
 int allocate_light_id() {
-    for (int i = 0; i < MAX_LIGHTS; i++) {
+    for (int i = 0; i < QC_MAX_LIGHTS; i++) {
         if (!used[i]) { used[i] = true; return i; }
     }
     return -1;
 }
 
 void free_light_id(int id) {
-    if (id >= 0 && id < MAX_LIGHTS) used[id] = false;
+    if (id >= 0 && id < QC_MAX_LIGHTS) used[id] = false;
 }
 
 Lighting create_lighting(Vec3 pos, Color color) {

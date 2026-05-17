@@ -1,5 +1,6 @@
 #pragma once
 #include "QuarkCore/QuarkCore.hpp"
+#include "QuarkCore/QuarkLights.hpp"
 using namespace qc;
 
 #include <string>
