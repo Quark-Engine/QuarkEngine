@@ -22,9 +22,6 @@ struct AssetEntry {
 extern std::vector<TextureOption> texture_options;
 extern std::vector<AssetEntry> asset_entries;
 
-extern RenderTexture2D shadow_map;
-extern Shader shadowmap_shader;
-
 void load_textures(std::string project_path);
 void unload_textures();
 void apply_texture_repeat(Entity& e);
@@ -41,6 +38,3 @@ void load_assets(std::string project_path);
 void refresh_assets(std::string project_path);
 void clone_model_materials(Entity* e);
 bool is_image_file(const std::filesystem::path& p);
-
-RenderTexture2D load_shadowmap_render_texture(int width, int height);
-void unload_shadowmap_render_texture(RenderTexture2D& target);

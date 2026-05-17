@@ -245,13 +245,13 @@ void Editor::handle_input() {
 
     if (IsKeyDown(KeyboardKey::Delete)) {
         if (!del_key_was_pressed) {
-            delete_entity(*this, entity, shadowmap_shader);
+            delete_entity(*this, entity);
 
             del_key_was_pressed = true;
             del_hold_start = now;
             last_delete_time = now;
         } else if (now - del_hold_start > 0.5f && now - last_delete_time > 0.15f) {
-            delete_entity(*this, entity, shadowmap_shader);
+            delete_entity(*this, entity);
             last_delete_time = now;
         }
     }

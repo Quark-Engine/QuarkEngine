@@ -475,46 +475,4 @@ void clone_model_materials(Entity* e) {
     mesh->owns_materials = true;
 }
 
-RenderTexture2D load_shadowmap_render_texture(int width, int height) {
-    RenderTexture2D target = {0};
 
-    target.id = rlLoadFramebuffer();
-    target.texture.width = width;
-    target.texture.height = height;
-
-    if (target.id > 0) {
-        rlEnableFramebuffer(target.id);
-
-        unsigned char* data = (unsigned char*)malloc(width * height * 4);
-        memset(data, 255, width * height * 4);
-        target.texture.id = rlLoadTexture(data, width, height, PIXELFORMAT_UNCOMPRESSED_R8G8B8A8, 1);
-        free(data);
-        target.texture.width = width;
-        target.texture.height = height;
-        target.texture.format = PIXELFORMAT_UNCOMPRESSED_R8G8B8A8;
-        target.texture.mipmaps = 1;
-
-        target.depth.id = rlLoadTextureDepth(width, height, false);
-        target.depth.width = width;
-        target.depth.height = height;
-        target.depth.format = 19;
-        target.depth.mipmaps = 1;
-
-        rlFramebufferAttach(target.id, target.texture.id, RL_ATTACHMENT_COLOR_CHANNEL0, RL_ATTACHMENT_TEXTURE2D, 0);
-        
-        rlFramebufferAttach(target.id, target.depth.id, RL_ATTACHMENT_DEPTH, RL_ATTACHMENT_TEXTURE2D, 0);
-
-        if (rlFramebufferComplete(target.id)) TraceLog(LogLevel::Info, "SHADOWMAP", "FBO: [ID %i] Framebuffer object created successfully", target.id);
-        else TraceLog(LogLevel::Warn, "SHADOWMAP", "FBO: Framebuffer object is not complete");
-        rlDisableFramebuffer();
-    }
-
-    else TraceLog(LogLevel::Warn, "SHADOWMAP", "FBO: Framebuffer object could not be created");
-    return target;
-}
-
-void unload_shadowmap_render_texture(RenderTexture2D& target) {
-    if (target.id > 0) {
-        rlUnloadFramebuffer(target.id);
-    }
-}

@@ -1123,12 +1123,11 @@ void dublicate_entity(Editor& editor, Entity* entity) {
     editor.scene.selected = static_cast<int>(editor.scene.entities.size()) - 1;
 }
 
-void delete_entity(Editor& editor, Entity* entity, Shader shader) {
+void delete_entity(Editor& editor, Entity* entity) {
     editor.save_state();
     const int index = editor.scene.selected;
     if (auto light = entity->get_light_component(); light && light->created) {
         light->light.enabled = false;
-        if (light->light.id != -1) update_lighting(shader, light->light);
         free_light_id(light->light.id);
     }
     
@@ -1184,7 +1183,7 @@ void draw_ui(Editor& editor, Shader shader, FlyCamera camera, PluginContext* plu
             ImGui::Separator();
 
             if (ImGui::MenuItem(lang.word("delete"), "Del", false, entity != nullptr)) {
-                delete_entity(editor, entity, shader);
+                delete_entity(editor, entity);
             }
 
             ImGui::Separator();
