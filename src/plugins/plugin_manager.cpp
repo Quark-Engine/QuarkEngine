@@ -107,8 +107,7 @@ void PluginManager::load_all(const std::string& plugin_dir, PluginContext* ctx) 
 
         fs::path sentinel = bin.parent_path() / (bin.stem().string() + ".disabled");
         if (fs::exists(sentinel)) {
-            TraceLog(LOG_INFO, "PLUGIN: Skipping disabled plugin '%s'",
-                bin.filename().string().c_str());
+            TraceLog(LogLevel::Info, "PLUGIN", TextFormat("Skipping disabled plugin '%s'", bin.filename().string().c_str()));
             continue;
         }
 
