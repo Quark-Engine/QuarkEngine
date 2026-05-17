@@ -62,50 +62,6 @@ static void restore_model_load_signal_guards() {
 }
 #endif
 
-struct ObjVertexKey {
-    int v = -1;
-    int vt = -1;
-    int vn = -1;
-};
-
-struct ObjTriangle {
-    ObjVertexKey a;
-    ObjVertexKey b;
-    ObjVertexKey c;
-};
-
-static bool parse_obj_vertex_token(const std::string& token, ObjVertexKey& out) {
-    std::string parts[3];
-    int part_index = 0;
-    size_t start = 0;
-
-    for (size_t i = 0; i <= token.size() && part_index < 3; i++) {
-        if (i == token.size() || token[i] == '/') {
-            parts[part_index++] = token.substr(start, i - start);
-            start = i + 1;
-        }
-    }
-
-    auto parse_part = [](const std::string& value, int& result) -> bool {
-        if (value.empty()) return true;
-        try {
-            result = std::stoi(value);
-            return true;
-        } catch (...) {
-            return false;
-        }
-    };
-
-    out = {};
-    return parse_part(parts[0], out.v) && parse_part(parts[1], out.vt) && parse_part(parts[2], out.vn);
-}
-
-static int resolve_obj_index(int idx, int count) {
-    if (idx > 0) return idx - 1;
-    if (idx < 0) return count + idx;
-    return -1;
-}
-
 static Vec3 safe_normalize(Vec3 value) {
     const float length = sqrtf(value.x*value.x + value.y*value.y + value.z*value.z);
     if (length <= 0.000001f) return { 0.0f, 1.0f, 0.0f };
