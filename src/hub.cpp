@@ -30,6 +30,7 @@
 #include <fstream>
 #include <vector>
 #include <string>
+#include <map>
 #include <algorithm>
 #include <cstdio>
 #include <cstring>
@@ -61,6 +62,317 @@ static bool        hub_show_version_warning = false;
 static std::string hub_pending_open_path    = "";
 static std::string hub_saved_version        = "";
 
+// Plugin Management
+static bool hub_show_plugin_manager = false;
+
+struct HubPluginInfo {
+    std::string name;
+    std::string path;
+    std::string description;
+    bool enabled;
+};
+
+static std::vector<HubPluginInfo> hub_plugin_list;
+static int hub_plugin_selected = -1;
+
+static fs::path hub_plugin_disabled_sentinel(const std::string& plugin_path) {
+    fs::path p(plugin_path);
+    return p.parent_path() / (p.stem().string() + ".disabled");
+}
+
+static bool hub_plugin_is_enabled(const std::string& plugin_path) {
+    return !fs::exists(hub_plugin_disabled_sentinel(plugin_path));
+}
+
+static void hub_plugin_set_enabled(const std::string& plugin_path, bool enabled) {
+    fs::path sentinel = hub_plugin_disabled_sentinel(plugin_path);
+
+    if (enabled) {
+        if (fs::exists(sentinel)) fs::remove(sentinel);
+    }
+
+    else    
+        std::ofstream f(sentinel);
+}
+
+static std::string hub_plugin_read_meta_description(const fs::path& plugin_path) {
+    fs::path meta = plugin_path.parent_path() / (plugin_path.stem().string() + ".meta");
+    if (!fs::exists(meta)) return "";
+
+    std::ifstream f(meta);
+    std::string line;
+
+    while (std::getline(f, line)) {
+        if (line.rfind("description=", 0) == 0)
+            return line.substr(12);
+    }
+
+    return "";
+}
+
+static void hub_refresh_plugins() {
+    hub_plugin_list.clear();
+    hub_plugin_selected = -1;
+
+    const std::string plugins_dir = "plugins";
+    if (!fs::exists(plugins_dir)) return;
+
+    for (auto& entry : fs::directory_iterator(plugins_dir)) {
+        if (!entry.is_regular_file()) continue;
+        std::string ext = entry.path().extension().string();
+
+        #ifdef _WIN32
+                if (ext != ".dll") continue;
+        #else
+                if (ext != ".so") continue;
+        #endif
+
+        HubPluginInfo info;
+        info.path    = entry.path().string();
+        info.name    = entry.path().stem().string();
+        info.enabled = hub_plugin_is_enabled(info.path);
+        info.description = hub_plugin_read_meta_description(entry.path());
+
+        if (info.description.empty())
+            info.description = "No description provided.";
+
+        hub_plugin_list.push_back(info);
+    }
+
+    std::sort(hub_plugin_list.begin(), hub_plugin_list.end(), [](const HubPluginInfo& a, const HubPluginInfo& b){ return a.name < b.name; });
+}
+
+static ImVec4 hub_plugin_badge_color(const std::string& name) {
+    static const ImVec4 palette[] = {
+        {0.20f, 0.55f, 0.95f, 1.f},
+        {0.18f, 0.72f, 0.56f, 1.f},
+        {0.85f, 0.45f, 0.20f, 1.f},
+        {0.65f, 0.35f, 0.90f, 1.f},
+        {0.90f, 0.70f, 0.10f, 1.f},
+        {0.85f, 0.25f, 0.35f, 1.f},
+    };
+
+    size_t h = 0;
+    for (char c : name) h = h * 31 + (unsigned char)c;
+    return palette[h % 6];
+}
+
+static void hub_draw_plugin_manager() {
+    if (!hub_show_plugin_manager) return;
+
+    ImGuiIO& io = ImGui::GetIO();
+    float W = io.DisplaySize.x;
+    float H = io.DisplaySize.y;
+
+    const float WND_W = 720.f, WND_H = 480.f;
+    ImGui::SetNextWindowSize(ImVec2(WND_W, WND_H), ImGuiCond_Always);
+    ImGui::SetNextWindowPos(ImVec2(W * 0.5f, H * 0.5f), ImGuiCond_Always, ImVec2(0.5f, 0.5f));
+
+    bool open = true;
+    ImGui::Begin("Plugin Manager##pmgr", &open);
+
+    if (!open) {
+        hub_show_plugin_manager = false;
+        hub_plugin_selected = -1;
+        ImGui::End();
+        return;
+    }
+
+    if (ImGui::BeginTabBar("##pmgr_tabs")) {
+        if (ImGui::BeginTabItem("Installed")) {
+            ImGui::BeginChild("##pmgr_list", ImVec2(220, -1), true);
+
+            if (hub_plugin_list.empty()) {
+                ImVec2 avail = ImGui::GetContentRegionAvail();
+                const char* msg = "No plugins installed.";
+                ImVec2 ts = ImGui::CalcTextSize(msg);
+                ImGui::SetCursorPos(ImVec2((avail.x - ts.x) * 0.5f, (avail.y - ts.y) * 0.5f));
+                ImGui::TextDisabled("%s", msg);
+            }
+
+            for (int i = 0; i < (int)hub_plugin_list.size(); i++) {
+                auto& pi = hub_plugin_list[i];
+                ImGui::PushID(i);
+
+                bool is_sel = (hub_plugin_selected == i);
+
+                ImVec2 card_pos = ImGui::GetCursorScreenPos();
+                float card_w    = ImGui::GetContentRegionAvail().x;
+                float card_h    = 46.f;
+
+                ImU32 bg_col = is_sel ? IM_COL32(30, 80, 140, 255) : IM_COL32(26, 28, 31, 255);
+
+                ImGui::GetWindowDrawList()->AddRectFilled( card_pos, ImVec2(card_pos.x + card_w, card_pos.y + card_h), bg_col);
+                ImGui::GetWindowDrawList()->AddRect(
+                    card_pos, ImVec2(card_pos.x + card_w, card_pos.y + card_h),
+                    is_sel ? IM_COL32(50,130,220,255) : IM_COL32(50,52,56,255)
+                );
+
+                ImVec4 badge = hub_plugin_badge_color(pi.name);
+                ImVec2 badge_min = ImVec2(card_pos.x + 8, card_pos.y + 10);
+                ImVec2 badge_max = ImVec2(badge_min.x + 26, badge_min.y + 26);
+                ImGui::GetWindowDrawList()->AddRectFilled(badge_min, badge_max, ImGui::ColorConvertFloat4ToU32(badge), 4.f);
+
+                char letter[2] = { (char)toupper((unsigned char)pi.name[0]), '\0' };
+                ImVec2 letter_sz = ImGui::CalcTextSize(letter);
+
+                ImGui::GetWindowDrawList()->AddText(
+                    ImVec2(badge_min.x + (26 - letter_sz.x) * 0.5f, badge_min.y + (26 - letter_sz.y) * 0.5f), 
+                    IM_COL32(255,255,255,230), letter
+                );
+
+                if (!pi.enabled) {
+                    ImGui::GetWindowDrawList()->AddCircleFilled(ImVec2(badge_max.x - 2, badge_min.y + 2), 5.f, IM_COL32(200, 60, 60, 255));
+                }
+
+                ImGui::SetCursorScreenPos(ImVec2(card_pos.x + 44, card_pos.y + 14));
+                if (!pi.enabled) ImGui::TextDisabled("%s", pi.name.c_str());
+                else ImGui::Text("%s", pi.name.c_str());
+
+                ImGui::SetCursorScreenPos(card_pos);
+                ImGui::InvisibleButton("##card", ImVec2(card_w, card_h));
+                if (ImGui::IsItemClicked()) hub_plugin_selected = i;
+
+                ImGui::SetCursorScreenPos(ImVec2(card_pos.x, card_pos.y + card_h + 3));
+                ImGui::Dummy(ImVec2(card_w, 0));
+                ImGui::PopID();
+            }
+            ImGui::EndChild();
+
+            ImGui::SameLine();
+            ImGui::BeginChild("##pmgr_detail", ImVec2(-1, -1), false);
+
+            if (hub_plugin_selected >= 0 && hub_plugin_selected < (int)hub_plugin_list.size()) {
+                HubPluginInfo& pi = hub_plugin_list[hub_plugin_selected];
+
+                ImVec4 badge = hub_plugin_badge_color(pi.name);
+                ImDrawList* dl = ImGui::GetWindowDrawList();
+                ImVec2 icon_pos = ImGui::GetCursorScreenPos();
+
+                icon_pos.x += 8; icon_pos.y += 8;
+                ImVec2 icon_max = ImVec2(icon_pos.x + 64, icon_pos.y + 64);
+                dl->AddRectFilled(icon_pos, icon_max, ImGui::ColorConvertFloat4ToU32(badge), 8.f);
+
+                char letter[2] = { (char)toupper((unsigned char)pi.name[0]), '\0' };
+                ImVec2 lsz = ImGui::CalcTextSize(letter);
+                dl->AddText(nullptr, 28.f, ImVec2(icon_pos.x + (64 - 16) * 0.5f, icon_pos.y + (64 - 28) * 0.5f), IM_COL32(255,255,255,230), letter);
+
+                ImGui::SetCursorScreenPos(ImVec2(icon_max.x + 14, icon_pos.y + 4));
+                ImGui::Text("%s", pi.name.c_str());
+
+                ImGui::SetCursorScreenPos(ImVec2(icon_max.x + 14, icon_pos.y + 26));
+
+                if (pi.enabled) ImGui::TextColored(ImVec4(0.3f,0.8f,0.4f,1.f), "Enabled");
+                else ImGui::TextColored(ImVec4(0.7f,0.3f,0.3f,1.f), "Disabled");
+
+                ImGui::SetCursorScreenPos(ImVec2(icon_pos.x - 8, icon_max.y + 18));
+
+                ImGui::Separator();
+                ImGui::Spacing();
+
+                ImGui::TextWrapped("%s", pi.description.c_str());
+                ImGui::Spacing();
+                ImGui::TextDisabled("Path: %s", pi.path.c_str());
+
+                float bottom_y = ImGui::GetWindowPos().y + ImGui::GetWindowHeight() - 44;
+                ImGui::SetCursorScreenPos(ImVec2(icon_pos.x - 8, bottom_y));
+                ImGui::Separator();
+                ImGui::Spacing();
+
+                const char* toggle_lbl = pi.enabled ? "Disable" : "Enable";
+                ImVec4 tog_col = pi.enabled ? ImVec4(0.70f, 0.30f, 0.30f, 1.f) : ImVec4(0.20f, 0.60f, 0.30f, 1.f);
+
+                ImGui::PushStyleColor(ImGuiCol_Button, tog_col);
+                ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImVec4(tog_col.x+0.1f, tog_col.y+0.1f, tog_col.z+0.1f, 1.f));
+                ImGui::PushStyleColor(ImGuiCol_ButtonActive, ImVec4(tog_col.x-0.05f, tog_col.y-0.05f, tog_col.z-0.05f, 1.f));
+
+                if (ImGui::Button(toggle_lbl, ImVec2(110, 28))) {
+                    pi.enabled = !pi.enabled;
+                    hub_plugin_set_enabled(pi.path, pi.enabled);
+                }
+                ImGui::PopStyleColor(3);
+
+                ImGui::SameLine();
+
+                ImGui::PushStyleColor(ImGuiCol_Button,        ImVec4(0.55f,0.15f,0.15f,1.f));
+                ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImVec4(0.70f,0.20f,0.20f,1.f));
+                ImGui::PushStyleColor(ImGuiCol_ButtonActive,  ImVec4(0.40f,0.10f,0.10f,1.f));
+
+                if (ImGui::Button("Delete", ImVec2(90, 28))) {
+                    ImGui::OpenPopup("Confirm Delete");
+                }
+                ImGui::PopStyleColor(3);
+
+                ImGui::SetNextWindowSize(ImVec2(320, 100), ImGuiCond_Always);
+                ImGui::SetNextWindowPos(ImVec2(W * 0.5f, H * 0.5f), ImGuiCond_Always, ImVec2(0.5f,0.5f));
+
+                if (ImGui::BeginPopupModal("Confirm Delete", nullptr, ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoMove)) {
+
+                    ImGui::Spacing();
+                    ImGui::Text("Delete plugin \"%s\"?", pi.name.c_str());
+                    ImGui::TextDisabled("This removes the file from disk.");
+                    ImGui::Spacing(); ImGui::Separator(); ImGui::Spacing();
+
+                    ImGui::PushStyleColor(ImGuiCol_Button,        ImVec4(0.55f,0.15f,0.15f,1.f));
+                    ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImVec4(0.70f,0.20f,0.20f,1.f));
+                    ImGui::PushStyleColor(ImGuiCol_ButtonActive,  ImVec4(0.40f,0.10f,0.10f,1.f));
+
+                    if (ImGui::Button("Delete", ImVec2(90, 26))) {
+                        fs::remove(pi.path);
+                        fs::path sentinel = hub_plugin_disabled_sentinel(pi.path);
+                        if (fs::exists(sentinel)) fs::remove(sentinel);
+
+                        hub_refresh_plugins();
+                        ImGui::CloseCurrentPopup();
+                    }
+
+                    ImGui::PopStyleColor(3);
+                    ImGui::SameLine();
+
+                    if (ImGui::Button("Cancel", ImVec2(80, 26)))
+                        ImGui::CloseCurrentPopup();
+
+                    ImGui::EndPopup();
+                }
+
+            } 
+            
+            else {
+                ImVec2 avail = ImGui::GetContentRegionAvail();
+                const char* msg = "Select a plugin to view details.";
+                ImVec2 ts = ImGui::CalcTextSize(msg);
+
+                ImGui::SetCursorPos(ImVec2((avail.x - ts.x) * 0.5f, (avail.y - ts.y) * 0.5f));
+                ImGui::TextDisabled("%s", msg);
+            }
+
+            ImGui::EndChild();
+            ImGui::EndTabItem();
+        }
+
+        if (ImGui::BeginTabItem("Explore")) {
+            ImVec2 avail = ImGui::GetContentRegionAvail();
+            const char* line1 = "Browse online plugins";
+            const char* line2 = "Coming soon.";
+
+            ImVec2 s1 = ImGui::CalcTextSize(line1);
+            ImVec2 s2 = ImGui::CalcTextSize(line2);
+            float total_h = s1.y + 6 + s2.y;
+
+            ImGui::SetCursorPos(ImVec2((avail.x - s1.x) * 0.5f, (avail.y - total_h) * 0.5f));
+            ImGui::Text("%s", line1);
+            ImGui::SetCursorPosX((avail.x - s2.x) * 0.5f);
+            ImGui::TextDisabled("%s", line2);
+            ImGui::EndTabItem();
+        }
+
+        ImGui::EndTabBar();
+    }
+
+    ImGui::End();
+}
+
+// Hub
 static void hub_save_registry() {
     json j;
     
@@ -245,16 +557,18 @@ std::string run_hub() {
 
         ImGui::SetNextWindowPos(ImVec2(0, 0));
         ImGui::SetNextWindowSize(ImVec2((float)GetScreenWidth(), (float)GetScreenHeight()));
-        ImGui::Begin("##hub", nullptr,
+        ImGui::Begin(
+            "##hub", nullptr,
             ImGuiWindowFlags_NoResize   | ImGuiWindowFlags_NoMove       |
             ImGuiWindowFlags_NoTitleBar | ImGuiWindowFlags_NoScrollbar  |
-            ImGuiWindowFlags_NoBringToFrontOnFocus);
+            ImGuiWindowFlags_NoBringToFrontOnFocus
+        );
 
         ImGui::SetCursorPosY(ImGui::GetCursorPosY() + 4);
         ImGui::Text("QUARK HUB");
         ImGui::SameLine();
         ImGui::TextDisabled("  %s", lang.word("project_manager"));
-        ImGui::SameLine(ImGui::GetContentRegionAvail().x - 262);
+        ImGui::SameLine(ImGui::GetContentRegionAvail().x - 354);
 
         if (ImGui::Button(lang.word("import_project"), ImVec2(120, 28))) {
             std::string picked = hub_browse_project_file();
@@ -263,12 +577,20 @@ std::string run_hub() {
                 hub_refresh();
             }
         }
+
         ImGui::SameLine();
 
         if (ImGui::Button(("+ %s", lang.word("create_project")), ImVec2(134, 28))) {
             memset(hub_create_name, 0, sizeof(hub_create_name));
             strncpy(hub_create_path, HUB_PROJECTS_ROOT, sizeof(hub_create_path) - 1);
             hub_show_create = true;
+        }
+
+        ImGui::SameLine();
+        
+        if (ImGui::Button("Plugins", ImVec2(80, 28))) {
+            hub_refresh_plugins();
+            hub_show_plugin_manager = true;
         }
 
         ImGui::Separator();
@@ -507,6 +829,7 @@ std::string run_hub() {
             ImGui::EndPopup();
         }
 
+        hub_draw_plugin_manager();
         rlImGuiEnd();
         EndDrawing();
     }

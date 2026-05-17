@@ -83,6 +83,14 @@ void PluginManager::load_all(const std::string& plugin_dir, PluginContext* ctx) 
 #else
         if (ext != ".so") continue;
 #endif
+
+        fs::path sentinel = entry.path().parent_path() / (entry.path().stem().string() + ".disabled");
+
+        if (fs::exists(sentinel)) {
+            TraceLog(LOG_INFO, "PLUGIN: Skipping disabled plugin '%s'", entry.path().filename().string().c_str());
+            continue;
+        }
+
         load(entry.path().string());
     }
 
