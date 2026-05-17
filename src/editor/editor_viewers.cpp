@@ -3,9 +3,8 @@
 #include "../headers/language_manager.h"
 #include "../headers/tex.h"
 #include "../headers/entity.h"
-#include "rlImGui.h"
 #include "imgui.h"
-#include "raymath.h"
+#include "qcImGui.h"
 #include <cmath>
 #include <fstream>
 #include <sstream>
@@ -17,7 +16,7 @@
 #define lang LanguageManager::get()
 
 static bool show_model_viewer = false;
-static Model viewer_model = { 0 };
+static Model viewer_model;
 static RenderTexture2D viewer_rt = { 0 };
 
 static bool show_material_viewer = false;
@@ -27,7 +26,7 @@ static float material_albedo_f[4] = {1,1,1,1};
 static float material_brightness = 1.0f;
 static Texture2D material_texture = {0};
 static std::string material_texture_path = "";
-static Model viewer_mat_sphere = { 0 };
+static Model viewer_mat_sphere;
 static RenderTexture2D viewer_mat_rt = { 0 };
 static std::filesystem::path current_material_path = "";
 static bool show_texture_picker = false;
@@ -51,7 +50,6 @@ static float viewer_phi = 20.0f, viewer_theta = 45.0f, viewer_radius = 5.0f;
 bool open_model_viewer_for_asset(const ModelAsset& asset) {
     if (viewer_model.meshCount > 0) {
         UnloadModel(viewer_model);
-        viewer_model = {0};
     }
 
     if (!load_model_instance(asset, viewer_model)) return false;
@@ -82,7 +80,7 @@ bool open_material_viewer_for_path(const std::filesystem::path& material_path, s
 
     if (viewer_mat_sphere.meshCount > 0) {
         UnloadModel(viewer_mat_sphere);
-        viewer_mat_sphere = {0};
+        viewer_mat_sphere = {};
     }
 
     viewer_mat_sphere = LoadModelFromMesh(GenMeshSphere(1.0f, 64, 64));
@@ -279,7 +277,6 @@ void apply_material_settings() {
 void rebuild_material_preview_mesh() {
     if (viewer_mat_sphere.meshCount > 0) {
         UnloadModel(viewer_mat_sphere);
-        viewer_mat_sphere = {0};
     }
 
     Mesh mesh = {0};
@@ -369,7 +366,6 @@ void draw_model_viewer_window() {
     if (!show_model_viewer) {
         if (viewer_model.meshCount > 0) {
             UnloadModel(viewer_model);
-            viewer_model = { 0 };
         }
         return;
     }
@@ -412,7 +408,7 @@ void draw_model_viewer_window() {
             if (viewer_phi < -89.0f) viewer_phi = -89.0f;
         }
 
-        Camera3D cam = { 0 };
+        Camera3D cam;
         cam.fovy = 45.0f;
         cam.projection = CAMERA_PERSPECTIVE;
         cam.target = viewer_target;
@@ -425,9 +421,17 @@ void draw_model_viewer_window() {
         ClearBackground({ 40, 40, 45, 255 });
         BeginMode3D(cam);
         if (viewer_model.meshCount > 0) {
-            Matrix matCenter = MatrixTranslate(-viewer_model_center.x, -viewer_model_center.y, -viewer_model_center.z);
-            Matrix matRotation = MatrixRotateXYZ({viewer_model_rotation.x * DEG2RAD, viewer_model_rotation.y * DEG2RAD, 0});
-            viewer_model.transform = MatrixMultiply(matCenter, matRotation);
+            Mat4 matCenter = Mat4::translation(
+                -viewer_model_center.x,
+                -viewer_model_center.y, 
+                -viewer_model_center.z
+            );
+
+            Mat4 matRotation =
+                Mat4::rotationX(viewer_model_rotation.x * DEG2RAD) *
+                Mat4::rotationY(viewer_model_rotation.y * DEG2RAD);
+
+            viewer_model.transform = matCenter * matRotation;
 
             DrawModel(viewer_model, { 0, 0, 0 }, 1.0f, WHITE);
             DrawModelWires(viewer_model, { 0, 0, 0 }, 1.0f, DARKGRAY);
@@ -438,7 +442,7 @@ void draw_model_viewer_window() {
 
         ImGui::SetCursorScreenPos(viewport_pos);
         Rectangle src = { 0, 0, (float)viewer_rt.texture.width, -(float)viewer_rt.texture.height };
-        rlImGuiImageRect(&viewer_rt.texture, (int)size.x, (int)size.y, src);
+        qcImGuiImageRect(&viewer_rt.texture, (int)size.x, (int)size.y, src);
     }
     ImGui::End();
 }
@@ -449,7 +453,6 @@ void draw_material_viewer_window(Editor& editor, Entity* selected_entity) {
 
         if (viewer_mat_sphere.meshCount > 0) {
             UnloadModel(viewer_mat_sphere);
-            viewer_mat_sphere = { 0 };
         }
         return;
     }
@@ -578,7 +581,7 @@ void draw_material_viewer_window(Editor& editor, Entity* selected_entity) {
             viewer_phi = Clamp(viewer_phi, -89.0f, 89.0f);
         }
 
-        Camera3D cam = { 0 };
+        Camera3D cam;
         cam.fovy = 45.0f;
         cam.projection = CAMERA_PERSPECTIVE;
         cam.target = viewer_target;
@@ -594,11 +597,9 @@ void draw_material_viewer_window(Editor& editor, Entity* selected_entity) {
         BeginMode3D(cam);
 
         if (viewer_mat_sphere.meshCount > 0) {
-            Matrix rot = MatrixRotateXYZ({
-                viewer_model_rotation.x * DEG2RAD,
-                viewer_model_rotation.y * DEG2RAD,
-                0
-            });
+            Mat4 rot =
+                Mat4::rotationX(viewer_model_rotation.x * DEG2RAD) *
+                Mat4::rotationY(viewer_model_rotation.y * DEG2RAD);
 
             viewer_mat_sphere.transform = rot;
             DrawModel(viewer_mat_sphere, {0,0,0}, 1.0f, WHITE);
@@ -615,7 +616,7 @@ void draw_material_viewer_window(Editor& editor, Entity* selected_entity) {
             -(float)viewer_mat_rt.texture.height
         };
 
-        rlImGuiImageRect(&viewer_mat_rt.texture, (int)size.x, (int)size.y, src);
+        qcImGuiImageRect(&viewer_mat_rt.texture, (int)size.x, (int)size.y, src);
 
         ImGui::Columns(1);
     }
@@ -648,7 +649,6 @@ void draw_material_viewer_window(Editor& editor, Entity* selected_entity) {
 void cleanup_viewers() {
     if (viewer_model.meshCount > 0) {
         UnloadModel(viewer_model);
-        viewer_model = { 0 };
     }
 
     if (viewer_rt.id != 0) {
@@ -658,7 +658,6 @@ void cleanup_viewers() {
 
     if (viewer_mat_sphere.meshCount > 0) {
         UnloadModel(viewer_mat_sphere);
-        viewer_mat_sphere = { 0 };
     }
 
     if (viewer_mat_rt.id != 0) {

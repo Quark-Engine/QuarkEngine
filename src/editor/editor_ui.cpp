@@ -7,14 +7,11 @@
 #include "editor_utils.h"
 #include "editor_viewers.h"
 #include "../headers/ImGuizmo.h"
-#include "rlImGui.h"
 #include "../headers/lighting.h"
 #include "../headers/version.h"
 #include "../headers/project.h"
 #include "imgui.h"
 #include "imgui_internal.h"
-#include "raymath.h"
-#include "rlgl.h"
 #include <cstring>
 #include <cmath>
 #include <vector>
@@ -22,7 +19,7 @@
 
 #define lang LanguageManager::get()
 
-extern RenderTexture2D scene_rt;
+RenderTexture2D scene_rt = {};
 bool show_hierarchy = true;
 bool show_inspector = true;
 bool show_assets = true;
@@ -145,17 +142,17 @@ void open_url(const char* url) {
     #elif __linux__
         system((std::string("xdg-open ") + url).c_str());
     #else
-        TraceLog(LOG_ERROR, ("Cannot open URL: %s", url));
+        TraceLog(LogLevel::Error, "EDITOR", TextFormat("Cannot open URL: %s", url));
     #endif
 }
 
-Matrix compose_entity_transform_matrix(const Entity& entity) {
+Mat4 compose_entity_transform_Mat4(const Entity& entity) {
     const TransformComponent* transform = entity.get_transform_component();
-    if (!transform) return MatrixIdentity();
-    Matrix matScale = MatrixScale(transform->scale.x, transform->scale.y, transform->scale.z);
-    Matrix matRotation = MatrixRotateXYZ({transform->rotation.x * DEG2RAD, transform->rotation.y * DEG2RAD, transform->rotation.z * DEG2RAD});
-    Matrix matTranslation = MatrixTranslate(transform->position.x, transform->position.y, transform->position.z);
-    return MatrixMultiply(MatrixMultiply(matTranslation, matRotation), matScale);
+    if (!transform) return Mat4Identity();
+    Mat4 matScale = Mat4Scale(transform->scale.x, transform->scale.y, transform->scale.z);
+    Mat4 matRotation = Mat4RotateXYZ({transform->rotation.x * DEG2RAD, transform->rotation.y * DEG2RAD, transform->rotation.z * DEG2RAD});
+    Mat4 matTranslation = Mat4Translate(transform->position.x, transform->position.y, transform->position.z);
+    return Mat4Multiply(Mat4Multiply(matTranslation, matRotation), matScale);
 }
 
 Vec3 ray_plane_hit(Ray ray) {
@@ -211,7 +208,7 @@ Vec3 get_mesh_vertex_local_position(const Entity& entity, int mesh_index, int ve
 }
 
 Vec3 get_mesh_vertex_world_position(const Entity& entity, int mesh_index, int vertex_index) {
-    const Matrix transform = compose_entity_transform_matrix(entity);
+    const Mat4 transform = compose_entity_transform_Mat4(entity);
     return Vec3Transform(get_mesh_vertex_local_position(entity, mesh_index, vertex_index), transform);
 }
 
@@ -249,7 +246,7 @@ bool set_mesh_vertex_local_position(Entity& entity, int mesh_index, int vertex_i
 }
 
 bool set_mesh_vertex_world_position(Entity& entity, int mesh_index, int vertex_index, const Vec3& world_position) {
-    const Matrix inverse_transform = MatrixInvert(compose_entity_transform_matrix(entity));
+    const Mat4 inverse_transform = Mat4Invert(compose_entity_transform_Mat4(entity));
     const Vec3 local_position = Vec3Transform(world_position, inverse_transform);
     return set_mesh_vertex_local_position(entity, mesh_index, vertex_index, local_position);
 }
@@ -268,7 +265,7 @@ bool pick_mesh_triangle(
     const Mesh& mesh = mesh_component->model.meshes[mesh_index];
     if (!mesh.vertices || mesh.triangleCount <= 0) return false;
 
-    const Matrix transform = compose_entity_transform_matrix(entity);
+    const Mat4 transform = compose_entity_transform_Mat4(entity);
     float best_distance = FLT_MAX;
     int best_triangle = -1;
     int best_corner = 0;
@@ -279,11 +276,11 @@ bool pick_mesh_triangle(
 
         Vec3 vertices[3] = {};
         for (int i = 0; i < 3; i++) {
-            vertices[i] = Vec3Transform({
+            vertices[i] = transform * Vec3(
                 mesh.vertices[indices[i] * 3 + 0],
                 mesh.vertices[indices[i] * 3 + 1],
                 mesh.vertices[indices[i] * 3 + 2]
-            }, transform);
+            );
         }
 
         const RayCollision hit = GetRayCollisionTriangle(ray, vertices[0], vertices[1], vertices[2]);
@@ -294,7 +291,7 @@ bool pick_mesh_triangle(
 
         float closest_corner_distance = FLT_MAX;
         for (int i = 0; i < 3; i++) {
-            const float distance_to_corner = Vec3Distance(hit.point, vertices[i]);
+            const float distance_to_corner = (hit.point - vertices[i]).length();
             if (distance_to_corner < closest_corner_distance) {
                 closest_corner_distance = distance_to_corner;
                 best_corner = i;
@@ -313,7 +310,7 @@ bool raycast_entity(const Entity& entity, Ray ray, float& out_distance) {
     const MeshComponent* mesh = entity.get_mesh_component();
     if (!mesh || !has_valid_model_data(mesh->model)) return false;
 
-    const Matrix transform = compose_entity_transform_matrix(entity);
+    const Mat4 transform = compose_entity_transform_Mat4(entity);
 
     bool hit_any = false;
     float best_distance = FLT_MAX;
@@ -363,7 +360,7 @@ void reset_mesh_edit_model(Entity& entity) {
             UnloadModel(mesh->model);
         }
 
-        mesh->model = {0};
+        mesh->model;
         if (!load_model_instance(*mesh->asset, mesh->model)) {
             mesh->asset = nullptr;
             mesh->asset_name.clear();
@@ -418,20 +415,25 @@ void draw_gizmo(Editor& editor, FlyCamera camera) {
     ImGuizmo::SetDrawlist(ImGui::GetWindowDrawList());
     ImGuizmo::SetRect(g_scene_window_pos.x, g_scene_window_pos.y, g_scene_window_size.x, g_scene_window_size.y);
 
-    Matrix view = MatrixTranspose(GetCameraMatrix(camera.get_camera()));
-    Matrix projection = MatrixTranspose(MatrixPerspective(
+    Mat4 view = Mat4::lookAt(
+        camera.get_camera().position,
+        camera.get_camera().target,
+        camera.get_camera().up
+    );
+
+    Mat4 projection = Mat4::perspective(
         camera.get_camera().fovy * DEG2RAD,
         g_scene_window_size.x / g_scene_window_size.y,
         0.1f,
         1000.0f
-    ));
+    );
 
-    float view_matrix[16] = {};
-    float projection_matrix[16] = {};
-    float transform_matrix[16] = {};
+    float view_Mat4[16] = {};
+    float projection_Mat4[16] = {};
+    float transform_Mat4[16] = {};
 
-    memcpy(view_matrix, &view, sizeof(view_matrix));
-    memcpy(projection_matrix, &projection, sizeof(projection_matrix));
+    memcpy(view_Mat4, &view, sizeof(view_Mat4));
+    memcpy(projection_Mat4, &projection, sizeof(projection_Mat4));
 
     draw_mesh_vertex_overlay(editor, camera.get_camera());
 
@@ -461,15 +463,15 @@ void draw_gizmo(Editor& editor, FlyCamera camera) {
                 vertex_translation, 
                 vertex_rotation, 
                 vertex_scale, 
-                transform_matrix
+                transform_Mat4
             );
             
             ImGuizmo::Manipulate(
-                view_matrix,
-                projection_matrix,
+                view_Mat4,
+                projection_Mat4,
                 ImGuizmo::TRANSLATE,
                 ImGuizmo::WORLD,
-                transform_matrix
+                transform_Mat4
             );
 
             if (ImGuizmo::IsUsing() && !g_mesh_edit_state.was_using_gizmo) {
@@ -481,7 +483,7 @@ void draw_gizmo(Editor& editor, FlyCamera camera) {
                 float next_rotation[3] = {};
                 float next_scale[3] = {};
                 ImGuizmo::DecomposeMatrixToComponents(
-                    transform_matrix, 
+                    transform_Mat4, 
                     next_translation, 
                     next_rotation, 
                     next_scale
@@ -508,17 +510,17 @@ void draw_gizmo(Editor& editor, FlyCamera camera) {
         translation, 
         rotation, 
         scale, 
-        transform_matrix
+        transform_Mat4
     );
     
     static bool was_using = false;
     
     ImGuizmo::Manipulate(
-        view_matrix,
-        projection_matrix,
+        view_Mat4,
+        projection_Mat4,
         editor_internal::gizmo_mode,
         ImGuizmo::WORLD,
-        transform_matrix
+        transform_Mat4
     );
 
     if (ImGuizmo::IsUsing() && !was_using) {
@@ -530,7 +532,7 @@ void draw_gizmo(Editor& editor, FlyCamera camera) {
         float next_rotation[3] = {};
         float next_scale[3] = {};
         ImGuizmo::DecomposeMatrixToComponents(
-            transform_matrix, 
+            transform_Mat4, 
             next_translation, 
             next_rotation, 
             next_scale
@@ -551,7 +553,7 @@ void draw_gizmo(Editor& editor, FlyCamera camera) {
 static Vec2 world_to_scene_screen(const Vec3& world, const Camera3D& camera) {
     float rt_w = (float)GetScreenWidth();
     float rt_h = (float)GetScreenHeight();
-    Vec2 fb = GetWorldToScreen(world, camera);
+    Vec3 fb = GetWorldToScreen(world, camera);
     float nx = fb.x / rt_w;
     float ny = fb.y / rt_h;
     return {
@@ -564,18 +566,26 @@ static Ray scene_screen_to_world_ray(const Vec2& mouse, const Camera3D& camera) 
     float nx = (mouse.x - g_scene_window_pos.x) / g_scene_window_size.x;
     float ny = (mouse.y - g_scene_window_pos.y) / g_scene_window_size.y;
 
-    Matrix view   = GetCameraMatrix(camera);
-    Matrix proj   = MatrixPerspective(
+    Mat4 view = Mat4::lookAt(
+        camera.position,
+        camera.target,
+        camera.up
+    );
+
+    Mat4 proj = Mat4::perspective(
         camera.fovy * DEG2RAD,
         g_scene_window_size.x / g_scene_window_size.y,
-        0.1f, 1000.0f
+        0.1f,
+        1000.0f
     );
-    Matrix inv_vp = MatrixInvert(MatrixMultiply(proj, view));
+
+    Mat4 vp = proj * view;
+    Mat4 inv_vp = vp.inverted();
 
     float ndcX =  nx * 2.0f - 1.0f;
     float ndcY = -(ny * 2.0f - 1.0f);
 
-    auto mul = [](Matrix m, Vector4 v) -> Vector4 {
+    auto mul = [](Mat4 m, Vec4 v) -> Vec4 {
         return {
             m.m0*v.x + m.m4*v.y + m.m8*v.z  + m.m12*v.w,
             m.m1*v.x + m.m5*v.y + m.m9*v.z  + m.m13*v.w,
@@ -584,8 +594,8 @@ static Ray scene_screen_to_world_ray(const Vec2& mouse, const Camera3D& camera) 
         };
     };
 
-    Vector4 near_w = mul(inv_vp, {ndcX, ndcY, -1.0f, 1.0f});
-    Vector4 far_w  = mul(inv_vp, {ndcX, ndcY,  1.0f, 1.0f});
+    Vec4 near_w = mul(inv_vp, {ndcX, ndcY, -1.0f, 1.0f});
+    Vec4 far_w  = mul(inv_vp, {ndcX, ndcY,  1.0f, 1.0f});
 
     Vec3 near_pos = { near_w.x/near_w.w, near_w.y/near_w.w, near_w.z/near_w.w };
     Vec3 far_pos  = { far_w.x/far_w.w,   far_w.y/far_w.w,   far_w.z/far_w.w  };
@@ -700,7 +710,7 @@ void handle_scene_asset_drop(Editor& editor, Camera3D camera)
             const MeshComponent* mesh_comp = entity.get_mesh_component();
             if (!mesh_comp || !has_valid_model_data(mesh_comp->model)) continue;
 
-            Matrix transform_mat = compose_entity_transform_matrix(entity);
+            Mat4 transform_mat = compose_entity_transform_Mat4(entity);
 
             for (int i = 0; i < mesh_comp->model.meshCount; i++)
             {
@@ -895,19 +905,19 @@ void draw_polygon_editor(Editor& editor, Camera3D camera) {
         if (sel >= 0 && sel < (int)e_mesh.vertices.size()) {
             Vec3 world_pos = e_mesh.vertices[sel].position;
 
-            float view_matrix[16] = {};
-            float projection_matrix[16] = {};
-            float transform_matrix[16] = {};
+            float view_Mat4[16] = {};
+            float projection_Mat4[16] = {};
+            float transform_Mat4[16] = {};
 
-            Matrix view = MatrixTranspose(GetCameraMatrix(camera));
-            Matrix projection = MatrixTranspose(MatrixPerspective(
+            Mat4 view = Mat4Transpose(GetCameraMat4(camera));
+            Mat4 projection = Mat4Transpose(Mat4Perspective(
                 camera.fovy * DEG2RAD,
                 g_scene_window_size.x / g_scene_window_size.y,
                 0.1f, 1000.0f
             ));
 
-            memcpy(view_matrix, &view, sizeof(view_matrix));
-            memcpy(projection_matrix, &projection, sizeof(projection_matrix));
+            memcpy(view_Mat4, &view, sizeof(view_Mat4));
+            memcpy(projection_Mat4, &projection, sizeof(projection_Mat4));
 
             float t[3] = {world_pos.x, world_pos.y, world_pos.z};
             float r[3] = {0,0,0};
@@ -915,17 +925,17 @@ void draw_polygon_editor(Editor& editor, Camera3D camera) {
 
             ImGuizmo::SetDrawlist(ImGui::GetWindowDrawList());
             ImGuizmo::SetRect(g_scene_window_pos.x, g_scene_window_pos.y, g_scene_window_size.x, g_scene_window_size.y);
-            ImGuizmo::RecomposeMatrixFromComponents(t, r, s, transform_matrix);
+            ImGuizmo::RecomposeMatrixFromComponents(t, r, s, transform_Mat4);
 
             static bool was_using_poly_gizmo = false;
-            ImGuizmo::Manipulate(view_matrix, projection_matrix, ImGuizmo::TRANSLATE, ImGuizmo::WORLD, transform_matrix);
+            ImGuizmo::Manipulate(view_Mat4, projection_Mat4, ImGuizmo::TRANSLATE, ImGuizmo::WORLD, transform_Mat4);
 
             if (ImGuizmo::IsUsing() && !was_using_poly_gizmo)
                 editor.save_state();
 
             if (ImGuizmo::IsUsing()) {
                 float nt[3]={}, nr[3]={}, ns[3]={};
-                ImGuizmo::DecomposeMatrixToComponents(transform_matrix, nt, nr, ns);
+                ImGuizmo::DecomposeMatrixToComponents(transform_Mat4, nt, nr, ns);
                 e_mesh.vertices[sel].position = {nt[0], nt[1], nt[2]};
                 rebuild_mesh_from_editable(mesh->model, e_mesh);
                 mark_entity_bounds_dirty(entity);
@@ -1097,7 +1107,7 @@ void paste_entity(Editor& editor) {
             const int light_type = light_copy->light.light.type;
             light_copy->created = false;
             light_copy->light.id = -1;
-            light_copy->light.light = {0};
+            light_copy->light.light = {};
             light_copy->light.light.type = light_type;
             pasted.get_components()->add_component(light_copy);
         }
@@ -1116,7 +1126,7 @@ void dublicate_entity(Editor& editor, Entity* entity) {
         const int light_type = light->light.light.type;
         light->created = false;
         light->light.id = -1;
-        light->light.light = {0};
+        light->light.light = {};
         light->light.light.type = light_type;
     }
     editor.scene.entities.push_back(copy);
@@ -1301,7 +1311,7 @@ void draw_ui(Editor& editor, Shader shader, FlyCamera camera, PluginContext* plu
                     const int light_type = light->light.light.type;
                     light->created = false;
                     light->light.id = -1;
-                    light->light.light = {0};
+                    light->light.light = {};
                     light->light.light.type = light_type;
                 }
                 editor.scene.entities.push_back(copy);
@@ -1375,7 +1385,7 @@ void draw_ui(Editor& editor, Shader shader, FlyCamera camera, PluginContext* plu
                             const int light_type = light->light.light.type;
                             light->created = false;
                             light->light.id = -1;
-                            light->light.light = {0};
+                            light->light.light = {};
                             light->light.light.type = light_type;
                         }
                         editor.scene.entities.push_back(copy);
@@ -1496,12 +1506,16 @@ void draw_ui(Editor& editor, Shader shader, FlyCamera camera, PluginContext* plu
             g_scene_window_size = ImGui::GetContentRegionAvail();
 
             if (g_scene_window_size.x > 0 && g_scene_window_size.y > 0) {
-                if (scene_rt.id > 0) {
-                    if (scene_rt.texture.width  != (int)g_scene_window_size.x ||
-                        scene_rt.texture.height != (int)g_scene_window_size.y) {
+                if (scene_rt.id == 0 ||
+                    scene_rt.texture.width  != (int)g_scene_window_size.x ||
+                    scene_rt.texture.height != (int)g_scene_window_size.y) {
+                    if (scene_rt.id != 0) {
                         UnloadRenderTexture(scene_rt);
-                        scene_rt = LoadRenderTexture((int)g_scene_window_size.x, (int)g_scene_window_size.y);
                     }
+                    scene_rt = LoadRenderTexture((int)g_scene_window_size.x, (int)g_scene_window_size.y);
+                }
+
+                if (scene_rt.id > 0) {
                     ImGui::GetWindowDrawList()->AddImage(
                         (ImTextureID)(intptr_t)scene_rt.texture.id,
                         g_scene_window_pos,
@@ -1554,7 +1568,7 @@ void draw_ui(Editor& editor, Shader shader, FlyCamera camera, PluginContext* plu
     if (ImGui::BeginPopupModal(lang.word("about_quark_engine"), nullptr, ImGuiWindowFlags_AlwaysAutoResize)) {
         ImGui::Text("Quark Engine %s", QUARK_ENGINE_VERSION.c_str());
         ImGui::Separator();
-        ImGui::Text(lang.word("raylib_version"), RAYLIB_VERSION);
+        ImGui::Text(lang.word("raylib_version"), QC_VERSION_STRING);
         ImGui::Text(lang.word("imgui_version"), IMGUI_VERSION);
         ImGui::Spacing();
 

@@ -74,7 +74,7 @@ void load_textures(std::string project_path) {
 
 void unload_textures() {
     std::unordered_set<unsigned int> released_ids;
-    for (const auto& opt : texture_options) {
+    for (auto& opt : texture_options) {
         if (opt.texture.id == 0) continue;
         if (released_ids.insert(opt.texture.id).second) {
             UnloadTexture(opt.texture);
@@ -395,7 +395,7 @@ void refresh_textures(Scene* scene, const std::string& project_path) {
     }
 
     std::unordered_set<unsigned int> released_ids;
-    for (const auto& [_, removed_tex] : old_by_name) {
+    for (auto& [_, removed_tex] : old_by_name) {
         if (removed_tex.id == 0) continue;
         if (released_ids.insert(removed_tex.id).second) {
             UnloadTexture(removed_tex);

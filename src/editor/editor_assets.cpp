@@ -290,7 +290,7 @@ Texture create_material_preview(const std::string& mtl_path)
     }
 
     RenderTexture2D rt = LoadRenderTexture(128, 128);
-    Camera3D cam = { 0 };
+    Camera3D cam;
     cam.fovy = 45;
     cam.projection = CAMERA_PERSPECTIVE;
     cam.target = {0,0,0};

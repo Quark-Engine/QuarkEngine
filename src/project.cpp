@@ -255,7 +255,7 @@ bool project_load(const std::string& folder_path, Scene& scene, Shader shader) {
         e.components->deserialize(ej);
 
         if (e.is_group) {
-            scene.entities.push_back(e);
+            scene.entities.push_back(std::move(e));
             continue;
         }
 
@@ -284,7 +284,7 @@ bool project_load(const std::string& folder_path, Scene& scene, Shader shader) {
                     if (!load_model_instance(a, mesh->model)) {
                         mesh->asset = nullptr;
                         mesh->asset_name.clear();
-                        mesh->model = {0};
+                        mesh->model;
                         mesh->owns_model_instance = false;
                         break;
                     }
@@ -321,7 +321,7 @@ bool project_load(const std::string& folder_path, Scene& scene, Shader shader) {
             if (mat->texture.id != 0) {
                 mesh->model.materials[i].maps[MATERIAL_MAP_DIFFUSE].texture = mat->texture;
             }
-            mesh->model.materials[i].shader = shader;
+            mesh->model.materials[i].shader = &shader;
         }
 
         mesh->shader_assigned = true;
@@ -340,7 +340,7 @@ bool project_load(const std::string& folder_path, Scene& scene, Shader shader) {
             }
         }
 
-        scene.entities.push_back(e);
+        scene.entities.push_back(std::move(e));
     }
 
     return true;

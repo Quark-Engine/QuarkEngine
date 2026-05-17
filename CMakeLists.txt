@@ -7,15 +7,14 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 option(BUILD_ENGINE "Build Quark Engine" ON)
 option(BUILD_PLUGIN "Build Plugin" OFF)
 
-set(BUILD_EXAMPLES OFF CACHE BOOL "" FORCE)
+set(QC_BUILD_EXAMPLES OFF CACHE BOOL "" FORCE)
 set(BUILD_GAMES    OFF CACHE BOOL "" FORCE)
 set(BUILD_SHARED_LIBS    ON CACHE BOOL "" FORCE)
 set(GLFW_BUILD_SHARED_LIBS ON CACHE BOOL "" FORCE)
 
-add_subdirectory(quark-libs/QuarkCore)
-
 include_directories(
     ${CMAKE_SOURCE_DIR}/quark-libs/QuarkCore/include
+    ${CMAKE_SOURCE_DIR}/quark-libs/QuarkCore/imgui
     ${CMAKE_SOURCE_DIR}/quark-libs/imgui/include
     ${CMAKE_SOURCE_DIR}/src/headers
     ${CMAKE_SOURCE_DIR}/src/plugins
@@ -55,6 +54,8 @@ set_target_properties(imgui PROPERTIES
     ARCHIVE_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/bin
 )
 
+add_subdirectory(quark-libs/QuarkCore)
+
 if(BUILD_ENGINE)
     set(CMAKE_RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/bin)
 
@@ -81,8 +82,6 @@ if(BUILD_ENGINE)
         src/main.cpp
         src/models.cpp
         src/project.cpp
-        src/quark_imgui.cpp
-        src/quark_imgui.h
         src/plugins/plugin_manager.cpp
         src/scene.cpp
         src/tex.cpp
@@ -130,8 +129,14 @@ if(BUILD_ENGINE)
     if(WIN32)
         add_custom_command(TARGET ${PROJECT_NAME} POST_BUILD
             COMMAND ${CMAKE_COMMAND} -E copy_if_different
+                $<TARGET_FILE:QuarkCore>
                 $<TARGET_FILE:imgui>
-                ${CMAKE_RUNTIME_OUTPUT_DIRECTORY}
+                $<TARGET_FILE:SDL3::SDL3>
+                $<TARGET_FILE:libglew_shared>
+                $<TARGET_FILE:assimp::assimp>
+                $<TARGET_FILE:ZLIB::ZLIB>
+                "${VULKAN_RUNTIME_DLL}"
+                ${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/Debug
         )
     endif()
 endif()

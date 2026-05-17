@@ -61,7 +61,6 @@ void Scene::release_resources() {
                 UnloadModel(mesh->model);
             }
         }
-        mesh->model = {0};
         if (mat) mat->texture = {0};
     }
 

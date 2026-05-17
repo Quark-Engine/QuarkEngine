@@ -1,6 +1,6 @@
 #include "QuarkCore/QuarkCore.hpp"
+#include "qcImGui.h"
 #include "imgui.h"
-#include "quark_imgui.h"
 #include "plugins/plugin_manager.h"
 #include "headers/lighting.h"
 #include "headers/language_manager.h"
@@ -22,6 +22,7 @@ PluginContext* ctx = nullptr;
 
 extern bool g_is_scene_hovered;
 extern bool g_is_scene_active;
+extern RenderTexture2D scene_rt;
 
 static bool language_uses_ms_pgothic(const std::string& language_code) {
     return language_code == "japanese" ||
@@ -135,7 +136,7 @@ static void update_plugins(PluginManager& plugin_manager, Editor& editor) {
                 Entity e = make_entity_from_asset(s_editor->scene, a);
                 const MeshComponent* mesh = e.get_mesh_component();
                 if (!mesh || !mesh->model.meshCount) return -1;
-                s_editor->scene.entities.push_back(e);
+                s_editor->scene.entities.push_back(std::move(e));
                 return (int)s_editor->scene.entities.size() - 1;
             }
         }
@@ -157,13 +158,29 @@ static void update_plugins(PluginManager& plugin_manager, Editor& editor) {
     plugin_manager.draw_ui_all(*ctx);
 }
 
-static Matrix compose_entity_transform(const Entity& entity) {
+static Mat4 compose_entity_transform(const Entity& entity) {
     const TransformComponent* transform = entity.get_transform_component();
-    if (!transform) return MatrixIdentity();
-    Matrix matScale = MatrixScale(transform->scale.x, transform->scale.y, transform->scale.z);
-    Matrix matRotation = MatrixRotateXYZ({transform->rotation.x * DEG2RAD, transform->rotation.y * DEG2RAD, transform->rotation.z * DEG2RAD});
-    Matrix matTranslation = MatrixTranslate(transform->position.x, transform->position.y, transform->position.z);
-    return MatrixMultiply(MatrixMultiply(matTranslation, matRotation), matScale);
+    if (!transform)
+        return Mat4::identity();
+
+    Mat4 matScale = Mat4::scale(
+        transform->scale.x,
+        transform->scale.y,
+        transform->scale.z
+    );
+
+    Mat4 matRotation =
+        Mat4::rotationX(transform->rotation.x * DEG2RAD) *
+        Mat4::rotationY(transform->rotation.y * DEG2RAD) *
+        Mat4::rotationZ(transform->rotation.z * DEG2RAD);
+
+    Mat4 matTranslation = Mat4::translation(
+        transform->position.x,
+        transform->position.y,
+        transform->position.z
+    );
+
+    return matTranslation * matRotation * matScale;
 }
 
 static void expand_bounds_with_point(BoundingBox& bounds, const Vec3& point) {
@@ -193,7 +210,7 @@ static BoundingBox compute_scene_bounds(const Scene& scene) {
             mutable_mesh->bounds_dirty = false;
         }
         BoundingBox local_bounds = mutable_mesh->cached_local_bounds;
-        Matrix transform = compose_entity_transform(entity);
+        Mat4 transform = compose_entity_transform(entity);
 
         const Vec3 corners[8] = {
             { local_bounds.min.x, local_bounds.min.y, local_bounds.min.z },
@@ -207,7 +224,7 @@ static BoundingBox compute_scene_bounds(const Scene& scene) {
         };
 
         for (const Vec3& corner : corners) {
-            expand_bounds_with_point(bounds, Vec3Transform(corner, transform));
+            expand_bounds_with_point(bounds, Vec3(transform * corner));
         }
         has_bounds = true;
     }
@@ -222,7 +239,7 @@ static BoundingBox compute_scene_bounds(const Scene& scene) {
 
 static void set_model_shader(Model& model, Shader shader) {
     for (int i = 0; i < model.materialCount; i++) {
-        model.materials[i].shader = shader;
+        model.materials[i].shader = &shader;
     }
 }
 
@@ -233,7 +250,7 @@ static void set_shader_light_enabled(Shader shader, int slot, bool enabled) {
 }
 
 static void disable_all_shader_lights(Shader shader) {
-    for (int slot = 0; slot < MAX_LIGHTS; slot++) {
+    for (int slot = 0; slot < QC_MAX_LIGHTS; slot++) {
         set_shader_light_enabled(shader, slot, false);
     }
 }
@@ -264,7 +281,7 @@ static bool prepare_scene_light_uniforms(Scene& scene, Shader shader, const Vec3
         light->light.position = transform->position;
 
         if (light->light.light.type == LIGHT_DIRECTIONAL &&
-            Vec3LengthSqr(Vec3Subtract(light->light.position, light->light.target)) <= 0.000001f) {
+            (light->light.position - light->light.target).length() <= 0.000001f) {
             light->light.target = scene_center;
         }
 
@@ -277,7 +294,7 @@ static bool prepare_scene_light_uniforms(Scene& scene, Shader shader, const Vec3
 
     if (!has_active_scene_light) {
         Vec3 fallback_target = scene_center;
-        Vec3 fallback_position = Vec3Add(scene_center, { 6.0f, 10.0f, 6.0f });
+        Vec3 fallback_position = scene_center + Vec3(6.0f, 10.0f, 6.0f);
         Light fallback_light = create_light_at_slot(0, LIGHT_DIRECTIONAL, fallback_position, fallback_target, WHITE, shader);
         Lighting fallback_lighting = {};
         fallback_lighting.id = 0;
@@ -318,9 +335,11 @@ void ApplyCustomImGuiTheme()
 
     // ====== GLOBAL ======
     colors[ImGuiCol_Text]           = ImVec4(0.80f, 0.82f, 0.85f, 1.00f); // #c9cdd1
+    colors[ImGuiCol_TextDisabled]   = ImVec4(0.54f, 0.58f, 0.63f, 1.00f);
     colors[ImGuiCol_WindowBg]       = ImVec4(0.16f, 0.17f, 0.18f, 1.00f); // #2a2c2f
     colors[ImGuiCol_ChildBg]        = ImVec4(0.14f, 0.15f, 0.16f, 1.00f);
     colors[ImGuiCol_PopupBg]        = ImVec4(0.20f, 0.21f, 0.23f, 1.00f); // #32353a
+    colors[ImGuiCol_DockingEmptyBg] = ImVec4(0.11f, 0.12f, 0.13f, 1.00f);
 
     // ====== BORDERS ======
     colors[ImGuiCol_Border]         = ImVec4(0.27f, 0.28f, 0.30f, 1.00f); // #44484d
@@ -330,10 +349,11 @@ void ApplyCustomImGuiTheme()
     colors[ImGuiCol_FrameBg]        = ImVec4(0.14f, 0.15f, 0.16f, 1.00f); // #24272a
     colors[ImGuiCol_FrameBgHovered] = ImVec4(0.23f, 0.25f, 0.27f, 1.00f); // #3B4045 hover
     colors[ImGuiCol_FrameBgActive]  = ImVec4(0.0f, 0.6f, 1.0f, 1.0f); // #0099ffff
+    colors[ImGuiCol_InputTextCursor]= ImVec4(0.93f, 0.95f, 0.98f, 1.00f);
 
     // ====== TITLE / MENUBAR ======
     colors[ImGuiCol_TitleBg]        = ImVec4(0.19f, 0.20f, 0.22f, 1.00f); // #31343a
-    colors[ImGuiCol_TitleBgActive]  = ImVec4(0.20f, 0.21f, 0.23f, 1.00f);
+    colors[ImGuiCol_TitleBgActive]  = ImVec4(0.24f, 0.26f, 0.29f, 1.00f);
     colors[ImGuiCol_MenuBarBg]      = ImVec4(0.19f, 0.20f, 0.22f, 1.00f);
 
     // ====== BUTTONS ======
@@ -357,8 +377,10 @@ void ApplyCustomImGuiTheme()
 
     // ====== TABS ======
     colors[ImGuiCol_Tab]            = ImVec4(0.20f, 0.21f, 0.23f, 1.00f); // #333538FF
-    colors[ImGuiCol_TabHovered]     = ImVec4(0.30f, 0.32f, 0.35f, 1.00f); // #4D5259FF
-    colors[ImGuiCol_TabActive]      = ImVec4(0.24f, 0.26f, 0.28f, 1.00f); // #3D4247FF
+    colors[ImGuiCol_TabHovered]     = ImVec4(0.36f, 0.39f, 0.43f, 1.00f);
+    colors[ImGuiCol_TabActive]      = ImVec4(0.27f, 0.30f, 0.34f, 1.00f);
+    colors[ImGuiCol_TabUnfocused]   = ImVec4(0.17f, 0.18f, 0.20f, 1.00f);
+    colors[ImGuiCol_TabUnfocusedActive] = ImVec4(0.22f, 0.24f, 0.27f, 1.00f);
 
     // ====== CHECKBOX ======
     colors[ImGuiCol_CheckMark]      = ImVec4(0.0f, 0.6f, 1.0f, 1.0f); // #0099ffff
@@ -370,6 +392,8 @@ void ApplyCustomImGuiTheme()
 
     // ====== DOCKING ======
     colors[ImGuiCol_DockingPreview] = ImVec4(0.78f, 0.52f, 0.17f, 0.4f); // #c9802b66
+    colors[ImGuiCol_NavCursor]      = ImVec4(0.93f, 0.95f, 0.98f, 1.00f);
+    colors[ImGuiCol_TextLink]       = ImVec4(0.40f, 0.72f, 0.98f, 1.00f);
 }
 
 int main(int argc, char* argv[]) {
@@ -379,9 +403,9 @@ int main(int argc, char* argv[]) {
     std::string lang_code = load_or_create_config();
     LanguageManager::get().set_lang(lang_code);
 
-    InitWindow(1280, 720, "Quark Engine");
+    InitWindow(1280, 720, "Quark Engine", RendererType::OpenGL);
     SetTargetFPS(GetCurrentMonitorRefreshRate());
-    InitImGui();
+    qcImGuiSetup(false);
     reload_editor_fonts(LanguageManager::get().current);
 
     ApplyCustomImGuiTheme();
@@ -392,7 +416,7 @@ int main(int argc, char* argv[]) {
     else {
         project_path = run_hub();
         if (project_path.empty()) {
-            ImGuiShutdown();
+            qcImGuiShutdown();
             CloseWindow();
             return 0;
         }
@@ -464,29 +488,39 @@ int main(int argc, char* argv[]) {
         SetShaderValue(lighting_shader, lighting_shader.locs[SHADER_LOC_VECTOR_VIEW], &cam_pos, SHADER_UNIFORM_VEC3);
         prepare_scene_light_uniforms(editor.scene, lighting_shader, scene_center);
 
-        BeginMode3D(camera.get_camera());
-            DrawGrid(20, 1.0f);
-            for (auto& e : editor.scene.entities) {
-                MeshComponent* mesh = e.get_mesh_component();
-                TransformComponent* transform = e.get_transform_component();
-                MaterialComponent* mat = e.get_material_component();
-                if (!mesh || !transform) continue;
-
-                if (!mesh->shader_assigned || (mesh->model.materialCount > 0 &&
-                    mesh->model.materials[0].shader.id != lighting_shader.id)) {
-                    set_model_shader(mesh->model, lighting_shader);
-                }
-                mesh->shader_assigned = true;
-
-                int use = (mat && mat->texture.id != 0) ? 1 : 0;
-                SetShaderValue(lighting_shader, use_tex_loc, &use, SHADER_UNIFORM_INT);
-                draw_entity_with_texture(e);
-            }
-        EndMode3D();
-
         BeginDrawing();
             ClearBackground(DARKGRAY);
-            BeginImGui();
+
+            if (scene_rt.id > 0 && IsRenderTextureValid(scene_rt)) {
+                BeginTextureMode(scene_rt);
+                ClearBackground(Color{ 36, 38, 42, 255 });
+                BeginMode3D(camera.get_camera());
+                    DrawGrid(20, 1.0f);
+                    for (auto& e : editor.scene.entities) {
+                        MeshComponent* mesh = e.get_mesh_component();
+                        TransformComponent* transform = e.get_transform_component();
+                        MaterialComponent* mat = e.get_material_component();
+                        if (!mesh || !transform) continue;
+
+                        const bool has_materials = mesh->model.materialCount > 0 && mesh->model.materials != nullptr;
+                        const bool shader_missing = has_materials &&
+                            (mesh->model.materials[0].shader == nullptr ||
+                             mesh->model.materials[0].shader->id != lighting_shader.id);
+
+                        if (!mesh->shader_assigned || shader_missing) {
+                            set_model_shader(mesh->model, lighting_shader);
+                        }
+                        mesh->shader_assigned = true;
+
+                        int use = (mat && mat->texture.id != 0) ? 1 : 0;
+                        SetShaderValue(lighting_shader, use_tex_loc, &use, SHADER_UNIFORM_INT);
+                        draw_entity_with_texture(e);
+                    }
+                EndMode3D();
+                EndTextureMode();
+            }
+
+            qcImGuiBegin();
 
             const bool gizmo_busy = ImGuizmo::IsOver() || ImGuizmo::IsUsing();
             if (!gizmo_busy && (IsCursorHidden() || g_is_scene_hovered)) {
@@ -499,7 +533,7 @@ int main(int argc, char* argv[]) {
             
             update_plugins(*g_plugin_manager, editor);
 
-            EndImGui();
+            qcImGuiEnd();
         EndDrawing();
     }
 
@@ -508,7 +542,7 @@ int main(int argc, char* argv[]) {
     unload_textures();
     UnloadShader(lighting_shader);
     g_plugin_manager->unload_all();
-    ShutdownImGui();
+    qcImGuiShutdown();
     CloseWindow();
     return 0;
 }

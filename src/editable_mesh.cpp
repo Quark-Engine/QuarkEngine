@@ -13,15 +13,8 @@ void rebuild_mesh_from_editable(Model& model, EditableMesh& editable) {
 
     Mesh& mesh = model.meshes[0];
 
-    if (mesh.vaoId > 0) {
-        rlUnloadVertexArray(mesh.vaoId);
-        if (mesh.vboId) {
-            for (int i = 0; i < MAX_MESH_VERTEX_BUFFERS; i++) {
-                if (mesh.vboId[i] > 0)
-                    rlUnloadVertexBuffer(mesh.vboId[i]);
-            }
-        }
-
+    if (mesh.vaoId > 0 || mesh.vertices || mesh.normals || mesh.texcoords || mesh.indices) {
+        UnloadMesh(mesh);
         free(mesh.vertices);
         free(mesh.normals);
         free(mesh.texcoords);
