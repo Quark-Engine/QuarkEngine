@@ -1,6 +1,4 @@
 #pragma once
-#include "raylib.h"
-#include "rlgl.h"
 #include "lighting.h"
 #include "component.h"
 #include <string>
@@ -29,7 +27,7 @@ struct ModelAsset {
     ObjectType type;
     bool is_procedural;
     std::function<Model(int)> generator;
-    Model loaded_model = {0};
+    Model loaded_model;
 };
 
 struct Entity {

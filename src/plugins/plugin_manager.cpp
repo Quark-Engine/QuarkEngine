@@ -1,10 +1,12 @@
 #define NOMINMAX
 
-#include "raylib.h"
+#include "QuarkCore/QuarkCore.hpp"
 #include "plugin_manager.h"
 #include <filesystem>
 #include <iostream>
 #include <imgui.h>
+
+using namespace qc;
 
 namespace fs = std::filesystem;
 
@@ -39,13 +41,13 @@ void PluginManager::load(const std::string& filepath) {
             DWORD err = GetLastError();
             char msg[256];
             FormatMessageA(FORMAT_MESSAGE_FROM_SYSTEM, nullptr, err, 0, msg, sizeof(msg), nullptr);
-            TraceLog(LOG_ERROR, "PLUGIN: Failed to load '%s': %s", filepath.c_str(), msg);
+            TraceLog(LogLevel::Error, "PLUGIN", TextFormat("Failed to load '%s': %s", filepath.c_str(), msg));
             return;
         }
     #else
         LibHandle handle = dlopen(filepath.c_str(), RTLD_NOW);
         if (!handle) {
-            TraceLog(LOG_ERROR, "PLUGIN: Failed to load '%s': %s", filepath.c_str(), dlerror());
+            TraceLog(LogLevel::Error, "PLUGIN", TextFormat("Failed to load '%s': %s", filepath.c_str(), dlerror()));
             return;
         }
     #endif
@@ -65,7 +67,7 @@ void PluginManager::load(const std::string& filepath) {
         }
 
         plugins.push_back({ handle, plugin, filepath });
-        TraceLog(LOG_INFO, "PLUGIN: Loaded '%s' v%s", plugin->name, plugin->version);
+        TraceLog(LogLevel::Info, "PLUGIN", TextFormat("Loaded '%s' v%s", plugin->name, plugin->version));
 }
 
 void PluginManager::load_all(const std::string& plugin_dir, PluginContext* ctx) {

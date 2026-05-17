@@ -7,14 +7,14 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 option(BUILD_ENGINE "Build Quark Engine" ON)
 option(BUILD_PLUGIN "Build Plugin" OFF)
 
-set(BUILD_EXAMPLES OFF CACHE BOOL "" FORCE)
+set(QC_BUILD_EXAMPLES OFF CACHE BOOL "" FORCE)
 set(BUILD_GAMES    OFF CACHE BOOL "" FORCE)
 set(BUILD_SHARED_LIBS    ON CACHE BOOL "" FORCE)
 set(GLFW_BUILD_SHARED_LIBS ON CACHE BOOL "" FORCE)
 
-add_subdirectory(quark-libs/raylib)
-
 include_directories(
+    ${CMAKE_SOURCE_DIR}/quark-libs/QuarkCore/include
+    ${CMAKE_SOURCE_DIR}/quark-libs/QuarkCore/imgui
     ${CMAKE_SOURCE_DIR}/quark-libs/imgui/include
     ${CMAKE_SOURCE_DIR}/src/headers
     ${CMAKE_SOURCE_DIR}/src/plugins
@@ -26,7 +26,6 @@ add_library(imgui SHARED
     quark-libs/imgui/include/imgui_draw.cpp
     quark-libs/imgui/include/imgui_widgets.cpp
     quark-libs/imgui/include/imgui_tables.cpp
-    quark-libs/imgui/include/rlImGui.cpp
     src/ImGuizmo.cpp
 )
 
@@ -48,14 +47,14 @@ else()
     )
 endif()
 
-target_link_libraries(imgui PRIVATE raylib)
-
 set_target_properties(imgui PROPERTIES
     PREFIX ""
     RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/bin
     LIBRARY_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/bin
     ARCHIVE_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/bin
 )
+
+add_subdirectory(quark-libs/QuarkCore)
 
 if(BUILD_ENGINE)
     set(CMAKE_RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/bin)
@@ -84,7 +83,6 @@ if(BUILD_ENGINE)
         src/models.cpp
         src/project.cpp
         src/plugins/plugin_manager.cpp
-        src/rlights.cpp
         src/scene.cpp
         src/tex.cpp
     )
@@ -103,7 +101,10 @@ if(BUILD_ENGINE)
         )
     endif()
 
-    target_link_libraries(${PROJECT_NAME} PRIVATE raylib imgui)
+    target_link_libraries(${PROJECT_NAME} PRIVATE
+        QuarkCore
+        imgui
+    )
 
     if(WIN32)
         target_link_libraries(${PROJECT_NAME} PRIVATE winmm gdi32 opengl32)
@@ -128,13 +129,14 @@ if(BUILD_ENGINE)
     if(WIN32)
         add_custom_command(TARGET ${PROJECT_NAME} POST_BUILD
             COMMAND ${CMAKE_COMMAND} -E copy_if_different
-                $<TARGET_FILE:raylib>
-                ${CMAKE_RUNTIME_OUTPUT_DIRECTORY}
-        )
-        add_custom_command(TARGET ${PROJECT_NAME} POST_BUILD
-            COMMAND ${CMAKE_COMMAND} -E copy_if_different
+                $<TARGET_FILE:QuarkCore>
                 $<TARGET_FILE:imgui>
-                ${CMAKE_RUNTIME_OUTPUT_DIRECTORY}
+                $<TARGET_FILE:SDL3::SDL3>
+                $<TARGET_FILE:libglew_shared>
+                $<TARGET_FILE:assimp::assimp>
+                $<TARGET_FILE:ZLIB::ZLIB>
+                "${VULKAN_RUNTIME_DLL}"
+                ${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/Debug
         )
     endif()
 endif()

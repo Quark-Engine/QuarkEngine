@@ -2,7 +2,6 @@
 
 #include "../headers/editor.h"
 #include "../headers/models.h"
-#include "raylib.h"
 #include <string>
 #include <filesystem>
 
