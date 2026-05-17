@@ -21,7 +21,7 @@ void FlyCamera::update(Scene& scene) {
 
     Entity* selected = scene.get_selected();
     MeshComponent* sel_mesh = selected ? selected->get_mesh_component() : nullptr;
-    if (sel_mesh && sel_mesh->editable_mode) return;
+    if (sel_mesh && sel_mesh->vertex_gizmo) return;
 
     if (IsMouseButtonPressed(MouseButton::Left) && !ImGuizmo::IsOver()) {
         DisableCursor();

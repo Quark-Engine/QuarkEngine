@@ -313,7 +313,7 @@ void save_material_to_file(Editor& editor) {
         MaterialComponent* mat = entity.get_material_component();
         if (!mat) continue;
 
-        if (std::filesystem::absolute(mat->texture_name) == std::filesystem::absolute(current_material_path))
+        if (!mat->texture_name.empty() && std::filesystem::absolute(mat->texture_name) == std::filesystem::absolute(current_material_path))
         {
             load_material_to_entity(&entity, current_material_path);
         }

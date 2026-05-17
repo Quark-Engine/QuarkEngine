@@ -135,5 +135,6 @@
   "polygon_create": "Створити Полігон",
   "polygon_none": "Немає Полігону",
   "vertices": "Вершини",
-  "triangles": "Трикутники"
+  "triangles": "Трикутники",
+  "drag_n_drop_material": "Drag the material to an entity"
 }

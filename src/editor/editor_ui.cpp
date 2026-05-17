@@ -240,7 +240,6 @@ bool set_mesh_vertex_local_position(Entity& entity, int mesh_index, int vertex_i
     const bool applied = apply_mesh_overrides(entity);
     if (applied) {
         mark_entity_bounds_dirty(&entity);
-        mark_entity_uv_dirty(&entity);
     }
     return applied;
 }
@@ -409,7 +408,7 @@ void draw_gizmo(Editor& editor, FlyCamera camera) {
     TransformComponent* transform = entity->get_transform_component();
     MeshComponent* mesh = entity->get_mesh_component();
     if (!transform || !mesh) return;
-    if (mesh->editable_mode) return;
+    if (mesh->vertex_gizmo) return;
     if (g_scene_window_size.x <= 0 || g_scene_window_size.y <= 0) return;
 
     ImGuizmo::SetDrawlist(ImGui::GetWindowDrawList());
@@ -868,7 +867,7 @@ void draw_polygon_editor(Editor& editor, Camera3D camera) {
     if (!entity) return;
 
     MeshComponent* mesh = entity->get_mesh_component();
-    if (!mesh || !mesh->editable_mode) return;
+    if (!mesh || !mesh->vertex_gizmo) return;
 
     EditableMesh& e_mesh = mesh->editable_mesh;
     ImDrawList* draw = ImGui::GetForegroundDrawList();
@@ -939,7 +938,6 @@ void draw_polygon_editor(Editor& editor, Camera3D camera) {
                 e_mesh.vertices[sel].position = {nt[0], nt[1], nt[2]};
                 rebuild_mesh_from_editable(mesh->model, e_mesh);
                 mark_entity_bounds_dirty(entity);
-                mark_entity_uv_dirty(entity);
             }
 
             was_using_poly_gizmo = ImGuizmo::IsUsing();

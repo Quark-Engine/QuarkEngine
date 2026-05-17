@@ -316,6 +316,10 @@ bool project_load(const std::string& folder_path, Scene& scene, Shader shader) {
             continue;
         }
 
+        if (mesh->is_editable_mesh) {
+            rebuild_mesh_from_editable(mesh->model, mesh->editable_mesh);
+        }
+
         for (int i = 0; i < mesh->model.materialCount; i++) {
             mesh->model.materials[i].maps[MATERIAL_MAP_DIFFUSE].color = WHITE;
             if (mat->texture.id != 0) {
