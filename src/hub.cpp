@@ -70,6 +70,7 @@ struct HubPluginInfo {
     std::string path;
     std::string description;
     bool enabled;
+    Texture2D icon;
 };
 
 static std::vector<HubPluginInfo> hub_plugin_list;
@@ -111,6 +112,9 @@ static std::string hub_plugin_read_meta_description(const fs::path& plugin_path)
 }
 
 static void hub_refresh_plugins() {
+    for (auto& p : hub_plugin_list)
+        if (p.icon.id != 0) UnloadTexture(p.icon);
+
     hub_plugin_list.clear();
     hub_plugin_selected = -1;
 
@@ -118,28 +122,88 @@ static void hub_refresh_plugins() {
     if (!fs::exists(plugins_dir)) return;
 
     for (auto& entry : fs::directory_iterator(plugins_dir)) {
-        if (!entry.is_regular_file()) continue;
-        std::string ext = entry.path().extension().string();
-
-        #ifdef _WIN32
-                if (ext != ".dll") continue;
-        #else
-                if (ext != ".so") continue;
-        #endif
-
         HubPluginInfo info;
-        info.path    = entry.path().string();
-        info.name    = entry.path().stem().string();
+
+        if (entry.is_directory()) {
+            fs::path bin;
+            for (auto& f : fs::directory_iterator(entry.path())) {
+                std::string ext = f.path().extension().string();
+#ifdef _WIN32
+                if (ext == ".dll") { bin = f.path(); break; }
+#elif __APPLE__
+                if (ext == ".dylib") { bin = f.path(); break; }
+#else
+                if (ext == ".so") { bin = f.path(); break; }
+#endif
+            }
+            if (bin.empty()) continue;
+
+            info.path = bin.string();
+            info.name = entry.path().filename().string();
+
+            fs::path icon_path = entry.path() / "icon.png";
+            fs::path meta_path = entry.path() / "meta.txt";
+
+            info.icon = fs::exists(icon_path)
+                ? LoadTexture(icon_path.string().c_str())
+                : Texture2D{0};
+
+            if (fs::exists(meta_path)) {
+                std::ifstream f(meta_path);
+                std::string line;
+                while (std::getline(f, line)) {
+                    if (line.rfind("description=", 0) == 0) {
+                        info.description = line.substr(12);
+                        break;
+                    }
+                }
+            }
+
+        } 
+        
+        else if (entry.is_regular_file()) {
+            std::string ext = entry.path().extension().string();
+#ifdef _WIN32
+            if (ext != ".dll") continue;
+#elif __APPLE__
+            if (ext != ".dylib") continue;
+#else
+            if (ext != ".so") continue;
+#endif
+            info.path = entry.path().string();
+            info.name = entry.path().stem().string();
+
+            fs::path icon_path = entry.path().parent_path() / (info.name + ".png");
+            fs::path meta_path = entry.path().parent_path() / (info.name + ".meta");
+
+            info.icon = fs::exists(icon_path)
+                ? LoadTexture(icon_path.string().c_str())
+                : Texture2D{0};
+
+            if (fs::exists(meta_path)) {
+                std::ifstream f(meta_path);
+                std::string line;
+                while (std::getline(f, line)) {
+                    if (line.rfind("description=", 0) == 0) {
+                        info.description = line.substr(12);
+                        break;
+                    }
+                }
+            }
+
+        } 
+        
+        else {
+            continue;
+        }
+
         info.enabled = hub_plugin_is_enabled(info.path);
-        info.description = hub_plugin_read_meta_description(entry.path());
-
-        if (info.description.empty())
-            info.description = "No description provided.";
-
+        if (info.description.empty()) info.description = "No description provided.";
         hub_plugin_list.push_back(info);
     }
 
-    std::sort(hub_plugin_list.begin(), hub_plugin_list.end(), [](const HubPluginInfo& a, const HubPluginInfo& b){ return a.name < b.name; });
+    std::sort(hub_plugin_list.begin(), hub_plugin_list.end(),
+        [](const HubPluginInfo& a, const HubPluginInfo& b){ return a.name < b.name; });
 }
 
 static ImVec4 hub_plugin_badge_color(const std::string& name) {
@@ -211,15 +275,18 @@ static void hub_draw_plugin_manager() {
                 ImVec4 badge = hub_plugin_badge_color(pi.name);
                 ImVec2 badge_min = ImVec2(card_pos.x + 8, card_pos.y + 10);
                 ImVec2 badge_max = ImVec2(badge_min.x + 26, badge_min.y + 26);
-                ImGui::GetWindowDrawList()->AddRectFilled(badge_min, badge_max, ImGui::ColorConvertFloat4ToU32(badge), 4.f);
 
                 char letter[2] = { (char)toupper((unsigned char)pi.name[0]), '\0' };
                 ImVec2 letter_sz = ImGui::CalcTextSize(letter);
 
-                ImGui::GetWindowDrawList()->AddText(
-                    ImVec2(badge_min.x + (26 - letter_sz.x) * 0.5f, badge_min.y + (26 - letter_sz.y) * 0.5f), 
-                    IM_COL32(255,255,255,230), letter
-                );
+                if (pi.icon.id != 0) {
+                    ImGui::GetWindowDrawList()->AddImage((ImTextureID)(intptr_t)pi.icon.id, badge_min, badge_max);
+                } 
+                
+                else {
+                    ImGui::GetWindowDrawList()->AddRectFilled(badge_min, badge_max, ImGui::ColorConvertFloat4ToU32(badge), 4.f);
+                    ImGui::GetWindowDrawList()->AddText(ImVec2(badge_min.x + (26 - letter_sz.x) * 0.5f, badge_min.y + (26 - letter_sz.y) * 0.5f), IM_COL32(255,255,255,230), letter);
+                }
 
                 if (!pi.enabled) {
                     ImGui::GetWindowDrawList()->AddCircleFilled(ImVec2(badge_max.x - 2, badge_min.y + 2), 5.f, IM_COL32(200, 60, 60, 255));
@@ -251,11 +318,23 @@ static void hub_draw_plugin_manager() {
 
                 icon_pos.x += 8; icon_pos.y += 8;
                 ImVec2 icon_max = ImVec2(icon_pos.x + 64, icon_pos.y + 64);
-                dl->AddRectFilled(icon_pos, icon_max, ImGui::ColorConvertFloat4ToU32(badge), 8.f);
 
                 char letter[2] = { (char)toupper((unsigned char)pi.name[0]), '\0' };
                 ImVec2 lsz = ImGui::CalcTextSize(letter);
-                dl->AddText(nullptr, 28.f, ImVec2(icon_pos.x + (64 - 16) * 0.5f, icon_pos.y + (64 - 28) * 0.5f), IM_COL32(255,255,255,230), letter);
+
+                if (pi.icon.id != 0) {
+                    dl->AddImage((ImTextureID)(intptr_t)pi.icon.id, icon_pos, icon_max);
+                } 
+                
+                else {
+                    dl->AddRectFilled(icon_pos, icon_max, ImGui::ColorConvertFloat4ToU32(badge), 8.f);
+                    dl->AddText(
+                        nullptr, 28.f,
+                        ImVec2(icon_pos.x + (64 - 16) * 0.5f,
+                        icon_pos.y + (64 - 28) * 0.5f),
+                        IM_COL32(255,255,255,230), letter
+                    );
+                }
 
                 ImGui::SetCursorScreenPos(ImVec2(icon_max.x + 14, icon_pos.y + 4));
                 ImGui::Text("%s", pi.name.c_str());
@@ -318,8 +397,16 @@ static void hub_draw_plugin_manager() {
                     ImGui::PushStyleColor(ImGuiCol_ButtonActive,  ImVec4(0.40f,0.10f,0.10f,1.f));
 
                     if (ImGui::Button("Delete", ImVec2(90, 26))) {
-                        fs::remove(pi.path);
-                        fs::path sentinel = hub_plugin_disabled_sentinel(pi.path);
+                        if (pi.icon.id != 0) UnloadTexture(pi.icon);
+
+                        fs::path bin(pi.path);
+                        fs::path parent = bin.parent_path();
+                        fs::path plugins_root = fs::canonical("plugins");
+
+                        if (fs::canonical(parent) != plugins_root) fs::remove_all(parent);
+                        else fs::remove(bin);
+
+                        fs::path sentinel = bin.parent_path() / (bin.stem().string() + ".disabled");
                         if (fs::exists(sentinel)) fs::remove(sentinel);
 
                         hub_refresh_plugins();

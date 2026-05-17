@@ -75,23 +75,42 @@ void PluginManager::load_all(const std::string& plugin_dir, PluginContext* ctx) 
     }
 
     for (const auto& entry : fs::directory_iterator(plugin_dir)) {
-        const std::string ext = entry.path().extension().string();
+        fs::path bin;
+
+        if (entry.is_directory()) {
+            for (auto& f : fs::directory_iterator(entry.path())) {
+                std::string ext = f.path().extension().string();
 #ifdef _WIN32
-        if (ext != ".dll") continue;
+                if (ext == ".dll") { bin = f.path(); break; }
 #elif __APPLE__
-        if (ext != ".dylib") continue;
+                if (ext == ".dylib") { bin = f.path(); break; }
 #else
-        if (ext != ".so") continue;
+                if (ext == ".so") { bin = f.path(); break; }
 #endif
+            }
+        } 
+        
+        else if (entry.is_regular_file()) {
+            std::string ext = entry.path().extension().string();
+#ifdef _WIN32
+            if (ext == ".dll") bin = entry.path();
+#elif __APPLE__
+            if (ext == ".dylib") bin = entry.path();
+#else
+            if (ext == ".so") bin = entry.path();
+#endif
+        }
 
-        fs::path sentinel = entry.path().parent_path() / (entry.path().stem().string() + ".disabled");
+        if (bin.empty()) continue;
 
+        fs::path sentinel = bin.parent_path() / (bin.stem().string() + ".disabled");
         if (fs::exists(sentinel)) {
-            TraceLog(LOG_INFO, "PLUGIN: Skipping disabled plugin '%s'", entry.path().filename().string().c_str());
+            TraceLog(LOG_INFO, "PLUGIN: Skipping disabled plugin '%s'",
+                bin.filename().string().c_str());
             continue;
         }
 
-        load(entry.path().string());
+        load(bin.string());
     }
 
     for (auto& lp : plugins) {
