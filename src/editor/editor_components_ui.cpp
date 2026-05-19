@@ -3,6 +3,7 @@
 #include "editor_ui.h"
 #include "editor_viewers.h"
 #include "imgui.h"
+#include "headers/text_mesh.h"
 #include "headers/models.h"
 #include "headers/entity.h"
 #include "editor/editor_ui.h"
@@ -47,6 +48,7 @@ void ComponentUIHelper::draw_entity_inspector(Editor& editor, Entity& entity, Sh
                 else if (auto light = std::dynamic_pointer_cast<LightComponent>(comp)) draw_light_component(editor, entity, light.get(), shader);
                 else if (auto material = std::dynamic_pointer_cast<MaterialComponent>(comp)) draw_material_component(editor, entity, material.get());
                 else if (auto collision = std::dynamic_pointer_cast<CollisionComponent>(comp)) draw_collision_component(editor, entity, collision.get());
+                else if (auto text = std::dynamic_pointer_cast<Text3DComponent>(comp)) draw_3d_text_component(editor, entity, text.get());
 
                 ImGui::Spacing();
 
@@ -134,6 +136,25 @@ void ComponentUIHelper::draw_entity_inspector(Editor& editor, Entity& entity, Sh
                         light->light.position = transform->position;
                     }
                     components_manager->add_component(light);
+                } else { editor.undo(); }
+            }
+
+            if (ImGui::MenuItem(lang.word("text"))) {
+                editor.save_state();
+                bool already_exists = false;
+
+                for (size_t j = 0; j < components_manager->get_component_count(); ++j) {
+                    auto existing = components_manager->get_component(j);
+                    if (existing && existing->get_type() == COMPONENT_CUSTOM) {
+                        already_exists = true;
+                        break;
+                    }
+
+                }
+
+                if (!already_exists) {
+                    auto text = std::make_shared<Text3DComponent>();
+                    components_manager->add_component(text);
                 } else { editor.undo(); }
             }
             ImGui::EndPopup();
@@ -633,4 +654,65 @@ void ComponentUIHelper::draw_collision_component(Editor& editor, Entity& entity,
     if (changed) {
         mark_entity_bounds_dirty(&entity);
     }
+}
+
+void ComponentUIHelper::draw_3d_text_component(Editor& editor, Entity& entity, Text3DComponent* text) {
+    if (!text) return;
+
+    char buf[256] = {};
+    strncpy_s(buf, sizeof(buf), text->text.c_str(), _TRUNCATE);
+
+    if (ImGui::InputText("Text", buf, sizeof(buf), ImGuiInputTextFlags_EnterReturnsTrue)) {
+        editor.save_state();
+        text->text = buf;
+        update_model(&entity);
+        mark_entity_bounds_dirty(&entity);
+    }
+
+    auto drag = [&](const char* label, float& val, float spd, float mn, float mx) {
+        if (ImGui::DragFloat(label, &val, spd, mn, mx)) {
+            editor.save_state();
+            update_model(&entity);
+            mark_entity_bounds_dirty(&entity);
+        }
+    };
+
+    drag("Size",           text->size,           0.01f, 0.05f, 10.f);
+    drag("Thickness",      text->thickness,      0.01f, 0.01f,  5.f);
+    drag("Letter Spacing", text->letter_spacing, 0.005f, 0.f, 100);
+
+    ImGui::Separator();
+
+    static std::vector<std::pair<std::string,std::string>> s_fonts;
+    static std::vector<const char*> s_font_names;
+    static int s_selected = -1;
+    static bool s_scanned = false;
+
+    if (!s_scanned) {
+        s_fonts = get_system_fonts();
+        s_font_names.clear();
+        for (auto& f : s_fonts) s_font_names.push_back(f.first.c_str());
+
+        for (int i = 0; i < (int)s_fonts.size(); i++) {
+            if (s_fonts[i].second == text->font_path) { s_selected = i; break; }
+        }
+        s_scanned = true;
+    }
+
+    ImGui::Text("Font");
+    if (!s_font_names.empty()) {
+        if (ImGui::Combo("##font", &s_selected, s_font_names.data(), (int)s_font_names.size())) {
+            editor.save_state();
+            text->font_path = s_fonts[s_selected].second;
+            update_model(&entity);
+            mark_entity_bounds_dirty(&entity);
+        }
+    } 
+    
+    else {
+        ImGui::TextDisabled("No fonts found");
+    }
+
+    if (!text->font_path.empty() && ImGui::IsItemHovered())
+        ImGui::SetTooltip("%s", text->font_path.c_str());
 }

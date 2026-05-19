@@ -1,5 +1,6 @@
 #include "headers/models.h"
 #include "headers/scene.h"
+#include "headers/text_mesh.h"
 #include "editor/editor_utils.h"
 #include <algorithm>
 #include <cctype>
@@ -805,6 +806,17 @@ void load_models() {
     torus_asset.is_procedural = true;
     torus_asset.generator = [](int seg) { return LoadModelFromMesh(GenMeshTorus(1.0f, 1.0f, seg, seg)); };
     assets.push_back(torus_asset);
+
+    ModelAsset text_asset;
+    text_asset.name = "3D Text";
+    text_asset.type = CUBE;
+    text_asset.is_procedural = true;
+    text_asset.generator = [](int) {
+        std::string fp = get_default_font_path();
+        return generate_text_mesh("Text", 0.3f, 0.15f, 0.2f, fp);
+    };
+    
+    assets.push_back(text_asset);
 }
 
 void update_model(Entity* e)
@@ -816,6 +828,14 @@ void update_model(Entity* e)
     if (!mesh) return;
 
     if (mesh->model.meshCount > 0 && entity_owns_model(*e)) UnloadModel(mesh->model);
+
+    if (auto* tc = e->get_components()->get_component_of_type<Text3DComponent>().get()) {
+        std::string fp = tc->font_path.empty() ? get_default_font_path() : tc->font_path;
+        mesh->model = generate_text_mesh(tc->text, tc->size, tc->thickness, tc->letter_spacing, fp);
+        mesh->owns_model_instance = true;
+        return;
+    }
+
     if (mesh->is_editable_mesh)
     {
         mesh->model = {};

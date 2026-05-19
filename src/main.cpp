@@ -6,6 +6,7 @@
 #include "plugins/plugin_manager.h"
 #include "headers/lighting.h"
 #include "headers/language_manager.h"
+#include "headers/text_mesh.h"
 #include "editor/editor.h"
 #include "editor/editor_entity.h"
 #include "headers/camera.h"
@@ -409,6 +410,7 @@ int main(int argc, char* argv[]) {
 
     InitWindow(1280, 720, "Quark Engine");
     SetTargetFPS(GetMonitorRefreshRate(GetCurrentMonitor()));
+    init_freetype();
     rlImGuiSetup(true);
     reload_editor_fonts(LanguageManager::get().current);
 
@@ -518,6 +520,8 @@ int main(int argc, char* argv[]) {
         Vector3 active_shadow_dir = Vector3Normalize(Vector3Subtract(active_shadow_pos, active_shadow_target));
         bool has_shadow_light = false;
         int active_shadow_type = LIGHT_DIRECTIONAL;
+
+        
 
         for (auto& e : editor.scene.entities) {
             LightComponent* light = e.get_light_component();
@@ -640,6 +644,7 @@ int main(int argc, char* argv[]) {
     unload_shadowmap_render_texture(shadow_map);
     g_plugin_manager->unload_all();
     rlImGuiShutdown();
+    shutdown_freetype();
     CloseWindow();
     return 0;
 }

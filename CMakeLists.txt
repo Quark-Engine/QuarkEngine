@@ -13,6 +13,7 @@ set(BUILD_SHARED_LIBS    ON CACHE BOOL "" FORCE)
 set(GLFW_BUILD_SHARED_LIBS ON CACHE BOOL "" FORCE)
 
 add_subdirectory(quark-libs/raylib)
+add_subdirectory(quark-libs/freetype)
 
 include_directories(
     ${CMAKE_SOURCE_DIR}/quark-libs/imgui/include
@@ -34,6 +35,7 @@ target_include_directories(imgui PUBLIC
     ${CMAKE_SOURCE_DIR}/quark-libs/imgui/include
     ${CMAKE_SOURCE_DIR}/src
     ${CMAKE_SOURCE_DIR}/src/headers
+    ${CMAKE_SOURCE_DIR}/quark-libs/freetype/include
 )
 
 if(WIN32)
@@ -48,7 +50,7 @@ else()
     )
 endif()
 
-target_link_libraries(imgui PRIVATE raylib)
+target_link_libraries(imgui PRIVATE raylib freetype)
 
 set_target_properties(imgui PROPERTIES
     PREFIX ""
@@ -87,9 +89,14 @@ if(BUILD_ENGINE)
         src/rlights.cpp
         src/scene.cpp
         src/tex.cpp
+        src/text_mesh.cpp
     )
 
     add_executable(${PROJECT_NAME} ${SOURCE_FILES} ${EDITOR_FILES})
+
+    target_include_directories(${PROJECT_NAME} PRIVATE
+        ${CMAKE_SOURCE_DIR}/quark-libs/freetype/include
+    )
 
     if(WIN32)
         target_compile_definitions(${PROJECT_NAME}
@@ -103,7 +110,7 @@ if(BUILD_ENGINE)
         )
     endif()
 
-    target_link_libraries(${PROJECT_NAME} PRIVATE raylib imgui)
+    target_link_libraries(${PROJECT_NAME} PRIVATE raylib imgui freetype)
 
     if(WIN32)
         target_link_libraries(${PROJECT_NAME} PRIVATE winmm gdi32 opengl32)
@@ -127,6 +134,10 @@ if(BUILD_ENGINE)
 
     if(WIN32)
         add_custom_command(TARGET ${PROJECT_NAME} POST_BUILD
+        COMMAND ${CMAKE_COMMAND} -E make_directory ${CMAKE_RUNTIME_OUTPUT_DIRECTORY}
+    )
+
+        add_custom_command(TARGET ${PROJECT_NAME} POST_BUILD
             COMMAND ${CMAKE_COMMAND} -E copy_if_different
                 $<TARGET_FILE:raylib>
                 ${CMAKE_RUNTIME_OUTPUT_DIRECTORY}
@@ -135,6 +146,19 @@ if(BUILD_ENGINE)
             COMMAND ${CMAKE_COMMAND} -E copy_if_different
                 $<TARGET_FILE:imgui>
                 ${CMAKE_RUNTIME_OUTPUT_DIRECTORY}
+        )
+    endif()
+
+    if(WIN32)
+        add_custom_command(TARGET ${PROJECT_NAME} POST_BUILD
+            COMMAND ${CMAKE_COMMAND} -E make_directory
+                ${CMAKE_RUNTIME_OUTPUT_DIRECTORY}
+        )
+
+        add_custom_command(TARGET ${PROJECT_NAME} POST_BUILD
+            COMMAND ${CMAKE_COMMAND} -E copy_if_different
+                $<TARGET_FILE:freetype>
+                $<TARGET_FILE_DIR:${PROJECT_NAME}>
         )
     endif()
 endif()
