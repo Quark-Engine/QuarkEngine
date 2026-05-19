@@ -10,7 +10,6 @@ option(BUILD_PLUGIN "Build Plugin" OFF)
 set(QC_BUILD_EXAMPLES OFF CACHE BOOL "" FORCE)
 set(BUILD_GAMES    OFF CACHE BOOL "" FORCE)
 set(BUILD_SHARED_LIBS    ON CACHE BOOL "" FORCE)
-set(GLFW_BUILD_SHARED_LIBS ON CACHE BOOL "" FORCE)
 
 include_directories(
     ${CMAKE_SOURCE_DIR}/quark-libs/QuarkCore/include
@@ -21,11 +20,14 @@ include_directories(
     ${CMAKE_SOURCE_DIR}/src
 )
 
+add_subdirectory(quark-libs/QuarkCore)
+
 add_library(imgui SHARED
     quark-libs/imgui/include/imgui.cpp
     quark-libs/imgui/include/imgui_draw.cpp
     quark-libs/imgui/include/imgui_widgets.cpp
     quark-libs/imgui/include/imgui_tables.cpp
+    quark-libs/QuarkCore/imgui/qcImGui.cpp
     src/ImGuizmo.cpp
 )
 
@@ -33,6 +35,12 @@ target_include_directories(imgui PUBLIC
     ${CMAKE_SOURCE_DIR}/quark-libs/imgui/include
     ${CMAKE_SOURCE_DIR}/src
     ${CMAKE_SOURCE_DIR}/src/headers
+)
+
+target_link_libraries(imgui PUBLIC
+    SDL3::SDL3
+    libglew_shared
+    QuarkCore
 )
 
 if(WIN32)
@@ -53,8 +61,6 @@ set_target_properties(imgui PROPERTIES
     LIBRARY_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/bin
     ARCHIVE_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/bin
 )
-
-add_subdirectory(quark-libs/QuarkCore)
 
 if(BUILD_ENGINE)
     set(CMAKE_RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/bin)
