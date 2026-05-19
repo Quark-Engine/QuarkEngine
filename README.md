@@ -1,6 +1,8 @@
-# Quark Engine OpenGL rewrite branch
+# Quark Engine QuarkCore rewrite branch
 
-Quark Engine is a lightweight, world-class 3D game engine and editor built using **C++**, **Raylib**, and **Dear ImGui**. It is designed for rapid 3D scene prototyping, featuring a modern editor interface, a robust lighting system, and flexible asset management.
+This is a branch for rewriting Quark Engine to QuarkCore, which is a raylib-style framework.
+
+# Default README:
 
 ## Features
 
@@ -26,8 +28,8 @@ Quark Engine is a lightweight, world-class 3D game engine and editor built using
 ## Tech Stack
 
 *   **Core:** C++17
-*   **Rendering:** Raylib
-*   **UI:** Dear ImGui via rlImGui
+*   **Rendering:** QuarkCore
+*   **UI:** Dear ImGui via qcImGui
 *   **Gizmos:** ImGuizmo
 *   **Serialization:** nlohmann/json
 
@@ -35,7 +37,6 @@ Quark Engine is a lightweight, world-class 3D game engine and editor built using
 
 ### Prerequisites
 *   A C++ compiler supporting C++17.
-*   Raylib development libraries installed.
 
 ### Directory Structure
 Ensure your project folder contains an `assets` directory with the following resources:
@@ -43,23 +44,6 @@ Ensure your project folder contains an `assets` directory with the following res
 *   `lighting.vs` / `lighting.fs` (Shaders)
 *   `file.png`, `folder.png`, `full_folder.png` (Editor icons)
 
-## Configuration
-
-The engine stores all configuration in a single `config.json` file in the project root:
-
-```json
-{
-    "language": "en_us",
-    "projects": [
-        {
-            "name": "ProjectName",
-            "path": "path/to/project"
-        }
-    ]
-}
-```
-
-*   **language:** Current UI language (`en_us`, `ru_ru`)
 *   **projects:** Array of registered projects for the Quark Hub
 
 This file is automatically created on first run and manages both application settings and project registry.
@@ -107,4 +91,4 @@ cmake --build build
 
 ## License
 
-This project is licensed under the MIT License - see the source headers for details.
+This project is licensed under the MIT License - see the source headers for details. 
