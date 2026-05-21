@@ -10,6 +10,7 @@
 #include "editor/editor.h"
 #include <language_manager.h>
 #include <filesystem>
+#include <cstring>
 
 #define lang LanguageManager::get()
 
@@ -660,7 +661,8 @@ void ComponentUIHelper::draw_3d_text_component(Editor& editor, Entity& entity, T
     if (!text) return;
 
     char buf[256] = {};
-    strncpy_s(buf, sizeof(buf), text->text.c_str(), _TRUNCATE);
+    std::strncpy(buf, text->text.c_str(), sizeof(buf) - 1);
+    buf[sizeof(buf) - 1] = '\0';
 
     if (ImGui::InputText("Text", buf, sizeof(buf), ImGuiInputTextFlags_EnterReturnsTrue)) {
         editor.save_state();
