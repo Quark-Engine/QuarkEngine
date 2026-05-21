@@ -1,0 +1,3 @@
+[submodule "quark-libs/freetype"]
+	path = quark-libs/freetype
+	url = https://github.com/freetype/freetype.git
