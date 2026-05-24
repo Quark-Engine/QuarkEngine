@@ -39,7 +39,6 @@ target_include_directories(imgui PUBLIC
 
 target_link_libraries(imgui PUBLIC
     SDL3::SDL3
-    libglew_shared
     QuarkCore
 )
 
@@ -138,7 +137,6 @@ if(BUILD_ENGINE)
                 $<TARGET_FILE:QuarkCore>
                 $<TARGET_FILE:imgui>
                 $<TARGET_FILE:SDL3::SDL3>
-                $<TARGET_FILE:libglew_shared>
                 $<TARGET_FILE:assimp::assimp>
                 $<TARGET_FILE:ZLIB::ZLIB>
                 "${VULKAN_RUNTIME_DLL}"
