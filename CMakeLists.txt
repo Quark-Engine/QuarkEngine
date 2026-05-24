@@ -139,6 +139,7 @@ if(BUILD_ENGINE)
                 $<TARGET_FILE:SDL3::SDL3>
                 $<TARGET_FILE:assimp::assimp>
                 $<TARGET_FILE:ZLIB::ZLIB>
+                $<TARGET_FILE:freetype>
                 "${VULKAN_RUNTIME_DLL}"
                 ${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/Debug
         )
