@@ -54,6 +54,7 @@ Lighting create_lighting(Vec3 pos, Color color) {
     l.target    = Vec3(0,0,0);
     l.color     = color;
     l.enabled   = true;
+    l.light.type = LIGHT_POINT;
     l.intensity = 1.0f;
     l.range     = 5.0f;
     l.spot_angle = 30.0f;

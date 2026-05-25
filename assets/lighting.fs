@@ -12,8 +12,8 @@ uniform int useTexture;
 out vec4 finalColor;
 
 #define MAX_LIGHTS 4
-#define LIGHT_POINT       0
-#define LIGHT_DIRECTIONAL 1
+#define LIGHT_DIRECTIONAL 0
+#define LIGHT_POINT       1
 #define LIGHT_SPOT        2
 #define LIGHT_AREA        3
 
@@ -50,21 +50,27 @@ void main() {
 
         vec3 lightDir;
         float attenuation = 1.0;
+        float directLight = 0.0;
+        float lightEnergy = min(lights[i].intensity, 4.0);
 
         if (lights[i].type == LIGHT_DIRECTIONAL) {
             lightDir = normalize(lights[i].position - lights[i].target);
             attenuation = 1.0;
         }
         else if (lights[i].type == LIGHT_POINT) {
-            lightDir = normalize(lights[i].position - fragPosition);
-            float dist = length(lights[i].position - fragPosition);
-            attenuation = clamp(1.0 - (dist / lights[i].range), 0.0, 1.0);
+            vec3 toLight = lights[i].position - fragPosition;
+            float dist = max(length(toLight), 0.35);
+            lightDir = toLight / dist;
+            float range = max(lights[i].range, 0.001);
+            attenuation = clamp(1.0 - (dist / range), 0.0, 1.0);
             attenuation *= attenuation;
         }
         else if (lights[i].type == LIGHT_SPOT) {
-            lightDir = normalize(lights[i].position - fragPosition);
-            float dist = length(lights[i].position - fragPosition);
-            attenuation = clamp(1.0 - (dist / lights[i].range), 0.0, 1.0);
+            vec3 toLight = lights[i].position - fragPosition;
+            float dist = max(length(toLight), 0.35);
+            lightDir = toLight / dist;
+            float range = max(lights[i].range, 0.001);
+            attenuation = clamp(1.0 - (dist / range), 0.0, 1.0);
             attenuation *= attenuation;
 
             vec3 spotDir = normalize(lights[i].position - lights[i].target);
@@ -74,24 +80,28 @@ void main() {
             else attenuation *= smoothstep(cutoff, cutoff + 0.05, theta);
         }
         else if (lights[i].type == LIGHT_AREA) {
-            lightDir = normalize(lights[i].position - fragPosition);
-            float dist = length(lights[i].position - fragPosition);
-            attenuation = clamp(1.0 - (dist / lights[i].range), 0.0, 1.0);
+            vec3 toLight = lights[i].position - fragPosition;
+            float dist = max(length(toLight), 0.35);
+            lightDir = toLight / dist;
+            float range = max(lights[i].range, 0.001);
+            attenuation = clamp(1.0 - (dist / range), 0.0, 1.0);
             attenuation = sqrt(attenuation);
         }
 
-        float NdotL = max(dot(normal, lightDir), 0.0);
-        lightAccum += lights[i].color.rgb * NdotL * attenuation * lights[i].intensity;
+        directLight = max(dot(normal, lightDir), 0.0);
+        float wrappedLight = clamp((dot(normal, lightDir) + 0.28) / 1.28, 0.0, 1.0);
+        float diffuse = max(directLight, wrappedLight * 0.25);
+        vec3 bounce = lights[i].color.rgb * attenuation * lightEnergy * 0.08;
+        lightAccum += lights[i].color.rgb * diffuse * attenuation * lightEnergy + bounce;
 
-        if (NdotL > 0.0) {
-            float spec = pow(max(dot(viewD, reflect(-lightDir, normal)), 0.0), 16.0);
-            specular += spec * attenuation * lights[i].intensity * lights[i].color.rgb;
+        if (directLight > 0.0) {
+            float spec = pow(max(dot(viewD, reflect(-lightDir, normal)), 0.0), 24.0);
+            specular += spec * attenuation * lightEnergy * 0.2 * lights[i].color.rgb;
         }
     }
 
     vec3 ambientLight = ambient.rgb;
     vec3 color = texelColor.rgb * tint.rgb * (ambientLight + lightAccum) + specular;
-    color += texelColor.rgb * tint.rgb * (ambientLight / 10.0);
     color += emissionColor * emissionPower;
 
     finalColor = vec4(color, texelColor.a * tint.a);

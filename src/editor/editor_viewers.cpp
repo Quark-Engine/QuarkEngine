@@ -25,6 +25,7 @@ static Color material_albedo = WHITE;
 static float material_albedo_f[4] = {1,1,1,1};
 static float material_brightness = 1.0f;
 static Texture2D material_texture = {0};
+static bool material_texture_owned = false;
 static std::string material_texture_path = "";
 static Model viewer_mat_sphere;
 static RenderTexture2D viewer_mat_rt = { 0 };
@@ -46,6 +47,19 @@ static Vec3 viewer_target = { 0, 0, 0 };
 static Vec3 viewer_model_center = { 0, 0, 0 };
 static Vec3 viewer_model_rotation = { 0, 0, 0 };
 static float viewer_phi = 20.0f, viewer_theta = 45.0f, viewer_radius = 5.0f;
+
+static void release_material_preview_model() {
+    if (viewer_mat_sphere.meshCount <= 0) {
+        return;
+    }
+
+    if (viewer_mat_sphere.materialCount > 0 && viewer_mat_sphere.materials && viewer_mat_sphere.materials[0].maps) {
+        viewer_mat_sphere.materials[0].maps[MATERIAL_MAP_DIFFUSE].texture = {0};
+    }
+
+    UnloadModel(viewer_mat_sphere);
+    viewer_mat_sphere = {};
+}
 
 bool open_model_viewer_for_asset(const ModelAsset& asset) {
     if (viewer_model.meshCount > 0) {
@@ -78,10 +92,13 @@ bool open_material_viewer_for_path(const std::filesystem::path& material_path, s
     current_material_path = material_path;
     material_texture_path = "";
 
-    if (viewer_mat_sphere.meshCount > 0) {
-        UnloadModel(viewer_mat_sphere);
-        viewer_mat_sphere = {};
+    if (material_texture_owned && material_texture.id != 0) {
+        UnloadTexture(material_texture);
     }
+    material_texture = {0};
+    material_texture_owned = false;
+
+    release_material_preview_model();
 
     viewer_mat_sphere = LoadModelFromMesh(GenMeshSphere(1.0f, 64, 64));
     Material& material = viewer_mat_sphere.materials[0];
@@ -91,7 +108,6 @@ bool open_material_viewer_for_path(const std::filesystem::path& material_path, s
     material_albedo_f[2] = 1.0f;
     material_albedo_f[3] = 1.0f;
     material_brightness = 1.0f;
-    material_texture = {0};
 
     std::string line;
     while (std::getline(material_file, line)) {
@@ -132,6 +148,7 @@ bool open_material_viewer_for_path(const std::filesystem::path& material_path, s
             if (texture_cache.count(cache_key)) {
                 material.maps[MATERIAL_MAP_DIFFUSE].texture = texture_cache[cache_key];
                 material_texture = texture_cache[cache_key];
+                material_texture_owned = false;
             }
         }
     }
@@ -275,9 +292,7 @@ void apply_material_settings() {
 }
 
 void rebuild_material_preview_mesh() {
-    if (viewer_mat_sphere.meshCount > 0) {
-        UnloadModel(viewer_mat_sphere);
-    }
+    release_material_preview_model();
 
     Mesh mesh = {0};
 
@@ -351,11 +366,12 @@ void load_material_texture(const std::string& texture_name) {
 
     if (!std::filesystem::exists(texture_full_path)) return;
 
-    if (material_texture.id != 0) {
+    if (material_texture_owned && material_texture.id != 0) {
         UnloadTexture(material_texture);
     }
 
     material_texture = LoadTexture(texture_full_path.string().c_str());
+    material_texture_owned = material_texture.id != 0;
     material_texture_path = texture_name;
     apply_material_settings();
 }
@@ -451,9 +467,7 @@ void draw_material_viewer_window(Editor& editor, Entity* selected_entity) {
     if (!show_material_viewer) {
         material_preview_primitive = 0;
 
-        if (viewer_mat_sphere.meshCount > 0) {
-            UnloadModel(viewer_mat_sphere);
-        }
+        release_material_preview_model();
         return;
     }
 
@@ -656,12 +670,16 @@ void cleanup_viewers() {
         viewer_rt = { 0 };
     }
 
-    if (viewer_mat_sphere.meshCount > 0) {
-        UnloadModel(viewer_mat_sphere);
-    }
+    release_material_preview_model();
 
     if (viewer_mat_rt.id != 0) {
         UnloadRenderTexture(viewer_mat_rt);
         viewer_mat_rt = { 0 };
     }
+
+    if (material_texture_owned && material_texture.id != 0) {
+        UnloadTexture(material_texture);
+    }
+    material_texture = {0};
+    material_texture_owned = false;
 }

@@ -5,8 +5,8 @@ using namespace qc;
 
 #include <string>
 
-#define LIGHT_POINT       0
-#define LIGHT_DIRECTIONAL 1
+#define LIGHT_DIRECTIONAL 0
+#define LIGHT_POINT       1
 #define LIGHT_SPOT        2
 #define LIGHT_AREA        3
 

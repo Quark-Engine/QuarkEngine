@@ -13,8 +13,8 @@ set(BUILD_SHARED_LIBS    ON CACHE BOOL "" FORCE)
 
 include_directories(
     ${CMAKE_SOURCE_DIR}/quark-libs/QuarkCore/include
-    ${CMAKE_SOURCE_DIR}/quark-libs/QuarkCore/imgui
     ${CMAKE_SOURCE_DIR}/quark-libs/imgui/include
+    ${CMAKE_SOURCE_DIR}/imgui
     ${CMAKE_SOURCE_DIR}/src/headers
     ${CMAKE_SOURCE_DIR}/src/plugins
     ${CMAKE_SOURCE_DIR}/src
@@ -27,12 +27,15 @@ add_library(imgui SHARED
     quark-libs/imgui/include/imgui_draw.cpp
     quark-libs/imgui/include/imgui_widgets.cpp
     quark-libs/imgui/include/imgui_tables.cpp
-    quark-libs/QuarkCore/imgui/qcImGui.cpp
+    imgui/imgui_impl_sdl3.cpp
+    imgui/imgui_impl_opengl3.cpp
+    src/qcImGui.cpp
     src/ImGuizmo.cpp
 )
 
 target_include_directories(imgui PUBLIC
     ${CMAKE_SOURCE_DIR}/quark-libs/imgui/include
+    ${CMAKE_SOURCE_DIR}/imgui
     ${CMAKE_SOURCE_DIR}/src
     ${CMAKE_SOURCE_DIR}/src/headers
 )

@@ -292,24 +292,6 @@ static bool prepare_scene_light_uniforms(Scene& scene, Shader shader, const Vec3
         has_active_scene_light = true;
     }
 
-    if (!has_active_scene_light) {
-        Vec3 fallback_target = scene_center;
-        Vec3 fallback_position = scene_center + Vec3(6.0f, 10.0f, 6.0f);
-        Light fallback_light = create_light_at_slot(0, LIGHT_DIRECTIONAL, fallback_position, fallback_target, WHITE, shader);
-        Lighting fallback_lighting = {};
-        fallback_lighting.id = 0;
-        fallback_lighting.enabled = true;
-        fallback_lighting.position = fallback_position;
-        fallback_lighting.target = fallback_target;
-        fallback_lighting.color = WHITE;
-        fallback_lighting.intensity = 1.0f;
-        fallback_lighting.range = 20.0f;
-        fallback_lighting.spot_angle = 30.0f;
-        fallback_lighting.light = fallback_light;
-        initialize_lighting_uniform_cache(fallback_lighting, shader, 0);
-        update_lighting(shader, fallback_lighting);
-    }
-
     return has_active_scene_light;
 }
 
@@ -405,6 +387,7 @@ int main(int argc, char* argv[]) {
 
     InitWindow(1280, 720, "Quark Engine", RendererType::OpenGL);
     SetTargetFPS(GetCurrentMonitorRefreshRate());
+    SetExitKey(KEY_NULL);
     qcImGuiSetup(false);
     reload_editor_fonts(LanguageManager::get().current);
 
@@ -435,10 +418,13 @@ int main(int argc, char* argv[]) {
 
     int use_tex_loc = GetShaderLocation(lighting_shader, "useTexture");
     int ambient_loc = GetShaderLocation(lighting_shader, "ambient");
+    int emission_color_loc = GetShaderLocation(lighting_shader, "emissionColor");
+    int emission_power_loc = GetShaderLocation(lighting_shader, "emissionPower");
     int texture_active_slot = 10;
 
-    float ambient[4] = {0.2f, 0.2f, 0.2f, 1.0f};
-    SetShaderValue(lighting_shader, ambient_loc, ambient, SHADER_UNIFORM_VEC4);
+    SetShaderValue(lighting_shader, ambient_loc, Vec4{0.025f, 0.025f, 0.025f, 1.0f});
+    SetShaderValue(lighting_shader, emission_color_loc, Vec3{0.0f, 0.0f, 0.0f});
+    SetShaderValue(lighting_shader, emission_power_loc, 0.0f);
 
     g_plugin_manager = new PluginManager();
     ctx = new PluginContext{};
