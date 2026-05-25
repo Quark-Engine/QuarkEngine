@@ -1,6 +1,8 @@
 #define NOMINMAX
 
-#include "raylib.h"
+#include "QuarkCore/QuarkCore.hpp"
+
+using namespace qc;
 
 #ifdef _WIN32
     #define WIN32_LEAN_AND_MEAN
@@ -23,8 +25,8 @@
 #include "headers/version.h"
 #include "headers/language_manager.h"
 #include "project.h"
-#include "rlImGui.h"
 #include "imgui.h"
+#include "qcImGui.h"
 #include "nlohmann/json.hpp"
 #include <filesystem>
 #include <fstream>
@@ -640,7 +642,7 @@ std::string run_hub() {
     while (!WindowShouldClose() && !should_exit) {
         BeginDrawing();
         ClearBackground({ 33, 35, 38, 255 });
-        rlImGuiBegin();
+        qcImGuiBegin();
 
         ImGui::SetNextWindowPos(ImVec2(0, 0));
         ImGui::SetNextWindowSize(ImVec2((float)GetScreenWidth(), (float)GetScreenHeight()));
@@ -917,7 +919,7 @@ std::string run_hub() {
         }
 
         hub_draw_plugin_manager();
-        rlImGuiEnd();
+        qcImGuiEnd();
         EndDrawing();
     }
 

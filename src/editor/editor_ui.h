@@ -1,6 +1,5 @@
 #pragma once
 
-#include "raylib.h"
 #include "../headers/editor.h"
 #include "../headers/camera.h"
 #include "../headers/entity.h"
@@ -29,7 +28,7 @@ extern std::vector<int> g_selected_vertices;
 void copy_entity(Entity* entity);
 void paste_entity(Editor& editor);
 void dublicate_entity(Editor& editor, Entity* entity);
-void delete_entity(Editor& editor, Entity* entity, Shader shader);
+void delete_entity(Editor& editor, Entity* entity);
 
 void draw_ui(Editor& editor, Shader shader, FlyCamera camera, PluginContext* ctx);
 

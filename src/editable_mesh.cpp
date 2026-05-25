@@ -1,31 +1,24 @@
 #include "editable_mesh.h"
-#include "raylib.h"
-#include "raymath.h"
-#include "rlgl.h"
-#include <config.h>
+#include "QuarkCore/QuarkCore.hpp"
+#include <memory>
+
+using namespace qc;
 
 void rebuild_mesh_from_editable(Model& model, EditableMesh& editable) {
     if (model.meshCount <= 0) {
         model.meshCount = 1;
-        model.meshes = (Mesh*)MemAlloc(sizeof(Mesh));
+        model.meshes = (Mesh*)malloc(sizeof(Mesh));
         model.meshes[0] = {};
     }
 
     Mesh& mesh = model.meshes[0];
 
-    if (mesh.vaoId > 0) {
-        rlUnloadVertexArray(mesh.vaoId);
-        if (mesh.vboId) {
-            for (int i = 0; i < MAX_MESH_VERTEX_BUFFERS; i++) {
-                if (mesh.vboId[i] > 0)
-                    rlUnloadVertexBuffer(mesh.vboId[i]);
-            }
-        }
-
-        MemFree(mesh.vertices);
-        MemFree(mesh.normals);
-        MemFree(mesh.texcoords);
-        MemFree(mesh.indices);
+    if (mesh.vaoId > 0 || mesh.vertices || mesh.normals || mesh.texcoords || mesh.indices) {
+        UnloadMesh(mesh);
+        free(mesh.vertices);
+        free(mesh.normals);
+        free(mesh.texcoords);
+        free(mesh.indices);
         mesh = {};
     }
 
@@ -35,13 +28,13 @@ void rebuild_mesh_from_editable(Model& model, EditableMesh& editable) {
     if (mesh.vertexCount == 0 || mesh.triangleCount == 0)
         return;
 
-    mesh.vertices  = (float*)MemAlloc(sizeof(float) * mesh.vertexCount * 3);
-    mesh.normals   = (float*)MemAlloc(sizeof(float) * mesh.vertexCount * 3);
-    mesh.texcoords = (float*)MemAlloc(sizeof(float) * mesh.vertexCount * 2);
-    mesh.indices   = (unsigned short*)MemAlloc(sizeof(unsigned short) * mesh.triangleCount * 3);
+    mesh.vertices  = (float*)malloc(sizeof(float) * mesh.vertexCount * 3);
+    mesh.normals   = (float*)malloc(sizeof(float) * mesh.vertexCount * 3);
+    mesh.texcoords = (float*)malloc(sizeof(float) * mesh.vertexCount * 2);
+    mesh.indices   = (unsigned short*)malloc(sizeof(unsigned short) * mesh.triangleCount * 3);
 
     for (int i = 0; i < mesh.vertexCount; i++) {
-        Vector3 p = editable.vertices[i].position;
+        Vec3 p = editable.vertices[i].position;
         mesh.vertices[i * 3 + 0] = p.x;
         mesh.vertices[i * 3 + 1] = p.y;
         mesh.vertices[i * 3 + 2] = p.z;
@@ -69,14 +62,14 @@ void rebuild_mesh_from_editable(Model& model, EditableMesh& editable) {
         int ib = mesh.indices[i * 3 + 1];
         int ic = mesh.indices[i * 3 + 2];
 
-        Vector3 a = { mesh.vertices[ia*3], mesh.vertices[ia*3+1], mesh.vertices[ia*3+2] };
-        Vector3 b = { mesh.vertices[ib*3], mesh.vertices[ib*3+1], mesh.vertices[ib*3+2] };
-        Vector3 c = { mesh.vertices[ic*3], mesh.vertices[ic*3+1], mesh.vertices[ic*3+2] };
+        Vec3 a = { mesh.vertices[ia*3], mesh.vertices[ia*3+1], mesh.vertices[ia*3+2] };
+        Vec3 b = { mesh.vertices[ib*3], mesh.vertices[ib*3+1], mesh.vertices[ib*3+2] };
+        Vec3 c = { mesh.vertices[ic*3], mesh.vertices[ic*3+1], mesh.vertices[ic*3+2] };
 
-        Vector3 n = Vector3Normalize(Vector3CrossProduct(
-            Vector3Subtract(b, a),
-            Vector3Subtract(c, a)
-        ));
+        Vec3 n =
+                (b - a)
+                .cross(c - a)
+                .normalized();
 
         for (int v : {ia, ib, ic}) {
             mesh.normals[v*3+0] += n.x;
@@ -86,11 +79,11 @@ void rebuild_mesh_from_editable(Model& model, EditableMesh& editable) {
     }
 
     for (int i = 0; i < mesh.vertexCount; i++) {
-        Vector3 n = Vector3Normalize({
-            mesh.normals[i*3+0],
-            mesh.normals[i*3+1],
-            mesh.normals[i*3+2]
-        });
+        Vec3 n = Vec3(
+            mesh.normals[i * 3 + 0],
+            mesh.normals[i * 3 + 1],
+            mesh.normals[i * 3 + 2]
+        ).normalized();
 
         mesh.normals[i*3+0] = n.x;
         mesh.normals[i*3+1] = n.y;
@@ -101,12 +94,12 @@ void rebuild_mesh_from_editable(Model& model, EditableMesh& editable) {
 
     if (model.materialCount <= 0) {
         model.materialCount = 1;
-        model.materials = (Material*)MemAlloc(sizeof(Material));
+        model.materials = (Material*)malloc(sizeof(Material));
         model.materials[0] = LoadMaterialDefault();
     }
 
     if (!model.meshMaterial)
-        model.meshMaterial = (int*)MemAlloc(sizeof(int));
+        model.meshMaterial = (int*)malloc(sizeof(int));
 
     model.meshMaterial[0] = 0;
 }

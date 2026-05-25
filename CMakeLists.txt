@@ -1,41 +1,49 @@
 cmake_minimum_required(VERSION 3.10)
 project(QuarkEngine)
 
-set(CMAKE_CXX_STANDARD 17)
+set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
 option(BUILD_ENGINE "Build Quark Engine" ON)
 option(BUILD_PLUGIN "Build Plugin" OFF)
 
-set(BUILD_EXAMPLES OFF CACHE BOOL "" FORCE)
+set(QC_BUILD_EXAMPLES OFF CACHE BOOL "" FORCE)
 set(BUILD_GAMES    OFF CACHE BOOL "" FORCE)
 set(BUILD_SHARED_LIBS    ON CACHE BOOL "" FORCE)
-set(GLFW_BUILD_SHARED_LIBS ON CACHE BOOL "" FORCE)
-
-add_subdirectory(quark-libs/raylib)
-add_subdirectory(quark-libs/freetype)
 
 include_directories(
+    ${CMAKE_SOURCE_DIR}/quark-libs/QuarkCore/include
     ${CMAKE_SOURCE_DIR}/quark-libs/imgui/include
+    ${CMAKE_SOURCE_DIR}/imgui
     ${CMAKE_SOURCE_DIR}/src/headers
     ${CMAKE_SOURCE_DIR}/src/plugins
     ${CMAKE_SOURCE_DIR}/src
 )
+
+add_subdirectory(quark-libs/QuarkCore)
 
 add_library(imgui SHARED
     quark-libs/imgui/include/imgui.cpp
     quark-libs/imgui/include/imgui_draw.cpp
     quark-libs/imgui/include/imgui_widgets.cpp
     quark-libs/imgui/include/imgui_tables.cpp
-    quark-libs/imgui/include/rlImGui.cpp
+    imgui/imgui_impl_sdl3.cpp
+    imgui/imgui_impl_opengl3.cpp
+    src/qcImGui.cpp
     src/ImGuizmo.cpp
 )
 
 target_include_directories(imgui PUBLIC
     ${CMAKE_SOURCE_DIR}/quark-libs/imgui/include
+    ${CMAKE_SOURCE_DIR}/imgui
     ${CMAKE_SOURCE_DIR}/src
     ${CMAKE_SOURCE_DIR}/src/headers
     ${CMAKE_SOURCE_DIR}/quark-libs/freetype/include
+)
+
+target_link_libraries(imgui PUBLIC
+    SDL3::SDL3
+    QuarkCore
 )
 
 if(WIN32)
@@ -49,8 +57,6 @@ else()
         PRIVATE "IMGUI_API=__attribute__((visibility(\"default\")))"
     )
 endif()
-
-target_link_libraries(imgui PRIVATE raylib freetype)
 
 set_target_properties(imgui PROPERTIES
     PREFIX ""
@@ -86,7 +92,6 @@ if(BUILD_ENGINE)
         src/models.cpp
         src/project.cpp
         src/plugins/plugin_manager.cpp
-        src/rlights.cpp
         src/scene.cpp
         src/tex.cpp
         src/text_mesh.cpp
@@ -110,7 +115,10 @@ if(BUILD_ENGINE)
         )
     endif()
 
-    target_link_libraries(${PROJECT_NAME} PRIVATE raylib imgui freetype)
+    target_link_libraries(${PROJECT_NAME} PRIVATE
+        QuarkCore
+        imgui
+    )
 
     if(WIN32)
         target_link_libraries(${PROJECT_NAME} PRIVATE winmm gdi32 opengl32)
@@ -139,13 +147,14 @@ if(BUILD_ENGINE)
 
         add_custom_command(TARGET ${PROJECT_NAME} POST_BUILD
             COMMAND ${CMAKE_COMMAND} -E copy_if_different
-                $<TARGET_FILE:raylib>
-                ${CMAKE_RUNTIME_OUTPUT_DIRECTORY}
-        )
-        add_custom_command(TARGET ${PROJECT_NAME} POST_BUILD
-            COMMAND ${CMAKE_COMMAND} -E copy_if_different
+                $<TARGET_FILE:QuarkCore>
                 $<TARGET_FILE:imgui>
-                ${CMAKE_RUNTIME_OUTPUT_DIRECTORY}
+                $<TARGET_FILE:SDL3::SDL3>
+                $<TARGET_FILE:assimp::assimp>
+                $<TARGET_FILE:ZLIB::ZLIB>
+                $<TARGET_FILE:freetype>
+                "${VULKAN_RUNTIME_DLL}"
+                ${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/Debug
         )
     endif()
 

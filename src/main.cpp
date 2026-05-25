@@ -1,8 +1,6 @@
-#include "raylib.h"
-#include "rlImGui.h"
+#include "QuarkCore/QuarkCore.hpp"
+#include "qcImGui.h"
 #include "imgui.h"
-#include "raymath.h"
-#include "rlgl.h"
 #include "plugins/plugin_manager.h"
 #include "headers/lighting.h"
 #include "headers/language_manager.h"
@@ -16,20 +14,16 @@
 #include <iostream>
 #include <cfloat>
 
-#define SHADOWMAP_RESOLUTION 1024
+using namespace qc;
 
 namespace fs = std::filesystem;
-
-Shader shadowmap_shader = {0};
-RenderTexture2D shadow_map = {0};
-RenderTexture2D scene_rt = {0};
 
 PluginManager* g_plugin_manager = nullptr;
 PluginContext* ctx = nullptr;
 
 extern bool g_is_scene_hovered;
 extern bool g_is_scene_active;
-static Shader shadowcaster_shader = {0};
+extern RenderTexture2D scene_rt;
 
 static bool language_uses_ms_pgothic(const std::string& language_code) {
     return language_code == "japanese" ||
@@ -143,7 +137,7 @@ static void update_plugins(PluginManager& plugin_manager, Editor& editor) {
                 Entity e = make_entity_from_asset(s_editor->scene, a);
                 const MeshComponent* mesh = e.get_mesh_component();
                 if (!mesh || !mesh->model.meshCount) return -1;
-                s_editor->scene.entities.push_back(e);
+                s_editor->scene.entities.push_back(std::move(e));
                 return (int)s_editor->scene.entities.size() - 1;
             }
         }
@@ -165,16 +159,32 @@ static void update_plugins(PluginManager& plugin_manager, Editor& editor) {
     plugin_manager.draw_ui_all(*ctx);
 }
 
-static Matrix compose_entity_transform(const Entity& entity) {
+static Mat4 compose_entity_transform(const Entity& entity) {
     const TransformComponent* transform = entity.get_transform_component();
-    if (!transform) return MatrixIdentity();
-    Matrix matScale = MatrixScale(transform->scale.x, transform->scale.y, transform->scale.z);
-    Matrix matRotation = MatrixRotateXYZ({transform->rotation.x * DEG2RAD, transform->rotation.y * DEG2RAD, transform->rotation.z * DEG2RAD});
-    Matrix matTranslation = MatrixTranslate(transform->position.x, transform->position.y, transform->position.z);
-    return MatrixMultiply(MatrixMultiply(matTranslation, matRotation), matScale);
+    if (!transform)
+        return Mat4::identity();
+
+    Mat4 matScale = Mat4::scale(
+        transform->scale.x,
+        transform->scale.y,
+        transform->scale.z
+    );
+
+    Mat4 matRotation =
+        Mat4::rotationX(transform->rotation.x * DEG2RAD) *
+        Mat4::rotationY(transform->rotation.y * DEG2RAD) *
+        Mat4::rotationZ(transform->rotation.z * DEG2RAD);
+
+    Mat4 matTranslation = Mat4::translation(
+        transform->position.x,
+        transform->position.y,
+        transform->position.z
+    );
+
+    return matTranslation * matRotation * matScale;
 }
 
-static void expand_bounds_with_point(BoundingBox& bounds, const Vector3& point) {
+static void expand_bounds_with_point(BoundingBox& bounds, const Vec3& point) {
     bounds.min.x = fminf(bounds.min.x, point.x);
     bounds.min.y = fminf(bounds.min.y, point.y);
     bounds.min.z = fminf(bounds.min.z, point.z);
@@ -201,9 +211,9 @@ static BoundingBox compute_scene_bounds(const Scene& scene) {
             mutable_mesh->bounds_dirty = false;
         }
         BoundingBox local_bounds = mutable_mesh->cached_local_bounds;
-        Matrix transform = compose_entity_transform(entity);
+        Mat4 transform = compose_entity_transform(entity);
 
-        const Vector3 corners[8] = {
+        const Vec3 corners[8] = {
             { local_bounds.min.x, local_bounds.min.y, local_bounds.min.z },
             { local_bounds.max.x, local_bounds.min.y, local_bounds.min.z },
             { local_bounds.min.x, local_bounds.max.y, local_bounds.min.z },
@@ -214,8 +224,8 @@ static BoundingBox compute_scene_bounds(const Scene& scene) {
             { local_bounds.max.x, local_bounds.max.y, local_bounds.max.z }
         };
 
-        for (const Vector3& corner : corners) {
-            expand_bounds_with_point(bounds, Vector3Transform(corner, transform));
+        for (const Vec3& corner : corners) {
+            expand_bounds_with_point(bounds, Vec3(transform * corner));
         }
         has_bounds = true;
     }
@@ -230,7 +240,7 @@ static BoundingBox compute_scene_bounds(const Scene& scene) {
 
 static void set_model_shader(Model& model, Shader shader) {
     for (int i = 0; i < model.materialCount; i++) {
-        model.materials[i].shader = shader;
+        model.materials[i].shader = &shader;
     }
 }
 
@@ -241,12 +251,12 @@ static void set_shader_light_enabled(Shader shader, int slot, bool enabled) {
 }
 
 static void disable_all_shader_lights(Shader shader) {
-    for (int slot = 0; slot < MAX_LIGHTS; slot++) {
+    for (int slot = 0; slot < QC_MAX_LIGHTS; slot++) {
         set_shader_light_enabled(shader, slot, false);
     }
 }
 
-static bool prepare_scene_light_uniforms(Scene& scene, Shader shader, const Vector3& scene_center) {
+static bool prepare_scene_light_uniforms(Scene& scene, Shader shader, const Vec3& scene_center) {
     disable_all_shader_lights(shader);
 
     bool has_active_scene_light = false;
@@ -272,7 +282,7 @@ static bool prepare_scene_light_uniforms(Scene& scene, Shader shader, const Vect
         light->light.position = transform->position;
 
         if (light->light.light.type == LIGHT_DIRECTIONAL &&
-            Vector3LengthSqr(Vector3Subtract(light->light.position, light->light.target)) <= 0.000001f) {
+            (light->light.position - light->light.target).length() <= 0.000001f) {
             light->light.target = scene_center;
         }
 
@@ -283,46 +293,7 @@ static bool prepare_scene_light_uniforms(Scene& scene, Shader shader, const Vect
         has_active_scene_light = true;
     }
 
-    if (!has_active_scene_light) {
-        Vector3 fallback_target = scene_center;
-        Vector3 fallback_position = Vector3Add(scene_center, { 6.0f, 10.0f, 6.0f });
-        Light fallback_light = create_light_at_slot(0, LIGHT_DIRECTIONAL, fallback_position, fallback_target, WHITE, shader);
-        Lighting fallback_lighting = {};
-        fallback_lighting.id = 0;
-        fallback_lighting.enabled = true;
-        fallback_lighting.position = fallback_position;
-        fallback_lighting.target = fallback_target;
-        fallback_lighting.color = WHITE;
-        fallback_lighting.intensity = 1.0f;
-        fallback_lighting.range = 20.0f;
-        fallback_lighting.spot_angle = 30.0f;
-        fallback_lighting.light = fallback_light;
-        initialize_lighting_uniform_cache(fallback_lighting, shader, 0);
-        update_lighting(shader, fallback_lighting);
-    }
-
     return has_active_scene_light;
-}
-
-static void draw_entity_shadow_caster(const Entity& entity) {
-    const MeshComponent* mesh = entity.get_mesh_component();
-    const TransformComponent* transform = entity.get_transform_component();
-    if (!mesh || !transform) return;
-
-    rlPushMatrix();
-    rlTranslatef(transform->position.x, transform->position.y, transform->position.z);
-    rlRotatef(transform->rotation.x, 1, 0, 0);
-    rlRotatef(transform->rotation.y, 0, 1, 0);
-    rlRotatef(transform->rotation.z, 0, 0, 1);
-    rlScalef(transform->scale.x, transform->scale.y, transform->scale.z);
-
-    const bool edited_mesh_is_double_sided = entity_has_mesh_overrides(entity) || mesh->mesh_triangles_detached;
-    if (edited_mesh_is_double_sided) rlDisableBackfaceCulling();
-
-    DrawModel(mesh->model, {0, 0, 0}, 1.0f, WHITE);
-
-    if (edited_mesh_is_double_sided) rlEnableBackfaceCulling();
-    rlPopMatrix();
 }
 
 void ApplyCustomImGuiTheme()
@@ -347,9 +318,11 @@ void ApplyCustomImGuiTheme()
 
     // ====== GLOBAL ======
     colors[ImGuiCol_Text]           = ImVec4(0.80f, 0.82f, 0.85f, 1.00f); // #c9cdd1
+    colors[ImGuiCol_TextDisabled]   = ImVec4(0.54f, 0.58f, 0.63f, 1.00f);
     colors[ImGuiCol_WindowBg]       = ImVec4(0.16f, 0.17f, 0.18f, 1.00f); // #2a2c2f
     colors[ImGuiCol_ChildBg]        = ImVec4(0.14f, 0.15f, 0.16f, 1.00f);
     colors[ImGuiCol_PopupBg]        = ImVec4(0.20f, 0.21f, 0.23f, 1.00f); // #32353a
+    colors[ImGuiCol_DockingEmptyBg] = ImVec4(0.11f, 0.12f, 0.13f, 1.00f);
 
     // ====== BORDERS ======
     colors[ImGuiCol_Border]         = ImVec4(0.27f, 0.28f, 0.30f, 1.00f); // #44484d
@@ -359,10 +332,11 @@ void ApplyCustomImGuiTheme()
     colors[ImGuiCol_FrameBg]        = ImVec4(0.14f, 0.15f, 0.16f, 1.00f); // #24272a
     colors[ImGuiCol_FrameBgHovered] = ImVec4(0.23f, 0.25f, 0.27f, 1.00f); // #3B4045 hover
     colors[ImGuiCol_FrameBgActive]  = ImVec4(0.0f, 0.6f, 1.0f, 1.0f); // #0099ffff
+    colors[ImGuiCol_InputTextCursor]= ImVec4(0.93f, 0.95f, 0.98f, 1.00f);
 
     // ====== TITLE / MENUBAR ======
     colors[ImGuiCol_TitleBg]        = ImVec4(0.19f, 0.20f, 0.22f, 1.00f); // #31343a
-    colors[ImGuiCol_TitleBgActive]  = ImVec4(0.20f, 0.21f, 0.23f, 1.00f);
+    colors[ImGuiCol_TitleBgActive]  = ImVec4(0.24f, 0.26f, 0.29f, 1.00f);
     colors[ImGuiCol_MenuBarBg]      = ImVec4(0.19f, 0.20f, 0.22f, 1.00f);
 
     // ====== BUTTONS ======
@@ -386,8 +360,10 @@ void ApplyCustomImGuiTheme()
 
     // ====== TABS ======
     colors[ImGuiCol_Tab]            = ImVec4(0.20f, 0.21f, 0.23f, 1.00f); // #333538FF
-    colors[ImGuiCol_TabHovered]     = ImVec4(0.30f, 0.32f, 0.35f, 1.00f); // #4D5259FF
-    colors[ImGuiCol_TabActive]      = ImVec4(0.24f, 0.26f, 0.28f, 1.00f); // #3D4247FF
+    colors[ImGuiCol_TabHovered]     = ImVec4(0.36f, 0.39f, 0.43f, 1.00f);
+    colors[ImGuiCol_TabActive]      = ImVec4(0.27f, 0.30f, 0.34f, 1.00f);
+    colors[ImGuiCol_TabUnfocused]   = ImVec4(0.17f, 0.18f, 0.20f, 1.00f);
+    colors[ImGuiCol_TabUnfocusedActive] = ImVec4(0.22f, 0.24f, 0.27f, 1.00f);
 
     // ====== CHECKBOX ======
     colors[ImGuiCol_CheckMark]      = ImVec4(0.0f, 0.6f, 1.0f, 1.0f); // #0099ffff
@@ -399,6 +375,8 @@ void ApplyCustomImGuiTheme()
 
     // ====== DOCKING ======
     colors[ImGuiCol_DockingPreview] = ImVec4(0.78f, 0.52f, 0.17f, 0.4f); // #c9802b66
+    colors[ImGuiCol_NavCursor]      = ImVec4(0.93f, 0.95f, 0.98f, 1.00f);
+    colors[ImGuiCol_TextLink]       = ImVec4(0.40f, 0.72f, 0.98f, 1.00f);
 }
 
 int main(int argc, char* argv[]) {
@@ -408,14 +386,14 @@ int main(int argc, char* argv[]) {
     std::string lang_code = load_or_create_config();
     LanguageManager::get().set_lang(lang_code);
 
-    InitWindow(1280, 720, "Quark Engine");
-    SetTargetFPS(GetMonitorRefreshRate(GetCurrentMonitor()));
+    InitWindow(1280, 720, "Quark Engine", RendererType::OpenGL);
+    SetTargetFPS(GetCurrentMonitorRefreshRate());
     init_freetype();
-    rlImGuiSetup(true);
+    SetExitKey(KEY_NULL);
+    qcImGuiSetup(false);
     reload_editor_fonts(LanguageManager::get().current);
 
     ApplyCustomImGuiTheme();
-    SetExitKey(0);
 
     std::string project_path = "";
     if (argc > 1)
@@ -423,7 +401,7 @@ int main(int argc, char* argv[]) {
     else {
         project_path = run_hub();
         if (project_path.empty()) {
-            rlImGuiShutdown();
+            qcImGuiShutdown();
             CloseWindow();
             return 0;
         }
@@ -437,39 +415,18 @@ int main(int argc, char* argv[]) {
     FlyCamera camera;
     editor.project_path = project_path;
 
-    shadowmap_shader = LoadShader("assets/lighting.vs", "assets/lighting.fs");
-    shadowcaster_shader = LoadShader("assets/shadowcaster.vs", "assets/shadowcaster.fs");
-    shadowmap_shader.locs[SHADER_LOC_VECTOR_VIEW] = GetShaderLocation(shadowmap_shader, "viewPos");
+    Shader lighting_shader = LoadShader("assets/lighting.vs", "assets/lighting.fs");
+    lighting_shader.locs[SHADER_LOC_VECTOR_VIEW] = GetShaderLocation(lighting_shader, "viewPos");
 
-    shadow_map = load_shadowmap_render_texture(SHADOWMAP_RESOLUTION, SHADOWMAP_RESOLUTION);
-    
-    scene_rt = LoadRenderTexture(GetScreenWidth(), GetScreenHeight());
-
-    Camera3D light_cam = {0};
-    light_cam.projection = CAMERA_ORTHOGRAPHIC;
-    light_cam.up         = {0.0f, 1.0f, 0.0f};
-    light_cam.fovy       = 20.0f;
-    light_cam.target     = Vector3Zero();
-    light_cam.position   = {0.0f, 15.0f, 0.0f};
-
-    int light_vp_loc      = GetShaderLocation(shadowmap_shader, "lightVP");
-    int shadow_map_loc    = GetShaderLocation(shadowmap_shader, "shadowMap");
-    int shadow_map_res    = SHADOWMAP_RESOLUTION;
-    int emission_color_loc = GetShaderLocation(shadowmap_shader, "emissionColor");
-    int emission_power_loc = GetShaderLocation(shadowmap_shader, "emissionPower");
-    int use_tex_loc        = GetShaderLocation(shadowmap_shader, "useTexture");
-    int ambient_loc        = GetShaderLocation(shadowmap_shader, "ambient");
-    int shadow_light_dir_loc = GetShaderLocation(shadowmap_shader, "shadowLightDir");
-    int shadows_enabled_loc  = GetShaderLocation(shadowmap_shader, "shadowsEnabled");
-
-    float ambient[4] = {0.2f, 0.2f, 0.2f, 1.0f};
+    int use_tex_loc = GetShaderLocation(lighting_shader, "useTexture");
+    int ambient_loc = GetShaderLocation(lighting_shader, "ambient");
+    int emission_color_loc = GetShaderLocation(lighting_shader, "emissionColor");
+    int emission_power_loc = GetShaderLocation(lighting_shader, "emissionPower");
     int texture_active_slot = 10;
 
-    SetShaderValue(shadowmap_shader, GetShaderLocation(shadowmap_shader, "shadowMapResolution"), &shadow_map_res, SHADER_UNIFORM_INT);
-    SetShaderValue(shadowmap_shader, ambient_loc, ambient, SHADER_UNIFORM_VEC4);
-
-    Matrix light_view = {0};
-    Matrix light_proj = {0};
+    SetShaderValue(lighting_shader, ambient_loc, Vec4{0.025f, 0.025f, 0.025f, 1.0f});
+    SetShaderValue(lighting_shader, emission_color_loc, Vec3{0.0f, 0.0f, 0.0f});
+    SetShaderValue(lighting_shader, emission_power_loc, 0.0f);
 
     g_plugin_manager = new PluginManager();
     ctx = new PluginContext{};
@@ -482,7 +439,7 @@ int main(int argc, char* argv[]) {
     refresh_models(project_path, editor.scene);
 
     if (project_is_valid(project_path))
-        project_load(project_path, editor.scene, shadowmap_shader);
+        project_load(project_path, editor.scene, lighting_shader);
     else
         project_new(project_path, editor.scene);
 
@@ -502,12 +459,12 @@ int main(int argc, char* argv[]) {
             fs::path(project_path).filename().string().c_str(), GetFPS()));
 
         BoundingBox scene_bounds = compute_scene_bounds(editor.scene);
-        Vector3 scene_center = {
+        Vec3 scene_center = {
             (scene_bounds.min.x + scene_bounds.max.x) * 0.5f,
             (scene_bounds.min.y + scene_bounds.max.y) * 0.5f,
             (scene_bounds.min.z + scene_bounds.max.z) * 0.5f
         };
-        Vector3 scene_extents = {
+        Vec3 scene_extents = {
             (scene_bounds.max.x - scene_bounds.min.x) * 0.5f,
             (scene_bounds.max.y - scene_bounds.min.y) * 0.5f,
             (scene_bounds.max.z - scene_bounds.min.z) * 0.5f
@@ -515,111 +472,43 @@ int main(int argc, char* argv[]) {
         float scene_radius = fmaxf(fmaxf(scene_extents.x, scene_extents.y), scene_extents.z);
         if (scene_radius < 10.0f) scene_radius = 10.0f;
 
-        Vector3 active_shadow_target = scene_center;
-        Vector3 active_shadow_pos = Vector3Add(scene_center, { 6.0f, 10.0f, 6.0f });
-        Vector3 active_shadow_dir = Vector3Normalize(Vector3Subtract(active_shadow_pos, active_shadow_target));
-        bool has_shadow_light = false;
-        int active_shadow_type = LIGHT_DIRECTIONAL;
-
-        
-
-        for (auto& e : editor.scene.entities) {
-            LightComponent* light = e.get_light_component();
-            TransformComponent* transform = e.get_transform_component();
-            if (!light || !transform || !light->enabled || !light->light.enabled) continue;
-
-            active_shadow_pos = transform->position;
-
-            active_shadow_target = light->light.target;
-            if (Vector3LengthSqr(Vector3Subtract(active_shadow_pos, active_shadow_target)) <= 0.000001f) {
-                active_shadow_target = scene_center;
-            }
-
-            active_shadow_dir = Vector3Normalize(Vector3Subtract(active_shadow_pos, active_shadow_target));
-            active_shadow_type = light->light.light.type;
-
-            if (active_shadow_type == LIGHT_DIRECTIONAL) {
-                light_cam.projection = CAMERA_ORTHOGRAPHIC;
-                light_cam.up = {0.0f, 1.0f, 0.0f};
-                light_cam.fovy = scene_radius * 2.0f;
-                light_cam.target = scene_center;
-                light_cam.position = Vector3Add(scene_center, Vector3Scale(active_shadow_dir, fmaxf(scene_radius * 2.0f, 15.0f)));
-                active_shadow_dir = Vector3Normalize(Vector3Subtract(light_cam.position, light_cam.target));
-            } else {
-                light_cam.projection = CAMERA_PERSPECTIVE;
-                light_cam.up = {0.0f, 0.0f, -1.0f};
-                light_cam.fovy = 20.0f;
-                light_cam.target = active_shadow_target;
-                light_cam.position = active_shadow_pos;
-            }
-
-            has_shadow_light = true;
-            break;
-        }
-
-        if (!has_shadow_light) {
-            light_cam.projection = CAMERA_ORTHOGRAPHIC;
-            light_cam.up = {0.0f, 1.0f, 0.0f};
-            light_cam.fovy = scene_radius * 2.0f;
-            light_cam.target = active_shadow_target;
-            light_cam.position = Vector3Add(scene_center, Vector3Scale(active_shadow_dir, fmaxf(scene_radius * 2.0f, 15.0f)));
-            active_shadow_dir = Vector3Normalize(Vector3Subtract(light_cam.position, light_cam.target));
-        }
-
-        Vector3 cam_pos = camera.get_camera().position;
-        int shadows_enabled = 1;
-        float shadow_light_dir[3] = { active_shadow_dir.x, active_shadow_dir.y, active_shadow_dir.z };
-        SetShaderValue(shadowmap_shader, shadowmap_shader.locs[SHADER_LOC_VECTOR_VIEW], &cam_pos, SHADER_UNIFORM_VEC3);
-        SetShaderValue(shadowmap_shader, shadow_light_dir_loc, shadow_light_dir, SHADER_UNIFORM_VEC3);
-        SetShaderValue(shadowmap_shader, shadows_enabled_loc, &shadows_enabled, SHADER_UNIFORM_INT);
-        
-        BeginTextureMode(shadow_map);
-            ClearBackground(WHITE);
-            BeginMode3D(light_cam);
-                light_view = rlGetMatrixModelview();
-                light_proj = rlGetMatrixProjection();
-                for (auto& e : editor.scene.entities) {
-                    MeshComponent* mesh = e.get_mesh_component();
-                    if (!mesh || mesh->model.meshCount <= 0) continue;
-                    set_model_shader(mesh->model, shadowcaster_shader);
-                    draw_entity_shadow_caster(e);
-                }
-            EndMode3D();
-        EndTextureMode();
-
-        Matrix light_view_proj = MatrixMultiply(light_view, light_proj);
-
-        BeginTextureMode(scene_rt);
-        ClearBackground(DARKGRAY);
-        SetShaderValueMatrix(shadowmap_shader, light_vp_loc, light_view_proj);
-
-        SetShaderValueTexture(shadowmap_shader, shadow_map_loc, shadow_map.depth);
-        prepare_scene_light_uniforms(editor.scene, shadowmap_shader, scene_center);
-
-        BeginMode3D(camera.get_camera());
-            DrawGrid(20, 1.0f);
-            for (auto& e : editor.scene.entities) {
-                MeshComponent* mesh = e.get_mesh_component();
-                TransformComponent* transform = e.get_transform_component();
-                MaterialComponent* mat = e.get_material_component();
-                if (!mesh || !transform) continue;
-
-                if (!mesh->shader_assigned || (mesh->model.materialCount > 0 &&
-                    mesh->model.materials[0].shader.id != shadowmap_shader.id)) {
-                    set_model_shader(mesh->model, shadowmap_shader);
-                }
-                mesh->shader_assigned = true;
-
-                int use = (mat && mat->texture.id != 0) ? 1 : 0;
-                SetShaderValue(shadowmap_shader, use_tex_loc, &use, SHADER_UNIFORM_INT);
-                draw_entity_with_texture(e);
-            }
-        EndMode3D();
-    EndTextureMode();
+        Vec3 cam_pos = camera.get_camera().position;
+        SetShaderValue(lighting_shader, lighting_shader.locs[SHADER_LOC_VECTOR_VIEW], &cam_pos, SHADER_UNIFORM_VEC3);
+        prepare_scene_light_uniforms(editor.scene, lighting_shader, scene_center);
 
         BeginDrawing();
             ClearBackground(DARKGRAY);
-            rlImGuiBegin();
+
+            if (scene_rt.id > 0 && IsRenderTextureValid(scene_rt)) {
+                BeginTextureMode(scene_rt);
+                ClearBackground(Color{ 36, 38, 42, 255 });
+                BeginMode3D(camera.get_camera());
+                    DrawGrid(20, 1.0f);
+                    for (auto& e : editor.scene.entities) {
+                        MeshComponent* mesh = e.get_mesh_component();
+                        TransformComponent* transform = e.get_transform_component();
+                        MaterialComponent* mat = e.get_material_component();
+                        if (!mesh || !transform) continue;
+
+                        const bool has_materials = mesh->model.materialCount > 0 && mesh->model.materials != nullptr;
+                        const bool shader_missing = has_materials &&
+                            (mesh->model.materials[0].shader == nullptr ||
+                             mesh->model.materials[0].shader->id != lighting_shader.id);
+
+                        if (!mesh->shader_assigned || shader_missing) {
+                            set_model_shader(mesh->model, lighting_shader);
+                        }
+                        mesh->shader_assigned = true;
+
+                        int use = (mat && mat->texture.id != 0) ? 1 : 0;
+                        SetShaderValue(lighting_shader, use_tex_loc, &use, SHADER_UNIFORM_INT);
+                        draw_entity_with_texture(e);
+                    }
+                EndMode3D();
+                EndTextureMode();
+            }
+
+            qcImGuiBegin();
 
             const bool gizmo_busy = ImGuizmo::IsOver() || ImGuizmo::IsUsing();
             if (!gizmo_busy && (IsCursorHidden() || g_is_scene_hovered)) {
@@ -628,22 +517,20 @@ int main(int argc, char* argv[]) {
 
             editor.handle_input();
 
-            editor.draw_ui(shadowmap_shader, camera, ctx);
+            editor.draw_ui(lighting_shader, camera, ctx);
             
             update_plugins(*g_plugin_manager, editor);
 
-            rlImGuiEnd();
+            qcImGuiEnd();
         EndDrawing();
     }
 
     editor.scene.release_resources();
     unload_models();
     unload_textures();
-    UnloadShader(shadowcaster_shader);
-    UnloadShader(shadowmap_shader);
-    unload_shadowmap_render_texture(shadow_map);
+    UnloadShader(lighting_shader);
     g_plugin_manager->unload_all();
-    rlImGuiShutdown();
+    qcImGuiShutdown();
     shutdown_freetype();
     CloseWindow();
     return 0;

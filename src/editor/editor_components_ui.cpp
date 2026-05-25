@@ -304,7 +304,7 @@ void ComponentUIHelper::draw_mesh_component(Editor& editor, Entity& entity, Mesh
 
             std::vector<int> remap(m.vertexCount, -1);
             for (int i = 0; i < m.vertexCount; i++) {
-                Vector3 pos = {
+                Vec3 pos = {
                     m.vertices[i*3+0],
                     m.vertices[i*3+1],
                     m.vertices[i*3+2]
@@ -312,7 +312,7 @@ void ComponentUIHelper::draw_mesh_component(Editor& editor, Entity& entity, Mesh
 
                 int found = -1;
                 for (int j = 0; j < (int)mesh->editable_mesh.vertices.size(); j++) {
-                    Vector3 existing = mesh->editable_mesh.vertices[j].position;
+                    Vec3 existing = mesh->editable_mesh.vertices[j].position;
                     if (fabsf(existing.x - pos.x) < 0.0001f &&
                         fabsf(existing.y - pos.y) < 0.0001f &&
                         fabsf(existing.z - pos.z) < 0.0001f) {
@@ -645,10 +645,10 @@ void ComponentUIHelper::draw_collision_component(Editor& editor, Entity& entity,
     ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.8f, 0.2f, 0.2f, 1.0f));
     ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImVec4(1.0f, 0.3f, 0.3f, 1.0f));
     if (ImGui::Button(lang.word("reset"), ImVec2(-1, 0))) {
-        collision->size = Vector3One();
+        collision->size = Vec3(1.0f, 1.0f, 1.0f);
         collision->radius = 0.5f;
         collision->height = 2.0f;
-        collision->center = Vector3Zero();
+        collision->center = Vec3(0.0f, 0.0f, 0.0f);
     }
     ImGui::PopStyleColor(2);
 

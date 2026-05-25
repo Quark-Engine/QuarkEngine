@@ -1,10 +1,12 @@
 #pragma once
-#include "raylib.h"
-#include "rlights.h"
+#include "QuarkCore/QuarkCore.hpp"
+#include "QuarkCore/QuarkLights.hpp"
+using namespace qc;
+
 #include <string>
 
-#define LIGHT_POINT       0
-#define LIGHT_DIRECTIONAL 1
+#define LIGHT_DIRECTIONAL 0
+#define LIGHT_POINT       1
 #define LIGHT_SPOT        2
 #define LIGHT_AREA        3
 
@@ -12,9 +14,9 @@ struct Lighting {
     int id = -1;
 
     Light light;
-    Vector3 position;
-    Vector3 target;
-    Vector3 rotation;
+    Vec3 position;
+    Vec3 target;
+    Vec3 rotation;
 
     Color color = WHITE;
     bool enabled;
@@ -28,8 +30,8 @@ struct Lighting {
     float range = 5.0f;
 };
 
-Lighting create_lighting(Vector3 pos, Color color);
-Light create_light_at_slot(int slot, int type, Vector3 position, Vector3 target, Color color, Shader shader);
+Lighting create_lighting(Vec3 pos, Color color);
+Light create_light_at_slot(int slot, int type, Vec3 position, Vec3 target, Color color, Shader shader);
 void initialize_lighting_uniform_cache(Lighting& lighting, Shader shader, int slot);
 void update_lighting(Shader shader, Lighting& l);
 void free_light_id(int id);
