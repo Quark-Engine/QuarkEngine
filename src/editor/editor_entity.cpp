@@ -48,7 +48,7 @@ Entity make_entity_from_asset(Scene& scene, ModelAsset& asset) {
         if (!load_model_instance(asset, mesh->model)) {
             mesh->asset = nullptr;
             mesh->asset_name.clear();
-            mesh->model = {0};
+            mesh->model;
             return entity;
         }
 
@@ -96,7 +96,7 @@ void make_prefab(Entity entity, const fs::path path) {
     std::ofstream f(path / (entity.name + ".prefab"));
 
     if (!f.is_open()) {
-        TraceLog(LOG_ERROR, "Failed to open %s.prefab ", entity.name.c_str());
+        TraceLog(LogLevel::Error, "PREFAB", TextFormat("Failed to open %s.prefab ", entity.name.c_str()));
         return;
     }
 
@@ -107,7 +107,7 @@ void make_prefab(Entity entity, const fs::path path) {
 Entity make_entity_from_prefab(Scene& scene, const fs::path filename) {
     std::ifstream f(filename);
     if (!f.is_open()) {
-        TraceLog(LOG_ERROR, "Failed to open prefab %s", filename.string().c_str());
+        TraceLog(LogLevel::Error, "PREFAB", TextFormat("Failed to open prefab %s", filename.string().c_str()));
         return {};
     }
 
@@ -135,7 +135,7 @@ Entity make_entity_from_prefab(Scene& scene, const fs::path filename) {
         load_material_to_entity(&entity, mat->texture_name);
     }
 
-    TraceLog(LOG_INFO, "[TEXTURE_NAME] %s", mat->texture_name.c_str());
+    TraceLog(LogLevel::Info, "PREFAB", TextFormat("[TEXTURE_NAME] %s", mat->texture_name.c_str()));
 
     return entity;
 }

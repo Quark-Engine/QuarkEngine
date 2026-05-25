@@ -74,7 +74,7 @@ void load_textures(std::string project_path) {
 
 void unload_textures() {
     std::unordered_set<unsigned int> released_ids;
-    for (const auto& opt : texture_options) {
+    for (auto& opt : texture_options) {
         if (opt.texture.id == 0) continue;
         if (released_ids.insert(opt.texture.id).second) {
             UnloadTexture(opt.texture);
@@ -97,13 +97,13 @@ void apply_texture_repeat(Entity &e) {
             float u, v;
 
             if (mat_component->auto_uv) {
-                Vector3 pos = {
+                Vec3 pos = {
                     mesh.vertices[i*3+0],
                     mesh.vertices[i*3+1],
                     mesh.vertices[i*3+2]
                 };
 
-                Vector3 normal = {
+                Vec3 normal = {
                     mesh.normals[i*3+0],
                     mesh.normals[i*3+1],
                     mesh.normals[i*3+2]
@@ -256,28 +256,31 @@ void draw_collision_debug(Entity& entity) {
 
     if (!collision || !transform || !collision->visualize) return;
 
-    Vector3 worldPos = Vector3Add(transform->position, collision->center);
+    Vec3 worldPos = transform->position + collision->center;
 
-    Matrix matScale = MatrixScale(transform->scale.x, transform->scale.y, transform->scale.z);
-    Matrix matRotX  = MatrixRotateX(DEG2RAD * transform->rotation.x);
-    Matrix matRotY  = MatrixRotateY(DEG2RAD * transform->rotation.y);
-    Matrix matRotZ  = MatrixRotateZ(DEG2RAD * transform->rotation.z);
-    Matrix matTrans = MatrixTranslate(worldPos.x, worldPos.y, worldPos.z);
+    Mat4 matScale;
+    matScale.scale(transform->scale.x, transform->scale.y, transform->scale.z);
+    Mat4 matRotX;
+    matRotX.rotationX(DEG2RAD * transform->rotation.x);
+    Mat4 matRotY;
+    matRotY.rotationY(DEG2RAD * transform->rotation.y);
+    Mat4 matRotZ;
+    matRotZ.rotationZ(DEG2RAD * transform->rotation.z);
+    Mat4 matTrans;
+    matTrans.translation(worldPos.x, worldPos.y, worldPos.z);
 
-    Matrix world =
-        MatrixMultiply(
-            MatrixMultiply(
-                MatrixMultiply(matScale, matRotX),
-                MatrixMultiply(matRotY, matRotZ)
-            ),
-            matTrans
-        );
+    Mat4 world =
+        matScale *
+        matRotX *
+        matRotY *
+        matRotZ *
+        matTrans;
 
     Color lineColor = GREEN;
     Color pointColor = LIME;
 
-    rlPushMatrix();
-    rlMultMatrixf(MatrixToFloat(world));
+    PushMatrix();
+    MultMatrix(world);
 
     switch (collision->collider_type) {
 
@@ -319,7 +322,7 @@ void draw_collision_debug(Entity& entity) {
         }
     }
 
-    rlPopMatrix();
+    PopMatrix();
 }
 
 void draw_entity_with_texture(Entity& e) {
@@ -329,24 +332,24 @@ void draw_entity_with_texture(Entity& e) {
     const TransformComponent* transform = e.get_transform_component();
     if (!mesh || !transform || !mat) return;
 
-    rlPushMatrix();
-    rlTranslatef(transform->position.x, transform->position.y, transform->position.z);
+    PushMatrix();
+    Translate(transform->position.x, transform->position.y, transform->position.z);
 
-    rlRotatef(transform->rotation.x, 1, 0, 0);
-    rlRotatef(transform->rotation.y, 0, 1, 0);
-    rlRotatef(transform->rotation.z, 0, 0, 1);
-    
-    rlScalef(transform->scale.x, transform->scale.y, transform->scale.z);
+    Rotate(transform->rotation.x, Vec3(1.0f, 0.0f, 0.0f));
+    Rotate(transform->rotation.y, Vec3(0.0f, 1.0f, 0.0f));
+    Rotate(transform->rotation.z, Vec3(0.0f, 0.0f, 1.0f));
+
+    Scale(Vec3(transform->scale.x, transform->scale.y, transform->scale.z));
 
     const bool edited_mesh_is_double_sided = entity_has_mesh_overrides(e) || mesh->mesh_triangles_detached;
-    if (edited_mesh_is_double_sided) rlDisableBackfaceCulling();
+    if (edited_mesh_is_double_sided) DisableBackfaceCulling();
 
     DrawModel(mesh->model, {0,0,0}, 1.0f, mat->color);
     if (mat->outline_color.a > 0) DrawModelWires(mesh->model, {0,0,0}, 1.0f, mat->outline_color);
 
-    if (edited_mesh_is_double_sided) rlEnableBackfaceCulling();
+    if (edited_mesh_is_double_sided) EnableBackfaceCulling();
 
-    rlPopMatrix();
+    PopMatrix();
     draw_collision_debug(e);
 }
 
@@ -392,7 +395,7 @@ void refresh_textures(Scene* scene, const std::string& project_path) {
     }
 
     std::unordered_set<unsigned int> released_ids;
-    for (const auto& [_, removed_tex] : old_by_name) {
+    for (auto& [_, removed_tex] : old_by_name) {
         if (removed_tex.id == 0) continue;
         if (released_ids.insert(removed_tex.id).second) {
             UnloadTexture(removed_tex);
@@ -453,8 +456,8 @@ void clone_model_materials(Entity* e) {
     if (!mesh || mesh->model.materialCount <= 0) return;
 
     if (mesh->owns_materials) {
-        if (mesh->model.materials)    RL_FREE(mesh->model.materials);
-        if (mesh->model.meshMaterial) RL_FREE(mesh->model.meshMaterial);
+        if (mesh->model.materials)    free(mesh->model.materials);
+        if (mesh->model.meshMaterial) free(mesh->model.meshMaterial);
         mesh->model.materials    = nullptr;
         mesh->model.meshMaterial = nullptr;
         mesh->owns_materials     = false;
@@ -462,56 +465,14 @@ void clone_model_materials(Entity* e) {
 
     if (!mesh->asset || !mesh->asset->loaded_model.materials) return;
 
-    Material* cloned = (Material*)RL_MALLOC(mesh->model.materialCount * sizeof(Material));
+    Material* cloned = (Material*)malloc(mesh->model.materialCount * sizeof(Material));
     memcpy(cloned, mesh->asset->loaded_model.materials, mesh->model.materialCount * sizeof(Material));
     mesh->model.materials = cloned;
 
-    mesh->model.meshMaterial = (int*)RL_MALLOC(mesh->model.meshCount * sizeof(int));
+    mesh->model.meshMaterial = (int*)malloc(mesh->model.meshCount * sizeof(int));
     memcpy(mesh->model.meshMaterial, mesh->asset->loaded_model.meshMaterial, mesh->model.meshCount * sizeof(int));
 
     mesh->owns_materials = true;
 }
 
-RenderTexture2D load_shadowmap_render_texture(int width, int height) {
-    RenderTexture2D target = {0};
 
-    target.id = rlLoadFramebuffer();
-    target.texture.width = width;
-    target.texture.height = height;
-
-    if (target.id > 0) {
-        rlEnableFramebuffer(target.id);
-
-        unsigned char* data = (unsigned char*)malloc(width * height * 4);
-        memset(data, 255, width * height * 4);
-        target.texture.id = rlLoadTexture(data, width, height, PIXELFORMAT_UNCOMPRESSED_R8G8B8A8, 1);
-        free(data);
-        target.texture.width = width;
-        target.texture.height = height;
-        target.texture.format = PIXELFORMAT_UNCOMPRESSED_R8G8B8A8;
-        target.texture.mipmaps = 1;
-
-        target.depth.id = rlLoadTextureDepth(width, height, false);
-        target.depth.width = width;
-        target.depth.height = height;
-        target.depth.format = 19;
-        target.depth.mipmaps = 1;
-
-        rlFramebufferAttach(target.id, target.texture.id, RL_ATTACHMENT_COLOR_CHANNEL0, RL_ATTACHMENT_TEXTURE2D, 0);
-        
-        rlFramebufferAttach(target.id, target.depth.id, RL_ATTACHMENT_DEPTH, RL_ATTACHMENT_TEXTURE2D, 0);
-
-        if (rlFramebufferComplete(target.id)) TRACELOG(LOG_INFO, "FBO: [ID %i] Framebuffer object created successfully", target.id);
-        else TRACELOG(LOG_WARNING, "FBO: Framebuffer object is not complete");
-        rlDisableFramebuffer();
-    }
-
-    else TRACELOG(LOG_WARNING, "FBO: Framebuffer object could not be created");
-    return target;
-}
-
-void unload_shadowmap_render_texture(RenderTexture2D& target) {
-    if (target.id > 0) {
-        rlUnloadFramebuffer(target.id);
-    }
-}

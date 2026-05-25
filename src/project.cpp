@@ -6,12 +6,14 @@
 #include "headers/tex.h"
 #include "headers/version.h"
 #include "editor/editor.h"
-#include "raylib.h"
+#include "QuarkCore/QuarkCore.hpp"
 #include "nlohmann/json.hpp"
 #include <fstream>
 #include <filesystem>
 #include <iostream>
 #include "editor/editor_viewers.h"
+
+using namespace qc;
 
 namespace fs = std::filesystem;
 using json = nlohmann::json;
@@ -184,7 +186,7 @@ void project_save(const std::string& folder_path, const Scene& scene) {
 
     std::ofstream f(root_path / "scene.json");
     if (!f.is_open()) {
-        TraceLog(LOG_ERROR, "Failed to open scene.json for writing: %s", folder_path.c_str());
+        TraceLog(LogLevel::Error, "PROJECT", TextFormat("Failed to open scene.json for writing: %s", folder_path.c_str()));
         return;
     }
     f << j.dump(4);
@@ -193,7 +195,7 @@ void project_save(const std::string& folder_path, const Scene& scene) {
 }
 
 bool project_load(const std::string& folder_path, Scene& scene, Shader shader) {
-    TraceLog(LOG_INFO, "project_load called: %s", folder_path.c_str());
+    TraceLog(LogLevel::Info, "PROJECT", TextFormat("project_load called: %s", folder_path.c_str()));
     const fs::path root_path = resolve_project_root_path(fs::path(folder_path));
     const fs::path json_path = resolve_scene_json_path(fs::path(folder_path));
     if (!fs::exists(json_path)) return false;
@@ -215,12 +217,13 @@ bool project_load(const std::string& folder_path, Scene& scene, Shader shader) {
         }
     }
 
-    TraceLog(LOG_INFO, "=== Loading project ===");
-    TraceLog(LOG_INFO, "  Name:    %s", project_name.c_str());
-    TraceLog(LOG_INFO, "  Version: %s", project_version.c_str());
-    TraceLog(LOG_INFO, "  Scene:   %s", json_path.string().c_str());
-    TraceLog(LOG_INFO, "  Engine:  %s", QUARK_ENGINE_VERSION.c_str());
-    TraceLog(LOG_INFO, "======================");
+    TraceLog(LogLevel::Info, "PROJECT", "=== Loading project ===");
+    TraceLog(LogLevel::Info, "PROJECT", TextFormat("  Name:    %s", project_name.c_str()));
+    TraceLog(LogLevel::Info, "PROJECT", TextFormat("  Version: %s", project_version.c_str()));
+    TraceLog(LogLevel::Info, "PROJECT", TextFormat("  Scene:   %s", json_path.string().c_str()));
+    TraceLog(LogLevel::Info, "PROJECT", TextFormat("  Engine:  %s", QUARK_ENGINE_VERSION.c_str()));
+    TraceLog(LogLevel::Info, "PROJECT", TextFormat("  Root:    %s", root_path.string().c_str()));
+    TraceLog(LogLevel::Info, "PROJECT", "======================");
 
     scene.release_resources();
     reset_light_registry();
@@ -245,14 +248,14 @@ bool project_load(const std::string& folder_path, Scene& scene, Shader shader) {
         }
 
         if (!ej.contains("components")) {
-            TraceLog(LOG_WARNING, "Skipping legacy entity '%s': project must use component data only.", e.name.c_str());
+            TraceLog(LogLevel::Warn, "PROJECT", TextFormat("Skipping legacy entity '%s': project must use component data only.", e.name.c_str()));
             continue;
         }
 
         e.components->deserialize(ej);
 
         if (e.is_group) {
-            scene.entities.push_back(e);
+            scene.entities.push_back(std::move(e));
             continue;
         }
 
@@ -281,7 +284,7 @@ bool project_load(const std::string& folder_path, Scene& scene, Shader shader) {
                     if (!load_model_instance(a, mesh->model)) {
                         mesh->asset = nullptr;
                         mesh->asset_name.clear();
-                        mesh->model = {0};
+                        mesh->model;
                         mesh->owns_model_instance = false;
                         break;
                     }
@@ -322,7 +325,7 @@ bool project_load(const std::string& folder_path, Scene& scene, Shader shader) {
             if (mat->texture.id != 0) {
                 mesh->model.materials[i].maps[MATERIAL_MAP_DIFFUSE].texture = mat->texture;
             }
-            mesh->model.materials[i].shader = shader;
+            mesh->model.materials[i].shader = &shader;
         }
 
         mesh->shader_assigned = true;
@@ -341,7 +344,7 @@ bool project_load(const std::string& folder_path, Scene& scene, Shader shader) {
             }
         }
 
-        scene.entities.push_back(e);
+        scene.entities.push_back(std::move(e));
     }
 
     return true;

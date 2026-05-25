@@ -2,7 +2,6 @@
 
 #include "editor.h"
 #include "../headers/models.h"
-#include "raylib.h"
 #include <filesystem>
 #include <unordered_map>
 #include <vector>
