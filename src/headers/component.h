@@ -318,3 +318,34 @@ public:
 
     void deserialize(const nlohmann::json& json);
 };
+
+class Text3DComponent : public Component {
+public:
+    std::string text = "3D Text";
+    float size = 1.0f;
+    float thickness = 0.2f;
+    float letter_spacing = 0.1f;
+    std::string font_path;
+    
+
+    Text3DComponent() { name = "3D Text"; type = COMPONENT_CUSTOM; }
+
+    std::string get_type_name() const override { return "3D Text"; }
+    ComponentType get_type() const override { return COMPONENT_CUSTOM; }
+
+    void serialize(nlohmann::json& j) const override {
+        j["text"] = text;
+        j["size"] = size;
+        j["thickness"] = thickness;
+        j["letter_spacing"] = letter_spacing;
+        j["font_path"] = font_path;
+    }
+
+    void deserialize(const nlohmann::json& j) override {
+        if (j.contains("text")) text = j["text"];
+        if (j.contains("size")) size = j["size"];
+        if (j.contains("thickness")) thickness = j["thickness"];
+        if (j.contains("letter_spacing")) letter_spacing = j["letter_spacing"];
+        if (j.contains("font_path")) font_path = j["font_path"];
+    }
+};

@@ -4,6 +4,7 @@
 #include "plugins/plugin_manager.h"
 #include "headers/lighting.h"
 #include "headers/language_manager.h"
+#include "headers/text_mesh.h"
 #include "editor/editor.h"
 #include "editor/editor_entity.h"
 #include "headers/camera.h"
@@ -387,6 +388,7 @@ int main(int argc, char* argv[]) {
 
     InitWindow(1280, 720, "Quark Engine", RendererType::OpenGL);
     SetTargetFPS(GetCurrentMonitorRefreshRate());
+    init_freetype();
     SetExitKey(KEY_NULL);
     qcImGuiSetup(false);
     reload_editor_fonts(LanguageManager::get().current);
@@ -529,6 +531,7 @@ int main(int argc, char* argv[]) {
     UnloadShader(lighting_shader);
     g_plugin_manager->unload_all();
     qcImGuiShutdown();
+    shutdown_freetype();
     CloseWindow();
     return 0;
 }

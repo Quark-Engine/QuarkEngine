@@ -14,6 +14,7 @@ public:
     static void draw_light_component(Editor& editor, Entity& entity, LightComponent* light, Shader shader);
     static void draw_material_component(Editor& editor, Entity& entity, MaterialComponent* material);
     static void draw_collision_component(Editor& editor, Entity& entity, CollisionComponent* collision);
+    static void draw_3d_text_component(Editor& editor, Entity& entity, Text3DComponent* text);
     
 private:
     static bool should_show_component_menu;

@@ -38,6 +38,7 @@ target_include_directories(imgui PUBLIC
     ${CMAKE_SOURCE_DIR}/imgui
     ${CMAKE_SOURCE_DIR}/src
     ${CMAKE_SOURCE_DIR}/src/headers
+    ${CMAKE_SOURCE_DIR}/quark-libs/freetype/include
 )
 
 target_link_libraries(imgui PUBLIC
@@ -93,9 +94,14 @@ if(BUILD_ENGINE)
         src/plugins/plugin_manager.cpp
         src/scene.cpp
         src/tex.cpp
+        src/text_mesh.cpp
     )
 
     add_executable(${PROJECT_NAME} ${SOURCE_FILES} ${EDITOR_FILES})
+
+    target_include_directories(${PROJECT_NAME} PRIVATE
+        ${CMAKE_SOURCE_DIR}/quark-libs/freetype/include
+    )
 
     if(WIN32)
         target_compile_definitions(${PROJECT_NAME}
@@ -136,6 +142,10 @@ if(BUILD_ENGINE)
 
     if(WIN32)
         add_custom_command(TARGET ${PROJECT_NAME} POST_BUILD
+        COMMAND ${CMAKE_COMMAND} -E make_directory ${CMAKE_RUNTIME_OUTPUT_DIRECTORY}
+    )
+
+        add_custom_command(TARGET ${PROJECT_NAME} POST_BUILD
             COMMAND ${CMAKE_COMMAND} -E copy_if_different
                 $<TARGET_FILE:QuarkCore>
                 $<TARGET_FILE:imgui>
@@ -145,6 +155,19 @@ if(BUILD_ENGINE)
                 $<TARGET_FILE:freetype>
                 "${VULKAN_RUNTIME_DLL}"
                 ${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/Debug
+        )
+    endif()
+
+    if(WIN32)
+        add_custom_command(TARGET ${PROJECT_NAME} POST_BUILD
+            COMMAND ${CMAKE_COMMAND} -E make_directory
+                ${CMAKE_RUNTIME_OUTPUT_DIRECTORY}
+        )
+
+        add_custom_command(TARGET ${PROJECT_NAME} POST_BUILD
+            COMMAND ${CMAKE_COMMAND} -E copy_if_different
+                $<TARGET_FILE:freetype>
+                $<TARGET_FILE_DIR:${PROJECT_NAME}>
         )
     endif()
 endif()

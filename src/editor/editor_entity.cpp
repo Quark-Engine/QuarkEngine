@@ -37,7 +37,13 @@ Entity make_entity_from_asset(Scene& scene, ModelAsset& asset) {
         store_material_textures(&entity);
         mat->texture_source = TEXTURE_NONE;
         mat->texture_name.clear();
+
+        if (asset.name == "Text") {
+            auto text_comp = std::make_shared<Text3DComponent>();
+            entity.get_components()->add_component(text_comp);
+        }
     } 
+
     else {
         if (!load_model_instance(asset, mesh->model)) {
             mesh->asset = nullptr;
