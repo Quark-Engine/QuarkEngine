@@ -1,6 +1,7 @@
 #include <string>
 #include <vector>
-#include <raylib.h>
+#include "QuarkCore/QuarkCore.hpp"
+using namespace qc;
 
 void init_freetype();
 void shutdown_freetype();

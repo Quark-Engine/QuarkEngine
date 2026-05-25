@@ -7,6 +7,7 @@
 #include <string>
 #include <algorithm>
 #include <cctype>
+#include <memory>
 
 #if _WIN32
     #include <cstdlib>
@@ -43,7 +44,7 @@ static std::string lowercase_copy(const std::string& str) {
 
 void init_freetype() {
     if (FT_Init_FreeType(&g_ft)) {
-        TraceLog(LOG_ERROR, "FreeType: failed to init");
+        TraceLog(LogLevel::Error, "Freetype", "failed to init");
     }
 }
 
@@ -319,10 +320,10 @@ struct MeshBuilder {
         m.vertexCount   = (int)(verts.size() / 3);
         m.triangleCount = (int)(indices.size() / 3);
 
-        m.vertices  = (float*)MemAlloc((unsigned int)verts.size()   * sizeof(float));
-        m.normals   = (float*)MemAlloc((unsigned int)norms.size()   * sizeof(float));
-        m.texcoords = (float*)MemAlloc((unsigned int)uvs.size()     * sizeof(float));
-        m.indices   = (unsigned short*)MemAlloc((unsigned int)indices.size() * sizeof(unsigned short));
+        m.vertices  = (float*)malloc((unsigned int)verts.size()   * sizeof(float));
+        m.normals   = (float*)malloc((unsigned int)norms.size()   * sizeof(float));
+        m.texcoords = (float*)malloc((unsigned int)uvs.size()     * sizeof(float));
+        m.indices   = (unsigned short*)malloc((unsigned int)indices.size() * sizeof(unsigned short));
 
         memcpy(m.vertices,  verts.data(),   verts.size()   * sizeof(float));
         memcpy(m.normals,   norms.data(),   norms.size()   * sizeof(float));
@@ -340,12 +341,12 @@ Model generate_text_mesh(const std::string& text, float size, float thickness, f
         return LoadModelFromMesh(GenMeshCube(0.001f, 0.001f, 0.001f));
     };
 
-    if (!g_ft) { TraceLog(LOG_WARNING, "FreeType not initialised"); return make_fallback(); }
+    if (!g_ft) { TraceLog(LogLevel::Warn, "Freetype", "not initialised"); return make_fallback(); }
     if (text.empty() || font_path.empty()) return make_fallback();
 
     FT_Face face;
     if (FT_New_Face(g_ft, font_path.c_str(), 0, &face)) {
-        TraceLog(LOG_WARNING, "FreeType: cannot load font %s", font_path.c_str());
+        TraceLog(LogLevel::Warn, "Freetype", TextFormat("cannot load font %s", font_path.c_str()));
         return make_fallback();
     }
 
@@ -401,7 +402,7 @@ Model generate_text_mesh(const std::string& text, float size, float thickness, f
     Model model = LoadModelFromMesh(mesh);
 
     if (model.materialCount == 0) {
-        model.materials  = (Material*)MemAlloc(sizeof(Material));
+        model.materials  = (Material*)malloc(sizeof(Material));
         model.materials[0] = LoadMaterialDefault();
         model.materialCount = 1;
     }
