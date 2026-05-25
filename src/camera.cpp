@@ -2,6 +2,20 @@
 #include <cmath>
 #include "imgui.h"
 #include "headers/ImGuizmo.h"
+#include "SDL3/SDL_mouse.h"
+
+namespace {
+
+void set_camera_capture(bool enabled) {
+    if (SDL_Window* window = GetNativeWindow()) {
+        SDL_SetWindowRelativeMouseMode(window, enabled);
+    }
+
+    if (enabled) DisableCursor();
+    else EnableCursor();
+}
+
+} // namespace
 
 FlyCamera::FlyCamera() {
     cam.position = {5.0f, 5.0f, 5.0f};
@@ -24,22 +38,22 @@ void FlyCamera::update(Scene& scene) {
     if (sel_mesh && sel_mesh->vertex_gizmo) return;
 
     if (IsMouseButtonPressed(MouseButton::Left) && !ImGuizmo::IsOver()) {
-        DisableCursor();
+        set_camera_capture(true);
         active = true;
-        
-        Vec2 winCenter = { GetScreenWidth()/2.0f, GetScreenHeight()/2.0f };
-        SetMousePosition(winCenter.x, winCenter.y);
     }
 
-    if (IsKeyPressed(KeyboardKey::Escape)) {
-        EnableCursor();
+    if (IsKeyPressed(KeyboardKey::Escape) || !IsWindowFocused()) {
+        set_camera_capture(false);
         active = false;
     }
 
     if (!active) return;
 
     float dt = GetDeltaTime();
-    Vec2 md = GetMouseDelta();
+    float rel_x = 0.0f;
+    float rel_y = 0.0f;
+    SDL_GetRelativeMouseState(&rel_x, &rel_y);
+    Vec2 md = { rel_x, rel_y };
     if (fabs(md.x) > 100 || fabs(md.y) > 100) md = {0,0};
 
     yaw   -= md.x * sensitivity;
@@ -62,8 +76,6 @@ void FlyCamera::update(Scene& scene) {
     if (IsKeyDown(KeyboardKey::D)) cam.position = cam.position + (right * (speed * dt));
 
     cam.target = cam.position + forward;
-    Vec2 winCenter = { GetScreenWidth()/2.0f, GetScreenHeight()/2.0f };
-    SetMousePosition(winCenter.x, winCenter.y);
 }
 
 Camera3D& FlyCamera::get_camera() {

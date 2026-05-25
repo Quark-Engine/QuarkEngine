@@ -1143,6 +1143,35 @@ void delete_entity(Editor& editor, Entity* entity) {
     editor.scene.selected = -1;
 }
 
+static void draw_bottom_status_bar() {
+    ImGuiViewport* viewport = ImGui::GetMainViewport();
+    if (viewport == nullptr) return;
+
+    const float status_bar_height = 28.0f;
+    ImGuiWindowFlags flags =
+        ImGuiWindowFlags_NoDocking |
+        ImGuiWindowFlags_NoTitleBar |
+        ImGuiWindowFlags_NoResize |
+        ImGuiWindowFlags_NoMove |
+        ImGuiWindowFlags_NoScrollbar |
+        ImGuiWindowFlags_NoScrollWithMouse |
+        ImGuiWindowFlags_NoSavedSettings |
+        ImGuiWindowFlags_NoBringToFrontOnFocus;
+
+    ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(10.0f, 5.0f));
+    if (ImGui::BeginViewportSideBar("##main_status_bar", viewport, ImGuiDir_Down, status_bar_height, flags)) {
+        ImGui::TextDisabled("Quark Engine");
+
+        const char* fps_text = TextFormat("FPS: %d", GetFPS());
+        const float fps_text_width = ImGui::CalcTextSize(fps_text).x;
+        ImGui::SameLine();
+        ImGui::SetCursorPosX(ImGui::GetWindowWidth() - fps_text_width - 10.0f);
+        ImGui::Text("%s", fps_text);
+    }
+    ImGui::End();
+    ImGui::PopStyleVar();
+}
+
 void draw_ui(Editor& editor, Shader shader, FlyCamera camera, PluginContext* plugin_ctx) {
     using namespace editor_internal;
 
@@ -1238,6 +1267,8 @@ void draw_ui(Editor& editor, Shader shader, FlyCamera camera, PluginContext* plu
 
         ImGui::EndMainMenuBar();
     }
+
+    draw_bottom_status_bar();
 
     ImGuiIO& io = ImGui::GetIO();
 
