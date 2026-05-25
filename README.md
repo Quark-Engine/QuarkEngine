@@ -1,8 +1,6 @@
-# Quark Engine QuarkCore rewrite branch
+# Quark Engine
 
-This is a branch for rewriting Quark Engine to QuarkCore, which is a raylib-style framework.
-
-# Default README:
+A light-weight engine in C++ and QuarkCore.
 
 ## Features
 
