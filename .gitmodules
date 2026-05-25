@@ -1,3 +1,4 @@
 [submodule "quark-libs/QuarkCore"]
 	path = quark-libs/QuarkCore
 	url = https://github.com/Quark-Engine/QuarkCore
+	branch = main
