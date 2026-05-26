@@ -40,7 +40,7 @@ jobs:
 
       - name: Install macOS dependencies
         if: runner.os == 'macOS'
-        run: brew install ninja molten-vk
+        run: brew install ninja molten-vk vulkan-headers vulkan-loader
 
       - name: Configure CMake (Linux/macOS)
         if: runner.os != 'Windows'
