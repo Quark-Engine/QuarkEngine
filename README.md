@@ -1,4 +1,4 @@
-# Quark Engine QuarkCore rewrite branch
+# Quark Engine QuarkCore rewrite branch(OUTDATED)
 
 This is a branch for rewriting Quark Engine to QuarkCore, which is a raylib-style framework.
 
