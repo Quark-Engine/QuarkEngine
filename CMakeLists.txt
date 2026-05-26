@@ -10,6 +10,7 @@ option(BUILD_PLUGIN "Build Plugin" OFF)
 set(QC_BUILD_EXAMPLES OFF CACHE BOOL "" FORCE)
 set(BUILD_GAMES    OFF CACHE BOOL "" FORCE)
 set(BUILD_SHARED_LIBS    ON CACHE BOOL "" FORCE)
+set(CMAKE_POSITION_INDEPENDENT_CODE ON)
 
 include_directories(
     ${CMAKE_SOURCE_DIR}/quark-libs/QuarkCore/include
