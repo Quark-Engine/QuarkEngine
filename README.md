@@ -48,7 +48,12 @@ This file is automatically created on first run and manages both application set
 
 ## Dependencies on Linux
 ```sh
-sudo apt-get install -y ninja-build libgl1-mesa-dev libx11-dev libxrandr-dev libxi-dev libxinerama-dev libxcursor-dev libxxf86vm-dev
+sudo apt-get install -y ninja-build libgl1-mesa-dev libx11-dev libxrandr-dev libxi-dev libxinerama-dev libxcursor-dev libxxf86vm-dev vulkan-tools libvulkan-dev
+```
+
+## Dependencies on MacOS
+```sh
+brew install ninja molten-vk vulkan-headers vulkan-loader
 ```
 
 # Build
