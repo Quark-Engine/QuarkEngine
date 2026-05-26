@@ -34,11 +34,13 @@ jobs:
             libxi-dev \
             libxinerama-dev \
             libxcursor-dev \
-            libxxf86vm-dev
+            libxxf86vm-dev \
+            vulkan-tools \
+            libvulkan-dev
 
       - name: Install macOS dependencies
         if: runner.os == 'macOS'
-        run: brew install ninja
+        run: brew install ninja molten-vk
 
       - name: Configure CMake (Linux/macOS)
         if: runner.os != 'Windows'

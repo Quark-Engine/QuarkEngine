@@ -154,7 +154,7 @@ if(BUILD_ENGINE)
                 $<TARGET_FILE:ZLIB::ZLIB>
                 $<TARGET_FILE:freetype>
                 "${VULKAN_RUNTIME_DLL}"
-                ${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/Debug
+                ${CMAKE_RUNTIME_OUTPUT_DIRECTORY}
         )
     endif()
 
