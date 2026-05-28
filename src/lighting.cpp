@@ -1,6 +1,9 @@
 #include "headers/lighting.h"
+#include <cstring>
+
 static bool used[QC_MAX_LIGHTS] = {false};
 
+// lighting
 void update_lighting(Shader shader, Lighting& l) {
     l.light.position = l.position;
     l.light.target   = l.target;
@@ -21,13 +24,16 @@ void update_lighting(Shader shader, Lighting& l) {
 
     float intensity = l.intensity;
     float range = l.range;
+
     int intensity_loc = GetShaderLocation(shader, TextFormat("lights[%i].intensity", l.id));
-    int range_loc     = GetShaderLocation(shader, TextFormat("lights[%i].range",     l.id));
+    int range_loc = GetShaderLocation(shader, TextFormat("lights[%i].range", l.id));
+
     SetShaderValue(shader, intensity_loc, &intensity, SHADER_UNIFORM_FLOAT);
-    SetShaderValue(shader, range_loc,     &range,     SHADER_UNIFORM_FLOAT);
+    SetShaderValue(shader, range_loc, &range, SHADER_UNIFORM_FLOAT);
 
     if (l.spot_angle_loc == -1)
         l.spot_angle_loc = GetShaderLocation(shader, TextFormat("lights[%i].spotAngle", l.id));
+
     SetShaderValue(shader, l.spot_angle_loc, &l.spot_angle, SHADER_UNIFORM_FLOAT);
 }
 
@@ -41,6 +47,7 @@ int allocate_light_id() {
     for (int i = 0; i < QC_MAX_LIGHTS; i++) {
         if (!used[i]) { used[i] = true; return i; }
     }
+
     return -1;
 }
 
@@ -49,14 +56,14 @@ void free_light_id(int id) {
 }
 
 Lighting create_lighting(Vec3 pos, Color color) {
-    Lighting l = {};
-    l.position  = pos;
-    l.target    = Vec3(0,0,0);
-    l.color     = color;
-    l.enabled   = true;
+    Lighting l   = {};
+    l.position   = pos;
+    l.target     = Vec3(0,0,0);
+    l.color      = color;
+    l.enabled    = true;
     l.light.type = LIGHT_POINT;
-    l.intensity = 1.0f;
-    l.range     = 5.0f;
+    l.intensity  = 1.0f;
+    l.range      = 5.0f;
     l.spot_angle = 30.0f;
     return l;
 }
@@ -84,4 +91,42 @@ static void cache_extended_light_uniform_locations(Lighting& lighting, Shader sh
 
 void initialize_lighting_uniform_cache(Lighting& lighting, Shader shader, int slot) {
     cache_extended_light_uniform_locations(lighting, shader, slot);
+}
+
+// shadows
+void ShadowMap::init(int resolution) {
+    size = resolution;
+    fbo = LoadRenderTexture(size, size);
+    active = fbo.id > 0;
+}
+
+void ShadowMap::unload() {
+    if (fbo.id > 0) {
+        UnloadRenderTexture(fbo);
+        fbo = {0};
+        active = false;
+    }
+}
+
+void shadow_map_begin(ShadowMap& sm) {
+    BeginTextureMode(sm.fbo);
+    ClearBackground(WHITE);
+}
+
+void shadow_map_end() {
+    EndTextureMode();
+}
+
+Mat4 compute_light_space_matrix(Vec3 light_pos, Vec3 target, float ortho_size, float near, float far) {
+    Mat4 view = Mat4::lookAt(light_pos, target, Vec3{0, 1, 0});
+    Mat4 proj = Mat4::ortho(-ortho_size, ortho_size, -ortho_size, ortho_size, near, far);
+
+    return proj * view;
+}
+
+Mat4 compute_spot_light_space_matrix(Vec3 light_pos, Vec3 target, float fov, float near, float far) {
+    Mat4 view = Mat4::lookAt(light_pos, target, Vec3{0, 1, 0});
+    Mat4 proj = Mat4::perspective(fov * DEG2RAD, 1.0f, near, far);
+
+    return proj * view;
 }

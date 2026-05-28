@@ -428,6 +428,21 @@ int main(int argc, char* argv[]) {
     SetShaderValue(lighting_shader, emission_color_loc, Vec3{0.0f, 0.0f, 0.0f});
     SetShaderValue(lighting_shader, emission_power_loc, 0.0f);
 
+    ShadowMap shadow_maps[QC_MAX_LIGHTS] = {};
+    for (int i = 0; i < QC_MAX_LIGHTS; i++) {
+        shadow_maps[i].init();
+    }
+
+    int u_light_space_matrix[QC_MAX_LIGHTS];
+    int u_shadow_map[QC_MAX_LIGHTS];
+    int u_shadow_map_active[QC_MAX_LIGHTS];
+
+    for (int i = 0; i < QC_MAX_LIGHTS; i++) {
+        u_light_space_matrix[i] = GetShaderLocation(lighting_shader, TextFormat("lightSpaceMatrix[%i]", i));
+        u_shadow_map[i]         = GetShaderLocation(lighting_shader, TextFormat("shadowMap[%i]", i));
+        u_shadow_map_active[i]  = GetShaderLocation(lighting_shader, TextFormat("shadowMapActive[%i]", i));
+    }
+
     g_plugin_manager = new PluginManager();
     ctx = new PluginContext{};
 
@@ -475,6 +490,61 @@ int main(int argc, char* argv[]) {
         Vec3 cam_pos = camera.get_camera().position;
         SetShaderValue(lighting_shader, lighting_shader.locs[SHADER_LOC_VECTOR_VIEW], &cam_pos, SHADER_UNIFORM_VEC3);
         prepare_scene_light_uniforms(editor.scene, lighting_shader, scene_center);
+
+        for (Entity& e : editor.scene.entities) {
+            LightComponent* light = e.get_light_component();
+            TransformComponent* transform = e.get_transform_component();
+
+            if (!light || !transform || !light->enabled || !light->created) continue;
+
+            int slot = light->light.id;
+            if (slot < 0 || slot >= QC_MAX_LIGHTS) continue;
+
+            ShadowMap& sm = shadow_maps[slot];
+            sm.active = true;
+
+            if (light->light.light.type == LIGHT_DIRECTIONAL) {
+                sm.light_space = compute_light_space_matrix(transform->position, light->light.target, scene_radius, 0.1f, scene_radius * 4.0f);
+            }
+
+            else {
+                float fov = (light->light.light.type == LIGHT_SPOT) ? light->light.spot_angle * 2.0f : 90.0f;
+                sm.light_space = compute_spot_light_space_matrix(transform->position, light->light.target, fov, 0.1f, light->light.range * 2.0f);
+            }
+
+            shadow_map_begin(sm);
+            BeginMode3D(camera.get_camera());
+
+            float lsm[16];
+
+            memcpy(lsm, &sm.light_space, sizeof(lsm));
+            SetShaderValueMatrix(lighting_shader, u_light_space_matrix[slot], *(Matrix*)lsm);
+
+            for (Entity& entity : editor.scene.entities) {
+                MeshComponent* mesh = entity.get_mesh_component();
+                TransformComponent* transform = entity.get_transform_component();
+                if (!mesh || !transform) continue;
+
+                draw_entity_with_texture(entity);
+            }
+
+            EndMode3D();
+            shadow_map_end();
+        }
+
+        for (int i = 0; i < QC_MAX_LIGHTS; i++) {
+            float lsm[16];
+
+            memcpy(lsm, &shadow_maps[i].light_space, sizeof(lsm));
+            SetShaderValueMatrix(lighting_shader, u_light_space_matrix[i], *(Matrix*)lsm);
+
+            int active = shadow_maps[i].active ? 1 : 0;
+            SetShaderValue(lighting_shader, u_shadow_map_active[i], &active, SHADER_UNIFORM_INT);
+
+            if (shadow_maps[i].active) {
+                SetShaderValueTexture(lighting_shader, u_shadow_map[i], shadow_maps[i].fbo.texture);
+            }
+        }
 
         BeginDrawing();
             ClearBackground(DARKGRAY);
@@ -528,6 +598,10 @@ int main(int argc, char* argv[]) {
     editor.scene.release_resources();
     unload_models();
     unload_textures();
+
+    for (int i = 0; i < QC_MAX_LIGHTS; i++)
+        shadow_maps[i].unload();
+
     UnloadShader(lighting_shader);
     g_plugin_manager->unload_all();
     qcImGuiShutdown();

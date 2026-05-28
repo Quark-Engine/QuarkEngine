@@ -9,16 +9,23 @@ uniform mat4 projection;
 uniform mat4 model;
 uniform mat4 normalMatrix;
 
+uniform mat4 lightSpaceMatrix[4];
+
 out vec3 fragPosition;
 out vec2 fragTexCoord;
 out vec4 fragColor;
 out vec3 fragNormal;
+out vec4 fragPosLightSpace[4];
 
 void main()
 {
     fragPosition = vec3(model * vec4(aPosition, 1.0));
     fragTexCoord = aTexCoord0;
-    fragColor = vec4(1.0);
-    fragNormal = normalize((normalMatrix * vec4(aNormal, 0.0)).xyz);
+    fragColor    = vec4(1.0);
+    fragNormal   = normalize((normalMatrix * vec4(aNormal, 0.0)).xyz);
+
+    for (int i = 0; i < 4; i++)
+        fragPosLightSpace[i] = lightSpaceMatrix[i] * vec4(fragPosition, 1.0);
+
     gl_Position = projection * view * vec4(fragPosition, 1.0);
 }
