@@ -1,7 +1,7 @@
 #define NOMINMAX
 
 #include "QuarkCore/QuarkCore.hpp"
-#include "plugin_manager.h"
+#include "plugins/plugin_manager.h"
 #include <filesystem>
 #include <iostream>
 #include <imgui.h>

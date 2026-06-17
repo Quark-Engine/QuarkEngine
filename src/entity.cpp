@@ -1,5 +1,5 @@
-#include "headers/entity.h"
-#include "headers/component.h"
+#include "entity.h"
+#include "component.h"
 
 Entity::Entity() 
     : id(0),

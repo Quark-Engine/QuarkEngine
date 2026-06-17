@@ -1,5 +1,5 @@
-#include "headers/tex.h"
-#include "headers/models.h"
+#include "tex.h"
+#include "models.h"
 #include <algorithm>
 #include <unordered_map>
 #include <unordered_set>

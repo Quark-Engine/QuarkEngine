@@ -1,6 +1,6 @@
 #pragma once
-#include "headers/component.h"
-#include "headers/entity.h"
+#include "component.h"
+#include "entity.h"
 #include "imgui.h"
 #include "editor/editor.h"
 #include <string>

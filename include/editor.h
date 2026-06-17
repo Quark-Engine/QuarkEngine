@@ -5,7 +5,7 @@
 #include "models.h"
 #include <stack>
 #include <filesystem>
-#include <plugin_manager.h>
+#include "plugins/plugin_manager.h"
 
 struct SceneState {
     std::vector<Entity> entities;

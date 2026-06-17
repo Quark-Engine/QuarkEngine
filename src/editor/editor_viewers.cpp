@@ -1,8 +1,8 @@
-#include "editor_viewers.h"
-#include "editor_utils.h"
-#include "../headers/language_manager.h"
-#include "../headers/tex.h"
-#include "../headers/entity.h"
+#include "editor/editor_viewers.h"
+#include "editor/editor_utils.h"
+#include "language_manager.h"
+#include "tex.h"
+#include "entity.h"
 #include "imgui.h"
 #include "qcImGui.h"
 #include <cmath>
@@ -11,7 +11,7 @@
 #include <iostream>
 #include <cstdlib>
 #include <algorithm>
-#include "editor_assets.h"
+#include "editor/editor_assets.h"
 
 #define lang LanguageManager::get()
 

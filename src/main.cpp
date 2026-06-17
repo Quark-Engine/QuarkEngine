@@ -2,15 +2,15 @@
 #include "qcImGui.h"
 #include "imgui.h"
 #include "plugins/plugin_manager.h"
-#include "headers/lighting.h"
-#include "headers/language_manager.h"
-#include "headers/text_mesh.h"
+#include "lighting.h"
+#include "language_manager.h"
+#include "text_mesh.h"
 #include "editor/editor.h"
 #include "editor/editor_entity.h"
-#include "headers/camera.h"
-#include "headers/project.h"
-#include "headers/hub.h"
-#include "headers/tex.h"
+#include "camera.h"
+#include "project.h"
+#include "hub.h"
+#include "tex.h"
 #include <iostream>
 #include <cfloat>
 

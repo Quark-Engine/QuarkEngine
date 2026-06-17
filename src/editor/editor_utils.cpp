@@ -1,7 +1,7 @@
-#include "editor_utils.h"
+#include "editor/editor_utils.h"
 #include "QuarkCore/QuarkCore.hpp"
-#include "headers/entity.h"
-#include "headers/models.h"
+#include "entity.h"
+#include "models.h"
 #include <algorithm>
 #include <cmath>
 #include <filesystem>

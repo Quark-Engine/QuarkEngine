@@ -1,7 +1,7 @@
 #pragma once
 
 #include "editor.h"
-#include "../headers/models.h"
+#include "../models.h"
 #include <filesystem>
 #include <unordered_map>
 #include <vector>

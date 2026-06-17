@@ -1,7 +1,7 @@
-#include "../headers/component.h"
+#include "component.h"
 #define _CRT_SECURE_NO_WARNINGS
 
-#include "../headers/entity.h"
+#include "entity.h"
 #include "nlohmann/json.hpp"
 
 void MeshComponent::serialize(nlohmann::json& json) const {

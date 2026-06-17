@@ -1,10 +1,10 @@
-#include "editor_entity.h"
-#include "editor_assets.h"
-#include "editor_utils.h"
-#include "editor_viewers.h"
-#include "../nlohmann/json.hpp"
-#include "../headers/models.h"
-#include "../headers/entity.h"
+#include "editor/editor_entity.h"
+#include "editor/editor_assets.h"
+#include "editor/editor_utils.h"
+#include "editor/editor_viewers.h"
+#include "nlohmann/json.hpp"
+#include "models.h"
+#include "entity.h"
 #include <fstream>
 
 void assign_entity_name(Entity& entity, const char* new_name) {

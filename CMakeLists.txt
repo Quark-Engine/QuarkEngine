@@ -16,7 +16,7 @@ include_directories(
     ${CMAKE_SOURCE_DIR}/quark-libs/QuarkCore/include
     ${CMAKE_SOURCE_DIR}/quark-libs/imgui/include
     ${CMAKE_SOURCE_DIR}/imgui
-    ${CMAKE_SOURCE_DIR}/src/headers
+    ${CMAKE_SOURCE_DIR}/include
     ${CMAKE_SOURCE_DIR}/src/plugins
     ${CMAKE_SOURCE_DIR}/src
 )
@@ -38,7 +38,7 @@ target_include_directories(imgui PUBLIC
     ${CMAKE_SOURCE_DIR}/quark-libs/imgui/include
     ${CMAKE_SOURCE_DIR}/imgui
     ${CMAKE_SOURCE_DIR}/src
-    ${CMAKE_SOURCE_DIR}/src/headers
+    ${CMAKE_SOURCE_DIR}/include
     ${CMAKE_SOURCE_DIR}/quark-libs/freetype/include
 )
 
@@ -102,6 +102,7 @@ if(BUILD_ENGINE)
 
     target_include_directories(${PROJECT_NAME} PRIVATE
         ${CMAKE_SOURCE_DIR}/quark-libs/freetype/include
+        ${CMAKE_SOURCE_DIR}/include
     )
 
     if(WIN32)

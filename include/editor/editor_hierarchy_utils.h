@@ -1,7 +1,7 @@
 #pragma once
 
-#include "../headers/entity.h"
-#include "../headers/scene.h"
+#include "../entity.h"
+#include "../scene.h"
 #include <vector>
 #include <string>
 

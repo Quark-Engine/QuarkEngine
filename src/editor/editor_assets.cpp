@@ -1,12 +1,12 @@
-#include "editor_assets.h"
+#include "editor/editor_assets.h"
 
-#include "editor.h"
-#include "editor_entity.h"
-#include "editor_utils.h"
-#include "editor_viewers.h"
-#include "../headers/project.h"
-#include "../headers/tex.h"
-#include "../headers/language_manager.h"
+#include "editor/editor.h"
+#include "editor/editor_entity.h"
+#include "editor/editor_utils.h"
+#include "editor/editor_viewers.h"
+#include "project.h"
+#include "tex.h"
+#include "language_manager.h"
 #include "imgui.h"
 #include <algorithm>
 #include <fstream>

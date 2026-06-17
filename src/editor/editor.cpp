@@ -1,10 +1,10 @@
-﻿#include "editor.h"
+﻿#include "editor/editor.h"
 
-#include "editor_assets.h"
-#include "editor_ui.h"
-#include "editor_utils.h"
-#include "editor_viewers.h"
-#include "../headers/project.h"
+#include "editor/editor_assets.h"
+#include "editor/editor_ui.h"
+#include "editor/editor_utils.h"
+#include "editor/editor_viewers.h"
+#include "project.h"
 #include "imgui.h"
 
 namespace fs = std::filesystem;

@@ -1,7 +1,7 @@
 #pragma once
 
-#include "../headers/editor.h"
-#include "../headers/models.h"
+#include "../editor.h"
+#include "../models.h"
 #include <string>
 #include <filesystem>
 

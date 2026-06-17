@@ -1,8 +1,8 @@
 ﻿#pragma once
 
-#include "../headers/editor.h"
+#include "../editor.h"
 #include "imgui.h"
-#include "../headers/ImGuizmo.h"
+#include "ImGuizmo.h"
 #include <string>
 #include <unordered_map>
 

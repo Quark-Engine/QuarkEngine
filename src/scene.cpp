@@ -1,5 +1,5 @@
-#include "headers/scene.h"
-#include "headers/models.h"
+#include "scene.h"
+#include "models.h"
 #include <unordered_set>
 
 Entity* Scene::get_selected() {

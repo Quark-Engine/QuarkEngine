@@ -1,7 +1,7 @@
-#include "headers/camera.h"
+#include "camera.h"
 #include <cmath>
 #include "imgui.h"
-#include "headers/ImGuizmo.h"
+#include "ImGuizmo.h"
 #include "SDL3/SDL_mouse.h"
 
 namespace {

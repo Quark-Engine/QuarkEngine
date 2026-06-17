@@ -1,21 +1,21 @@
-#include "editor_ui.h"
+#include "editor/editor_ui.h"
 
-#include "editor.h"
-#include "editor_assets.h"
-#include "editor_components_ui.h"
-#include "editor_entity.h"
-#include "editor_utils.h"
-#include "editor_viewers.h"
-#include "../headers/ImGuizmo.h"
-#include "../headers/lighting.h"
-#include "../headers/version.h"
-#include "../headers/project.h"
+#include "editor/editor.h"
+#include "editor/editor_assets.h"
+#include "editor/editor_components_ui.h"
+#include "editor/editor_entity.h"
+#include "editor/editor_utils.h"
+#include "editor/editor_viewers.h"
+#include "ImGuizmo.h"
+#include "lighting.h"
+#include "version.h"
+#include "project.h"
 #include "imgui.h"
 #include "imgui_internal.h"
 #include <cstring>
 #include <cmath>
 #include <vector>
-#include <language_manager.h>
+#include "language_manager.h"
 
 #define lang LanguageManager::get()
 

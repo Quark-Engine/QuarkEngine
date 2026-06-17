@@ -18,7 +18,7 @@
 
 #endif
 
-#include "headers/text_mesh.h"
+#include "text_mesh.h"
 
 
 namespace fs = std::filesystem;

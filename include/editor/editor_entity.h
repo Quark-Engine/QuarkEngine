@@ -1,8 +1,8 @@
 #pragma once
 
 #include <filesystem>
-#include "../headers/scene.h"
-#include "../headers/entity.h"
+#include "scene.h"
+#include "entity.h"
 
 namespace fs = std::filesystem;
 

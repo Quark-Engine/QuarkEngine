@@ -1,4 +1,4 @@
-#include "editor_hierarchy_utils.h"
+#include "editor/editor_hierarchy_utils.h"
 
 std::vector<int> get_entity_children(const Scene& scene, int parent_id) {
     std::vector<int> children;

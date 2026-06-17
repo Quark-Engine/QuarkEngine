@@ -1,6 +1,6 @@
 #pragma once
 
-#include "headers/entity.h"
+#include "entity.h"
 #include <filesystem>
 #include <string>
 

@@ -1,14 +1,14 @@
-#include "editor_components_ui.h"
-#include "editor_utils.h"
-#include "editor_ui.h"
-#include "editor_viewers.h"
+#include "editor/editor_components_ui.h"
+#include "editor/editor_utils.h"
+#include "editor/editor_ui.h"
+#include "editor/editor_viewers.h"
 #include "imgui.h"
-#include "headers/text_mesh.h"
-#include "headers/models.h"
-#include "headers/entity.h"
+#include "text_mesh.h"
+#include "models.h"
+#include "entity.h"
 #include "editor/editor_ui.h"
 #include "editor/editor.h"
-#include <language_manager.h>
+#include "language_manager.h"
 #include <filesystem>
 #include <cstring>
 

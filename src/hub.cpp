@@ -22,8 +22,8 @@ using namespace qc;
 #endif
 
 #include "hub.h"
-#include "headers/version.h"
-#include "headers/language_manager.h"
+#include "version.h"
+#include "language_manager.h"
 #include "project.h"
 #include "imgui.h"
 #include "qcImGui.h"

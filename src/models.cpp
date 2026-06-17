@@ -1,6 +1,6 @@
-#include "headers/models.h"
-#include "headers/scene.h"
-#include "headers/text_mesh.h"
+#include "models.h"
+#include "scene.h"
+#include "text_mesh.h"
 #include "editor/editor_utils.h"
 #include <algorithm>
 #include <cctype>

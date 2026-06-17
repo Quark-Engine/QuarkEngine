@@ -1,4 +1,4 @@
-#include "headers/lighting.h"
+#include "lighting.h"
 #include <cstring>
 
 static bool used[QC_MAX_LIGHTS] = {false};
