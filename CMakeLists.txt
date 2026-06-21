@@ -212,6 +212,14 @@ if(BUILD_ENGINE)
                 ${CMAKE_RUNTIME_OUTPUT_DIRECTORY}
             COMMENT "Copying shared libraries next to ${PROJECT_NAME} (Linux/macOS)..."
         )
+        if(NOT APPLE)
+            add_custom_command(TARGET ${PROJECT_NAME} POST_BUILD
+                COMMAND ${CMAKE_COMMAND} -E create_symlink $<TARGET_FILE_NAME:freetype> $<TARGET_FILE_DIR:${PROJECT_NAME}>/$<IF:$<CONFIG:Debug>,libfreetyped.so.6,libfreetype.so.6>
+                COMMAND ${CMAKE_COMMAND} -E create_symlink $<TARGET_FILE_NAME:assimp::assimp> $<TARGET_FILE_DIR:${PROJECT_NAME}>/$<IF:$<CONFIG:Debug>,libassimpd.so.6,libassimp.so.6>
+                COMMAND ${CMAKE_COMMAND} -E create_symlink $<TARGET_FILE_NAME:SDL3::SDL3> $<TARGET_FILE_DIR:${PROJECT_NAME}>/libSDL3.so.0
+                COMMENT "Creating shared library symlinks next to ${PROJECT_NAME} (Linux)..."
+            )
+        endif()
     endif()
 endif()
 

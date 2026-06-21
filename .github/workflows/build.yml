@@ -72,8 +72,8 @@ jobs:
         run: |
           mkdir -p dist
           cp build/bin/QuarkEngine dist/
-          cp build/bin/*.so         dist/ 2>/dev/null || true
-          cp build/bin/*.dylib      dist/ 2>/dev/null || true
+          cp -P build/bin/*.so*     dist/ 2>/dev/null || true
+          cp -P build/bin/*.dylib*  dist/ 2>/dev/null || true
           cp -r build/bin/assets    dist/assets 2>/dev/null || true
 
       - name: Upload artifact (Windows)
