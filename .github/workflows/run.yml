@@ -1,0 +1,96 @@
+name: Run (Windows, Linux & macOS)
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  run:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest, macos-latest]
+        build_type: [Debug, Release]
+
+    runs-on: ${{ matrix.os }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+        with:
+          submodules: recursive
+
+      - name: Install Linux dependencies
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            ninja-build \
+            libgl1-mesa-dev \
+            libx11-dev \
+            libxrandr-dev \
+            libxi-dev \
+            libxinerama-dev \
+            libxcursor-dev \
+            libxxf86vm-dev \
+            vulkan-tools \
+            libvulkan-dev \
+            xvfb
+
+      - name: Install macOS dependencies
+        if: runner.os == 'macOS'
+        run: brew install ninja molten-vk vulkan-headers vulkan-loader
+
+      - name: Configure CMake (Linux/macOS)
+        if: runner.os != 'Windows'
+        run: cmake -S . -B build -DCMAKE_BUILD_TYPE=${{ matrix.build_type }}
+
+      - name: Configure CMake (Windows)
+        if: runner.os == 'Windows'
+        run: cmake -S . -B build
+
+      - name: Build
+        run: cmake --build build --config ${{ matrix.build_type }} --parallel
+
+      - name: Locate executable (Windows)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          $src = "build/bin/${{ matrix.build_type }}/QuarkEngine.exe"
+          if (!(Test-Path $src)) {
+            $src = "build/bin/QuarkEngine.exe"
+          }
+          echo "EXE_PATH=$src" >> $env:GITHUB_ENV
+
+      - name: Locate executable (Linux/macOS)
+        if: runner.os != 'Windows'
+        run: |
+          echo "EXE_PATH=build/bin/QuarkEngine" >> "$GITHUB_ENV"
+
+      - name: Run executable (Windows)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          Write-Host "Running $env:EXE_PATH"
+          & $env:EXE_PATH --headless --test
+          if ($LASTEXITCODE -ne 0) {
+            Write-Error "Executable exited with code $LASTEXITCODE"
+            exit $LASTEXITCODE
+          }
+
+      - name: Run executable (Linux)
+        if: runner.os == 'Linux'
+        run: |
+          chmod +x "$EXE_PATH"
+          echo "Running $EXE_PATH under xvfb"
+          xvfb-run --auto-servernum "$EXE_PATH" --headless --test
+
+      - name: Run executable (macOS)
+        if: runner.os == 'macOS'
+        run: |
+          chmod +x "$EXE_PATH"
+          echo "Running $EXE_PATH"
+          "$EXE_PATH" --headless --test
