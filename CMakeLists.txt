@@ -12,6 +12,15 @@ set(BUILD_GAMES    OFF CACHE BOOL "" FORCE)
 set(BUILD_SHARED_LIBS    ON CACHE BOOL "" FORCE)
 set(CMAKE_POSITION_INDEPENDENT_CODE ON)
 
+set(CMAKE_SKIP_BUILD_RPATH FALSE)
+set(CMAKE_BUILD_WITH_INSTALL_RPATH TRUE)
+set(CMAKE_INSTALL_RPATH_USE_LINK_PATH TRUE)
+if(APPLE)
+    set(CMAKE_INSTALL_RPATH "@loader_path")
+elseif(UNIX)
+    set(CMAKE_INSTALL_RPATH "$ORIGIN")
+endif()
+
 include_directories(
     ${CMAKE_SOURCE_DIR}/quark-libs/QuarkCore/include
     ${CMAKE_SOURCE_DIR}/quark-libs/imgui/include
@@ -65,6 +74,13 @@ set_target_properties(imgui PROPERTIES
     LIBRARY_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/bin
     ARCHIVE_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/bin
 )
+
+if(UNIX)
+    set_target_properties(imgui PROPERTIES
+        BUILD_RPATH "$ORIGIN"
+        INSTALL_RPATH "$ORIGIN"
+    )
+endif()
 
 if(BUILD_ENGINE)
     set(CMAKE_RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/bin)
@@ -136,6 +152,18 @@ if(BUILD_ENGINE)
         )
     endif()
 
+    if(APPLE)
+        set_target_properties(${PROJECT_NAME} PROPERTIES
+            BUILD_RPATH "@loader_path"
+            INSTALL_RPATH "@loader_path"
+        )
+    elseif(UNIX)
+        set_target_properties(${PROJECT_NAME} PROPERTIES
+            BUILD_RPATH "$ORIGIN"
+            INSTALL_RPATH "$ORIGIN"
+        )
+    endif()
+
     add_custom_command(TARGET ${PROJECT_NAME} POST_BUILD
         COMMAND ${CMAKE_COMMAND} -E copy_directory
             ${CMAKE_SOURCE_DIR}/assets
@@ -172,6 +200,19 @@ if(BUILD_ENGINE)
                 $<TARGET_FILE_DIR:${PROJECT_NAME}>
         )
     endif()
+
+    if(UNIX)
+        add_custom_command(TARGET ${PROJECT_NAME} POST_BUILD
+            COMMAND ${CMAKE_COMMAND} -E copy_if_different
+                $<TARGET_FILE:QuarkCore>
+                $<TARGET_FILE:imgui>
+                $<TARGET_FILE:assimp::assimp>
+                $<TARGET_FILE:freetype>
+                $<TARGET_FILE:SDL3::SDL3>
+                ${CMAKE_RUNTIME_OUTPUT_DIRECTORY}
+            COMMENT "Copying shared libraries next to ${PROJECT_NAME} (Linux/macOS)..."
+        )
+    endif()
 endif()
 
 if(BUILD_PLUGIN)
@@ -193,4 +234,11 @@ if(BUILD_PLUGIN)
         LIBRARY_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/bin/plugins
         ARCHIVE_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/bin/plugins
     )
+
+    if(UNIX)
+        set_target_properties(MyPlugin PROPERTIES
+            BUILD_RPATH "$ORIGIN/.."
+            INSTALL_RPATH "$ORIGIN/.."
+        )
+    endif()
 endif()
