@@ -2,16 +2,51 @@
 
 #include "imgui.h"
 #include "imgui_impl_opengl3.h"
+#include "imgui_impl_vulkan.h"
 #include "imgui_impl_sdl3.h"
+
+#include <cmath>
+#include <utility>
 
 namespace qc {
 
 namespace {
 
 bool g_qc_imgui_initialized = false;
+enum class ImGuiBackendKind {
+    None,
+    OpenGL,
+    Vulkan
+};
+
+ImGuiBackendKind g_qc_imgui_backend = ImGuiBackendKind::None;
 
 void qcImGuiEventBridge(const SDL_Event* event) {
     qcImGuiProcessEvent(event);
+}
+
+void qcImGuiVulkanRenderCallback(VkCommandBuffer commandBuffer) {
+    if (!g_qc_imgui_initialized || g_qc_imgui_backend != ImGuiBackendKind::Vulkan) {
+        return;
+    }
+
+    ImGui_ImplVulkan_RenderDrawData(ImGui::GetDrawData(), commandBuffer);
+}
+
+ImTextureID qcImGuiTextureIdFor(const Texture2D* texture) {
+    if (texture == nullptr || texture->id == 0) {
+        return 0;
+    }
+
+    if (GetCurrentBackend() == RendererType::Vulkan) {
+        const VkDescriptorSet descriptor = GetVulkanTextureDescriptorSet(texture->id);
+        if (descriptor == VK_NULL_HANDLE) {
+            return 0;
+        }
+        return static_cast<ImTextureID>(reinterpret_cast<uintptr_t>(descriptor));
+    }
+
+    return static_cast<ImTextureID>(static_cast<uintptr_t>(texture->id));
 }
 
 } // namespace
@@ -35,20 +70,85 @@ bool qcImGuiSetup(bool darkTheme) {
     }
 
     SDL_Window* window = GetNativeWindow();
-    SDL_GLContext context = GetNativeContext();
-
-    if (window == nullptr || context == nullptr) {
+    if (window == nullptr) {
         ImGui::DestroyContext();
         return false;
     }
 
-    if (!ImGui_ImplSDL3_InitForOpenGL(window, context)) {
-        ImGui::DestroyContext();
-        return false;
+    g_qc_imgui_backend = ImGuiBackendKind::None;
+
+    const RendererType backend = GetCurrentBackend();
+    bool initOk = false;
+
+    if (backend == RendererType::OpenGL) {
+        SDL_GLContext context = GetNativeContext();
+        if (context == nullptr) {
+            ImGui::DestroyContext();
+            return false;
+        }
+
+        if (!ImGui_ImplSDL3_InitForOpenGL(window, context)) {
+            ImGui::DestroyContext();
+            return false;
+        }
+        if (!ImGui_ImplOpenGL3_Init("#version 330 core")) {
+            ImGui_ImplSDL3_Shutdown();
+            ImGui::DestroyContext();
+            return false;
+        }
+
+        g_qc_imgui_backend = ImGuiBackendKind::OpenGL;
+        initOk = true;
+    } else if (backend == RendererType::Vulkan) {
+        const VkInstance instance = GetVulkanInstance();
+        const VkPhysicalDevice physicalDevice = GetVulkanPhysicalDevice();
+        const VkDevice device = GetVulkanDevice();
+        const VkQueue queue = GetVulkanGraphicsQueue();
+        const uint32_t queueFamily = GetVulkanGraphicsQueueFamily();
+        const VkDescriptorPool descriptorPool = GetVulkanDescriptorPool();
+        const VkRenderPass renderPass = GetVulkanMainRenderPass();
+        const uint32_t minImageCount = GetVulkanMinImageCount();
+        const uint32_t imageCount = GetVulkanImageCount();
+
+        if (instance == VK_NULL_HANDLE || physicalDevice == VK_NULL_HANDLE || device == VK_NULL_HANDLE ||
+            queue == VK_NULL_HANDLE || queueFamily == UINT32_MAX || descriptorPool == VK_NULL_HANDLE ||
+            renderPass == VK_NULL_HANDLE || minImageCount == 0 || imageCount == 0) {
+            ImGui::DestroyContext();
+            return false;
+        }
+
+        if (!ImGui_ImplSDL3_InitForVulkan(window)) {
+            ImGui::DestroyContext();
+            return false;
+        }
+
+        ImGui_ImplVulkan_InitInfo initInfo{};
+        initInfo.ApiVersion = VK_API_VERSION_1_2;
+        initInfo.Instance = instance;
+        initInfo.PhysicalDevice = physicalDevice;
+        initInfo.Device = device;
+        initInfo.QueueFamily = queueFamily;
+        initInfo.Queue = queue;
+        initInfo.DescriptorPool = descriptorPool;
+        initInfo.DescriptorPoolSize = 0;
+        initInfo.MinImageCount = minImageCount;
+        initInfo.ImageCount = imageCount;
+        initInfo.PipelineInfoMain.RenderPass = renderPass;
+        initInfo.PipelineInfoMain.Subpass = 0;
+        initInfo.PipelineInfoMain.MSAASamples = GetVulkanMSAASamples();
+        initInfo.UseDynamicRendering = false;
+        initInfo.MinAllocationSize = 1024 * 1024;
+
+        initOk = ImGui_ImplVulkan_Init(&initInfo);
+        if (initOk) {
+            SetVulkanRenderCallback(qcImGuiVulkanRenderCallback);
+            g_qc_imgui_backend = ImGuiBackendKind::Vulkan;
+        } else {
+            ImGui_ImplSDL3_Shutdown();
+        }
     }
 
-    if (!ImGui_ImplOpenGL3_Init("#version 330 core")) {
-        ImGui_ImplSDL3_Shutdown();
+    if (!initOk) {
         ImGui::DestroyContext();
         return false;
     }
@@ -64,10 +164,18 @@ void qcImGuiShutdown() {
     }
 
     SetNativeEventCallback(nullptr);
-    ImGui_ImplOpenGL3_Shutdown();
-    ImGui_ImplSDL3_Shutdown();
+    SetVulkanRenderCallback(nullptr);
+
+    if (g_qc_imgui_backend == ImGuiBackendKind::OpenGL) {
+        ImGui_ImplOpenGL3_Shutdown();
+        ImGui_ImplSDL3_Shutdown();
+    } else if (g_qc_imgui_backend == ImGuiBackendKind::Vulkan) {
+        ImGui_ImplVulkan_Shutdown();
+        ImGui_ImplSDL3_Shutdown();
+    }
     ImGui::DestroyContext();
     g_qc_imgui_initialized = false;
+    g_qc_imgui_backend = ImGuiBackendKind::None;
 }
 
 void qcImGuiBegin() {
@@ -75,8 +183,12 @@ void qcImGuiBegin() {
         return;
     }
 
-    ImGui_ImplOpenGL3_NewFrame();
     ImGui_ImplSDL3_NewFrame();
+    if (g_qc_imgui_backend == ImGuiBackendKind::OpenGL) {
+        ImGui_ImplOpenGL3_NewFrame();
+    } else if (g_qc_imgui_backend == ImGuiBackendKind::Vulkan) {
+        ImGui_ImplVulkan_NewFrame();
+    }
     ImGui::NewFrame();
 }
 
@@ -86,7 +198,9 @@ void qcImGuiEnd() {
     }
 
     ImGui::Render();
-    ImGui_ImplOpenGL3_RenderDrawData(ImGui::GetDrawData());
+    if (g_qc_imgui_backend == ImGuiBackendKind::OpenGL) {
+        ImGui_ImplOpenGL3_RenderDrawData(ImGui::GetDrawData());
+    }
 }
 
 void qcImGuiProcessEvent(const SDL_Event* event) {
@@ -97,8 +211,34 @@ void qcImGuiProcessEvent(const SDL_Event* event) {
     ImGui_ImplSDL3_ProcessEvent(event);
 }
 
+ImTextureID qcImGuiGetTextureId(const Texture2D* texture) {
+    return qcImGuiTextureIdFor(texture);
+}
+
+void qcImGuiImage(const Texture2D* texture, const ImVec2& size, const ImVec2& uv0, const ImVec2& uv1) {
+    const ImTextureID textureId = qcImGuiTextureIdFor(texture);
+    if (textureId == 0) {
+        return;
+    }
+    ImGui::Image(textureId, size, uv0, uv1);
+}
+
+void qcImGuiAddImage(ImDrawList* drawList, const Texture2D* texture, const ImVec2& pMin, const ImVec2& pMax, const ImVec2& uv0, const ImVec2& uv1, ImU32 color) {
+    if (drawList == nullptr) {
+        return;
+    }
+
+    const ImTextureID textureId = qcImGuiTextureIdFor(texture);
+    if (textureId == 0) {
+        return;
+    }
+
+    drawList->AddImage(textureId, pMin, pMax, uv0, uv1, color);
+}
+
 void qcImGuiImageRect(const Texture2D* texture, int width, int height, Rectangle sourceRect) {
-    if (texture == nullptr || texture->id == 0) {
+    const ImTextureID textureId = qcImGuiTextureIdFor(texture);
+    if (textureId == 0) {
         return;
     }
 
@@ -121,7 +261,7 @@ void qcImGuiImageRect(const Texture2D* texture, int width, int height, Rectangle
     }
 
     ImGui::Image(
-        (ImTextureID)(intptr_t)texture->id,
+        textureId,
         ImVec2(static_cast<float>(width), static_cast<float>(height)),
         ImVec2(u0, v0),
         ImVec2(u1, v1)

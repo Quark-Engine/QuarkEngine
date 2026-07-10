@@ -282,7 +282,7 @@ static void hub_draw_plugin_manager() {
                 ImVec2 letter_sz = ImGui::CalcTextSize(letter);
 
                 if (pi.icon.id != 0) {
-                    ImGui::GetWindowDrawList()->AddImage((ImTextureID)(intptr_t)pi.icon.id, badge_min, badge_max);
+                    qcImGuiAddImage(ImGui::GetWindowDrawList(), &pi.icon, badge_min, badge_max);
                 } 
                 
                 else {
@@ -325,7 +325,7 @@ static void hub_draw_plugin_manager() {
                 ImVec2 lsz = ImGui::CalcTextSize(letter);
 
                 if (pi.icon.id != 0) {
-                    dl->AddImage((ImTextureID)(intptr_t)pi.icon.id, icon_pos, icon_max);
+                    qcImGuiAddImage(dl, &pi.icon, icon_pos, icon_max);
                 } 
                 
                 else {

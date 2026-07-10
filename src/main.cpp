@@ -386,7 +386,7 @@ int main(int argc, char* argv[]) {
     std::string lang_code = load_or_create_config();
     LanguageManager::get().set_lang(lang_code);
 
-    InitWindow(1280, 720, "Quark Engine", RendererType::OpenGL);
+    InitWindow(1280, 720, "Quark Engine", RendererType::Vulkan);
     SetTargetFPS(GetCurrentMonitorRefreshRate());
     init_freetype();
     SetExitKey(KEY_NULL);

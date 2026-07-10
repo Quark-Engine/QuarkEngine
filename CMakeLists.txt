@@ -39,6 +39,7 @@ add_library(imgui SHARED
     quark-libs/imgui/include/imgui_tables.cpp
     imgui/imgui_impl_sdl3.cpp
     imgui/imgui_impl_opengl3.cpp
+    imgui/imgui_impl_vulkan.cpp
     src/qcImGui.cpp
     src/ImGuizmo.cpp
 )

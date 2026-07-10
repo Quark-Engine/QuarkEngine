@@ -4,6 +4,7 @@
 #include "editor/editor_entity.h"
 #include "editor/editor_utils.h"
 #include "editor/editor_viewers.h"
+#include "qcImGui.h"
 #include "project.h"
 #include "tex.h"
 #include "language_manager.h"
@@ -630,14 +631,14 @@ void draw_assets_ui(Editor& editor) {
         ImGui::SetCursorScreenPos(pos);
         if (entry.is_directory) {
             const Texture texture = fs::is_empty(editor.current_asset_path / entry.filename) ? icon_folder_tex : icon_full_folder_tex;
-            if (texture.id != 0) ImGui::Image((void*)(intptr_t)texture.id, ImVec2(kIconSize, kIconSize));
+            if (texture.id != 0) qcImGuiImage(&texture, ImVec2(kIconSize, kIconSize));
             else ImGui::Button(lang.word("folder"), ImVec2(kIconSize, kIconSize));
         } else if (entry.is_image) {
             const std::string full = (editor.current_asset_path / entry.filename).string();
             if (!editor_internal::tex_cache.count(full)) {
                 editor_internal::tex_cache[full] = LoadTexture(full.c_str());
             }
-            ImGui::Image((void*)(intptr_t)editor_internal::tex_cache[full].id, ImVec2(kIconSize, kIconSize));
+            qcImGuiImage(&editor_internal::tex_cache[full], ImVec2(kIconSize, kIconSize));
         } 
         
         else if (entry.is_model) {
@@ -659,7 +660,7 @@ void draw_assets_ui(Editor& editor) {
             }
 
             if (preview_texture.id != 0) {
-                ImGui::Image((void*)(intptr_t)preview_texture.id, ImVec2(kIconSize, kIconSize));
+                qcImGuiImage(&preview_texture, ImVec2(kIconSize, kIconSize));
             } else {
                 ImDrawList* draw_list = ImGui::GetWindowDrawList();
                 draw_list->AddRectFilled(pos, ImVec2(pos.x + kIconSize, pos.y + kIconSize), load_failed ? IM_COL32(80, 80, 90, 255) : IM_COL32(100, 100, 120, 255));
@@ -679,12 +680,12 @@ void draw_assets_ui(Editor& editor) {
             if (material_preview_cache.count(full)) preview = material_preview_cache[full];
             else preview = create_material_preview(full);
 
-            if (preview.id != 0) ImGui::Image((void*)(intptr_t)preview.id, ImVec2(kIconSize, kIconSize));
+            if (preview.id != 0) qcImGuiImage(&preview, ImVec2(kIconSize, kIconSize));
             else ImGui::Button("MAT", ImVec2(kIconSize, kIconSize));
         }
         
         else {
-            if (icon_file_tex.id != 0) ImGui::Image((void*)(intptr_t)icon_file_tex.id, ImVec2(kIconSize, kIconSize));
+            if (icon_file_tex.id != 0) qcImGuiImage(&icon_file_tex, ImVec2(kIconSize, kIconSize));
             else ImGui::Button(entry.extension.empty() ? "file" : entry.extension.c_str(), ImVec2(kIconSize, kIconSize));
         }
 

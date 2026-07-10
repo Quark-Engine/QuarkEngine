@@ -10,6 +10,7 @@
 #include "lighting.h"
 #include "version.h"
 #include "project.h"
+#include "qcImGui.h"
 #include "imgui.h"
 #include "imgui_internal.h"
 #include <cstring>
@@ -909,7 +910,7 @@ void draw_polygon_editor(Editor& editor, Camera3D camera) {
             float transform_Mat4[16] = {};
 
             Mat4 view = Mat4Transpose(GetCameraMat4(camera));
-            Mat4 projection = Mat4Transpose(Mat4Perspective(
+            Mat4 projection = Mat4Transpose(Mat4PerspectiveVulkan(
                 camera.fovy * DEG2RAD,
                 g_scene_window_size.x / g_scene_window_size.y,
                 0.1f, 1000.0f
@@ -1160,7 +1161,7 @@ static void draw_bottom_status_bar() {
 
     ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(10.0f, 5.0f));
     if (ImGui::BeginViewportSideBar("##main_status_bar", viewport, ImGuiDir_Down, status_bar_height, flags)) {
-        ImGui::TextDisabled("Quark Engine");
+        ImGui::TextDisabled("Quark Engine Editor v%s", "1.0.0");
 
         const char* fps_text = TextFormat("FPS: %d", GetFPS());
         const float fps_text_width = ImGui::CalcTextSize(fps_text).x;
@@ -1545,8 +1546,9 @@ void draw_ui(Editor& editor, Shader shader, FlyCamera camera, PluginContext* plu
                 }
 
                 if (scene_rt.id > 0) {
-                    ImGui::GetWindowDrawList()->AddImage(
-                        (ImTextureID)(intptr_t)scene_rt.texture.id,
+                    qcImGuiAddImage(
+                        ImGui::GetWindowDrawList(),
+                        &scene_rt.texture,
                         g_scene_window_pos,
                         ImVec2(g_scene_window_pos.x + g_scene_window_size.x,
                             g_scene_window_pos.y + g_scene_window_size.y),
