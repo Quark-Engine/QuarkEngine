@@ -437,14 +437,6 @@ void draw_assets_ui(Editor& editor) {
         if (entry.is_directory) {
             directories.push_back(entry);
         } else {
-            if (entry.is_image) {
-                for (auto& asset_entry : asset_entries) {
-                    if (asset_entry.filename == entry.filename && asset_entry.is_image) {
-                        entry.texture = asset_entry.texture;
-                        break;
-                    }
-                }
-            }
             files.push_back(entry);
         }
     }
@@ -635,10 +627,13 @@ void draw_assets_ui(Editor& editor) {
             else ImGui::Button(lang.word("folder"), ImVec2(kIconSize, kIconSize));
         } else if (entry.is_image) {
             const std::string full = (editor.current_asset_path / entry.filename).string();
-            if (!editor_internal::tex_cache.count(full)) {
+            if (ImGui::IsRectVisible(pos, ImVec2(pos.x + kIconSize, pos.y + kIconSize)) &&
+                !editor_internal::tex_cache.count(full)) {
                 editor_internal::tex_cache[full] = LoadTexture(full.c_str());
             }
-            qcImGuiImage(&editor_internal::tex_cache[full], ImVec2(kIconSize, kIconSize));
+            if (editor_internal::tex_cache.count(full)) {
+                qcImGuiImage(&editor_internal::tex_cache[full], ImVec2(kIconSize, kIconSize));
+            }
         } 
         
         else if (entry.is_model) {
@@ -648,7 +643,7 @@ void draw_assets_ui(Editor& editor) {
 
             if (model_preview_cache.count(full)) {
                 preview_texture = model_preview_cache[full];
-            } else {
+            } else if (ImGui::IsRectVisible(pos, ImVec2(pos.x + kIconSize, pos.y + kIconSize))) {
                 ModelAsset* asset = find_asset_by_path(editor.current_asset_path / entry.filename, editor.project_path);
                 if (asset) {
                     preview_texture = create_model_preview(*asset, full);
@@ -678,7 +673,7 @@ void draw_assets_ui(Editor& editor) {
             Texture preview = {0};
 
             if (material_preview_cache.count(full)) preview = material_preview_cache[full];
-            else preview = create_material_preview(full);
+            else if (ImGui::IsRectVisible(pos, ImVec2(pos.x + kIconSize, pos.y + kIconSize))) preview = create_material_preview(full);
 
             if (preview.id != 0) qcImGuiImage(&preview, ImVec2(kIconSize, kIconSize));
             else ImGui::Button("MAT", ImVec2(kIconSize, kIconSize));
@@ -699,14 +694,12 @@ void draw_assets_ui(Editor& editor) {
             draw_list->AddText(ext_pos, IM_COL32(255, 255, 255, 255), ext_display.c_str());
         }
 
-        if (item_hovered && ImGui::IsMouseDown(0) && !editor_internal::file_dragging) {
-            if (dragged_file_name != entry.filename) {
-                dragged_file_name = entry.filename;
-                drag_start_pos = ImGui::GetMousePos();
+        if (item_hovered && ImGui::IsMouseClicked(ImGuiMouseButton_Left) && !editor_internal::file_dragging) {
+            dragged_file_name = entry.filename;
+            drag_start_pos = ImGui::GetMousePos();
 
-                editor_internal::dragged_file_index = i;
-                dragged_file_path = editor.current_asset_path / entry.filename;
-            }
+            editor_internal::dragged_file_index = i;
+            dragged_file_path = editor.current_asset_path / entry.filename;
         }
         
         if (dragged_file_name == entry.filename && ImGui::IsMouseDown(0)) {
@@ -734,7 +727,10 @@ void draw_assets_ui(Editor& editor) {
             }
         }
 
-        if (entry.is_directory && editor_internal::file_dragging && entries[editor_internal::dragged_file_index].filename != entry.filename) {
+        const bool has_valid_dragged_file = editor_internal::dragged_file_index >= 0 &&
+            editor_internal::dragged_file_index < static_cast<int>(entries.size());
+        if (entry.is_directory && editor_internal::file_dragging && has_valid_dragged_file &&
+            entries[editor_internal::dragged_file_index].filename != entry.filename) {
             ImVec2 mouse_pos = ImGui::GetMousePos();
             bool mouse_over_folder = mouse_pos.x >= pos.x && mouse_pos.x <= pos.x + size.x &&
                                     mouse_pos.y >= pos.y && mouse_pos.y <= pos.y + size.y;
@@ -890,8 +886,13 @@ void draw_assets_ui(Editor& editor) {
         ImGui::EndPopup();
     }
 
-    if (ImGui::IsMouseReleased(0) && editor_internal::file_dragging) {
+    if (ImGui::IsMouseReleased(ImGuiMouseButton_Left)) {
+        editor_internal::file_dragging = false;
+        editor_internal::scene_asset_dragging = false;
+        editor_internal::dragged_file_index = -1;
+        editor_internal::dragged_target_folder_index = -1;
         dragged_file_name.clear();
+        dragged_file_path.clear();
         drag_start_pos = ImVec2(0, 0);
     }
 

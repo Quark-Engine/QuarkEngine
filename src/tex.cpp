@@ -417,10 +417,6 @@ void load_assets(std::string project_path) {
         asset_entry.is_directory = entry.is_directory(ec) && !ec;
         asset_entry.is_image = !asset_entry.is_directory && is_image_file(entry.path());
 
-        if (asset_entry.is_image) {
-            asset_entry.texture = LoadTexture(entry.path().string().c_str());
-        }
-
         asset_entries.push_back(asset_entry);
     }
 }
@@ -445,7 +441,6 @@ void refresh_assets(std::string project_path) {
         a.is_directory = entry.is_directory(ec) && !ec;
         a.is_image = !a.is_directory && is_image_file(entry.path());
 
-        if (a.is_image) a.texture = LoadTexture(entry.path().string().c_str());
         asset_entries.push_back(a);
     }
 }

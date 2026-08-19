@@ -34,7 +34,7 @@
   "help": "Help",
   "about": "About",
   "about_quark_engine": "About Quark Engine",
-  "raylib_version": "Raylib Version: %s",
+  "quarkcore_version": "QuarkCore Version: %s",
   "imgui_version": "ImGui Version: %s",
   "open_docs": "Open Documentation",
   "api_docs": "API Documentation",
