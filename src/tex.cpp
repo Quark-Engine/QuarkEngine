@@ -8,6 +8,7 @@ namespace fs = std::filesystem;
 
 std::vector<TextureOption> texture_options;
 std::vector<AssetEntry> asset_entries;
+bool g_wireframe_enabled = false;
 
 static std::vector<fs::directory_entry> collect_resource_entries(const fs::path& resource_dir) {
     std::vector<fs::directory_entry> result;
@@ -345,7 +346,8 @@ void draw_entity_with_texture(Entity& e) {
     if (edited_mesh_is_double_sided) DisableBackfaceCulling();
 
     DrawModel(mesh->model, {0,0,0}, 1.0f, mat->color);
-    if (mat->outline_color.a > 0) DrawModelWires(mesh->model, {0,0,0}, 1.0f, mat->outline_color);
+    if (g_wireframe_enabled && mat->outline_color.a > 0)
+        DrawModelWires(mesh->model, {0,0,0}, 1.0f, mat->outline_color);
 
     if (edited_mesh_is_double_sided) EnableBackfaceCulling();
 

@@ -10,6 +10,7 @@
 #include "lighting.h"
 #include "version.h"
 #include "project.h"
+#include "tex.h"
 #include "qcImGui.h"
 #include "imgui.h"
 #include "imgui_internal.h"
@@ -1597,7 +1598,15 @@ void draw_ui(Editor& editor, Shader shader, FlyCamera camera, PluginContext* plu
     }
 
     if (ImGui::BeginPopupModal(lang.word("about_quark_engine"), nullptr, ImGuiWindowFlags_AlwaysAutoResize)) {
-        ImGui::Text("Quark Engine %s", QUARK_ENGINE_VERSION.c_str());
+        const auto backend = qc::GetCurrentBackend();
+
+        ImGui::Text("Quark Engine %s using %s",
+            QUARK_ENGINE_VERSION.c_str(),
+            backend == qc::RendererType::Vulkan ? "Vulkan" :
+            backend == qc::RendererType::OpenGL ? "OpenGL" :
+            backend == qc::RendererType::Auto ? "Auto" :
+            "Unknown"
+        );
         ImGui::Separator();
         ImGui::Text(lang.word("quarkcore_version"), QC_VERSION_STRING);
         ImGui::Text(lang.word("imgui_version"), IMGUI_VERSION);
@@ -1620,6 +1629,8 @@ void draw_ui(Editor& editor, Shader shader, FlyCamera camera, PluginContext* plu
         ImGui::Begin(lang.word("preferences"), &show_preferences);
         ImGui::Text(lang.word("preferences"));
         ImGui::Separator();
+
+        ImGui::Checkbox("Wireframe", &g_wireframe_enabled);
         
         ImGui::Text(lang.word("language"));
 

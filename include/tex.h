@@ -21,6 +21,7 @@ struct AssetEntry {
 
 extern std::vector<TextureOption> texture_options;
 extern std::vector<AssetEntry> asset_entries;
+extern bool g_wireframe_enabled;
 
 void load_textures(std::string project_path);
 void unload_textures();
