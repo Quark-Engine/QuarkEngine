@@ -55,6 +55,7 @@
 
     "file": "File",
     "folder": "Folder",
+    "open_file_explorer" : "Open in File Explorer",
     "new_file": "New File",
     "empty_folder": "Empty Folder",
     "new_folder": "New Folder",

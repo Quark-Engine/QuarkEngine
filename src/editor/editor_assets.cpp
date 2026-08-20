@@ -17,6 +17,11 @@
 #include <sstream>
 #include <string>
 
+#ifdef _WIN32
+#include <windows.h>
+#include <shellapi.h>
+#endif
+
 #define lang LanguageManager::get()
 
 namespace fs = std::filesystem;
@@ -34,6 +39,23 @@ Texture icon_folder_tex = {0};
 Texture icon_full_folder_tex = {0};
 
 constexpr float kIconSize = 64.0f;
+
+void open_in_system_file_explorer(const fs::path& path, bool is_directory) {
+#ifdef _WIN32
+    if (is_directory) {
+        ShellExecuteW(nullptr, L"open", path.wstring().c_str(), nullptr, nullptr, 1);
+    } else {
+        const std::wstring arguments = L"/select,\"" + path.wstring() + L"\"";
+        ShellExecuteW(nullptr, L"open", L"explorer.exe", arguments.c_str(), nullptr, 1);
+    }
+#elif defined(__APPLE__)
+    const std::string command = "open \"" + path.string() + "\"";
+    std::system(command.c_str());
+#elif defined(__linux__)
+    const std::string command = "xdg-open \"" + path.string() + "\"";
+    std::system(command.c_str());
+#endif
+}
 
 }
 
@@ -564,6 +586,12 @@ void draw_assets_ui(Editor& editor) {
         }
 
         if (ImGui::BeginPopupContextItem("AssetContext")) {
+            if (ImGui::MenuItem(lang.word("open_file_explorer"))) {
+                open_in_system_file_explorer(editor.current_asset_path / entry.filename, entry.is_directory);
+            }
+
+            ImGui::Separator();
+
             if (ImGui::MenuItem(lang.word("delete"))) {
                 editor.save_state();
 

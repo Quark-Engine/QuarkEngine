@@ -93,29 +93,29 @@ std::string load_or_create_config() {
 
     if (!std::filesystem::exists(path)) {
         json def;
-        def["language"] = "en_us";
+        def["language"] = "english";
         def["projects"] = json::array();
 
         std::ofstream out(path);
         out << def.dump(4);
 
-        return "en_us";
+        return "english";
     }
 
     std::ifstream in(path);
     if (!in.is_open())
-        return "en_us";
+        return "english";
 
     json j;
     try {
         in >> j;
     } catch (...) {
-        return "en_us";
+        return "english";
     }
 
     if (j.contains("language")) {
         return normalize_language_code(j["language"].get<std::string>());
     }
 
-    return "en_us";
+    return "english";
 }

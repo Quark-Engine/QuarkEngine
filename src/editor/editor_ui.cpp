@@ -91,7 +91,7 @@ static const char* language_codes[] = {
     "czech",
     "danish",
     "dutch",
-    "en_us",
+    "english",
     "esperanto",
     "estonian",
     "finnish",

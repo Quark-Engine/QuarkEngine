@@ -473,7 +473,7 @@ static void hub_save_registry() {
     }
     
     if (!j.contains("language")) {
-        j["language"] = "en_us";
+        j["language"] = "english";
     }
 
     json projects = json::array();
