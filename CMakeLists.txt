@@ -185,19 +185,6 @@ if(BUILD_ENGINE)
                 $<TARGET_FILE:ZLIB::ZLIB>
                 $<TARGET_FILE:freetype>
                 "${VULKAN_RUNTIME_DLL}"
-                ${CMAKE_RUNTIME_OUTPUT_DIRECTORY}
-        )
-    endif()
-
-    if(WIN32)
-        add_custom_command(TARGET ${PROJECT_NAME} POST_BUILD
-            COMMAND ${CMAKE_COMMAND} -E make_directory
-                ${CMAKE_RUNTIME_OUTPUT_DIRECTORY}
-        )
-
-        add_custom_command(TARGET ${PROJECT_NAME} POST_BUILD
-            COMMAND ${CMAKE_COMMAND} -E copy_if_different
-                $<TARGET_FILE:freetype>
                 $<TARGET_FILE_DIR:${PROJECT_NAME}>
         )
     endif()
