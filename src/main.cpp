@@ -13,6 +13,7 @@
 #include "tex.h"
 #include <iostream>
 #include <cfloat>
+#include <array>
 
 using namespace qc;
 
@@ -202,7 +203,7 @@ static BoundingBox compute_scene_bounds(const Scene& scene) {
 
     for (const auto& entity : scene.entities) {
         const MeshComponent* mesh = entity.get_mesh_component();
-        if (!mesh || mesh->model.meshCount <= 0 || !mesh->model.meshes) continue;
+        if (!mesh || !mesh->enabled || mesh->model.meshCount <= 0 || !mesh->model.meshes) continue;
 
         Entity& mutable_entity = const_cast<Entity&>(entity);
         MeshComponent* mutable_mesh = mutable_entity.get_mesh_component();
@@ -296,6 +297,84 @@ static bool prepare_scene_light_uniforms(Scene& scene, Shader shader, const Vec3
     return has_active_scene_light;
 }
 
+static void render_scene_shadow_maps(Scene& scene, Shader shadow_shader,
+    std::array<RenderTexture2D, QC_MAX_LIGHTS>& shadow_maps,
+    std::array<Camera3D, QC_MAX_LIGHTS>& shadow_cameras,
+    const Vec3& scene_center,
+    Shader lighting_shader,
+    std::array<int, QC_MAX_LIGHTS>& light_view_locations,
+    std::array<int, QC_MAX_LIGHTS>& light_projection_locations) {
+    std::array<bool, QC_MAX_LIGHTS> rendered = {};
+    Material shadow_material = {};
+    shadow_material.shader = &shadow_shader;
+
+    for (auto& entity : scene.entities) {
+        LightComponent* light = entity.get_light_component();
+        TransformComponent* transform = entity.get_transform_component();
+        if (!light || !transform || !light->enabled || !light->created ||
+            light->light.id < 0 || light->light.id >= QC_MAX_LIGHTS ||
+            rendered[light->light.id]) continue;
+
+        const int slot = light->light.id;
+        shadow_cameras[slot].position = transform->position;
+        shadow_cameras[slot].target = light->light.target;
+        if ((shadow_cameras[slot].position - shadow_cameras[slot].target).length() <= 0.000001f) {
+            shadow_cameras[slot].target = scene_center;
+            if ((shadow_cameras[slot].position - shadow_cameras[slot].target).length() <= 0.000001f)
+                shadow_cameras[slot].target = shadow_cameras[slot].position + Vec3{0.0f, -1.0f, 0.0f};
+        }
+        rendered[slot] = true;
+
+        BeginTextureMode(shadow_maps[slot]);
+        ClearBackground(WHITE);
+        BeginMode3D(shadow_cameras[slot]);
+        BeginShaderMode(shadow_shader);
+
+        Mat4 light_view;
+        Mat4 light_projection;
+        for (auto& source : scene.entities) {
+            MeshComponent* mesh = source.get_mesh_component();
+            TransformComponent* source_transform = source.get_transform_component();
+            if (!mesh || !mesh->enabled || !source_transform ||
+                mesh->model.meshCount <= 0 || !mesh->model.meshes) continue;
+
+            const Mat4 entity_transform = compose_entity_transform(source) * mesh->model.transform;
+            for (int mesh_index = 0; mesh_index < mesh->model.meshCount; ++mesh_index) {
+                DrawMesh(mesh->model.meshes[mesh_index], shadow_material, entity_transform);
+            }
+        }
+
+        for (int i = 0; i < 16; ++i) {
+            light_view.m[i] = GetMatrixModelview()[i];
+            light_projection.m[i] = GetMatrixProjection()[i];
+        }
+        SetShaderValueMatrix(lighting_shader, light_view_locations[slot], light_view.m);
+        SetShaderValueMatrix(lighting_shader, light_projection_locations[slot], light_projection.m);
+
+        EndShaderMode();
+        EndMode3D();
+        EndTextureMode();
+    }
+}
+
+static void assign_shadow_maps(Scene& scene,
+    const std::array<RenderTexture2D, QC_MAX_LIGHTS>& shadow_maps,
+    Shader lighting_shader) {
+    for (auto& entity : scene.entities) {
+        MeshComponent* mesh = entity.get_mesh_component();
+        if (!mesh || !mesh->model.materials) continue;
+
+        set_model_shader(mesh->model, lighting_shader);
+        for (int material_index = 0; material_index < mesh->model.materialCount; ++material_index) {
+            Material& material = mesh->model.materials[material_index];
+            if (!material.maps) continue;
+            for (int shadow_index = 0; shadow_index < QC_MAX_LIGHTS; ++shadow_index)
+                material.maps[MATERIAL_MAP_HEIGHT + shadow_index].texture = shadow_maps[shadow_index].texture;
+        }
+        mesh->shader_assigned = true;
+    }
+}
+
 void ApplyCustomImGuiTheme()
 {
     ImGuiStyle& style = ImGui::GetStyle();
@@ -380,32 +459,53 @@ void ApplyCustomImGuiTheme()
 }
 
 int main(int argc, char* argv[]) {
+    bool headless = false;
+    bool test_mode = false;
+    std::string project_path;
+    for (int argument_index = 1; argument_index < argc; ++argument_index) {
+        const std::string argument = argv[argument_index];
+        if (argument == "--headless") {
+            headless = true;
+        } else if (argument == "--test") {
+            test_mode = true;
+        } else if (project_path.empty()) {
+            project_path = argument;
+        }
+    }
+    headless = headless || test_mode;
+
     fs::create_directories("projects");
     fs::create_directories("assets");
+
+    if (test_mode)
+        return 0;
 
     std::string lang_code = load_or_create_config();
     LanguageManager::get().set_lang(lang_code);
 
     InitWindow(1280, 720, "Quark Engine", RendererType::OpenGL);
     SetTargetFPS(static_cast<int>(GetCurrentMonitorRefreshRate()));
-    init_freetype();
     SetExitKey(KEY_NULL);
-    qcImGuiSetup(false);
-    reload_editor_fonts(LanguageManager::get().current);
 
-    ApplyCustomImGuiTheme();
+    if (!headless) {
+        init_freetype();
+        qcImGuiSetup(false);
+        reload_editor_fonts(LanguageManager::get().current);
+        ApplyCustomImGuiTheme();
+    }
 
-    std::string project_path = "";
-    if (argc > 1)
-        project_path = argv[1];
-    else {
+    if (project_path.empty() && !headless) {
         project_path = run_hub();
         if (project_path.empty()) {
             qcImGuiShutdown();
+            shutdown_freetype();
             CloseWindow();
             return 0;
         }
     }
+
+    if (project_path.empty())
+        project_path = (fs::path("projects") / "default").string();
 
     project_path = project_resolve_root(project_path);
 
@@ -416,32 +516,28 @@ int main(int argc, char* argv[]) {
     editor.project_path = project_path;
 
     Shader lighting_shader = LoadShader("assets/lighting.vs", "assets/lighting.fs");
+    Shader shadow_shader = LoadShader("assets/shadow_depth.vs", "assets/shadow_depth.fs");
     lighting_shader.locs[SHADER_LOC_VECTOR_VIEW] = GetShaderLocation(lighting_shader, "viewPos");
+
+    std::array<RenderTexture2D, QC_MAX_LIGHTS> shadow_maps;
+    std::array<Camera3D, QC_MAX_LIGHTS> shadow_cameras;
+    std::array<int, QC_MAX_LIGHTS> light_view_locations;
+    std::array<int, QC_MAX_LIGHTS> light_projection_locations;
+    for (int i = 0; i < QC_MAX_LIGHTS; ++i) {
+        shadow_maps[i] = LoadRenderTexture(1024, 1024);
+        shadow_cameras[i] = CreateCamera3D();
+        shadow_cameras[i].fovy = 55.0f;
+        light_view_locations[i] = GetShaderLocation(lighting_shader, TextFormat("lightViews[%i]", i));
+        light_projection_locations[i] = GetShaderLocation(lighting_shader, TextFormat("lightProjections[%i]", i));
+    }
 
     int use_tex_loc = GetShaderLocation(lighting_shader, "useTexture");
     int ambient_loc = GetShaderLocation(lighting_shader, "ambient");
     int emission_color_loc = GetShaderLocation(lighting_shader, "emissionColor");
     int emission_power_loc = GetShaderLocation(lighting_shader, "emissionPower");
-    int texture_active_slot = 10;
-
     SetShaderValue(lighting_shader, ambient_loc, Vec4{0.025f, 0.025f, 0.025f, 1.0f});
     SetShaderValue(lighting_shader, emission_color_loc, Vec3{0.0f, 0.0f, 0.0f});
     SetShaderValue(lighting_shader, emission_power_loc, 0.0f);
-
-    ShadowMap shadow_maps[QC_MAX_LIGHTS] = {};
-    for (int i = 0; i < QC_MAX_LIGHTS; i++) {
-        shadow_maps[i].init();
-    }
-
-    int u_light_space_matrix[QC_MAX_LIGHTS];
-    int u_shadow_map[QC_MAX_LIGHTS];
-    int u_shadow_map_active[QC_MAX_LIGHTS];
-
-    for (int i = 0; i < QC_MAX_LIGHTS; i++) {
-        u_light_space_matrix[i] = GetShaderLocation(lighting_shader, TextFormat("lightSpaceMatrix[%i]", i));
-        u_shadow_map[i]         = GetShaderLocation(lighting_shader, TextFormat("shadowMap[%i]", i));
-        u_shadow_map_active[i]  = GetShaderLocation(lighting_shader, TextFormat("shadowMapActive[%i]", i));
-    }
 
     g_plugin_manager = new PluginManager();
     ctx = new PluginContext{};
@@ -457,6 +553,18 @@ int main(int argc, char* argv[]) {
         project_load(project_path, editor.scene, lighting_shader);
     else
         project_new(project_path, editor.scene);
+
+    if (headless || test_mode) {
+        editor.scene.release_resources();
+        unload_models();
+        unload_textures();
+        UnloadShader(lighting_shader);
+        UnloadShader(shadow_shader);
+        for (auto& shadow_map : shadow_maps)
+            UnloadRenderTexture(shadow_map);
+        CloseWindow();
+        return 0;
+    }
 
     
     g_plugin_manager->load_all("plugins", ctx);
@@ -479,72 +587,12 @@ int main(int argc, char* argv[]) {
             (scene_bounds.min.y + scene_bounds.max.y) * 0.5f,
             (scene_bounds.min.z + scene_bounds.max.z) * 0.5f
         };
-        Vec3 scene_extents = {
-            (scene_bounds.max.x - scene_bounds.min.x) * 0.5f,
-            (scene_bounds.max.y - scene_bounds.min.y) * 0.5f,
-            (scene_bounds.max.z - scene_bounds.min.z) * 0.5f
-        };
-        float scene_radius = fmaxf(fmaxf(scene_extents.x, scene_extents.y), scene_extents.z);
-        if (scene_radius < 10.0f) scene_radius = 10.0f;
-
         Vec3 cam_pos = camera.get_camera().position;
         SetShaderValue(lighting_shader, lighting_shader.locs[SHADER_LOC_VECTOR_VIEW], &cam_pos, SHADER_UNIFORM_VEC3);
         prepare_scene_light_uniforms(editor.scene, lighting_shader, scene_center);
-
-        for (Entity& e : editor.scene.entities) {
-            LightComponent* light = e.get_light_component();
-            TransformComponent* transform = e.get_transform_component();
-
-            if (!light || !transform || !light->enabled || !light->created) continue;
-
-            int slot = light->light.id;
-            if (slot < 0 || slot >= QC_MAX_LIGHTS) continue;
-
-            ShadowMap& sm = shadow_maps[slot];
-            sm.active = true;
-
-            if (light->light.light.type == LIGHT_DIRECTIONAL) {
-                sm.light_space = compute_light_space_matrix(transform->position, light->light.target, scene_radius, 0.1f, scene_radius * 4.0f);
-            }
-
-            else {
-                float fov = (light->light.light.type == LIGHT_SPOT) ? light->light.spot_angle * 2.0f : 90.0f;
-                sm.light_space = compute_spot_light_space_matrix(transform->position, light->light.target, fov, 0.1f, light->light.range * 2.0f);
-            }
-
-            shadow_map_begin(sm);
-            BeginMode3D(camera.get_camera());
-
-            float lsm[16];
-
-            memcpy(lsm, &sm.light_space, sizeof(lsm));
-            SetShaderValueMatrix(lighting_shader, u_light_space_matrix[slot], *(Matrix*)lsm);
-
-            for (Entity& entity : editor.scene.entities) {
-                MeshComponent* mesh = entity.get_mesh_component();
-                TransformComponent* transform = entity.get_transform_component();
-                if (!mesh || !transform) continue;
-
-                draw_entity_with_texture(entity);
-            }
-
-            EndMode3D();
-            shadow_map_end();
-        }
-
-        for (int i = 0; i < QC_MAX_LIGHTS; i++) {
-            float lsm[16];
-
-            memcpy(lsm, &shadow_maps[i].light_space, sizeof(lsm));
-            SetShaderValueMatrix(lighting_shader, u_light_space_matrix[i], *(Matrix*)lsm);
-
-            int active = shadow_maps[i].active ? 1 : 0;
-            SetShaderValue(lighting_shader, u_shadow_map_active[i], &active, SHADER_UNIFORM_INT);
-
-            if (shadow_maps[i].active) {
-                SetShaderValueTexture(lighting_shader, u_shadow_map[i], shadow_maps[i].fbo.texture);
-            }
-        }
+        render_scene_shadow_maps(editor.scene, shadow_shader, shadow_maps, shadow_cameras, scene_center,
+            lighting_shader, light_view_locations, light_projection_locations);
+        assign_shadow_maps(editor.scene, shadow_maps, lighting_shader);
 
         BeginDrawing();
             ClearBackground(DARKGRAY);
@@ -558,7 +606,7 @@ int main(int argc, char* argv[]) {
                         MeshComponent* mesh = e.get_mesh_component();
                         TransformComponent* transform = e.get_transform_component();
                         MaterialComponent* mat = e.get_material_component();
-                        if (!mesh || !transform) continue;
+                        if (!mesh || !mesh->enabled || !transform) continue;
 
                         const bool has_materials = mesh->model.materialCount > 0 && mesh->model.materials != nullptr;
                         const bool shader_missing = has_materials &&
@@ -599,10 +647,10 @@ int main(int argc, char* argv[]) {
     unload_models();
     unload_textures();
 
-    for (int i = 0; i < QC_MAX_LIGHTS; i++)
-        shadow_maps[i].unload();
-
     UnloadShader(lighting_shader);
+    UnloadShader(shadow_shader);
+    for (auto& shadow_map : shadow_maps)
+        UnloadRenderTexture(shadow_map);
     g_plugin_manager->unload_all();
     qcImGuiShutdown();
     shutdown_freetype();

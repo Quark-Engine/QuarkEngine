@@ -4,14 +4,12 @@ in vec3 fragPosition;
 in vec2 fragTexCoord;
 in vec4 fragColor;
 in vec3 fragNormal;
-in vec4 fragPosLightSpace[4];
-
 uniform sampler2D texture0;
+uniform sampler2D shadowMaps[4];
+uniform mat4 lightViews[4];
+uniform mat4 lightProjections[4];
 uniform vec4 colDiffuse;
 uniform int useTexture;
-
-uniform sampler2D shadowMap[4];
-uniform int shadowMapActive[4];
 
 out vec4 finalColor;
 
@@ -38,29 +36,35 @@ uniform vec3 viewPos;
 uniform vec3 emissionColor;
 uniform float emissionPower;
 
-float sampleShadow(sampler2D map, vec4 lightSpacePos, vec3 normal, vec3 lightDir)
+float shadow_factor(int lightIndex, vec3 worldPosition)
 {
-    vec3 proj = lightSpacePos.xyz / lightSpacePos.w;
-    proj = proj * 0.5 + 0.5;
+    vec4 lightSpacePosition = lightProjections[lightIndex] * lightViews[lightIndex]
+        * vec4(worldPosition, 1.0);
+    if (lightSpacePosition.w <= 0.0) return 0.0;
 
-    if (proj.z > 1.0 || proj.x < 0.0 || proj.x > 1.0 || proj.y < 0.0 || proj.y > 1.0)
-        return 1.0;
+    vec3 projected = lightSpacePosition.xyz / lightSpacePosition.w;
+    projected = projected * 0.5 + 0.5;
 
-    float cosTheta = clamp(dot(normal, lightDir), 0.0, 1.0);
-    float bias = mix(0.005, 0.0005, cosTheta);
+    if (projected.x < 0.0 || projected.x > 1.0 ||
+        projected.y < 0.0 || projected.y > 1.0 || projected.z > 1.0)
+        return 0.0;
 
+    float currentDepth = projected.z;
+    float bias = 0.004;
+    vec2 texelSize = 1.0 / vec2(textureSize(shadowMaps[lightIndex], 0));
     float shadow = 0.0;
-    vec2 texelSize = 1.0 / textureSize(map, 0);
 
-    for (int x = -1; x <= 1; x++) {
-        for (int y = -1; y <= 1; y++) {
-            float pcfDepth = texture(map, proj.xy + vec2(x, y) * texelSize).r;
-            shadow += (proj.z - bias > pcfDepth) ? 1.0 : 0.0;
+    for (int x = -1; x <= 1; x++)
+    {
+        for (int y = -1; y <= 1; y++)
+        {
+            float closestDepth = texture(shadowMaps[lightIndex],
+                projected.xy + vec2(x, y) * texelSize).r;
+            shadow += currentDepth - bias > closestDepth ? 1.0 : 0.0;
         }
     }
 
-    shadow /= 9.0;
-    return 1.0 - shadow;
+    return shadow / 9.0;
 }
 
 void main()
@@ -131,22 +135,20 @@ void main()
             attenuation = sqrt(clamp(1.0 - dist / range, 0.0, 1.0));
         }
 
-        float shadowFactor = 1.0;
-
-        if (shadowMapActive[i] == 1)
-            shadowFactor = sampleShadow(shadowMap[i], fragPosLightSpace[i], normal, lightDir);
-
         float directLight = max(dot(normal, lightDir), 0.0);
+        float shadow = shadow_factor(i, fragPosition);
         float wrappedLight = clamp((dot(normal, lightDir) + 0.28) / 1.28, 0.0, 1.0);
         float diffuse = max(directLight, wrappedLight * 0.25);
 
         vec3 bounce = lights[i].color.rgb * attenuation * lightEnergy * 0.08;
-        lightAccum += (lights[i].color.rgb * diffuse * attenuation * lightEnergy * shadowFactor) + bounce;
+        lightAccum += (lights[i].color.rgb * diffuse * attenuation * lightEnergy)
+            * (1.0 - shadow) + bounce;
 
         if (directLight > 0.0)
         {
             float spec = pow(max(dot(viewD, reflect(-lightDir, normal)), 0.0), 24.0);
-            specular  += spec * attenuation * lightEnergy * shadowFactor * 0.2 * lights[i].color.rgb;
+            specular  += spec * attenuation * lightEnergy * 0.2 * lights[i].color.rgb
+                * (1.0 - shadow);
         }
     }
 
