@@ -76,7 +76,12 @@ set_target_properties(imgui PROPERTIES
     ARCHIVE_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/bin
 )
 
-if(UNIX)
+if(APPLE)
+    set_target_properties(imgui PROPERTIES
+        BUILD_RPATH "@loader_path"
+        INSTALL_RPATH "@loader_path"
+    )
+elseif(UNIX)
     set_target_properties(imgui PROPERTIES
         BUILD_RPATH "$ORIGIN"
         INSTALL_RPATH "$ORIGIN"
@@ -197,10 +202,18 @@ if(BUILD_ENGINE)
                 $<TARGET_FILE:assimp::assimp>
                 $<TARGET_FILE:freetype>
                 $<TARGET_FILE:SDL3::SDL3>
-                ${CMAKE_RUNTIME_OUTPUT_DIRECTORY}
+                $<TARGET_FILE_DIR:${PROJECT_NAME}>
             COMMENT "Copying shared libraries next to ${PROJECT_NAME} (Linux/macOS)..."
         )
-        if(NOT APPLE)
+        if(APPLE)
+            add_custom_command(TARGET ${PROJECT_NAME} POST_BUILD
+                COMMAND ${CMAKE_COMMAND} -E rm -f $<TARGET_FILE_DIR:${PROJECT_NAME}>/$<IF:$<CONFIG:Debug>,libassimpd.6.dylib,libassimp.6.dylib>
+                COMMAND ${CMAKE_COMMAND} -E create_symlink $<TARGET_FILE_NAME:assimp::assimp> $<TARGET_FILE_DIR:${PROJECT_NAME}>/$<IF:$<CONFIG:Debug>,libassimpd.6.dylib,libassimp.6.dylib>
+                COMMAND ${CMAKE_COMMAND} -E rm -f $<TARGET_FILE_DIR:${PROJECT_NAME}>/$<IF:$<CONFIG:Debug>,libfreetyped.6.dylib,libfreetype.6.dylib>
+                COMMAND ${CMAKE_COMMAND} -E create_symlink $<TARGET_FILE_NAME:freetype> $<TARGET_FILE_DIR:${PROJECT_NAME}>/$<IF:$<CONFIG:Debug>,libfreetyped.6.dylib,libfreetype.6.dylib>
+                COMMENT "Creating macOS shared library compatibility symlinks..."
+            )
+        else()
             add_custom_command(TARGET ${PROJECT_NAME} POST_BUILD
                 COMMAND ${CMAKE_COMMAND} -E create_symlink $<TARGET_FILE_NAME:freetype> $<TARGET_FILE_DIR:${PROJECT_NAME}>/$<IF:$<CONFIG:Debug>,libfreetyped.so.6,libfreetype.so.6>
                 COMMAND ${CMAKE_COMMAND} -E create_symlink $<TARGET_FILE_NAME:assimp::assimp> $<TARGET_FILE_DIR:${PROJECT_NAME}>/$<IF:$<CONFIG:Debug>,libassimpd.so.6,libassimp.so.6>
