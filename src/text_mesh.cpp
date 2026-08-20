@@ -74,7 +74,14 @@ std::vector<std::pair<std::string, std::string>> get_system_fonts() {
     };
 
 #if _WIN32
-    const char* win = getenv("WINDIR");
+    char windir[512] = {};
+    size_t windir_length = 0;
+    char* win = nullptr;
+    if (_dupenv_s(&win, &windir_length, "WINDIR") == 0 && win) {
+        snprintf(windir, sizeof(windir), "%s", win);
+        free(win);
+        win = windir;
+    }
 
     if (win) {
         scan_dir(std::string(win) + "\\Fonts");

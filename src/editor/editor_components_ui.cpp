@@ -403,36 +403,59 @@ void ComponentUIHelper::draw_material_component(Editor& editor, Entity& entity, 
     MeshComponent* mesh = entity.get_mesh_component();
 
     static std::vector<std::string> available_materials;
+    static std::vector<std::string> material_display_names;
     static std::vector<const char*> material_names_cstr;
     static int selected_material_index = -1;
     static bool materials_list_needs_update = true;
 
     if (materials_list_needs_update) {
         available_materials = get_all_materials_in_project();
+        available_materials.insert(available_materials.begin(), "None");
+        material_display_names.clear();
         material_names_cstr.clear();
         
         for (const auto& mat_path : available_materials) {
-            material_names_cstr.push_back(mat_path.c_str());
+            material_display_names.push_back(
+                mat_path == "None" ? "None" : std::filesystem::path(mat_path).filename().generic_string()
+            );
         }
-        
-        selected_material_index = -1;
-        if (!mat->texture_name.empty()) {
-            for (int i = 0; i < static_cast<int>(available_materials.size()); ++i) {
-                if (available_materials[i] == mat->texture_name) {
-                    selected_material_index = i;
-                    break;
-                }
-            }
+        for (const auto& display_name : material_display_names) {
+            material_names_cstr.push_back(display_name.c_str());
         }
         
         materials_list_needs_update = false;
+    }
+
+    selected_material_index = 0;
+    if (!mat->texture_name.empty()) {
+        const std::filesystem::path current_path = std::filesystem::current_path();
+        std::filesystem::path material_path(mat->texture_name);
+        if (material_path.is_absolute()) {
+            std::error_code relative_error;
+            material_path = std::filesystem::relative(material_path, current_path, relative_error);
+            if (relative_error) material_path = std::filesystem::path(mat->texture_name).filename();
+        }
+
+        const std::string display_path = material_path.generic_string();
+        for (int i = 1; i < static_cast<int>(available_materials.size()); ++i) {
+            if (available_materials[i] == display_path) {
+                selected_material_index = i;
+                break;
+            }
+        }
     }
 
     ImGui::Text(lang.word("material_file"));
     if (!material_names_cstr.empty()) {
         if (ImGui::Combo("##material_combo", &selected_material_index, material_names_cstr.data(), 
                          static_cast<int>(material_names_cstr.size()))) {
-            if (selected_material_index >= 0 && selected_material_index < static_cast<int>(available_materials.size())) {
+            if (selected_material_index == 0) {
+                editor.save_state();
+                clear_material_textures(&entity);
+                mat->texture_name.clear();
+                mat->texture = {0};
+                mat->texture_source = TEXTURE_NONE;
+            } else if (selected_material_index > 0 && selected_material_index < static_cast<int>(available_materials.size())) {
                 const std::string& selected_path = available_materials[selected_material_index];
                 if (std::filesystem::exists(selected_path)) {
                     load_material_to_entity(&entity, selected_path);
@@ -661,8 +684,7 @@ void ComponentUIHelper::draw_3d_text_component(Editor& editor, Entity& entity, T
     if (!text) return;
 
     char buf[256] = {};
-    std::strncpy(buf, text->text.c_str(), sizeof(buf) - 1);
-    buf[sizeof(buf) - 1] = '\0';
+    std::snprintf(buf, sizeof(buf), "%s", text->text.c_str());
 
     if (ImGui::InputText("Text", buf, sizeof(buf), ImGuiInputTextFlags_EnterReturnsTrue)) {
         editor.save_state();

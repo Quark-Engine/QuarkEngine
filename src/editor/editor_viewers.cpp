@@ -238,7 +238,7 @@ std::vector<std::string> get_all_materials_in_project() {
         for (const auto& entry : std::filesystem::recursive_directory_iterator(current_path)) {
             if (entry.is_regular_file() && entry.path().extension() == ".mtl") {
                 std::filesystem::path rel_path = std::filesystem::relative(entry.path(), current_path);
-                materials.push_back(rel_path.string());
+                materials.push_back(rel_path.generic_string());
             }
         }
         

@@ -85,7 +85,7 @@ void LightComponent::serialize(nlohmann::json& json) const {
     json["light_rotation"] = {light.rotation.x, light.rotation.y, light.rotation.z};
     
     char color_buf[16];
-    sprintf(color_buf, "%02X%02X%02X%02X", light.color.r, light.color.g, light.color.b, light.color.a);
+    snprintf(color_buf, sizeof(color_buf), "%02X%02X%02X%02X", light.color.r, light.color.g, light.color.b, light.color.a);
     json["light_color"] = std::string(color_buf);
     
     json["light_intensity"] = light.intensity;

@@ -24,13 +24,17 @@ enum PolygonEditMode {
 extern MeshEditState g_mesh_edit_state;
 extern PolygonEditMode g_poly_mode;
 extern std::vector<int> g_selected_vertices;
+extern bool show_hierarchy;
+extern bool show_inspector;
+extern bool show_assets;
+extern bool show_scene;
 
 void copy_entity(Entity* entity);
 void paste_entity(Editor& editor);
 void dublicate_entity(Editor& editor, Entity* entity);
 void delete_entity(Editor& editor, Entity* entity);
 
-void draw_ui(Editor& editor, Shader shader, FlyCamera camera, PluginContext* ctx);
+void draw_ui(Editor& editor, Shader shader, FlyCamera& camera, PluginContext* ctx);
 
 void draw_gizmo(Editor& editor, FlyCamera camera);
 void handle_scene_asset_drop(Editor& editor, Camera3D camera);

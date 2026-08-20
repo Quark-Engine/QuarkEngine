@@ -108,6 +108,7 @@ if(BUILD_ENGINE)
         src/component.cpp
         src/editable_mesh.cpp
         src/entity.cpp
+        src/editor_preferences.cpp
         src/hub.cpp
         src/language_manager.cpp
         src/lighting.cpp

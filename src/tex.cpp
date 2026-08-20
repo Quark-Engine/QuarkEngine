@@ -1,5 +1,6 @@
 #include "tex.h"
 #include "models.h"
+#include "editor_preferences.h"
 #include <algorithm>
 #include <unordered_map>
 #include <unordered_set>
@@ -255,7 +256,7 @@ void draw_collision_debug(Entity& entity) {
     MeshComponent* mesh_component = entity.get_mesh_component();
     TransformComponent* transform = entity.get_transform_component();
 
-    if (!collision || !transform || !collision->visualize) return;
+    if (!collision || !transform || !collision->visualize || !g_editor_preferences.show_colliders) return;
 
     Vec3 worldPos = transform->position + collision->center;
 
@@ -346,8 +347,14 @@ void draw_entity_with_texture(Entity& e) {
     if (edited_mesh_is_double_sided) DisableBackfaceCulling();
 
     DrawModel(mesh->model, {0,0,0}, 1.0f, mat->color);
-    if (g_wireframe_enabled && mat->outline_color.a > 0)
-        DrawModelWires(mesh->model, {0,0,0}, 1.0f, mat->outline_color);
+    if (g_wireframe_enabled && mat->outline_color.a > 0) {
+        Color wireframe_color = {
+            static_cast<unsigned char>(g_editor_preferences.wireframe_red),
+            static_cast<unsigned char>(g_editor_preferences.wireframe_green),
+            static_cast<unsigned char>(g_editor_preferences.wireframe_blue), 255
+        };
+        DrawModelWires(mesh->model, {0,0,0}, 1.0f, wireframe_color);
+    }
 
     if (edited_mesh_is_double_sided) EnableBackfaceCulling();
 

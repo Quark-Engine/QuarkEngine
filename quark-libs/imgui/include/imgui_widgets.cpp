@@ -816,26 +816,37 @@ bool ImGui::ButtonEx(const char* label, const ImVec2& size_arg, ImGuiButtonFlags
     ImU32 border_bottom = IM_COL32(49, 53, 59, 255);    // #31353b
 
     ImU32 text_col = IM_COL32(221, 225, 228, 255); // #dde1e4
+    const bool light_theme = style.Colors[ImGuiCol_WindowBg].x > 0.5f;
+
+    if (light_theme) {
+        col_top = IM_COL32(246, 248, 252, 255);
+        col_bottom = IM_COL32(190, 204, 224, 255);
+        border_top = IM_COL32(210, 218, 232, 255);
+        border_left = IM_COL32(195, 205, 222, 255);
+        border_right = IM_COL32(145, 162, 188, 255);
+        border_bottom = IM_COL32(125, 145, 176, 255);
+        text_col = IM_COL32(18, 27, 42, 255);
+    }
 
     if (held && hovered) // PRESSED
     {
-        col_top    = IM_COL32(63, 67, 72, 255);   // #3f4348
-        col_bottom = IM_COL32(54, 58, 63, 255);   // #363a3f
+        col_top    = light_theme ? IM_COL32(155, 181, 218, 255) : IM_COL32(63, 67, 72, 255);
+        col_bottom = light_theme ? IM_COL32(104, 140, 191, 255) : IM_COL32(54, 58, 63, 255);
 
-        border_right  = IM_COL32(0, 49, 105, 255);  // #003169ff
-        border_bottom = IM_COL32(0, 99, 186, 255);  // #0063baff
+        border_right  = light_theme ? IM_COL32(65, 105, 165, 255) : IM_COL32(0, 49, 105, 255);
+        border_bottom = light_theme ? IM_COL32(45, 83, 143, 255) : IM_COL32(0, 99, 186, 255);
 
-        text_col = IM_COL32(0, 208, 255, 255); // #00d0ffff
+        text_col = light_theme ? IM_COL32(10, 42, 85, 255) : IM_COL32(0, 208, 255, 255);
     }
     else if (hovered) // HOVER
     {
-        col_top    = IM_COL32(107, 113, 120, 255); // #6b7178
-        col_bottom = IM_COL32(76, 81, 88, 255);    // #4c5158
+        col_top    = light_theme ? IM_COL32(225, 234, 247, 255) : IM_COL32(107, 113, 120, 255);
+        col_bottom = light_theme ? IM_COL32(160, 184, 217, 255) : IM_COL32(76, 81, 88, 255);
     }
     else // NORMAL
     {
-        col_top    = IM_COL32(96, 101, 107, 255); // #60656b
-        col_bottom = IM_COL32(68, 73, 79, 255);   // #44494f
+        col_top    = light_theme ? IM_COL32(246, 248, 252, 255) : IM_COL32(96, 101, 107, 255);
+        col_bottom = light_theme ? IM_COL32(190, 204, 224, 255) : IM_COL32(68, 73, 79, 255);
     }
 
     draw->AddRectFilledMultiColor(
@@ -844,10 +855,10 @@ bool ImGui::ButtonEx(const char* label, const ImVec2& size_arg, ImGuiButtonFlags
         col_bottom, col_bottom
     );
 
-    draw->AddLine(bb.Min, ImVec2(bb.Max.x, bb.Min.y), border_top);                         // top
-    draw->AddLine(bb.Min, ImVec2(bb.Min.x, bb.Max.y), border_left);                        // left
-    draw->AddLine(ImVec2(bb.Max.x - 1, bb.Min.y), ImVec2(bb.Max.x - 1, bb.Max.y), border_right); // right
-    draw->AddLine(ImVec2(bb.Min.x, bb.Max.y - 1), ImVec2(bb.Max.x, bb.Max.y - 1), border_bottom); // bottom
+    draw->AddLine(bb.Min, ImVec2(bb.Max.x, bb.Min.y), border_top);
+    draw->AddLine(bb.Min, ImVec2(bb.Min.x, bb.Max.y), border_left);
+    draw->AddLine(ImVec2(bb.Max.x - 1, bb.Min.y), ImVec2(bb.Max.x - 1, bb.Max.y), border_right);
+    draw->AddLine(ImVec2(bb.Min.x, bb.Max.y - 1), ImVec2(bb.Max.x, bb.Max.y - 1), border_bottom);
 
     ImVec2 text_pos = ImVec2(
         bb.Min.x + (size.x - label_size.x) * style.ButtonTextAlign.x,
@@ -1324,14 +1335,17 @@ bool ImGui::Checkbox(const char* label, bool* v)
 
     ImDrawList* draw = window->DrawList;
 
-    ImU32 bg        = IM_COL32(47, 51, 55, 255);   // #2f3337
-    ImU32 border    = IM_COL32(93, 98, 104, 255);  // #5d6268
-    ImU32 check_bg  = IM_COL32(0, 147, 225, 255);  // #0093e1ff
-    ImU32 check_br  = IM_COL32(0, 99, 186, 255);   // #0063baff
-    ImU32 text_col  = IM_COL32(205, 209, 213, 255);// #cdd1d5
+    ImU32 bg = GetColorU32(ImGuiCol_FrameBg);
+    ImU32 border = GetColorU32(ImGuiCol_Border);
+    ImU32 check_bg = GetColorU32(ImGuiCol_CheckMark);
+    ImU32 check_br = GetColorU32(ImGuiCol_Border);
+    const ImGuiCol text_color = (g.LastItemData.ItemFlags & ImGuiItemFlags_Disabled)
+        ? ImGuiCol_TextDisabled
+        : ImGuiCol_Text;
+    ImU32 text_col = GetColorU32(text_color);
 
     if (hovered)
-        bg = IM_COL32(59, 64, 69, 255);
+        bg = GetColorU32(ImGuiCol_FrameBgHovered);
 
     draw->AddRectFilled(check_bb.Min, check_bb.Max, bg);
     draw->AddRect(check_bb.Min, check_bb.Max, border);
@@ -2246,36 +2260,42 @@ bool ImGui::Combo(const char* label, int* current_item,
 
     ImU32 top    = IM_COL32(96, 101, 107, 255); // #60656b
     ImU32 bottom = IM_COL32(68, 73, 79, 255);   // #44494f
+    const bool light_theme = style.Colors[ImGuiCol_WindowBg].x > 0.5f;
+
+    if (light_theme) {
+        top = IM_COL32(246, 248, 252, 255);
+        bottom = IM_COL32(190, 204, 224, 255);
+    }
 
     if (hovered)
     {
-        top    = IM_COL32(107, 113, 120, 255); // #6B7178FF
-        bottom = IM_COL32(76, 81, 88, 255);    // #4C5158FF
+        top    = light_theme ? IM_COL32(225, 234, 247, 255) : IM_COL32(107, 113, 120, 255);
+        bottom = light_theme ? IM_COL32(160, 184, 217, 255) : IM_COL32(76, 81, 88, 255);
     }
 
     draw->AddRectFilledMultiColor(bb.Min, bb.Max, top, top, bottom, bottom);
-    draw->AddRect(bb.Min, bb.Max, IM_COL32(72,77,82,255));
+    draw->AddRect(bb.Min, bb.Max, light_theme ? IM_COL32(145, 162, 188, 255) : IM_COL32(72,77,82,255));
 
     // arrow area
     float arrow_w = 18.0f;
     ImRect arrow_bb(ImVec2(bb.Max.x - arrow_w, bb.Min.y), bb.Max);
 
-    draw->AddRectFilled(arrow_bb.Min, arrow_bb.Max, IM_COL32(57,61,66,255));
-    draw->AddLine(arrow_bb.Min, ImVec2(arrow_bb.Min.x, arrow_bb.Max.y), IM_COL32(67,72,77,255));
+    draw->AddRectFilled(arrow_bb.Min, arrow_bb.Max, light_theme ? IM_COL32(178, 194, 218, 255) : IM_COL32(57,61,66,255));
+    draw->AddLine(arrow_bb.Min, ImVec2(arrow_bb.Min.x, arrow_bb.Max.y), light_theme ? IM_COL32(145, 162, 188, 255) : IM_COL32(67,72,77,255));
 
     ImVec2 center = (arrow_bb.Min + arrow_bb.Max) * 0.5f;
     draw->AddTriangleFilled(
         ImVec2(center.x - 4, center.y - 2),
         ImVec2(center.x + 4, center.y - 2),
         ImVec2(center.x, center.y + 3),
-        IM_COL32(220,224,228,255)
+        light_theme ? IM_COL32(24, 42, 68, 255) : IM_COL32(220,224,228,255)
     );
 
     if (preview)
     {
         draw->AddText(
             ImVec2(bb.Min.x + 6, bb.Min.y + (height - CalcTextSize(preview).y) * 0.5f),
-            IM_COL32(205,208,212,255),
+            light_theme ? IM_COL32(24, 42, 68, 255) : IM_COL32(205,208,212,255),
             preview
         );
     }
@@ -2299,12 +2319,12 @@ bool ImGui::Combo(const char* label, int* current_item,
     ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(2, 2));
     ImGui::PushStyleVar(ImGuiStyleVar_ItemSpacing, ImVec2(0, 0));
 
-    ImGui::PushStyleColor(ImGuiCol_PopupBg, IM_COL32(37, 40, 43, 255));
-    ImGui::PushStyleColor(ImGuiCol_Border, IM_COL32(72, 77, 82, 255));
-    ImGui::PushStyleColor(ImGuiCol_Header, IM_COL32(44,142,199,255));
-    ImGui::PushStyleColor(ImGuiCol_HeaderHovered, IM_COL32(44,111,199,255));
-    ImGui::PushStyleColor(ImGuiCol_HeaderActive, IM_COL32(38,102,166,255));
-    ImGui::PushStyleColor(ImGuiCol_Text, IM_COL32(220,224,228,255));
+    ImGui::PushStyleColor(ImGuiCol_PopupBg, light_theme ? IM_COL32(255, 255, 255, 255) : IM_COL32(37, 40, 43, 255));
+    ImGui::PushStyleColor(ImGuiCol_Border, light_theme ? IM_COL32(170, 182, 202, 255) : IM_COL32(72, 77, 82, 255));
+    ImGui::PushStyleColor(ImGuiCol_Header, light_theme ? IM_COL32(205, 220, 240, 255) : IM_COL32(44,142,199,255));
+    ImGui::PushStyleColor(ImGuiCol_HeaderHovered, light_theme ? IM_COL32(182, 205, 235, 255) : IM_COL32(44,111,199,255));
+    ImGui::PushStyleColor(ImGuiCol_HeaderActive, light_theme ? IM_COL32(155, 185, 222, 255) : IM_COL32(38,102,166,255));
+    ImGui::PushStyleColor(ImGuiCol_Text, light_theme ? IM_COL32(18, 27, 42, 255) : IM_COL32(220,224,228,255));
 
     ImGui::SetNextWindowPos(
         ImVec2(bb.Min.x, bb.Max.y),

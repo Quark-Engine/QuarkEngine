@@ -6,6 +6,7 @@
 #include "editor/editor_viewers.h"
 #include "project.h"
 #include "imgui.h"
+#include "editor_preferences.h"
 
 namespace fs = std::filesystem;
 
@@ -76,7 +77,10 @@ static SceneState capture_scene_state(const Scene& scene) {
 }
 
 void Editor::save_state() {
+    scene_dirty = true;
     undo_stack.push(capture_scene_state(scene));
+    while (undo_stack.size() > static_cast<size_t>(g_editor_preferences.undo_history_limit))
+        undo_stack.pop();
     while (!redo_stack.empty()) redo_stack.pop();
 }
 
@@ -97,6 +101,8 @@ void Editor::redo() {
     if (redo_stack.empty()) return;
 
     undo_stack.push(capture_scene_state(scene));
+    while (undo_stack.size() > static_cast<size_t>(g_editor_preferences.undo_history_limit))
+        undo_stack.pop();
 
     SceneState next = redo_stack.top();
     redo_stack.pop();
@@ -109,9 +115,12 @@ void Editor::redo() {
 void Editor::handle_input() {
     using namespace editor_internal;
 
-    if (IsKeyPressed(KeyboardKey::P)) gizmo_mode = ImGuizmo::TRANSLATE;
-    if (IsKeyPressed(KeyboardKey::R)) gizmo_mode = ImGuizmo::ROTATE;
-    if (IsKeyPressed(KeyboardKey::S)) gizmo_mode = ImGuizmo::SCALE;
+    ImGuiIO& io = ImGui::GetIO();
+    const bool keyboard_available = !io.WantTextInput;
+
+    if (keyboard_available && IsKeyPressed(KeyboardKey::P)) gizmo_mode = ImGuizmo::TRANSLATE;
+    if (keyboard_available && IsKeyPressed(KeyboardKey::R)) gizmo_mode = ImGuizmo::ROTATE;
+    if (keyboard_available && IsKeyPressed(KeyboardKey::S)) gizmo_mode = ImGuizmo::SCALE;
 
     if (IsFileDropped()) {
         FilePathList dropped = LoadDroppedFiles();
@@ -142,11 +151,11 @@ void Editor::handle_input() {
         }
     }
 
-    ImGuiIO& io = ImGui::GetIO();
-    const bool ctrl = (IsKeyDown(KeyboardKey::LeftControl) || IsKeyDown(KeyboardKey::RightControl)) && !io.WantCaptureKeyboard;
+    const bool ctrl = (IsKeyDown(KeyboardKey::LeftControl) || IsKeyDown(KeyboardKey::RightControl)) && keyboard_available;
 
     if (ctrl && IsKeyPressed(KeyboardKey::S)) {
         project_save(project_path, scene);
+        scene_dirty = false;
     }
 
     static float last_undo_time = 0.0f;
@@ -154,21 +163,18 @@ void Editor::handle_input() {
     static float last_copy_time = 0.0f;
     static float last_paste_time = 0.0f;
     static float last_dublicate_time = 0.0f;
-    static float last_delete_time = 0.0f;
 
     static bool undo_key_was_pressed = false;
     static bool redo_key_was_pressed = false;
     static bool copy_key_was_pressed = false;
     static bool paste_key_was_pressed = false;
     static bool dubl_key_was_pressed = false;
-    static bool del_key_was_pressed = false;
 
     static float undo_hold_start = 0.0f;
     static float redo_hold_start = 0.0f;
     static float copy_hold_start = 0.0f;
     static float paste_hold_start = 0.0f;
     static float dubl_hold_start = 0.0f;
-    static float del_hold_start = 0.0f;
 
     const float now = static_cast<float>(GetTime());
 
@@ -243,17 +249,8 @@ void Editor::handle_input() {
         }
     }
 
-    if (IsKeyDown(KeyboardKey::Delete)) {
-        if (!del_key_was_pressed) {
-            delete_entity(*this, entity);
-
-            del_key_was_pressed = true;
-            del_hold_start = now;
-            last_delete_time = now;
-        } else if (now - del_hold_start > 0.5f && now - last_delete_time > 0.15f) {
-            delete_entity(*this, entity);
-            last_delete_time = now;
-        }
+    if (keyboard_available && IsKeyPressed(KeyboardKey::Delete)) {
+        delete_entity(*this, entity);
     }
 
     static double last_asset_poll = 0.0;

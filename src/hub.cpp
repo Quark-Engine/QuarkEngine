@@ -24,6 +24,7 @@ using namespace qc;
 #include "hub.h"
 #include "version.h"
 #include "language_manager.h"
+#include "editor_preferences.h"
 #include "project.h"
 #include "imgui.h"
 #include "qcImGui.h"
@@ -63,6 +64,24 @@ static char hub_rename_buf[256]  = "";
 static bool        hub_show_version_warning = false;
 static std::string hub_pending_open_path    = "";
 static std::string hub_saved_version        = "";
+
+static ImU32 hub_card_color(bool selected) {
+    if (g_editor_preferences.light_theme)
+        return selected ? IM_COL32(190, 214, 245, 255) : IM_COL32(239, 242, 247, 255);
+    return selected ? IM_COL32(30, 80, 140, 255) : IM_COL32(26, 28, 31, 255);
+}
+
+static ImU32 hub_card_border_color(bool selected) {
+    if (g_editor_preferences.light_theme)
+        return selected ? IM_COL32(75, 130, 205, 255) : IM_COL32(190, 198, 210, 255);
+    return selected ? IM_COL32(50, 130, 220, 255) : IM_COL32(50, 52, 56, 255);
+}
+
+static ImU32 hub_card_hover_color() {
+    return g_editor_preferences.light_theme
+        ? IM_COL32(215, 226, 242, 220)
+        : IM_COL32(40, 42, 46, 180);
+}
 
 // Plugin Management
 static bool hub_show_plugin_manager = false;
@@ -266,12 +285,12 @@ static void hub_draw_plugin_manager() {
                 float card_w    = ImGui::GetContentRegionAvail().x;
                 float card_h    = 46.f;
 
-                ImU32 bg_col = is_sel ? IM_COL32(30, 80, 140, 255) : IM_COL32(26, 28, 31, 255);
+                ImU32 bg_col = hub_card_color(is_sel);
 
                 ImGui::GetWindowDrawList()->AddRectFilled( card_pos, ImVec2(card_pos.x + card_w, card_pos.y + card_h), bg_col);
                 ImGui::GetWindowDrawList()->AddRect(
                     card_pos, ImVec2(card_pos.x + card_w, card_pos.y + card_h),
-                    is_sel ? IM_COL32(50,130,220,255) : IM_COL32(50,52,56,255)
+                    hub_card_border_color(is_sel)
                 );
 
                 ImVec4 badge = hub_plugin_badge_color(pi.name);
@@ -634,14 +653,16 @@ std::string run_hub() {
         }
     }
     hub_refresh();
-    strncpy(hub_create_path, HUB_PROJECTS_ROOT, sizeof(hub_create_path) - 1);
+    snprintf(hub_create_path, sizeof(hub_create_path), "%s", HUB_PROJECTS_ROOT);
 
     std::string result_path = "";
     bool should_exit = false;
 
     while (!WindowShouldClose() && !should_exit) {
         BeginDrawing();
-        ClearBackground({ 33, 35, 38, 255 });
+        ClearBackground(g_editor_preferences.light_theme
+            ? Color{ 238, 241, 246, 255 }
+            : Color{ 33, 35, 38, 255 });
         qcImGuiBegin();
 
         ImGui::SetNextWindowPos(ImVec2(0, 0));
@@ -671,7 +692,7 @@ std::string run_hub() {
 
         if (ImGui::Button(("+ %s", lang.word("create_project")), ImVec2(134, 28))) {
             memset(hub_create_name, 0, sizeof(hub_create_name));
-            strncpy(hub_create_path, HUB_PROJECTS_ROOT, sizeof(hub_create_path) - 1);
+            snprintf(hub_create_path, sizeof(hub_create_path), "%s", HUB_PROJECTS_ROOT);
             hub_show_create = true;
         }
 
@@ -706,13 +727,13 @@ std::string run_hub() {
             ImGui::GetWindowDrawList()->AddRectFilled(
                 card_pos,
                 ImVec2(card_pos.x + card_w, card_pos.y + card_h),
-                is_sel ? IM_COL32(30, 80, 140, 255) : IM_COL32(26, 28, 31, 255)
+                hub_card_color(is_sel)
             );
 
             ImGui::GetWindowDrawList()->AddRect(
                 card_pos,
                 ImVec2(card_pos.x + card_w, card_pos.y + card_h),
-                is_sel ? IM_COL32(50, 130, 220, 255) : IM_COL32(50, 52, 56, 255)
+                hub_card_border_color(is_sel)
             );
 
             ImGui::InvisibleButton("##card", ImVec2(card_w, card_h));
@@ -721,7 +742,7 @@ std::string run_hub() {
                 ImGui::GetWindowDrawList()->AddRectFilled(
                     card_pos,
                     ImVec2(card_pos.x + card_w, card_pos.y + card_h),
-                    IM_COL32(40, 42, 46, 180)
+                    hub_card_hover_color()
                 );
             }
 
@@ -751,7 +772,7 @@ std::string run_hub() {
                 ImGui::Separator();
                 if (ImGui::MenuItem(lang.word("rename"))) {
                     hub_rename_index = i;
-                    strncpy(hub_rename_buf, hub_projects[i].name.c_str(), sizeof(hub_rename_buf) - 1);
+                    snprintf(hub_rename_buf, sizeof(hub_rename_buf), "%s", hub_projects[i].name.c_str());
                     hub_show_rename = true;
                 }
 
@@ -807,7 +828,7 @@ std::string run_hub() {
             if (ImGui::Button("Browse", ImVec2(56, 0))) {
                 std::string picked = hub_browse_folder();
                 if (!picked.empty())
-                    strncpy(hub_create_path, picked.c_str(), sizeof(hub_create_path) - 1);
+                    snprintf(hub_create_path, sizeof(hub_create_path), "%s", picked.c_str());
             }
 
             ImGui::Spacing();

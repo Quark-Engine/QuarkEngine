@@ -8,6 +8,7 @@
 #include "project.h"
 #include "tex.h"
 #include "language_manager.h"
+#include "editor_preferences.h"
 #include "imgui.h"
 #include <algorithm>
 #include <fstream>
@@ -459,6 +460,11 @@ void draw_assets_ui(Editor& editor) {
         if (entry.is_directory) {
             directories.push_back(entry);
         } else {
+            const bool matches_filter = g_editor_preferences.asset_filter == 0 ||
+                (g_editor_preferences.asset_filter == 1 && entry.is_image) ||
+                (g_editor_preferences.asset_filter == 2 && entry.is_model) ||
+                (g_editor_preferences.asset_filter == 3 && entry.is_material);
+            if (!matches_filter) continue;
             files.push_back(entry);
         }
     }
@@ -674,7 +680,7 @@ void draw_assets_ui(Editor& editor) {
             } else if (ImGui::IsRectVisible(pos, ImVec2(pos.x + kIconSize, pos.y + kIconSize))) {
                 ModelAsset* asset = find_asset_by_path(editor.current_asset_path / entry.filename, editor.project_path);
                 if (asset) {
-                    preview_texture = create_model_preview(*asset, full);
+                    preview_texture = create_model_preview(*asset, full, g_editor_preferences.asset_preview_size);
                     if (preview_texture.id != 0) model_preview_cache[full] = preview_texture;
                     else load_failed = true;
                 } else {

@@ -18,8 +18,11 @@
 #include <cmath>
 #include <vector>
 #include "language_manager.h"
+#include "editor_preferences.h"
 
 #define lang LanguageManager::get()
+
+void ApplyCustomImGuiTheme();
 
 RenderTexture2D scene_rt = {};
 bool show_hierarchy = true;
@@ -27,6 +30,9 @@ bool show_inspector = true;
 bool show_assets = true;
 bool show_scene = true;
 bool show_preferences = false;
+static bool show_exit_confirmation = false;
+static Editor* pending_delete_editor = nullptr;
+static Entity* pending_delete_entity = nullptr;
 
 bool g_is_scene_hovered = false;
 bool g_is_scene_active = false;
@@ -416,6 +422,22 @@ void draw_gizmo(Editor& editor, FlyCamera camera) {
     ImGuizmo::SetDrawlist(ImGui::GetWindowDrawList());
     ImGuizmo::SetRect(g_scene_window_pos.x, g_scene_window_pos.y, g_scene_window_size.x, g_scene_window_size.y);
 
+    float translation_snap[3] = {
+        g_editor_preferences.gizmo_translation_snap,
+        g_editor_preferences.gizmo_translation_snap,
+        g_editor_preferences.gizmo_translation_snap
+    };
+    float rotation_snap[3] = {
+        g_editor_preferences.gizmo_rotation_snap,
+        g_editor_preferences.gizmo_rotation_snap,
+        g_editor_preferences.gizmo_rotation_snap
+    };
+    float scale_snap[3] = {
+        g_editor_preferences.gizmo_scale_snap,
+        g_editor_preferences.gizmo_scale_snap,
+        g_editor_preferences.gizmo_scale_snap
+    };
+
     Mat4 view = Mat4::lookAt(
         camera.get_camera().position,
         camera.get_camera().target,
@@ -472,7 +494,9 @@ void draw_gizmo(Editor& editor, FlyCamera camera) {
                 projection_Mat4,
                 ImGuizmo::TRANSLATE,
                 ImGuizmo::WORLD,
-                transform_Mat4
+                transform_Mat4,
+                nullptr,
+                g_editor_preferences.gizmo_snap_enabled ? translation_snap : nullptr
             );
 
             if (ImGuizmo::IsUsing() && !g_mesh_edit_state.was_using_gizmo) {
@@ -521,7 +545,12 @@ void draw_gizmo(Editor& editor, FlyCamera camera) {
         projection_Mat4,
         editor_internal::gizmo_mode,
         ImGuizmo::WORLD,
-        transform_Mat4
+        transform_Mat4,
+        nullptr,
+        g_editor_preferences.gizmo_snap_enabled
+            ? (editor_internal::gizmo_mode == ImGuizmo::TRANSLATE ? translation_snap :
+               editor_internal::gizmo_mode == ImGuizmo::ROTATE ? rotation_snap : scale_snap)
+            : nullptr
     );
 
     if (ImGuizmo::IsUsing() && !was_using) {
@@ -1134,6 +1163,14 @@ void dublicate_entity(Editor& editor, Entity* entity) {
 }
 
 void delete_entity(Editor& editor, Entity* entity) {
+    if (!entity) return;
+    if (g_editor_preferences.confirm_delete) {
+        pending_delete_editor = &editor;
+        pending_delete_entity = entity;
+        ImGui::OpenPopup("Confirm Delete");
+        return;
+    }
+
     editor.save_state();
     const int index = editor.scene.selected;
     if (auto light = entity->get_light_component(); light && light->created) {
@@ -1174,8 +1211,16 @@ static void draw_bottom_status_bar() {
     ImGui::PopStyleVar();
 }
 
-void draw_ui(Editor& editor, Shader shader, FlyCamera camera, PluginContext* plugin_ctx) {
+void draw_ui(Editor& editor, Shader shader, FlyCamera& camera, PluginContext* plugin_ctx) {
     using namespace editor_internal;
+
+    ImVec4& selection_style = ImGui::GetStyle().Colors[ImGuiCol_HeaderActive];
+    selection_style = ImVec4(
+        g_editor_preferences.selection_red / 255.0f,
+        g_editor_preferences.selection_green / 255.0f,
+        g_editor_preferences.selection_blue / 255.0f,
+        1.0f
+    );
 
     ImGuizmo::BeginFrame();
 
@@ -1192,9 +1237,17 @@ void draw_ui(Editor& editor, Shader shader, FlyCamera camera, PluginContext* plu
         if (ImGui::BeginMenu(lang.word("file"))) {
             editor.plugin_manager->draw_ui_region(UI_MENU_FILE, *plugin_ctx);
 
-            if (ImGui::MenuItem(lang.word("save"), "Ctrl+S")) project_save(editor.project_path, editor.scene);
+            if (ImGui::MenuItem(lang.word("save"), "Ctrl+S")) {
+                project_save(editor.project_path, editor.scene);
+                editor.scene_dirty = false;
+            }
             ImGui::Separator();
-            if (ImGui::MenuItem(lang.word("exit"))) CloseWindow();
+            if (ImGui::MenuItem(lang.word("exit"))) {
+                if (g_editor_preferences.confirm_exit && editor.scene_dirty)
+                    show_exit_confirmation = true;
+                else
+                    CloseWindow();
+            }
             ImGui::EndMenu();
         }
 
@@ -1630,25 +1683,227 @@ void draw_ui(Editor& editor, Shader shader, FlyCamera camera, PluginContext* plu
         ImGui::Text(lang.word("preferences"));
         ImGui::Separator();
 
-        ImGui::Checkbox("Wireframe", &g_wireframe_enabled);
-        
-        ImGui::Text(lang.word("language"));
+        bool preferences_changed = false;
+        if (ImGui::BeginTabBar("PreferencesTabs")) {
+            if (ImGui::BeginTabItem("General")) {
+                static int language_index = -1;
+                if (language_index == -1)
+                    language_index = find_index(LanguageManager::get().current.c_str());
 
-        static int language_index = -1;
-        if (language_index == -1) {
-            language_index = find_index(LanguageManager::get().current.c_str());
+                ImGui::Text(lang.word("language"));
+                if (ImGui::Combo("##language_combo", &language_index, language_labels, IM_ARRAYSIZE(language_labels))) {
+                    ImGui::SaveIniSettingsToDisk(ImGui::GetIO().IniFilename);
+                    lang.set_lang(language_codes[language_index]);
+                    ImGui::LoadIniSettingsFromDisk(ImGui::GetIO().IniFilename);
+                    preferences_changed = true;
+                }
+                preferences_changed |= ImGui::Checkbox("Wireframe", &g_wireframe_enabled);
+                preferences_changed |= ImGui::Checkbox("Show collision shapes", &g_editor_preferences.show_colliders);
+                preferences_changed |= ImGui::Checkbox("Confirm delete", &g_editor_preferences.confirm_delete);
+                preferences_changed |= ImGui::Checkbox("Show bounding boxes", &g_editor_preferences.show_bounding_boxes);
+                preferences_changed |= ImGui::Checkbox("Focus camera on selection", &g_editor_preferences.focus_on_selection);
+                preferences_changed |= ImGui::Checkbox("Confirm exit with unsaved changes", &g_editor_preferences.confirm_exit);
+                preferences_changed |= ImGui::Checkbox("Open last project", &g_editor_preferences.open_last_project);
+                ImGui::EndTabItem();
+            }
+
+            if (ImGui::BeginTabItem("Rendering")) {
+                preferences_changed |= ImGui::Checkbox("Show scene grid", &g_editor_preferences.show_grid);
+                preferences_changed |= ImGui::Checkbox("Show coordinate axes", &g_editor_preferences.show_axes);
+                preferences_changed |= ImGui::Checkbox("Limit frame rate", &g_editor_preferences.limit_fps);
+                ImGui::BeginDisabled(!g_editor_preferences.limit_fps);
+                preferences_changed |= ImGui::SliderInt("Target FPS", &g_editor_preferences.target_fps, 30, 240);
+                ImGui::EndDisabled();
+                preferences_changed |= ImGui::SliderFloat("Camera speed", &g_editor_preferences.camera_speed, 0.1f, 20.0f, "%.1f");
+                preferences_changed |= ImGui::SliderFloat("Camera sensitivity", &g_editor_preferences.camera_sensitivity, 0.0005f, 0.02f, "%.4f");
+                preferences_changed |= ImGui::SliderFloat("Zoom sensitivity", &g_editor_preferences.camera_zoom_sensitivity, 0.1f, 5.0f, "%.1f");
+                preferences_changed |= ImGui::SliderFloat("Camera FOV", &g_editor_preferences.camera_fov, 20.0f, 120.0f, "%.0f deg");
+                preferences_changed |= ImGui::SliderFloat("Shadow bias", &g_editor_preferences.shadow_bias, 0.0001f, 0.05f, "%.4f");
+                const char* shadow_filter_names[] = { "Hard", "9 samples", "25 samples" };
+                preferences_changed |= ImGui::Combo("Shadow filtering", &g_editor_preferences.shadow_filter_quality, shadow_filter_names, 3);
+                preferences_changed |= ImGui::SliderInt("Undo history limit", &g_editor_preferences.undo_history_limit, 10, 500);
+                camera.cam.fovy = g_editor_preferences.camera_fov;
+                const char* backend_names[] = { "Auto", "OpenGL", "Vulkan" };
+                ImGui::Text("Renderer backend (restart required)");
+                preferences_changed |= ImGui::Combo("##renderer_backend", &g_editor_preferences.renderer_backend, backend_names, 3);
+                const char* msaa_names[] = { "Off", "2x", "4x", "8x" };
+                int msaa_index = g_editor_preferences.msaa_samples == 2 ? 1 : g_editor_preferences.msaa_samples == 4 ? 2 : g_editor_preferences.msaa_samples == 8 ? 3 : 0;
+                ImGui::Text("MSAA (restart required)");
+                if (ImGui::Combo("##msaa", &msaa_index, msaa_names, 4)) {
+                    g_editor_preferences.msaa_samples = msaa_index == 1 ? 2 : msaa_index == 2 ? 4 : msaa_index == 3 ? 8 : 1;
+                    preferences_changed = true;
+                }
+                const char* filter_names[] = { "Nearest", "Linear" };
+                ImGui::Text("Texture filtering (restart required)");
+                preferences_changed |= ImGui::Combo("##texture_filter", &g_editor_preferences.texture_filter, filter_names, 2);
+                float background_color[3] = {
+                    g_editor_preferences.background_red / 255.0f,
+                    g_editor_preferences.background_green / 255.0f,
+                    g_editor_preferences.background_blue / 255.0f
+                };
+                if (ImGui::ColorEdit3("Scene background", background_color)) {
+                    g_editor_preferences.background_red = static_cast<int>(std::round(background_color[0] * 255.0f));
+                    g_editor_preferences.background_green = static_cast<int>(std::round(background_color[1] * 255.0f));
+                    g_editor_preferences.background_blue = static_cast<int>(std::round(background_color[2] * 255.0f));
+                    preferences_changed = true;
+                }
+                preferences_changed |= ImGui::Checkbox("Enable autosave", &g_editor_preferences.autosave_enabled);
+                preferences_changed |= ImGui::Checkbox("Create autosave backup", &g_editor_preferences.autosave_backup_enabled);
+                ImGui::BeginDisabled(!g_editor_preferences.autosave_enabled);
+                preferences_changed |= ImGui::SliderInt("Autosave interval (minutes)", &g_editor_preferences.autosave_interval_minutes, 1, 60);
+                ImGui::EndDisabled();
+                ImGui::Separator();
+                preferences_changed |= ImGui::Checkbox("Enable Gizmo snapping", &g_editor_preferences.gizmo_snap_enabled);
+                ImGui::BeginDisabled(!g_editor_preferences.gizmo_snap_enabled);
+                preferences_changed |= ImGui::SliderFloat("Translation snap", &g_editor_preferences.gizmo_translation_snap, 0.01f, 10.0f, "%.2f");
+                preferences_changed |= ImGui::SliderFloat("Rotation snap", &g_editor_preferences.gizmo_rotation_snap, 1.0f, 90.0f, "%.1f deg");
+                preferences_changed |= ImGui::SliderFloat("Scale snap", &g_editor_preferences.gizmo_scale_snap, 0.01f, 1.0f, "%.2f");
+                ImGui::EndDisabled();
+                preferences_changed |= ImGui::Checkbox("Enable shadows", &g_editor_preferences.shadows_enabled);
+                const char* shadow_sizes[] = { "512", "1024", "2048" };
+                int shadow_size_index = g_editor_preferences.shadow_map_size == 512 ? 0 :
+                    g_editor_preferences.shadow_map_size == 2048 ? 2 : 1;
+                if (ImGui::Combo("Shadow map size (restart required)", &shadow_size_index, shadow_sizes, 3)) {
+                    g_editor_preferences.shadow_map_size = shadow_size_index == 0 ? 512 :
+                        shadow_size_index == 2 ? 2048 : 1024;
+                    preferences_changed = true;
+                }
+                if (preferences_changed)
+                    SetTargetFPS(g_editor_preferences.limit_fps ? g_editor_preferences.target_fps : 0);
+                ImGui::EndTabItem();
+            }
+
+            if (ImGui::BeginTabItem("Interface")) {
+                static ImGuiStyle interface_base_style;
+                static float interface_base_scale = 1.0f;
+                static bool interface_base_initialized = false;
+                if (!interface_base_initialized) {
+                    interface_base_style = ImGui::GetStyle();
+                    interface_base_scale = g_editor_preferences.interface_scale;
+                    interface_base_initialized = true;
+                }
+                preferences_changed |= ImGui::Checkbox("Hierarchy", &show_hierarchy);
+                preferences_changed |= ImGui::Checkbox("Inspector", &show_inspector);
+                preferences_changed |= ImGui::Checkbox("Assets", &show_assets);
+                preferences_changed |= ImGui::Checkbox("Scene", &show_scene);
+                preferences_changed |= ImGui::Checkbox("VSync (restart required)", &g_editor_preferences.vsync_enabled);
+                const bool light_theme_changed = ImGui::Checkbox("Light theme", &g_editor_preferences.light_theme);
+                preferences_changed |= light_theme_changed;
+                if (light_theme_changed) {
+                    ApplyCustomImGuiTheme();
+                    ImGui::GetStyle().ScaleAllSizes(g_editor_preferences.interface_scale);
+                    ImGui::GetStyle().FontScaleMain = g_editor_preferences.interface_scale;
+                    interface_base_style = ImGui::GetStyle();
+                    interface_base_scale = g_editor_preferences.interface_scale;
+                }
+                preferences_changed |= ImGui::Checkbox("Show light helpers", &g_editor_preferences.show_light_helpers);
+                preferences_changed |= ImGui::Checkbox("Show camera frustum", &g_editor_preferences.show_cameras);
+                preferences_changed |= ImGui::SliderInt("Asset preview size", &g_editor_preferences.asset_preview_size, 32, 128);
+                const char* asset_filter_names[] = { "All", "Images", "Models", "Materials" };
+                ImGui::Text("Asset type filter");
+                preferences_changed |= ImGui::Combo("##asset_type_filter", &g_editor_preferences.asset_filter, asset_filter_names, 4);
+                float selection_color[3] = { g_editor_preferences.selection_red / 255.0f, g_editor_preferences.selection_green / 255.0f, g_editor_preferences.selection_blue / 255.0f };
+                if (ImGui::ColorEdit3("Selection color", selection_color)) {
+                    g_editor_preferences.selection_red = static_cast<int>(selection_color[0] * 255.0f);
+                    g_editor_preferences.selection_green = static_cast<int>(selection_color[1] * 255.0f);
+                    g_editor_preferences.selection_blue = static_cast<int>(selection_color[2] * 255.0f);
+                    preferences_changed = true;
+                }
+                float wireframe_color[3] = { g_editor_preferences.wireframe_red / 255.0f, g_editor_preferences.wireframe_green / 255.0f, g_editor_preferences.wireframe_blue / 255.0f };
+                if (ImGui::ColorEdit3("Wireframe color", wireframe_color)) {
+                    g_editor_preferences.wireframe_red = static_cast<int>(wireframe_color[0] * 255.0f);
+                    g_editor_preferences.wireframe_green = static_cast<int>(wireframe_color[1] * 255.0f);
+                    g_editor_preferences.wireframe_blue = static_cast<int>(wireframe_color[2] * 255.0f);
+                    preferences_changed = true;
+                }
+                float bounds_color[3] = { g_editor_preferences.bounds_red / 255.0f, g_editor_preferences.bounds_green / 255.0f, g_editor_preferences.bounds_blue / 255.0f };
+                if (ImGui::ColorEdit3("Bounding box color", bounds_color)) {
+                    g_editor_preferences.bounds_red = static_cast<int>(bounds_color[0] * 255.0f);
+                    g_editor_preferences.bounds_green = static_cast<int>(bounds_color[1] * 255.0f);
+                    g_editor_preferences.bounds_blue = static_cast<int>(bounds_color[2] * 255.0f);
+                    preferences_changed = true;
+                }
+                if (ImGui::SliderFloat("Interface scale", &g_editor_preferences.interface_scale, 0.75f, 2.0f, "%.2fx")) {
+                    ImGui::GetStyle() = interface_base_style;
+                    ImGui::GetStyle().ScaleAllSizes(g_editor_preferences.interface_scale / interface_base_scale);
+                    if (ImGui::GetStyle().SeparatorSize <= 0.0f)
+                        ImGui::GetStyle().SeparatorSize = 1.0f;
+                    if (ImGui::GetStyle().WindowBorderHoverPadding <= 0.0f)
+                        ImGui::GetStyle().WindowBorderHoverPadding = 1.0f;
+                    if (ImGui::GetStyle().WindowMinSize.x < 1.0f)
+                        ImGui::GetStyle().WindowMinSize.x = 1.0f;
+                    if (ImGui::GetStyle().WindowMinSize.y < 1.0f)
+                        ImGui::GetStyle().WindowMinSize.y = 1.0f;
+                    ImGui::GetStyle().FontScaleMain = g_editor_preferences.interface_scale;
+                    preferences_changed = true;
+                }
+                if (preferences_changed) {
+                    g_editor_preferences.show_hierarchy = show_hierarchy;
+                    g_editor_preferences.show_inspector = show_inspector;
+                    g_editor_preferences.show_assets = show_assets;
+                    g_editor_preferences.show_scene = show_scene;
+                }
+                ImGui::EndTabItem();
+            }
+
+            ImGui::EndTabBar();
         }
 
-        if (ImGui::Combo(lang.word("language"), &language_index, language_labels, IM_ARRAYSIZE(language_labels))) {
-            ImGui::SaveIniSettingsToDisk(ImGui::GetIO().IniFilename);
-            lang.set_lang(language_codes[language_index]);
-            ImGui::LoadIniSettingsFromDisk(ImGui::GetIO().IniFilename);
+        if (preferences_changed) {
+            g_editor_preferences.wireframe_enabled = g_wireframe_enabled;
+            save_editor_preferences();
         }
 
         ImGui::End();
     }
+
+    if (pending_delete_editor && pending_delete_entity) {
+        if (ImGui::BeginPopupModal("Confirm Delete", nullptr, ImGuiWindowFlags_AlwaysAutoResize)) {
+            ImGui::Text("Delete selected entity?");
+            if (ImGui::Button("Delete")) {
+                Editor* editor_to_delete = pending_delete_editor;
+                Entity* entity_to_delete = pending_delete_entity;
+                pending_delete_editor = nullptr;
+                pending_delete_entity = nullptr;
+                const bool previous_confirm = g_editor_preferences.confirm_delete;
+                g_editor_preferences.confirm_delete = false;
+                delete_entity(*editor_to_delete, entity_to_delete);
+                g_editor_preferences.confirm_delete = previous_confirm;
+                ImGui::CloseCurrentPopup();
+            }
+            ImGui::SameLine();
+            if (ImGui::Button("Cancel")) {
+                pending_delete_editor = nullptr;
+                pending_delete_entity = nullptr;
+                ImGui::CloseCurrentPopup();
+            }
+            ImGui::EndPopup();
+        }
+    }
+
+    if (show_exit_confirmation) {
+        ImGui::OpenPopup("Unsaved Changes");
+        show_exit_confirmation = false;
+    }
+    if (ImGui::BeginPopupModal("Unsaved Changes", nullptr, ImGuiWindowFlags_AlwaysAutoResize)) {
+        ImGui::Text("The scene has unsaved changes.");
+        if (ImGui::Button("Save and Exit")) {
+            project_save(editor.project_path, editor.scene);
+            editor.scene_dirty = false;
+            CloseWindow();
+            ImGui::CloseCurrentPopup();
+        }
+        ImGui::SameLine();
+        if (ImGui::Button("Exit Without Saving")) {
+            CloseWindow();
+            ImGui::CloseCurrentPopup();
+        }
+        ImGui::SameLine();
+        if (ImGui::Button("Cancel")) ImGui::CloseCurrentPopup();
+        ImGui::EndPopup();
+    }
 }
 
-void Editor::draw_ui(Shader shader, FlyCamera camera, PluginContext* ctx) {
+void Editor::draw_ui(Shader shader, FlyCamera& camera, PluginContext* ctx) {
     ::draw_ui(*this, shader, camera, ctx);
 }

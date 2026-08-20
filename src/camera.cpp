@@ -2,6 +2,7 @@
 #include <cmath>
 #include "imgui.h"
 #include "ImGuizmo.h"
+#include "editor_preferences.h"
 #include "SDL3/SDL_mouse.h"
 
 namespace {
@@ -36,6 +37,14 @@ void FlyCamera::update(Scene& scene) {
     Entity* selected = scene.get_selected();
     MeshComponent* sel_mesh = selected ? selected->get_mesh_component() : nullptr;
     if (sel_mesh && sel_mesh->vertex_gizmo) return;
+
+    const float wheel = GetMouseWheelMove();
+    if (fabsf(wheel) > 0.001f) {
+        cam.fovy -= wheel * zoom_sensitivity;
+        if (cam.fovy < 20.0f) cam.fovy = 20.0f;
+        if (cam.fovy > 120.0f) cam.fovy = 120.0f;
+        g_editor_preferences.camera_fov = cam.fovy;
+    }
 
     if (IsMouseButtonPressed(MouseButton::Left) && !ImGuizmo::IsOver()) {
         set_camera_capture(true);
@@ -76,6 +85,15 @@ void FlyCamera::update(Scene& scene) {
     if (IsKeyDown(KeyboardKey::D)) cam.position = cam.position + (right * (speed * dt));
 
     cam.target = cam.position + forward;
+}
+
+void FlyCamera::focus_on(const Vec3& point) {
+    cam.position = point + Vec3{5.0f, 5.0f, 5.0f};
+    cam.target = point;
+
+    Vec3 dir = cam.target - cam.position;
+    yaw = atan2f(dir.x, dir.z);
+    pitch = asinf(dir.y / sqrtf(dir.x * dir.x + dir.y * dir.y + dir.z * dir.z));
 }
 
 Camera3D& FlyCamera::get_camera() {

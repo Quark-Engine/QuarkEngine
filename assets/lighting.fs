@@ -35,6 +35,9 @@ uniform vec4 ambient;
 uniform vec3 viewPos;
 uniform vec3 emissionColor;
 uniform float emissionPower;
+uniform int shadowsEnabled;
+uniform float shadowBias;
+uniform int shadowFilterQuality;
 
 float shadow_factor(int lightIndex, vec3 worldPosition)
 {
@@ -50,21 +53,25 @@ float shadow_factor(int lightIndex, vec3 worldPosition)
         return 0.0;
 
     float currentDepth = projected.z;
-    float bias = 0.004;
+    float bias = shadowBias;
     vec2 texelSize = 1.0 / vec2(textureSize(shadowMaps[lightIndex], 0));
     float shadow = 0.0;
 
-    for (int x = -1; x <= 1; x++)
+    int radius = shadowFilterQuality == 0 ? 0 : shadowFilterQuality == 1 ? 1 : 2;
+    int samples = 0;
+    for (int x = -2; x <= 2; x++)
     {
-        for (int y = -1; y <= 1; y++)
+        for (int y = -2; y <= 2; y++)
         {
+            if (abs(x) > radius || abs(y) > radius) continue;
             float closestDepth = texture(shadowMaps[lightIndex],
                 projected.xy + vec2(x, y) * texelSize).r;
             shadow += currentDepth - bias > closestDepth ? 1.0 : 0.0;
+            samples++;
         }
     }
 
-    return shadow / 9.0;
+    return samples > 0 ? shadow / float(samples) : 0.0;
 }
 
 void main()
@@ -136,7 +143,7 @@ void main()
         }
 
         float directLight = max(dot(normal, lightDir), 0.0);
-        float shadow = shadow_factor(i, fragPosition);
+        float shadow = shadowsEnabled == 1 ? shadow_factor(i, fragPosition) : 0.0;
         float wrappedLight = clamp((dot(normal, lightDir) + 0.28) / 1.28, 0.0, 1.0);
         float diffuse = max(directLight, wrappedLight * 0.25);
 

@@ -119,7 +119,7 @@ Entity make_entity_from_prefab(Scene& scene, const fs::path filename) {
     entity.name = j.value("name", "Entity");
     entity.is_group = j.value("is_group", false);
     entity.parent_id = j.value("parent_id", -1);
-    entity.id = scene.entities.size();
+    entity.id = static_cast<int>(scene.entities.size());
 
     if (j.contains("components")) {
         entity.components->deserialize(j);

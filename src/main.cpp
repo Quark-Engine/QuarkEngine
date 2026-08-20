@@ -4,8 +4,10 @@
 #include "plugins/plugin_manager.h"
 #include "lighting.h"
 #include "language_manager.h"
+#include "editor_preferences.h"
 #include "text_mesh.h"
 #include "editor/editor.h"
+#include "editor/editor_ui.h"
 #include "editor/editor_entity.h"
 #include "camera.h"
 #include "project.h"
@@ -14,6 +16,7 @@
 #include <iostream>
 #include <cfloat>
 #include <array>
+#include <SDL3/SDL_video.h>
 
 using namespace qc;
 
@@ -379,6 +382,50 @@ void ApplyCustomImGuiTheme()
 {
     ImGuiStyle& style = ImGui::GetStyle();
 
+    if (g_editor_preferences.light_theme) {
+        ImGui::StyleColorsLight();
+        style.WindowRounding = 0.0f;
+        style.FrameRounding = 0.0f;
+        style.PopupRounding = 0.0f;
+        style.TabRounding = 0.0f;
+        style.FrameBorderSize = 1.0f;
+        style.WindowBorderSize = 1.0f;
+        style.FramePadding = ImVec2(6, 3);
+        style.ItemSpacing = ImVec2(6, 4);
+
+        ImVec4* colors = style.Colors;
+        colors[ImGuiCol_Text] = ImVec4(0.07f, 0.09f, 0.12f, 1.0f);
+        colors[ImGuiCol_TextDisabled] = ImVec4(0.30f, 0.33f, 0.38f, 1.0f);
+        colors[ImGuiCol_WindowBg] = ImVec4(0.93f, 0.94f, 0.96f, 1.0f);
+        colors[ImGuiCol_ChildBg] = ImVec4(0.97f, 0.98f, 0.99f, 1.0f);
+        colors[ImGuiCol_PopupBg] = ImVec4(1.0f, 1.0f, 1.0f, 1.0f);
+        colors[ImGuiCol_Border] = ImVec4(0.70f, 0.73f, 0.78f, 1.0f);
+        colors[ImGuiCol_Separator] = ImVec4(0.78f, 0.80f, 0.84f, 1.0f);
+        colors[ImGuiCol_FrameBg] = ImVec4(0.86f, 0.88f, 0.91f, 1.0f);
+        colors[ImGuiCol_FrameBgHovered] = ImVec4(0.79f, 0.84f, 0.91f, 1.0f);
+        colors[ImGuiCol_FrameBgActive] = ImVec4(0.70f, 0.79f, 0.92f, 1.0f);
+        colors[ImGuiCol_TitleBg] = ImVec4(0.84f, 0.86f, 0.89f, 1.0f);
+        colors[ImGuiCol_TitleBgActive] = ImVec4(0.78f, 0.82f, 0.88f, 1.0f);
+        colors[ImGuiCol_MenuBarBg] = ImVec4(0.88f, 0.90f, 0.93f, 1.0f);
+        colors[ImGuiCol_Button] = ImVec4(0.82f, 0.85f, 0.90f, 1.0f);
+        colors[ImGuiCol_ButtonHovered] = ImVec4(0.70f, 0.79f, 0.91f, 1.0f);
+        colors[ImGuiCol_ButtonActive] = ImVec4(0.60f, 0.71f, 0.87f, 1.0f);
+        colors[ImGuiCol_Header] = ImVec4(0.84f, 0.88f, 0.94f, 1.0f);
+        colors[ImGuiCol_HeaderHovered] = ImVec4(0.73f, 0.82f, 0.94f, 1.0f);
+        colors[ImGuiCol_HeaderActive] = ImVec4(0.62f, 0.75f, 0.92f, 1.0f);
+        colors[ImGuiCol_Tab] = ImVec4(0.84f, 0.87f, 0.91f, 1.0f);
+        colors[ImGuiCol_TabHovered] = ImVec4(0.72f, 0.81f, 0.93f, 1.0f);
+        colors[ImGuiCol_TabActive] = ImVec4(0.96f, 0.97f, 0.99f, 1.0f);
+        colors[ImGuiCol_TabUnfocused] = ImVec4(0.86f, 0.88f, 0.92f, 1.0f);
+        colors[ImGuiCol_TabUnfocusedActive] = ImVec4(0.92f, 0.94f, 0.97f, 1.0f);
+        colors[ImGuiCol_CheckMark] = ImVec4(0.12f, 0.45f, 0.85f, 1.0f);
+        colors[ImGuiCol_SliderGrab] = ImVec4(0.35f, 0.56f, 0.84f, 1.0f);
+        colors[ImGuiCol_SliderGrabActive] = ImVec4(0.20f, 0.42f, 0.73f, 1.0f);
+        colors[ImGuiCol_TextSelectedBg] = ImVec4(0.35f, 0.58f, 0.91f, 0.35f);
+        colors[ImGuiCol_DockingPreview] = ImVec4(0.25f, 0.55f, 0.90f, 0.35f);
+        return;
+    }
+
     // ====== SHAPES ======
     style.WindowRounding = 0.0f;
     style.FrameRounding  = 0.0f;
@@ -481,10 +528,29 @@ int main(int argc, char* argv[]) {
         return 0;
 
     std::string lang_code = load_or_create_config();
+    load_editor_preferences();
     LanguageManager::get().set_lang(lang_code);
+    g_wireframe_enabled = g_editor_preferences.wireframe_enabled;
+    show_hierarchy = g_editor_preferences.show_hierarchy;
+    show_inspector = g_editor_preferences.show_inspector;
+    show_assets = g_editor_preferences.show_assets;
+    show_scene = g_editor_preferences.show_scene;
 
-    InitWindow(1280, 720, "Quark Engine", RendererType::OpenGL);
-    SetTargetFPS(static_cast<int>(GetCurrentMonitorRefreshRate()));
+    RendererType renderer_type = RendererType::OpenGL;
+    if (g_editor_preferences.renderer_backend == 1) renderer_type = RendererType::OpenGL;
+    else if (g_editor_preferences.renderer_backend == 2) renderer_type = RendererType::Vulkan;
+    SetMSAASamples(g_editor_preferences.msaa_samples);
+    SetTextureFilterMode(g_editor_preferences.texture_filter == 0
+        ? TextureFilterMode::Nearest : TextureFilterMode::Linear);
+
+    InitWindow(1280, 720, "Quark Engine", renderer_type);
+
+    if (g_editor_preferences.target_fps <= 0)
+        g_editor_preferences.target_fps = static_cast<int>(GetCurrentMonitorRefreshRate());
+    SetTargetFPS(g_editor_preferences.limit_fps ? g_editor_preferences.target_fps : 0);
+    if (!g_editor_preferences.vsync_enabled)
+        SDL_GL_SetSwapInterval(0);
+        
     SetExitKey(KEY_NULL);
 
     if (!headless) {
@@ -492,10 +558,22 @@ int main(int argc, char* argv[]) {
         qcImGuiSetup(false);
         reload_editor_fonts(LanguageManager::get().current);
         ApplyCustomImGuiTheme();
+        ImGui::GetStyle().ScaleAllSizes(g_editor_preferences.interface_scale);
+        ImGui::GetStyle().FontScaleMain = g_editor_preferences.interface_scale;
+        if (ImGui::GetStyle().WindowBorderHoverPadding <= 0.0f)
+            ImGui::GetStyle().WindowBorderHoverPadding = 1.0f;
+        if (ImGui::GetStyle().SeparatorSize <= 0.0f)
+            ImGui::GetStyle().SeparatorSize = 1.0f;
     }
 
     if (project_path.empty() && !headless) {
-        project_path = run_hub();
+        if (g_editor_preferences.open_last_project &&
+            !g_editor_preferences.last_project_path.empty() &&
+            project_is_valid(g_editor_preferences.last_project_path)) {
+            project_path = g_editor_preferences.last_project_path;
+        } else {
+            project_path = run_hub();
+        }
         if (project_path.empty()) {
             qcImGuiShutdown();
             shutdown_freetype();
@@ -508,23 +586,35 @@ int main(int argc, char* argv[]) {
         project_path = (fs::path("projects") / "default").string();
 
     project_path = project_resolve_root(project_path);
+    g_editor_preferences.last_project_path = project_path;
+    save_editor_preferences();
 
     fs::create_directories(fs::path(project_path) / "resources");
 
     Editor editor;
     FlyCamera camera;
     editor.project_path = project_path;
+    camera.speed = g_editor_preferences.camera_speed;
+    camera.zoom_sensitivity = g_editor_preferences.camera_zoom_sensitivity;
+    camera.cam.fovy = g_editor_preferences.camera_fov;
 
     Shader lighting_shader = LoadShader("assets/lighting.vs", "assets/lighting.fs");
     Shader shadow_shader = LoadShader("assets/shadow_depth.vs", "assets/shadow_depth.fs");
     lighting_shader.locs[SHADER_LOC_VECTOR_VIEW] = GetShaderLocation(lighting_shader, "viewPos");
+    const int shadows_enabled_loc = GetShaderLocation(lighting_shader, "shadowsEnabled");
+    const int shadow_bias_loc = GetShaderLocation(lighting_shader, "shadowBias");
+    const int shadow_filter_loc = GetShaderLocation(lighting_shader, "shadowFilterQuality");
+    const int shadows_enabled = g_editor_preferences.shadows_enabled ? 1 : 0;
+    SetShaderValue(lighting_shader, shadows_enabled_loc, &shadows_enabled, SHADER_UNIFORM_INT);
+    SetShaderValue(lighting_shader, shadow_bias_loc, g_editor_preferences.shadow_bias);
+    SetShaderValue(lighting_shader, shadow_filter_loc, g_editor_preferences.shadow_filter_quality);
 
     std::array<RenderTexture2D, QC_MAX_LIGHTS> shadow_maps;
     std::array<Camera3D, QC_MAX_LIGHTS> shadow_cameras;
     std::array<int, QC_MAX_LIGHTS> light_view_locations;
     std::array<int, QC_MAX_LIGHTS> light_projection_locations;
     for (int i = 0; i < QC_MAX_LIGHTS; ++i) {
-        shadow_maps[i] = LoadRenderTexture(1024, 1024);
+        shadow_maps[i] = LoadRenderTexture(g_editor_preferences.shadow_map_size, g_editor_preferences.shadow_map_size);
         shadow_cameras[i] = CreateCamera3D();
         shadow_cameras[i].fovy = 55.0f;
         light_view_locations[i] = GetShaderLocation(lighting_shader, TextFormat("lightViews[%i]", i));
@@ -571,11 +661,38 @@ int main(int argc, char* argv[]) {
     editor.plugin_manager = g_plugin_manager;
 
     std::string active_font_language = LanguageManager::get().current;
+    double last_autosave_time = GetTime();
+    int last_selected_entity = editor.scene.selected;
 
     while (!WindowShouldClose()) {
         if (active_font_language != LanguageManager::get().current) {
             active_font_language = LanguageManager::get().current;
             reload_editor_fonts(active_font_language);
+        }
+
+        camera.speed = g_editor_preferences.camera_speed;
+        camera.sensitivity = g_editor_preferences.camera_sensitivity;
+        camera.zoom_sensitivity = g_editor_preferences.camera_zoom_sensitivity;
+        if (g_editor_preferences.focus_on_selection && editor.scene.selected != last_selected_entity) {
+            Entity* selected_entity = editor.scene.get_selected();
+            TransformComponent* selected_transform = selected_entity ? selected_entity->get_transform_component() : nullptr;
+            if (selected_transform)
+                camera.focus_on(selected_transform->position);
+        }
+        last_selected_entity = editor.scene.selected;
+        if (g_editor_preferences.autosave_enabled &&
+            GetTime() - last_autosave_time >= g_editor_preferences.autosave_interval_minutes * 60.0) {
+            if (g_editor_preferences.autosave_backup_enabled) {
+                std::error_code backup_error;
+                fs::copy_file(
+                    fs::path(editor.project_path) / "scene.json",
+                    fs::path(editor.project_path) / "scene.json.bak",
+                    fs::copy_options::overwrite_existing,
+                    backup_error
+                );
+            }
+            project_save(editor.project_path, editor.scene);
+            last_autosave_time = GetTime();
         }
 
         SetWindowTitle(TextFormat("Quark Engine | %s | FPS: %d",
@@ -589,9 +706,14 @@ int main(int argc, char* argv[]) {
         };
         Vec3 cam_pos = camera.get_camera().position;
         SetShaderValue(lighting_shader, lighting_shader.locs[SHADER_LOC_VECTOR_VIEW], &cam_pos, SHADER_UNIFORM_VEC3);
+        const int runtime_shadows_enabled = g_editor_preferences.shadows_enabled ? 1 : 0;
+        SetShaderValue(lighting_shader, shadows_enabled_loc, &runtime_shadows_enabled, SHADER_UNIFORM_INT);
+        SetShaderValue(lighting_shader, shadow_bias_loc, g_editor_preferences.shadow_bias);
+        SetShaderValue(lighting_shader, shadow_filter_loc, g_editor_preferences.shadow_filter_quality);
         prepare_scene_light_uniforms(editor.scene, lighting_shader, scene_center);
-        render_scene_shadow_maps(editor.scene, shadow_shader, shadow_maps, shadow_cameras, scene_center,
-            lighting_shader, light_view_locations, light_projection_locations);
+        if (g_editor_preferences.shadows_enabled)
+            render_scene_shadow_maps(editor.scene, shadow_shader, shadow_maps, shadow_cameras, scene_center,
+                lighting_shader, light_view_locations, light_projection_locations);
         assign_shadow_maps(editor.scene, shadow_maps, lighting_shader);
 
         BeginDrawing();
@@ -599,9 +721,20 @@ int main(int argc, char* argv[]) {
 
             if (scene_rt.id > 0 && IsRenderTextureValid(scene_rt)) {
                 BeginTextureMode(scene_rt);
-                ClearBackground(Color{ 36, 38, 42, 255 });
+                ClearBackground(Color{
+                    static_cast<unsigned char>(g_editor_preferences.background_red),
+                    static_cast<unsigned char>(g_editor_preferences.background_green),
+                    static_cast<unsigned char>(g_editor_preferences.background_blue),
+                    255
+                });
                 BeginMode3D(camera.get_camera());
-                    DrawGrid(20, 1.0f);
+                    if (g_editor_preferences.show_grid)
+                        DrawGrid(20, 1.0f);
+                    if (g_editor_preferences.show_axes) {
+                        DrawLine3D({0, 0, 0}, {3, 0, 0}, RED);
+                        DrawLine3D({0, 0, 0}, {0, 3, 0}, GREEN);
+                        DrawLine3D({0, 0, 0}, {0, 0, 3}, BLUE);
+                    }
                     for (auto& e : editor.scene.entities) {
                         MeshComponent* mesh = e.get_mesh_component();
                         TransformComponent* transform = e.get_transform_component();
@@ -621,6 +754,44 @@ int main(int argc, char* argv[]) {
                         int use = (mat && mat->texture.id != 0) ? 1 : 0;
                         SetShaderValue(lighting_shader, use_tex_loc, &use, SHADER_UNIFORM_INT);
                         draw_entity_with_texture(e);
+                        if (g_editor_preferences.show_bounding_boxes && mesh->model.meshCount > 0) {
+                            PushMatrix();
+                            MultMatrix(compose_entity_transform(e));
+                            DrawBoundingBox(GetModelBoundingBox(mesh->model), Color{
+                                static_cast<unsigned char>(g_editor_preferences.bounds_red),
+                                static_cast<unsigned char>(g_editor_preferences.bounds_green),
+                                static_cast<unsigned char>(g_editor_preferences.bounds_blue), 255
+                            });
+                            PopMatrix();
+                        }
+                    }
+                    if (g_editor_preferences.show_light_helpers) {
+                        for (auto& entity : editor.scene.entities) {
+                            LightComponent* light = entity.get_light_component();
+                            TransformComponent* transform = entity.get_transform_component();
+                            if (!light || !transform || !light->enabled) continue;
+                            DrawSphere(transform->position, 0.15f, light->light.color);
+                            DrawLine3D(transform->position, light->light.target, light->light.color);
+                        }
+                    }
+                    if (g_editor_preferences.show_cameras) {
+                        const Camera3D& editor_camera = camera.get_camera();
+                        const Vec3 forward = (editor_camera.target - editor_camera.position).normalized();
+                        const Vec3 right = forward.cross(editor_camera.up).normalized();
+                        const Vec3 up = right.cross(forward).normalized();
+                        const float length = 1.5f;
+                        const float half_width = tanf(editor_camera.fovy * DEG2RAD * 0.5f) * length;
+                        const Vec3 center = editor_camera.position + forward * length;
+                        const Vec3 corners[4] = {
+                            center + up * half_width - right * half_width,
+                            center + up * half_width + right * half_width,
+                            center - up * half_width + right * half_width,
+                            center - up * half_width - right * half_width
+                        };
+                        for (int i = 0; i < 4; ++i) {
+                            DrawLine3D(editor_camera.position, corners[i], YELLOW);
+                            DrawLine3D(corners[i], corners[(i + 1) % 4], YELLOW);
+                        }
                     }
                 EndMode3D();
                 EndTextureMode();
@@ -644,6 +815,8 @@ int main(int argc, char* argv[]) {
     }
 
     editor.scene.release_resources();
+    g_editor_preferences.camera_fov = camera.get_camera().fovy;
+    save_editor_preferences();
     unload_models();
     unload_textures();
 
