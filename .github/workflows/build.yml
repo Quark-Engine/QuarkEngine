@@ -35,12 +35,14 @@ jobs:
             libxinerama-dev \
             libxcursor-dev \
             libxxf86vm-dev \
+            libshaderc-dev \
+            libspirv-cross-c-shared-dev \
             vulkan-tools \
             libvulkan-dev
 
       - name: Install macOS dependencies
         if: runner.os == 'macOS'
-        run: brew install ninja molten-vk vulkan-headers vulkan-loader
+          run: brew install ninja molten-vk shaderc spirv-cross vulkan-headers vulkan-loader
 
       - name: Configure CMake (Linux/macOS)
         if: runner.os != 'Windows'
