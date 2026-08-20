@@ -191,6 +191,12 @@ if(BUILD_ENGINE)
                 $<TARGET_FILE:freetype>
                 "${VULKAN_RUNTIME_DLL}"
                 $<TARGET_FILE_DIR:${PROJECT_NAME}>
+            COMMAND ${CMAKE_COMMAND} -E copy_if_different
+                "${CMAKE_SOURCE_DIR}/quark-libs/QuarkCore/external/Vulkan/lib/SPIRV-Tools-optd.dll"
+                "$<TARGET_FILE_DIR:${PROJECT_NAME}>/SPIRV-Tools-opt.dll"
+            COMMAND ${CMAKE_COMMAND} -E copy_if_different
+                "${CMAKE_SOURCE_DIR}/quark-libs/QuarkCore/external/Vulkan/lib/SPIRV-Toolsd.dll"
+                "$<TARGET_FILE_DIR:${PROJECT_NAME}>/SPIRV-Tools.dll"
         )
     endif()
 
