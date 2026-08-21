@@ -221,7 +221,7 @@ bool project_load(const std::string& folder_path, Scene& scene, Shader shader) {
     TraceLog(LogLevel::Info, "PROJECT", TextFormat("  Name:    %s", project_name.c_str()));
     TraceLog(LogLevel::Info, "PROJECT", TextFormat("  Version: %s", project_version.c_str()));
     TraceLog(LogLevel::Info, "PROJECT", TextFormat("  Scene:   %s", json_path.string().c_str()));
-    TraceLog(LogLevel::Info, "PROJECT", TextFormat("  Engine:  %s", QUARK_ENGINE_VERSION.c_str()));
+    TraceLog(LogLevel::Info, "PROJECT", TextFormat("  Engine:  %s", QUARK_ENGINE_VERSION));
     TraceLog(LogLevel::Info, "PROJECT", TextFormat("  Root:    %s", root_path.string().c_str()));
     TraceLog(LogLevel::Info, "PROJECT", "======================");
 

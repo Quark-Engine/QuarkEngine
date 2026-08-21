@@ -1654,7 +1654,7 @@ void draw_ui(Editor& editor, Shader shader, FlyCamera& camera, PluginContext* pl
         const auto backend = qc::GetCurrentBackend();
 
         ImGui::Text("Quark Engine %s using %s",
-            QUARK_ENGINE_VERSION.c_str(),
+            QUARK_ENGINE_VERSION,
             backend == qc::RendererType::Vulkan ? "Vulkan" :
             backend == qc::RendererType::OpenGL ? "OpenGL" :
             backend == qc::RendererType::Auto ? "Auto" :

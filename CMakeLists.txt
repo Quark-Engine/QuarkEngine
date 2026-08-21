@@ -105,8 +105,10 @@ if(BUILD_ENGINE)
     )
 
     set(SOURCE_FILES
+        src/application.cpp
         src/camera.cpp
         src/component.cpp
+        src/command_line.cpp
         src/editable_mesh.cpp
         src/entity.cpp
         src/hub.cpp

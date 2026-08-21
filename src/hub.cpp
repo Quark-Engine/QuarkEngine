@@ -921,7 +921,7 @@ std::string run_hub() {
 
         if (ImGui::BeginPopupModal(lang.word("version_mismatch"), nullptr, ImGuiWindowFlags_NoResize)) {
             ImGui::Spacing();
-            ImGui::TextWrapped(lang.word("version_mismatch_msg"), hub_saved_version.c_str(), QUARK_ENGINE_VERSION.c_str());
+            ImGui::TextWrapped(lang.word("version_mismatch_msg"), hub_saved_version.c_str(), QUARK_ENGINE_VERSION);
             ImGui::Spacing();
             ImGui::Separator();
             ImGui::Spacing();
