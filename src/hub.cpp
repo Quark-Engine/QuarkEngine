@@ -24,7 +24,7 @@ using namespace qc;
 #include "hub.h"
 #include "version.h"
 #include "language_manager.h"
-#include "editor_preferences.h"
+#include "editor/editor_preferences.h"
 #include "project.h"
 #include "imgui.h"
 #include "qcImGui.h"

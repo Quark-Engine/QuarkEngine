@@ -1,4 +1,5 @@
-#pragma once
+#ifndef __EDITOR_H__
+#define __EDITOR_H__
 #include "scene.h"
 #include "camera.h"
 #include "tex.h"
@@ -33,3 +34,5 @@ struct Editor {
     void undo();
     void redo();
 };
+
+#endif // __EDITOR_H__

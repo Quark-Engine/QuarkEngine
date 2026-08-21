@@ -1,4 +1,5 @@
-#pragma once
+#ifndef __EDITOR_PREFERENCES_H__
+#define __EDITOR_PREFERENCES_H__
 
 #include <string>
 
@@ -63,3 +64,5 @@ extern EditorPreferences g_editor_preferences;
 
 void load_editor_preferences();
 void save_editor_preferences();
+
+#endif // __EDITOR_PREFERENCES_H__

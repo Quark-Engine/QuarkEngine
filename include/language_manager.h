@@ -1,4 +1,5 @@
-#pragma once
+#ifndef __LANGUAGE_MANAGER_H__
+#define __LANGUAGE_MANAGER_H__
 
 #include "nlohmann/json.hpp"
 #include <string>
@@ -25,3 +26,5 @@ private:
 };
 
 std::string load_or_create_config();
+
+#endif // __LANGUAGE_MANAGER_H__

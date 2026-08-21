@@ -1,4 +1,5 @@
-#pragma once
+#ifndef __SCENE_H__
+#define __SCENE_H__
 #include <vector>
 #include "entity.h"
 #include "lighting.h"
@@ -15,3 +16,5 @@ struct Scene {
     std::string make_default_name_for(const Entity& entity) const;
     void release_resources();
 };
+
+#endif // __SCENE_H__

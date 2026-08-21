@@ -1,4 +1,5 @@
-#pragma once
+#ifndef __CAMERA_H__
+#define __CAMERA_H__
 #include "QuarkCore/QuarkCore.hpp"
 #include "scene.h"
 
@@ -19,3 +20,5 @@ public:
     void focus_on(const Vec3& point);
     Camera3D &get_camera();
 };
+
+#endif // __CAMERA_H__

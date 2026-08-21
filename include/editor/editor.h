@@ -1,4 +1,5 @@
-﻿#pragma once
+#ifndef __EDITOR_INTERNAL_H__
+#define __EDITOR_INTERNAL_H__
 
 #include "../editor.h"
 #include "imgui.h"
@@ -26,3 +27,5 @@ extern Entity clipboard_data;
 void restore_scene_entity_models(Scene& scene);
 
 }
+
+#endif // __EDITOR_INTERNAL_H__

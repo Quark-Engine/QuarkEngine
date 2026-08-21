@@ -1,4 +1,5 @@
-#pragma once
+#ifndef __PLUGIN_MANAGER_H__
+#define __PLUGIN_MANAGER_H__
 #include "plugin.h"
 #include <vector>
 #include <algorithm>
@@ -50,3 +51,5 @@ private:
     std::vector<LoadedPlugin> plugins;
     std::vector<RegisteredUICallback> ui_callbacks;
 };
+
+#endif // __PLUGIN_MANAGER_H__

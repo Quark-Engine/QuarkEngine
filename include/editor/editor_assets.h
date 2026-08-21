@@ -1,4 +1,5 @@
-#pragma once
+#ifndef __EDITOR_ASSETS_H__
+#define __EDITOR_ASSETS_H__
 
 #include "../editor.h"
 #include "../models.h"
@@ -29,3 +30,5 @@ bool import_path_to_resources(const fs::path& src, const fs::path& resource_dir)
 
 void cleanup_assets_ui();
 void invalidate_material_previews();
+
+#endif // __EDITOR_ASSETS_H__

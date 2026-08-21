@@ -1,4 +1,5 @@
-#pragma once
+#ifndef __EDITOR_FILE_UTILS_H__
+#define __EDITOR_FILE_UTILS_H__
 
 #include <string>
 #include <vector>
@@ -18,3 +19,5 @@ bool is_directory(const std::string& path);
 bool is_file(const std::string& path);
 
 bool delete_file_or_directory(const std::string& path);
+
+#endif // __EDITOR_FILE_UTILS_H__

@@ -1,4 +1,5 @@
-#pragma once
+#ifndef __EDITABLE_MESH_H__
+#define __EDITABLE_MESH_H__
 
 #include "QuarkCore/QuarkCore.hpp"
 using namespace qc;
@@ -20,3 +21,5 @@ struct EditableMesh {
 };
 
 void rebuild_mesh_from_editable(Model& model, EditableMesh& editable);
+
+#endif // __EDITABLE_MESH_H__

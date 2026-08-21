@@ -1,4 +1,5 @@
-#pragma once
+#ifndef __EDITOR_HIERARCHY_UTILS_H__
+#define __EDITOR_HIERARCHY_UTILS_H__
 
 #include "../entity.h"
 #include "../scene.h"
@@ -13,3 +14,5 @@ void move_entity_to_parent(Scene& scene, int entity_id, int new_parent_id);
 int create_group(Scene& scene, const std::string& name, int parent_id = -1);
 void delete_group(Scene& scene, int group_id, bool reparent_to_parent = true);
 bool is_entity_group(const Entity& entity);
+
+#endif // __EDITOR_HIERARCHY_UTILS_H__

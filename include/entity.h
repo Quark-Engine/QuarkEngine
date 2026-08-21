@@ -1,4 +1,5 @@
-#pragma once
+#ifndef __ENTITY_H__
+#define __ENTITY_H__
 #include "lighting.h"
 #include "component.h"
 #include <string>
@@ -61,3 +62,5 @@ struct Entity {
     CollisionComponent* get_collision_component();
     const CollisionComponent* get_collision_component() const;
 };
+
+#endif // __ENTITY_H__

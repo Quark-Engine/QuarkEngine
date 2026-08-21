@@ -8,7 +8,7 @@
 #include "project.h"
 #include "tex.h"
 #include "language_manager.h"
-#include "editor_preferences.h"
+#include "editor/editor_preferences.h"
 #include "imgui.h"
 #include <algorithm>
 #include <fstream>

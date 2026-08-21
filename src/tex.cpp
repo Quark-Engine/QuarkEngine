@@ -1,6 +1,6 @@
 #include "tex.h"
 #include "models.h"
-#include "editor_preferences.h"
+#include "editor/editor_preferences.h"
 #include <algorithm>
 #include <unordered_map>
 #include <unordered_set>

@@ -4,7 +4,7 @@
 #include "plugins/plugin_manager.h"
 #include "lighting.h"
 #include "language_manager.h"
-#include "editor_preferences.h"
+#include "editor/editor_preferences.h"
 #include "text_mesh.h"
 #include "editor/editor.h"
 #include "editor/editor_ui.h"

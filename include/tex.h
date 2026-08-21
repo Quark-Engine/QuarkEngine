@@ -1,4 +1,5 @@
-#pragma once
+#ifndef __TEX_H__
+#define __TEX_H__
 #include "entity.h"
 #include "scene.h"
 #include <functional>
@@ -39,3 +40,5 @@ void load_assets(std::string project_path);
 void refresh_assets(std::string project_path);
 void clone_model_materials(Entity* e);
 bool is_image_file(const std::filesystem::path& p);
+
+#endif // __TEX_H__

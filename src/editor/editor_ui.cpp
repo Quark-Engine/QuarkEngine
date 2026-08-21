@@ -18,7 +18,7 @@
 #include <cmath>
 #include <vector>
 #include "language_manager.h"
-#include "editor_preferences.h"
+#include "editor/editor_preferences.h"
 
 #define lang LanguageManager::get()
 

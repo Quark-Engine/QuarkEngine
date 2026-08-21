@@ -6,7 +6,7 @@
 #include "editor/editor_viewers.h"
 #include "project.h"
 #include "imgui.h"
-#include "editor_preferences.h"
+#include "editor/editor_preferences.h"
 
 namespace fs = std::filesystem;
 

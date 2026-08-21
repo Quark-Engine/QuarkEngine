@@ -1,4 +1,5 @@
-#pragma once
+#ifndef __EDITOR_UI_H__
+#define __EDITOR_UI_H__
 
 #include "../editor.h"
 #include "../camera.h"
@@ -41,3 +42,5 @@ void handle_scene_asset_drop(Editor& editor, Camera3D camera);
 
 void draw_mesh_vertex_overlay(Editor& editor, Camera3D camera);
 void reset_mesh_edit_model(Entity& entity);
+
+#endif // __EDITOR_UI_H__

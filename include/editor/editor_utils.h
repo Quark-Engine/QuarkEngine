@@ -1,4 +1,5 @@
-#pragma once
+#ifndef __EDITOR_UTILS_H__
+#define __EDITOR_UTILS_H__
 
 #include "entity.h"
 #include <filesystem>
@@ -8,3 +9,5 @@ bool has_valid_model_data(const Model& model);
 std::string get_asset_name_for_path(const std::filesystem::path& project_path_value, const std::filesystem::path& asset_path);
 Vec3 get_scene_drop_position(Camera3D camera);
 void apply_negative_scale_winding(Entity* entity);
+
+#endif // __EDITOR_UTILS_H__

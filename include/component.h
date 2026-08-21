@@ -1,4 +1,5 @@
-#pragma once
+#ifndef __COMPONENT_H__
+#define __COMPONENT_H__
 #include "QuarkCore/QuarkCore.hpp"
 using namespace qc;
 #include "lighting.h"
@@ -349,3 +350,5 @@ public:
         if (j.contains("font_path")) font_path = j["font_path"];
     }
 };
+
+#endif // __COMPONENT_H__

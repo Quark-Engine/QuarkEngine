@@ -2,7 +2,7 @@
 #include <cmath>
 #include "imgui.h"
 #include "ImGuizmo.h"
-#include "editor_preferences.h"
+#include "editor/editor_preferences.h"
 #include "SDL3/SDL_mouse.h"
 
 namespace {

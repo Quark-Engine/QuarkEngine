@@ -1,4 +1,5 @@
-#pragma once
+#ifndef __EDITOR_COMPONENTS_UI_H__
+#define __EDITOR_COMPONENTS_UI_H__
 #include "component.h"
 #include "entity.h"
 #include "imgui.h"
@@ -31,3 +32,5 @@ static const ComponentMenuItem available_components[] = {
 };
 
 static const int available_components_count = sizeof(available_components) / sizeof(ComponentMenuItem);
+
+#endif // __EDITOR_COMPONENTS_UI_H__

@@ -1,4 +1,5 @@
-#pragma once
+#ifndef __LIGHTING_H__
+#define __LIGHTING_H__
 #include "QuarkCore/QuarkCore.hpp"
 #include "QuarkCore/QuarkLights.hpp"
 using namespace qc;
@@ -39,3 +40,4 @@ void free_light_id(int id);
 int allocate_light_id();
 void reset_light_registry();
 
+#endif // __LIGHTING_H__

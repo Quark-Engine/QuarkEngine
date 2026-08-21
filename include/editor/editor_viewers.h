@@ -1,4 +1,5 @@
-#pragma once
+#ifndef __EDITOR_VIEWERS_H__
+#define __EDITOR_VIEWERS_H__
 
 #include "editor.h"
 #include "../models.h"
@@ -28,3 +29,5 @@ void show_model_viewer_window(bool show);
 void show_material_viewer_window(bool show);
 
 void cleanup_viewers();
+
+#endif // __EDITOR_VIEWERS_H__

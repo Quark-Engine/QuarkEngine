@@ -1,4 +1,5 @@
-#pragma once
+#ifndef __MODELS_H__
+#define __MODELS_H__
 #include "entity.h"
 #include <functional>
 #include <filesystem>
@@ -23,3 +24,5 @@ void capture_mesh_overrides_from_model(Entity& entity);
 bool apply_mesh_overrides(Entity& entity);
 bool get_mesh_triangle_vertex_indices(const Mesh& mesh, int triangle_index, int out_indices[3]);
 bool detach_mesh_triangles(Entity& entity);
+
+#endif // __MODELS_H__
