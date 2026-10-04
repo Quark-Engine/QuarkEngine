@@ -366,6 +366,7 @@ if(QUARK_BUILD_TESTS)
 
     add_executable(QuarkEngineTests
         tests/test_main.cpp
+        tests/plugin_event_stub.cpp
         tests/test_transform.cpp
         tests/test_hierarchy.cpp
         tests/test_light_registry.cpp
