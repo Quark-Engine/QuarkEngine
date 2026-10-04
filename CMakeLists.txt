@@ -458,23 +458,44 @@ if(BUILD_PLUGIN)
         plugins/MyPlugin/plugin.cpp
     )
 
+    add_library(SceneDiagnostics SHARED
+        plugins/SceneDiagnostics/plugin.cpp
+    )
+
     target_include_directories(MyPlugin PRIVATE
+        ${CMAKE_SOURCE_DIR}/include
+    )
+
+    target_include_directories(SceneDiagnostics PRIVATE
         ${CMAKE_SOURCE_DIR}/include
     )
 
     if(WIN32)
         target_link_options(MyPlugin PRIVATE -Wl,--allow-shlib-undefined)
+        target_link_options(SceneDiagnostics PRIVATE -Wl,--allow-shlib-undefined)
     endif()
 
     set_target_properties(MyPlugin PROPERTIES
         PREFIX ""
-        RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/bin/plugins
-        LIBRARY_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/bin/plugins
-        ARCHIVE_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/bin/plugins
+        RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/bin/$<CONFIG>/plugins
+        LIBRARY_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/bin/$<CONFIG>/plugins
+        ARCHIVE_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/bin/$<CONFIG>/plugins
+    )
+
+    set_target_properties(SceneDiagnostics PROPERTIES
+        PREFIX ""
+        RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/bin/$<CONFIG>/plugins
+        LIBRARY_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/bin/$<CONFIG>/plugins
+        ARCHIVE_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/bin/$<CONFIG>/plugins
     )
 
     if(UNIX)
         set_target_properties(MyPlugin PROPERTIES
+            BUILD_RPATH "$ORIGIN/.."
+            INSTALL_RPATH "$ORIGIN/.."
+        )
+        set_target_properties(SceneDiagnostics PROPERTIES
+            PREFIX ""
             BUILD_RPATH "$ORIGIN/.."
             INSTALL_RPATH "$ORIGIN/.."
         )

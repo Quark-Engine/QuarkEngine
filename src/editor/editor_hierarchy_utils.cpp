@@ -1,4 +1,5 @@
 #include "editor/editor_hierarchy_utils.h"
+#include "application_plugin_bridge.h"
 using namespace qc;
 #include "imgui.h"
 #include <algorithm>
@@ -262,6 +263,7 @@ int CreateGroup(CScene& scene, const std::string& name, int parentId)
     group.m_IsGroup = true;
     
     scene.m_vEntities.push_back(group);
+    DispatchPluginEvent(PLUGIN_EVENT_ENTITY_CREATED, group.m_Id);
     return group.m_Id;
 }
 
@@ -289,6 +291,7 @@ void DeleteGroup(CScene& scene, int groupId, bool reparentToParent)
         }
     }
     
+    DispatchPluginEvent(PLUGIN_EVENT_ENTITY_DELETED, groupId);
     scene.m_vEntities.erase(scene.m_vEntities.begin() + groupId);
     
     for (int i = groupId; i < static_cast<int>(scene.m_vEntities.size()); i++)

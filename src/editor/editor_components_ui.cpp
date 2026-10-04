@@ -7,6 +7,7 @@
 #include "models.h"
 #include "entity.h"
 #include "editor/editor.h"
+#include "application_plugin_bridge.h"
 #include "language_manager.h"
 #include <filesystem>
 #include <cstring>
@@ -254,6 +255,8 @@ void CComponentUIHelper::DrawTransformComponent(CEditor& editor, CEntity& entity
     if (ImGui::DragFloat3(lang.Word("position"), aPosition, 0.1f))
     {
         pTransform->m_Position = qc::Vec3(aPosition[0], aPosition[1], aPosition[2]);
+        DispatchPluginEvent(PLUGIN_EVENT_TRANSFORM_CHANGED,
+            static_cast<int>(&entity - editor.m_Scene.m_vEntities.data()));
         CEntityTextureService::MarkEntityBoundsDirty(&entity);
     }
     trackTransformEdit();
@@ -261,6 +264,8 @@ void CComponentUIHelper::DrawTransformComponent(CEditor& editor, CEntity& entity
     if (ImGui::DragFloat3(lang.Word("rotation"), aRotation, 1.0f))
     {
         pTransform->m_Rotation = qc::Vec3(aRotation[0], aRotation[1], aRotation[2]);
+        DispatchPluginEvent(PLUGIN_EVENT_TRANSFORM_CHANGED,
+            static_cast<int>(&entity - editor.m_Scene.m_vEntities.data()));
         CEntityTextureService::MarkEntityBoundsDirty(&entity);
     }
     trackTransformEdit();
@@ -276,6 +281,8 @@ void CComponentUIHelper::DrawTransformComponent(CEditor& editor, CEntity& entity
         bool willFlip = countNeg(aScale[0], aScale[1], aScale[2]) % 2 != 0;
 
         pTransform->m_Scale = qc::Vec3(aScale[0], aScale[1], aScale[2]);
+        DispatchPluginEvent(PLUGIN_EVENT_TRANSFORM_CHANGED,
+            static_cast<int>(&entity - editor.m_Scene.m_vEntities.data()));
         CEntityTextureService::MarkEntityBoundsDirty(&entity);
         CEntityTextureService::MarkEntityUVDirty(&entity);
 

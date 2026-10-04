@@ -1,6 +1,7 @@
 #include "editor/editor_entity_clipboard.h"
 
 #include "editor/editor.h"
+#include "application_plugin_bridge.h"
 #include "editor/editor_entity.h"
 #include "models.h"
 
@@ -63,6 +64,8 @@ void CEntityClipboard::Paste(CEditor& editor)
             pasted.GetComponents()->AddComponent(pLightCopy);
         }
         editor.m_Scene.m_vEntities.push_back(std::move(pasted));
-        editor.m_Scene.m_Selected = static_cast<int>(editor.m_Scene.m_vEntities.size()) - 1;
+        const int entityIndex = static_cast<int>(editor.m_Scene.m_vEntities.size()) - 1;
+        editor.m_Scene.m_Selected = entityIndex;
+        DispatchPluginEvent(PLUGIN_EVENT_ENTITY_CREATED, entityIndex);
     }
 }

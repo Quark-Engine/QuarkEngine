@@ -248,6 +248,7 @@ void CApplication::Initialize()
         m_Editor.m_Preferences.m_ShadowFilterQuality);
 
     m_PluginBridge.Initialize(m_Editor, m_PluginManager);
+    m_PluginBridge.SetCamera(m_Camera);
 
     m_Editor.m_Assets.Load(m_ProjectPath);
     m_Editor.m_Assets.Refresh(m_ProjectPath, m_Editor.m_Scene);
@@ -269,8 +270,11 @@ void CApplication::Initialize()
 
     if (!m_Options.NoPlugins)
     {
+        m_Editor.m_pPluginManager = &m_PluginManager;
+        m_PluginManager.SetDisabledPlugins(m_Editor.m_Preferences.m_vDisabledPlugins);
         m_PluginManager.LoadAll(m_Options.PluginsDir.c_str(), m_PluginBridge.GetContext());
     }
+    DispatchPluginEvent(PLUGIN_EVENT_SCENE_LOADED);
     m_Editor.m_pPluginManager = &m_PluginManager;
 
     m_ActiveFontLanguage = CLanguageManager::Get().m_Current;
@@ -321,6 +325,7 @@ void CApplication::UpdateFrame()
             );
         }
         CProjectService::Save(m_Editor.m_ProjectPath, m_Editor.m_Scene);
+        DispatchPluginEvent(PLUGIN_EVENT_SCENE_SAVED);
         m_LastAutosaveTime = GetTime();
     }
 

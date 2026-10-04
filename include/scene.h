@@ -6,6 +6,8 @@
 #include <memory>
 #include <string>
 
+class CComponentFactoryRegistry;
+
 class CScene
 {
 public:
@@ -20,6 +22,8 @@ public:
 
     int m_Selected = -1;
     std::vector<int> m_vSelectedEntities;
+
+    CComponentFactoryRegistry* m_pComponentRegistry = nullptr;
 };
 
 #endif // __SCENE_H__

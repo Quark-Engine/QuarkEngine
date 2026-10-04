@@ -36,6 +36,10 @@ public:
     void DrawAssetsUi();
     void HandleInput();
     void SaveState();
+    void BeginPluginCommand(const char* pDescription);
+    void EndPluginCommand();
+    void SetStatusMessage(const char* pMessage);
+    void RequestSceneRedraw();
     void Undo();
     void Redo();
 
@@ -61,6 +65,9 @@ public:
     int m_SelectedAssetIndex = -1;
     std::string m_SelectedAssetName;
     bool m_SceneDirty = false;
+    bool m_PluginCommandActive = false;
+    bool m_SceneRedrawRequested = false;
+    std::string m_StatusMessage;
 
     std::stack<quark::SSceneSnapshot> m_UndoStack;
     std::stack<quark::SSceneSnapshot> m_RedoStack;
@@ -76,7 +83,7 @@ private:
     void DrawScenePanel(CFlyCamera& camera, SPluginContext* pCtx);
     void DrawRenameModal();
     void DrawAboutModal();
-    void DrawPreferencesUi(CFlyCamera& camera);
+    void DrawPreferencesUi(CFlyCamera& camera, SPluginContext* pPluginCtx);
     void DrawConfirmationModals();
 
     void HierarchyAcceptEntityDrop(int targetIndex);
@@ -87,6 +94,7 @@ private:
     bool DrawPreferencesGeneralTab();
     bool DrawPreferencesRenderingTab(CFlyCamera& camera);
     bool DrawPreferencesInterfaceTab();
+    bool DrawPreferencesPluginsTab(SPluginContext* pPluginCtx);
 };
 
 #endif // __EDITOR_H__

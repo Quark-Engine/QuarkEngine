@@ -1,5 +1,6 @@
 #include "scene.h"
 #include "models.h"
+#include "application_plugin_bridge.h"
 #include <algorithm>
 #include <unordered_set>
 
@@ -26,11 +27,13 @@ void CScene::SelectEntity(int entityIndex, bool additive)
     {
         m_vSelectedEntities.erase(it);
         m_Selected = m_vSelectedEntities.empty() ? -1 : m_vSelectedEntities.back();
+        DispatchPluginEvent(PLUGIN_EVENT_ENTITY_SELECTED, m_Selected);
         return;
     }
 
     if (it == m_vSelectedEntities.end()) m_vSelectedEntities.push_back(entityIndex);
     m_Selected = entityIndex;
+    DispatchPluginEvent(PLUGIN_EVENT_ENTITY_SELECTED, entityIndex);
 }
 
 std::string CScene::MakeUniqueName(const std::string& baseName) const

@@ -1,12 +1,14 @@
 #include "editor/editor_status_bar.h"
 
+#include "editor.h"
+
 #include "QuarkCore/QuarkCore.hpp"
 #include "imgui.h"
 #include "imgui_internal.h"
 
 using namespace qc;
 
-void CStatusBar::Draw()
+void CStatusBar::Draw(const CEditor& editor)
 {
     ImGuiViewport* pViewport = ImGui::GetMainViewport();
     if (pViewport == nullptr)
@@ -29,6 +31,12 @@ void CStatusBar::Draw()
     if (ImGui::BeginViewportSideBar("##main_status_bar", pViewport, ImGuiDir_Down, statusBarHeight, flags))
     {
         ImGui::TextDisabled("Quark Engine Editor v%s", "1.0.0");
+
+        if (!editor.m_StatusMessage.empty())
+        {
+            ImGui::SameLine();
+            ImGui::Text("%s", editor.m_StatusMessage.c_str());
+        }
 
         const char* pFpsText = TextFormat("FPS: %d", GetFPS());
         const float fpsTextWidth = ImGui::CalcTextSize(pFpsText).x;

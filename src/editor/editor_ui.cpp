@@ -15,6 +15,8 @@
 
 #include "editor/editor.h"
 
+#include "application_plugin_bridge.h"
+
 #include "camera.h"
 #include "editor/editor_assets.h"
 #include "editor/editor_components_ui.h"
@@ -51,6 +53,7 @@
 #include <cstring>
 #include <filesystem>
 #include <fstream>
+#include <map>
 #include <string>
 #include <vector>
 
@@ -91,7 +94,7 @@ void CEditor::DrawUi(qc::Shader shader, CFlyCamera& camera, SPluginContext* pPlu
     CEditorLayout::EnsureInitialized(*this, dockspaceId);
 
     DrawMainMenuBar(pPluginCtx, dockspaceId);
-    CStatusBar::Draw();
+    CStatusBar::Draw(*this);
 
     if (m_Preferences.m_ShowHierarchy)
     {
@@ -116,7 +119,7 @@ void CEditor::DrawUi(qc::Shader shader, CFlyCamera& camera, SPluginContext* pPlu
     DrawMaterialViewerWindow(*this, m_Ui.m_MaterialViewer, m_Scene.GetSelected());
 
     DrawAboutModal();
-    DrawPreferencesUi(camera);
+    DrawPreferencesUi(camera, pPluginCtx);
     DrawConfirmationModals();
 }
 
@@ -133,6 +136,7 @@ void CEditor::DrawMainMenuBar(SPluginContext* pPluginCtx, ImGuiID dockspaceId)
             if (ImGui::MenuItem(lang.Word("save"), "Ctrl+S"))
             {
                 CProjectService::Save(m_ProjectPath, m_Scene);
+                DispatchPluginEvent(PLUGIN_EVENT_SCENE_SAVED);
                 m_SceneDirty = false;
             }
             if (ImGui::MenuItem("Save As...", "Ctrl+Shift+S"))
@@ -230,7 +234,9 @@ void CEditor::DrawMainMenuBar(SPluginContext* pPluginCtx, ImGuiID dockspaceId)
                     if (pCreatedMesh && HasValidModelData(pCreatedMesh->m_Model))
                     {
                         m_Scene.m_vEntities.push_back(std::move(created));
-                        m_Scene.SelectEntity(static_cast<int>(m_Scene.m_vEntities.size()) - 1, false);
+                        const int entityIndex = static_cast<int>(m_Scene.m_vEntities.size()) - 1;
+                        DispatchPluginEvent(PLUGIN_EVENT_ENTITY_CREATED, entityIndex);
+                        m_Scene.SelectEntity(entityIndex, false);
                     }
                 }
             }
@@ -240,7 +246,9 @@ void CEditor::DrawMainMenuBar(SPluginContext* pPluginCtx, ImGuiID dockspaceId)
                 SaveState();
                 CEntity created = CEntityFactory::Light(m_Scene, -1);
                 m_Scene.m_vEntities.push_back(std::move(created));
-                m_Scene.SelectEntity(static_cast<int>(m_Scene.m_vEntities.size()) - 1, false);
+                const int entityIndex = static_cast<int>(m_Scene.m_vEntities.size()) - 1;
+                DispatchPluginEvent(PLUGIN_EVENT_ENTITY_CREATED, entityIndex);
+                m_Scene.SelectEntity(entityIndex, false);
             }
             ImGui::EndMenu();
         }
@@ -392,7 +400,9 @@ void CEditor::HierarchyDrawCreateMenu(int parentIndex)
                 }
                 entity.m_ParentId = parentIndex;
                 m_Scene.m_vEntities.push_back(std::move(entity));
-                m_Scene.SelectEntity(static_cast<int>(m_Scene.m_vEntities.size()) - 1, false);
+                const int entityIndex = static_cast<int>(m_Scene.m_vEntities.size()) - 1;
+                DispatchPluginEvent(PLUGIN_EVENT_ENTITY_CREATED, entityIndex);
+                m_Scene.SelectEntity(entityIndex, false);
             }
         }
         ImGui::Separator();
@@ -401,7 +411,9 @@ void CEditor::HierarchyDrawCreateMenu(int parentIndex)
             SaveState();
             CEntity entity = CEntityFactory::Light(m_Scene, parentIndex);
             m_Scene.m_vEntities.push_back(std::move(entity));
-            m_Scene.SelectEntity(static_cast<int>(m_Scene.m_vEntities.size()) - 1, false);
+            const int entityIndex = static_cast<int>(m_Scene.m_vEntities.size()) - 1;
+            DispatchPluginEvent(PLUGIN_EVENT_ENTITY_CREATED, entityIndex);
+            m_Scene.SelectEntity(entityIndex, false);
         }
         ImGui::EndMenu();
     }
@@ -461,6 +473,8 @@ void CEditor::HierarchyDrawEntityItem(int entityIndex)
             SaveState();
             CEntity copy = CSceneEntityCommands::CloneInstance(entity, m_Scene);
             m_Scene.m_vEntities.push_back(std::move(copy));
+            DispatchPluginEvent(PLUGIN_EVENT_ENTITY_CREATED,
+                static_cast<int>(m_Scene.m_vEntities.size()) - 1);
         }
 
         ImGui::Separator();
@@ -526,6 +540,8 @@ void CEditor::HierarchyDrawEntityTree(int parentId)
                     SaveState();
                     CEntity copy = CSceneEntityCommands::CloneInstance(child, m_Scene);
                     m_Scene.m_vEntities.push_back(std::move(copy));
+                    DispatchPluginEvent(PLUGIN_EVENT_ENTITY_CREATED,
+                        static_cast<int>(m_Scene.m_vEntities.size()) - 1);
                 }
 
                 ImGui::Separator();
@@ -834,7 +850,7 @@ void CEditor::DrawAboutModal()
     }
 }
 
-void CEditor::DrawPreferencesUi(CFlyCamera& camera)
+void CEditor::DrawPreferencesUi(CFlyCamera& camera, SPluginContext* pPluginCtx)
 {
     if (!m_Ui.m_Modal.ShowPreferences)
     {
@@ -863,6 +879,12 @@ void CEditor::DrawPreferencesUi(CFlyCamera& camera)
         if (ImGui::BeginTabItem("Interface"))
         {
             preferencesChanged |= DrawPreferencesInterfaceTab();
+            ImGui::EndTabItem();
+        }
+
+        if (ImGui::BeginTabItem("Plugins"))
+        {
+            preferencesChanged |= DrawPreferencesPluginsTab(pPluginCtx);
             ImGui::EndTabItem();
         }
 
@@ -904,6 +926,203 @@ bool CEditor::DrawPreferencesGeneralTab()
     changed |= ImGui::Checkbox("Focus camera on selection", &m_Preferences.m_FocusOnSelection);
     changed |= ImGui::Checkbox("Confirm exit with unsaved changes", &m_Preferences.m_ConfirmExit);
     changed |= ImGui::Checkbox("Open last project", &m_Preferences.m_OpenLastProject);
+
+    return changed;
+}
+
+bool CEditor::DrawPreferencesPluginsTab(SPluginContext* pPluginCtx)
+{
+    bool changed = false;
+
+    ImGui::TextUnformatted("Loaded plugins");
+
+    if (!m_pPluginManager)
+    {
+        ImGui::TextUnformatted("Plugin manager is not available.");
+        return false;
+    }
+
+    const std::vector<SLoadedPlugin>& vPlugins = m_pPluginManager->GetPlugins();
+    const auto normalizePluginPath = [](const std::string& path)
+    {
+        return std::filesystem::path(path).lexically_normal().string();
+    };
+
+    const auto findDisabledPlugin = [&normalizePluginPath, this](const std::string& pluginPath)
+    {
+        const std::string normalizedPath = normalizePluginPath(pluginPath);
+        return std::find_if(
+            m_Preferences.m_vDisabledPlugins.begin(),
+            m_Preferences.m_vDisabledPlugins.end(),
+            [&normalizePluginPath, &normalizedPath](const std::string& disabledPath)
+            {
+                return normalizePluginPath(disabledPath) == normalizedPath;
+            });
+    };
+
+    const auto findLoadedPlugin = [&vPlugins, &normalizePluginPath](const std::string& pluginPath)
+    {
+        const auto iterator = std::find_if(
+            vPlugins.begin(),
+            vPlugins.end(),
+            [&normalizePluginPath, &pluginPath](const SLoadedPlugin& plugin)
+            {
+                return normalizePluginPath(plugin.FilePath) == normalizePluginPath(pluginPath);
+            });
+
+        if (iterator == vPlugins.end())
+        {
+            return static_cast<const SLoadedPlugin*>(nullptr);
+        }
+
+        return &(*iterator);
+    };
+
+    std::vector<std::pair<std::string, bool>> vRows;
+    const auto addPluginRow = [&vRows, &normalizePluginPath](const std::string& pluginPath, bool enabled)
+    {
+        const std::string normalizedPath = normalizePluginPath(pluginPath);
+        const auto iterator = std::find_if(
+            vRows.begin(),
+            vRows.end(),
+            [&normalizePluginPath, &normalizedPath](const std::pair<std::string, bool>& row)
+            {
+                return normalizePluginPath(row.first) == normalizedPath;
+            });
+
+        if (iterator != vRows.end())
+        {
+            iterator->second = enabled;
+            return;
+        }
+
+        vRows.emplace_back(normalizedPath, enabled);
+    };
+
+    for (const SLoadedPlugin& plugin : vPlugins)
+    {
+        const std::string normalizedPath = normalizePluginPath(plugin.FilePath);
+        addPluginRow(normalizedPath, findDisabledPlugin(normalizedPath) == m_Preferences.m_vDisabledPlugins.end());
+    }
+
+    for (const std::string& path : m_Preferences.m_vDisabledPlugins)
+    {
+        const std::string normalizedPath = normalizePluginPath(path);
+        if (findLoadedPlugin(normalizedPath) == nullptr)
+        {
+            addPluginRow(normalizedPath, false);
+        }
+    }
+
+    std::sort(
+        vRows.begin(),
+        vRows.end(),
+        [](const std::pair<std::string, bool>& lhs, const std::pair<std::string, bool>& rhs)
+        {
+            return lhs.first < rhs.first;
+        });
+
+    std::vector<std::pair<std::string, bool>> vPendingToggles;
+
+    if (vRows.empty())
+    {
+        ImGui::TextDisabled("No plugins are currently loaded.");
+    }
+    else if (ImGui::BeginTable("PluginsTable", 2, ImGuiTableFlags_SizingStretchProp | ImGuiTableFlags_RowBg))
+    {
+        ImGui::TableSetupColumn("Enabled", ImGuiTableColumnFlags_WidthFixed);
+        ImGui::TableSetupColumn("Plugin", ImGuiTableColumnFlags_WidthStretch);
+        ImGui::TableHeadersRow();
+
+        for (std::pair<std::string, bool>& row : vRows)
+        {
+            const std::string& pluginPath = row.first;
+            const SLoadedPlugin* pLoadedPlugin = findLoadedPlugin(pluginPath);
+            bool enabled = row.second;
+
+            ImGui::TableNextRow();
+            ImGui::TableSetColumnIndex(0);
+            ImGui::PushID(pluginPath.c_str());
+            if (ImGui::Checkbox("", &enabled))
+            {
+                vPendingToggles.emplace_back(pluginPath, enabled);
+                changed = true;
+            }
+            ImGui::PopID();
+
+            ImGui::TableSetColumnIndex(1);
+            ImGui::BeginGroup();
+            if (pLoadedPlugin != nullptr && pLoadedPlugin->pPlugin != nullptr)
+            {
+                const char* pPluginName = pLoadedPlugin->pPlugin->pName;
+                const char* pPluginVersion = pLoadedPlugin->pPlugin->pVersion;
+                if (pPluginName != nullptr)
+                {
+                    ImGui::TextUnformatted(pPluginName);
+                }
+                else
+                {
+                    const std::string fileName = std::filesystem::path(pluginPath).filename().string();
+                    ImGui::TextUnformatted(fileName.c_str());
+                }
+                if (pPluginVersion != nullptr && pPluginVersion[0] != '\0')
+                {
+                    ImGui::SameLine();
+                    ImGui::TextDisabled("v%s", pPluginVersion);
+                }
+            }
+            else
+            {
+                const std::string fileName = std::filesystem::path(pluginPath).filename().string();
+                ImGui::TextUnformatted(fileName.c_str());
+            }
+            ImGui::TextDisabled("%s", pluginPath.c_str());
+            ImGui::EndGroup();
+        }
+
+        ImGui::EndTable();
+    }
+
+    for (const std::pair<std::string, bool>& pendingToggle : vPendingToggles)
+    {
+        const std::string& pluginPath = pendingToggle.first;
+        const bool enabled = pendingToggle.second;
+        const auto loadedPluginIterator = std::find_if(
+            vPlugins.begin(),
+            vPlugins.end(),
+            [&normalizePluginPath, &pluginPath](const SLoadedPlugin& plugin)
+            {
+                return normalizePluginPath(plugin.FilePath) == normalizePluginPath(pluginPath);
+            });
+        const bool isLoaded = loadedPluginIterator != vPlugins.end();
+
+        if (enabled)
+        {
+            auto iterator = findDisabledPlugin(pluginPath);
+            if (iterator != m_Preferences.m_vDisabledPlugins.end())
+            {
+                m_Preferences.m_vDisabledPlugins.erase(iterator);
+            }
+
+            if (!isLoaded)
+            {
+                m_pPluginManager->LoadOne(pluginPath, pPluginCtx);
+            }
+        }
+        else
+        {
+            if (findDisabledPlugin(pluginPath) == m_Preferences.m_vDisabledPlugins.end())
+            {
+                m_Preferences.m_vDisabledPlugins.push_back(pluginPath);
+            }
+
+            if (isLoaded)
+            {
+                const int pluginIndex = static_cast<int>(std::distance(vPlugins.begin(), loadedPluginIterator));
+                m_pPluginManager->UnloadPlugin(pluginIndex);
+            }
+        }
+    }
 
     return changed;
 }
@@ -1136,6 +1355,7 @@ void CEditor::DrawConfirmationModals()
         if (ImGui::Button("Save and Exit"))
         {
             CProjectService::Save(m_ProjectPath, m_Scene);
+            DispatchPluginEvent(PLUGIN_EVENT_SCENE_SAVED);
             m_SceneDirty = false;
             CloseWindow();
             ImGui::CloseCurrentPopup();

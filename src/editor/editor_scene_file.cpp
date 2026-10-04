@@ -2,6 +2,7 @@
 
 #include "editor/editor.h"
 #include "editor/editor_desktop.h"
+#include "application_plugin_bridge.h"
 #include "project.h"
 
 #include <filesystem>
@@ -41,6 +42,7 @@ void CSceneFileService::SaveAs(CEditor& editor)
     std::filesystem::create_directories(rootPath, error);
 
     CProjectService::SaveScene(savePath.string(), editor.m_Scene);
+    DispatchPluginEvent(PLUGIN_EVENT_SCENE_SAVED);
     editor.m_ProjectPath = rootPath.string();
     editor.m_CurrentAssetPath = rootPath / "resources";
     std::filesystem::create_directories(editor.m_CurrentAssetPath, error);

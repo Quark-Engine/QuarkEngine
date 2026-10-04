@@ -57,6 +57,7 @@ CEditor::~CEditor() = default;
 
 void CEditor::Unload()
 {
+    m_PluginCommandActive = false;
     m_Scene.ReleaseResources();
     m_Ui.Unload();
     CleanupAssetsUi(*this);
@@ -83,6 +84,32 @@ void CEditor::SaveState()
     {
         m_RedoStack.pop();
     }
+}
+
+void CEditor::BeginPluginCommand(const char* pDescription)
+{
+    (void)pDescription;
+    if (m_PluginCommandActive)
+    {
+        return;
+    }
+    SaveState();
+    m_PluginCommandActive = true;
+}
+
+void CEditor::EndPluginCommand()
+{
+    m_PluginCommandActive = false;
+}
+
+void CEditor::SetStatusMessage(const char* pMessage)
+{
+    m_StatusMessage = pMessage ? pMessage : "";
+}
+
+void CEditor::RequestSceneRedraw()
+{
+    m_SceneRedrawRequested = true;
 }
 
 void CEditor::Undo()

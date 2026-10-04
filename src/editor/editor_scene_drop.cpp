@@ -1,6 +1,7 @@
 #include "editor/editor_scene_drop.h"
 
 #include "editor/editor.h"
+#include "application_plugin_bridge.h"
 #include "editor/editor_entity.h"
 #include "editor/editor_scene_picker.h"
 #include "editor/editor_utils.h"
@@ -98,7 +99,9 @@ void CSceneAssetDrop::Handle(CEditor& editor, const qc::Camera3D& camera)
         pTransform->m_Position = GetSceneDropPosition(camera);
 
         editor.m_Scene.m_vEntities.push_back(std::move(e));
-        editor.m_Scene.m_Selected = (int)editor.m_Scene.m_vEntities.size() - 1;
+        const int entityIndex = static_cast<int>(editor.m_Scene.m_vEntities.size()) - 1;
+        editor.m_Scene.m_Selected = entityIndex;
+        DispatchPluginEvent(PLUGIN_EVENT_ENTITY_CREATED, entityIndex);
 
         return;
     }
@@ -122,5 +125,7 @@ void CSceneAssetDrop::Handle(CEditor& editor, const qc::Camera3D& camera)
     pTransform->m_Position = GetSceneDropPosition(camera);
 
     editor.m_Scene.m_vEntities.push_back(std::move(entity));
-    editor.m_Scene.m_Selected = (int)editor.m_Scene.m_vEntities.size() - 1;
+    const int entityIndex = static_cast<int>(editor.m_Scene.m_vEntities.size()) - 1;
+    editor.m_Scene.m_Selected = entityIndex;
+    DispatchPluginEvent(PLUGIN_EVENT_ENTITY_CREATED, entityIndex);
 }

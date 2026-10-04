@@ -44,6 +44,20 @@ enum EUIRegion
 };
 
 /**
+ * @enum EPluginEvent
+ * @brief Notifications emitted by the host when the editor changes scene state.
+ */
+enum EPluginEvent
+{
+    PLUGIN_EVENT_ENTITY_CREATED,    /**< A new entity was appended to the scene. */
+    PLUGIN_EVENT_ENTITY_DELETED,    /**< An entity is about to be removed. */
+    PLUGIN_EVENT_ENTITY_SELECTED,   /**< The active or multi-selection changed. */
+    PLUGIN_EVENT_TRANSFORM_CHANGED, /**< Position, rotation, or scale changed. */
+    PLUGIN_EVENT_SCENE_LOADED,      /**< The current scene finished loading. */
+    PLUGIN_EVENT_SCENE_SAVED,       /**< The current scene finished saving. */
+};
+
+/**
  * @typedef FPluginUICallback
  * @param pCtx Pointer to the host-provided plugin context.
  * @brief Function pointer type for UI callbacks executed in a specific EUIRegion.
@@ -52,6 +66,15 @@ enum EUIRegion
  * current SPluginContext for accessing UI and engine state.
  */
 using FPluginUICallback = void(*)(SPluginContext*);
+
+/**
+ * @typedef FPluginEventCallback
+ * @brief Function pointer type for scene notifications delivered to plugins.
+ * @param pCtx         Current host context. Do not retain it after the callback.
+ * @param event        Event kind being reported.
+ * @param entityIndex  Related entity index, or -1 for scene-wide events.
+ */
+using FPluginEventCallback = void(*)(SPluginContext* pCtx, EPluginEvent event, int entityIndex);
 
 /**
  * @typedef FPluginComponentFactory
@@ -158,8 +181,9 @@ struct SPluginContext
      * The scene document stores every component under the string returned by
      * the component's GetTypeName(). A type the host cannot construct is
      * dropped with a warning, so a plugin that attaches components to entities
-     * has to call this from OnLoad() for each of them, and should call
-     * pfnUnregisterComponentFactory() from OnUnload().
+     * should call this from OnLoad() for each of them. Unregistration requires
+     * a valid context, but pfnOnUnload() does not receive one; do not retain a
+     * context pointer beyond a host callback to work around this limitation.
      *
      * @param pCtx      The context this callback was reached through. The host
      *                  reads its pComponentRegistry to reach the registry that
@@ -341,10 +365,6 @@ struct SPluginContext
      */
     void (*pfnEntitySetName)(CScene* pScene, int index, const char* pName);
 
-    // -------------------------------------------------------------------------
-    // Scene management
-    // -------------------------------------------------------------------------
-
     /**
      * @brief Current scene state owned by the host.
      */
@@ -420,6 +440,304 @@ struct SPluginContext
      * header can observe null here, so null-check before use.
      */
     const char* pProjectPath;
+
+    // -------------------------------------------------------------------------
+    // ABI extension fields. Keep new function pointers at the end of the
+    // context so plugins built against older headers keep their offsets.
+    // -------------------------------------------------------------------------
+
+    /**
+     * @brief Returns the parent entity index, or -1 for a root entity.
+     * @param pScene Scene to query; the host's ctx->pScene.
+     * @param index Entity index in [0, entityCount).
+     * @return -1 when the scene or entity index is invalid.
+     */
+    int (*pfnEntityGetParent)(CScene* pScene, int index);
+
+    /**
+     * @brief Reparents an entity while preserving its world transform.
+     * @param pScene Scene to mutate; the host's ctx->pScene.
+     * @param index Entity index to reparent.
+     * @param parentIndex Parent entity index, or -1 to make the entity a root.
+     * @return true when the hierarchy changed; false for invalid indices or a
+     *         parent that would create a cycle.
+     */
+    bool (*pfnEntitySetParent)(CScene* pScene, int index, int parentIndex);
+
+    /**
+     * @brief Returns the number of components attached to an entity.
+     * @param pScene Scene to query; the host's ctx->pScene.
+     * @param index Entity index in [0, entityCount).
+     * @return Component count, or 0 for an invalid entity.
+     */
+    int (*pfnEntityGetComponentCount)(CScene* pScene, int index);
+
+    /**
+     * @brief Returns a component type name by its position on the entity.
+     * @param pScene Scene to query; the host's ctx->pScene.
+     * @param index Entity index in [0, entityCount).
+     * @param componentIndex Component index in [0, component count).
+     * @return Host-owned type name, or nullptr for invalid arguments. The
+     *         pointer may be invalidated by the next call from this thread.
+     */
+    const char* (*pfnEntityGetComponentType)(CScene* pScene, int index, int componentIndex);
+
+    /**
+     * @brief Tests whether an entity has a component with the given type name.
+     * @param pScene Scene to query; the host's ctx->pScene.
+     * @param index Entity index in [0, entityCount).
+     * @param pTypeName Exact component type name registered by the host.
+     * @return true when the component exists.
+     */
+    bool (*pfnEntityHasComponent)(CScene* pScene, int index, const char* pTypeName);
+
+    /**
+     * @brief Creates and attaches a registered component type.
+     * @param pScene Scene to mutate; the host's ctx->pScene.
+     * @param index Entity index in [0, entityCount).
+     * @param pTypeName Exact component type name registered with the host.
+     * @return true when the component was created and attached.
+     */
+    bool (*pfnEntityAddComponent)(CScene* pScene, int index, const char* pTypeName);
+
+    /**
+     * @brief Removes the first component with the given type name.
+     * @param pScene Scene to mutate; the host's ctx->pScene.
+     * @param index Entity index in [0, entityCount).
+     * @param pTypeName Exact component type name to remove.
+     * @return true when a matching component was removed.
+     */
+    bool (*pfnEntityRemoveComponent)(CScene* pScene, int index, const char* pTypeName);
+
+    /**
+     * @brief Enables or disables the first component with the given type name.
+     * @param pScene Scene to mutate; the host's ctx->pScene.
+     * @param index Entity index in [0, entityCount).
+     * @param pTypeName Exact component type name to update.
+     * @param enabled New enabled state.
+     * @return true when a matching component was updated.
+     */
+    bool (*pfnEntitySetComponentEnabled)(CScene* pScene, int index,
+                                         const char* pTypeName, bool enabled);
+
+    /**
+     * @brief Returns the number of tags attached to an entity.
+     * @param pScene Scene to query; the host's ctx->pScene.
+     * @param index Entity index in [0, entityCount).
+     * @return Tag count, or 0 for an invalid entity.
+     */
+    int (*pfnEntityGetTagCount)(CScene* pScene, int index);
+
+    /**
+     * @brief Returns a tag by its index in the entity's tag list.
+     * @param pScene Scene to query; the host's ctx->pScene.
+     * @param index Entity index in [0, entityCount).
+     * @param tagIndex Tag index in [0, pfnEntityGetTagCount(pScene, index)).
+     * @return Host-owned tag string, or nullptr for invalid arguments. The
+     *         pointer may be invalidated by a later tag mutation.
+     */
+    const char* (*pfnEntityGetTag)(CScene* pScene, int index, int tagIndex);
+
+    /**
+     * @brief Tests whether an entity has a tag.
+     * @param pScene Scene to query; the host's ctx->pScene.
+     * @param index Entity index in [0, entityCount).
+     * @param pTag Null-terminated tag to find.
+     * @return true when the exact tag is attached to the entity.
+     */
+    bool (*pfnEntityHasTag)(CScene* pScene, int index, const char* pTag);
+
+    /**
+     * @brief Adds a tag to an entity.
+     * @param pScene Scene to mutate; the host's ctx->pScene.
+     * @param index Entity index in [0, entityCount).
+     * @param pTag Null-terminated tag to add.
+     * @return false for invalid arguments or when the tag already exists.
+     */
+    bool (*pfnEntityAddTag)(CScene* pScene, int index, const char* pTag);
+
+    /**
+     * @brief Removes a tag from an entity.
+     * @param pScene Scene to mutate; the host's ctx->pScene.
+     * @param index Entity index in [0, entityCount).
+     * @param pTag Null-terminated tag to remove.
+     * @return true when a matching tag was removed.
+     */
+    bool (*pfnEntityRemoveTag)(CScene* pScene, int index, const char* pTag);
+
+    /**
+     * @brief Returns the number of model assets currently registered.
+     * @param pAssets Host asset library; use ctx->pAssets.
+     * @return Number of registered model assets, or 0 when pAssets is null.
+     */
+    int (*pfnAssetGetCount)(CAssetLibrary* pAssets);
+
+    /**
+     * @brief Returns the name of a model asset by index.
+     * @param pAssets Host asset library; use ctx->pAssets.
+     * @param index Asset index in [0, pfnAssetGetCount(pAssets)).
+     * @return Host-owned asset name, or nullptr for invalid arguments.
+     */
+    const char* (*pfnAssetGetName)(CAssetLibrary* pAssets, int index);
+
+    /**
+     * @brief Returns the host EObjectType value for a model asset.
+     * @param pAssets Host asset library; use ctx->pAssets.
+     * @param index Asset index in [0, pfnAssetGetCount(pAssets)).
+     * @return Numeric EObjectType value, or -1 for invalid arguments.
+     */
+    int (*pfnAssetGetType)(CAssetLibrary* pAssets, int index);
+
+    /**
+     * @brief Tests whether a model asset with the given name exists.
+     * @param pAssets Host asset library; use ctx->pAssets.
+     * @param pName Null-terminated asset name.
+     * @return true when the asset is registered.
+     */
+    bool (*pfnAssetExists)(CAssetLibrary* pAssets, const char* pName);
+
+    /**
+     * @brief Instantiates an asset and places it at the requested local position.
+     * @param pAssets Host asset library to resolve the name against.
+     * @param pScene Scene to mutate; the host's ctx->pScene.
+     * @param pAssetName Null-terminated registered asset name.
+     * @param x Local X position of the new entity.
+     * @param y Local Y position of the new entity.
+     * @param z Local Z position of the new entity.
+     * @return The new entity index, or -1 when the asset or scene is invalid.
+     */
+    int (*pfnSceneSpawnEx)(CAssetLibrary* pAssets, CScene* pScene,
+                           const char* pAssetName, float x, float y, float z);
+
+    /**
+     * @brief Returns the primary selected entity index.
+     * @param pScene Scene to query; the host's ctx->pScene.
+     * @return Primary selected entity index, or -1 when nothing is selected.
+     */
+    int (*pfnSceneGetSelected)(CScene* pScene);
+
+    /**
+     * @brief Selects or deselects an entity.
+     * @param pScene Scene to mutate; the host's ctx->pScene.
+     * @param index Entity index in [0, entityCount), or -1 to clear the
+     *        complete selection when additive is false.
+     * @param additive When false, replaces the selection; when true, toggles
+     *        the specified entity in the current selection.
+     */
+    void (*pfnSceneSetSelected)(CScene* pScene, int index, bool additive);
+
+    /**
+     * @brief Returns the number of selected entities.
+     * @param pScene Scene to query; the host's ctx->pScene.
+     * @return Number of selected entities, or 0 when pScene is null.
+     */
+    int (*pfnSceneGetSelectionCount)(CScene* pScene);
+
+    /**
+     * @brief Returns a selected entity index by selection order.
+     * @param pScene Scene to query; the host's ctx->pScene.
+     * @param selectionIndex Selection-order index in [0, selection count).
+     * @return Entity index, or -1 for invalid arguments.
+     */
+    int (*pfnSceneGetSelectedAt)(CScene* pScene, int selectionIndex);
+
+    /**
+     * @brief Starts one undoable plugin command for the scene.
+     * @param pScene Scene to mutate; the host's ctx->pScene.
+     * @param pDescription Human-readable command description. The host does
+     *        not retain this pointer after the call returns.
+     * @note Call before scene mutations and pair with pfnSceneEndCommand().
+     *       Nested commands are ignored.
+     */
+    void (*pfnSceneBeginCommand)(CScene* pScene, const char* pDescription);
+
+    /**
+     * @brief Ends the currently active plugin command.
+     * @param pScene Scene passed to the matching begin-command call.
+     * @note Safe to call when no plugin command is active.
+     */
+    void (*pfnSceneEndCommand)(CScene* pScene);
+
+    /**
+     * @brief Undoes the most recent editor command.
+     * @return true when an undo step was available and applied.
+     * @note Operates on the host's currently open scene.
+     */
+    bool (*pfnSceneUndo)();
+
+    /**
+     * @brief Redoes the most recently undone editor command.
+     * @return true when a redo step was available and applied.
+     * @note Operates on the host's currently open scene.
+     */
+    bool (*pfnSceneRedo)();
+
+    /**
+     * @brief Reports whether the scene has unsaved changes.
+     * @param pScene Scene to query; the host's ctx->pScene.
+     * @return true when the scene contains changes not written to disk.
+     */
+    bool (*pfnSceneIsDirty)(CScene* pScene);
+
+    /**
+     * @brief Selects an entity and moves the editor camera to its world origin.
+     * @param index Entity index in the current scene.
+     * @note Invalid indices are ignored. This affects the host editor selection
+     *       and camera, not the saved scene transform.
+     */
+    void (*pfnEditorFocusEntity)(int index);
+
+    /**
+     * @brief Displays a message in the editor status bar.
+     * @param pMessage Null-terminated message to display. Passing nullptr
+     *        clears the current message.
+     */
+    void (*pfnEditorSetStatusMessage)(const char* pMessage);
+
+    /**
+     * @brief Requests a scene redraw from the editor.
+     * @note The current host continuously renders frames, so this is a redraw
+     *       hint reserved for integrations that throttle rendering.
+     */
+    void (*pfnEditorRequestSceneRedraw)();
+
+    /**
+     * @brief Selects an asset in the asset browser and opens model previews.
+     * @param pAssetName Registered model asset name or asset-browser name.
+     *        The host copies the value before this call returns.
+     * @note Invalid or unknown names are still recorded as the selected browser
+     *       name, but no model preview is opened.
+     */
+    void (*pfnEditorOpenAsset)(const char* pAssetName);
+
+    /**
+     * @brief Subscribes a plugin callback to one host event.
+     * @param pCtx        Context received from the host.
+     * @param event       Event kind to observe.
+     * @param pfnCallback Non-null callback; the host removes remaining
+     *                    subscriptions when the plugin is unloaded.
+     * @note This field is appended for ABI compatibility with older plugins.
+     */
+    void (*pfnRegisterEventCallback)(SPluginContext* pCtx, EPluginEvent event,
+                                     FPluginEventCallback pfnCallback);
+
+    /**
+     * @brief Removes a previously registered event callback.
+     * @param pCtx        Context received from the host.
+     * @param event       Event kind used during registration.
+     * @param pfnCallback Exact callback pointer to remove.
+     */
+    void (*pfnUnregisterEventCallback)(SPluginContext* pCtx, EPluginEvent event,
+                                       FPluginEventCallback pfnCallback);
+
+    /**
+     * @brief Returns the asset identifier assigned to an entity's mesh.
+     * @param pScene Scene to query; the host's ctx->pScene.
+     * @param index Entity index in [0, entityCount).
+     * @return Host-owned asset name, or nullptr when no asset is assigned.
+     * @note This field is appended for ABI compatibility with older plugins.
+     */
+    const char* (*pfnEntityGetAssetName)(CScene* pScene, int index);
 };
 
 /**

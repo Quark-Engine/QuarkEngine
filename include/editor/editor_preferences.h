@@ -2,6 +2,7 @@
 #define __EDITOR_PREFERENCES_H__
 
 #include <string>
+#include <vector>
 
 class CPreferences
 {
@@ -65,6 +66,7 @@ public:
     bool m_ShowScene = true;
     int m_AssetPreviewSize = 64;
     int m_AssetFilter = 0;
+    std::vector<std::string> m_vDisabledPlugins;
 };
 
 #endif // __EDITOR_PREFERENCES_H__

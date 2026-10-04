@@ -2,6 +2,7 @@
 
 #include "editor/editor.h"
 #include "editor/editor_state.h"
+#include "application_plugin_bridge.h"
 #include "models.h"
 #include "tex.h"
 #include "imgui.h"
@@ -114,7 +115,9 @@ void CSceneEntityCommands::Duplicate(CEditor& editor, CEntity* pEntity)
     editor.SaveState();
     CEntity copy = CloneInstance(*pEntity, editor.m_Scene);
     editor.m_Scene.m_vEntities.push_back(std::move(copy));
-    editor.m_Scene.m_Selected = static_cast<int>(editor.m_Scene.m_vEntities.size()) - 1;
+    const int entityIndex = static_cast<int>(editor.m_Scene.m_vEntities.size()) - 1;
+    editor.m_Scene.m_Selected = entityIndex;
+    DispatchPluginEvent(PLUGIN_EVENT_ENTITY_CREATED, entityIndex);
 }
 
 void CSceneEntityCommands::Erase(CEditor& editor, int index)
@@ -138,6 +141,7 @@ void CSceneEntityCommands::Erase(CEditor& editor, int index)
         pMesh->ReleaseOwnedResources();
     }
 
+    DispatchPluginEvent(PLUGIN_EVENT_ENTITY_DELETED, index);
     editor.m_Scene.m_vEntities.erase(editor.m_Scene.m_vEntities.begin() + index);
     for (int current = 0; current < static_cast<int>(editor.m_Scene.m_vEntities.size()); ++current)
     {

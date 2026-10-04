@@ -3,6 +3,7 @@
 #include <algorithm>
 #include <filesystem>
 #include <fstream>
+#include <iostream>
 
 using json = nlohmann::json;
 
@@ -67,6 +68,10 @@ static void ReadPreferences(CPreferences& preferences, const json& data)
     if (pPreferences->contains("show_scene")) preferences.m_ShowScene = (*pPreferences)["show_scene"].get<bool>();
     if (pPreferences->contains("asset_preview_size")) preferences.m_AssetPreviewSize = (*pPreferences)["asset_preview_size"].get<int>();
     if (pPreferences->contains("asset_filter")) preferences.m_AssetFilter = (*pPreferences)["asset_filter"].get<int>();
+    if (pPreferences->contains("disabled_plugins") && (*pPreferences)["disabled_plugins"].is_array())
+    {
+        preferences.m_vDisabledPlugins = (*pPreferences)["disabled_plugins"].get<std::vector<std::string>>();
+    }
 
     if (preferences.m_TargetFps > 0)
         preferences.m_TargetFps = std::clamp(preferences.m_TargetFps, 30, 240);
@@ -98,7 +103,9 @@ static void ReadPreferences(CPreferences& preferences, const json& data)
 
 void CPreferences::Save() const
 {
-    json preferences = {
+    try
+    {
+        json preferences = {
         {"wireframe_enabled", m_WireframeEnabled},
         {"show_grid", m_ShowGrid},
         {"show_axes", m_ShowAxes},
@@ -154,25 +161,39 @@ void CPreferences::Save() const
         {"show_scene", m_ShowScene},
         {"asset_preview_size", m_AssetPreviewSize},
         {"asset_filter", m_AssetFilter}
-    };
+        };
 
-    json config;
-    std::ifstream in("config.json");
-    if (in.is_open())
-    {
-        try
+        preferences["disabled_plugins"] = json::array();
+        for (const std::string& pluginPath : m_vDisabledPlugins)
         {
-            in >> config;
+            preferences["disabled_plugins"].push_back(pluginPath);
         }
-        catch (...)
+
+        json config;
+        std::ifstream in("config.json");
+        if (in.is_open())
         {
-            config = json::object();
+            try
+            {
+                in >> config;
+            }
+            catch (...)
+            {
+                config = json::object();
+            }
+        }
+        config["editor_preferences"] = preferences;
+
+        std::ofstream out("config.json");
+        if (out.is_open())
+        {
+            out << config.dump(4);
         }
     }
-    config["editor_preferences"] = preferences;
-
-    std::ofstream out("config.json");
-    if (out.is_open()) out << config.dump(4);
+    catch (const std::exception& exception)
+    {
+        std::cerr << "Failed to save config.json: " << exception.what() << '\n';
+    }
 }
 
 void CPreferences::Load()

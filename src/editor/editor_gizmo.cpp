@@ -1,6 +1,7 @@
 #include "editor/editor_gizmo.h"
 
 #include "editor/editor.h"
+#include "application_plugin_bridge.h"
 #include "editor/editor_mesh_edit.h"
 #include "editor/editor_state.h"
 #include "editor/editor_utils.h"
@@ -214,6 +215,7 @@ void CGizmoController::Draw(CEditor& editor, CFlyCamera& camera)
                     continue;
                 }
                 pSelectedTransform->m_Position = pSelectedTransform->m_Position + positionDelta;
+                DispatchPluginEvent(PLUGIN_EVENT_TRANSFORM_CHANGED, selected_index);
 CEntityTextureService::MarkEntityBoundsDirty(&selectedEntity);
                 if (CMaterialComponent* pSelectedMaterial = selectedEntity.GetMaterialComponent();
                     pSelectedMaterial && !pSelectedMaterial->m_TextureStretch)
@@ -222,6 +224,9 @@ CEntityTextureService::MarkEntityBoundsDirty(&selectedEntity);
                 }
             }
         }
+
+        DispatchPluginEvent(PLUGIN_EVENT_TRANSFORM_CHANGED,
+            static_cast<int>(pEntity - editor.m_Scene.m_vEntities.data()));
 
         CMaterialComponent* pMaterial = pEntity->GetMaterialComponent();
         if (pMaterial && !pMaterial->m_TextureStretch)
