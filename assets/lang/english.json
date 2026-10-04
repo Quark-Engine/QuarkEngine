@@ -41,6 +41,10 @@
     "about_quark_engine": "About Quark Engine",
     "quarkcore_version": "QuarkCore Version: %s-%s",
     "imgui_version": "ImGui Version: %s",
+    "website": "Website",
+    "open_website": "Open Website",
+    "discord_server": "Discord Server",
+    "join_discord_server": "Join Discord Server",
     "open_docs": "Open Documentation",
     "api_docs": "API Documentation",
 

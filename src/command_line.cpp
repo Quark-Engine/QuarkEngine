@@ -14,7 +14,9 @@ bool HasValue(int argc, char** ppArgv, int index)
 
 void CCommandLineParser::PrintVersion()
 {
-    std::cout << "Quark Engine " << QUARK_ENGINE_VERSION << "\n";
+    std::cout << "Quark Engine " << QUARK_ENGINE_VERSION
+        << " (Build " << QUARK_ENGINE_BUILD_NUMBER
+        << " | " << QUARK_ENGINE_BUILD_DATE_STRING << ")\n";
 }
 
 void CCommandLineParser::PrintUsage(const char* pProgramName)

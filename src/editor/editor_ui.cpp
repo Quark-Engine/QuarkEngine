@@ -819,8 +819,10 @@ void CEditor::DrawAboutModal()
 
         const auto backend = qc::GetCurrentBackend();
 
-        ImGui::Text("Quark Engine %s using %s",
+        ImGui::Text("Quark Engine %s (Build %s | %s) using %s",
             QUARK_ENGINE_VERSION,
+            QUARK_ENGINE_BUILD_NUMBER,
+            QUARK_ENGINE_BUILD_DATE_STRING,
             backend == qc::RendererType::Vulkan ? "Vulkan" :
             backend == qc::RendererType::OpenGL ? "OpenGL" :
             backend == qc::RendererType::Auto ? "Auto" :
@@ -830,6 +832,26 @@ void CEditor::DrawAboutModal()
         ImGui::Text(lang.Word("quarkcore_version"), QC_VERSION_STRING, "stable");
         ImGui::Text(lang.Word("imgui_version"), IMGUI_VERSION);
         ImGui::Spacing();
+
+        ImGui::TextColored(ImVec4(0.2f, 0.6f, 1.0f, 1.0f), "%s", lang.Word("website"));
+        if (ImGui::IsItemHovered())
+        {
+            ImGui::SetTooltip("%s", lang.Word("open_website"));
+            if (ImGui::IsMouseClicked(0))
+            {
+                CDesktopIntegration::OpenUrl("https://quark-engine.github.io/");
+            }
+        }
+
+        ImGui::TextColored(ImVec4(0.2f, 0.6f, 1.0f, 1.0f), "%s", lang.Word("discord_server"));
+        if (ImGui::IsItemHovered())
+        {
+            ImGui::SetTooltip("%s", lang.Word("join_discord_server"));
+            if (ImGui::IsMouseClicked(0))
+            {
+                CDesktopIntegration::OpenUrl("https://discord.gg/ttzpFBhy9Y");
+            }
+        }
 
         ImGui::TextColored(ImVec4(0.2f, 0.6f, 1.0f, 1.0f), "%s", lang.Word("api_docs"));
         if (ImGui::IsItemHovered())

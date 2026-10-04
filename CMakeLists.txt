@@ -1,6 +1,20 @@
 cmake_minimum_required(VERSION 3.10)
 project(QuarkEngine)
 
+execute_process(
+    COMMAND git rev-parse --short=7 HEAD
+    WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}"
+    OUTPUT_VARIABLE QUARK_ENGINE_BUILD
+    OUTPUT_STRIP_TRAILING_WHITESPACE
+    ERROR_QUIET
+    RESULT_VARIABLE GIT_REV_PARSE_RESULT
+)
+if(NOT GIT_REV_PARSE_RESULT EQUAL 0 OR QUARK_ENGINE_BUILD STREQUAL "")
+    set(QUARK_ENGINE_BUILD "unknown")
+    message(WARNING "Git commit hash unavailable; build number will be 'unknown'.")
+endif()
+string(TIMESTAMP QUARK_ENGINE_BUILD_DATE "%Y-%m-%d" UTC)
+
 if(MSVC)
     set(CMAKE_CXX_FLAGS_RELEASE "/MD /Od /RTC1 /DNDEBUG" CACHE STRING "" FORCE)
     set(CMAKE_C_FLAGS_RELEASE   "/MD /Od /RTC1 /DNDEBUG" CACHE STRING "" FORCE)
@@ -254,7 +268,12 @@ if(BUILD_ENGINE)
         imgui-opengl
         imgui-vulkan
     )
-    target_compile_definitions(${PROJECT_NAME} PRIVATE QUARKENGINE_BUILD QUARKCORE_STATIC)
+    target_compile_definitions(${PROJECT_NAME} PRIVATE
+        QUARKENGINE_BUILD
+        QUARKCORE_STATIC
+        QUARK_ENGINE_BUILD="${QUARK_ENGINE_BUILD}"
+        QUARK_ENGINE_BUILD_DATE="${QUARK_ENGINE_BUILD_DATE}"
+    )
     if(WIN32)
         target_link_libraries(${PROJECT_NAME} PRIVATE imgui-direct3d11)
     endif()
