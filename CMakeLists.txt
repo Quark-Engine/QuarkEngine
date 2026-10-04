@@ -450,6 +450,50 @@ if(QUARK_BUILD_TESTS)
                 $<TARGET_FILE:OpenAL::OpenAL>
                 $<TARGET_FILE_DIR:QuarkEngineTests>
         )
+        if(APPLE)
+            add_custom_command(TARGET QuarkEngineTests POST_BUILD
+                COMMAND ${CMAKE_COMMAND} -E rm -f
+                    "$<TARGET_FILE_DIR:QuarkEngineTests>/$<IF:$<CONFIG:Debug>,libassimpd.6.dylib,libassimp.6.dylib>"
+                COMMAND ${CMAKE_COMMAND} -E create_symlink
+                    "$<TARGET_FILE_NAME:assimp::assimp>"
+                    "$<TARGET_FILE_DIR:QuarkEngineTests>/$<IF:$<CONFIG:Debug>,libassimpd.6.dylib,libassimp.6.dylib>"
+                COMMAND ${CMAKE_COMMAND} -E rm -f
+                    "$<TARGET_FILE_DIR:QuarkEngineTests>/$<IF:$<CONFIG:Debug>,libfreetyped.6.dylib,libfreetype.6.dylib>"
+                COMMAND ${CMAKE_COMMAND} -E create_symlink
+                    "$<TARGET_FILE_NAME:freetype>"
+                    "$<TARGET_FILE_DIR:QuarkEngineTests>/$<IF:$<CONFIG:Debug>,libfreetyped.6.dylib,libfreetype.6.dylib>"
+                COMMAND ${CMAKE_COMMAND} -E rm -f
+                    "$<TARGET_FILE_DIR:QuarkEngineTests>/libopenal.1.dylib"
+                COMMAND ${CMAKE_COMMAND} -E create_symlink
+                    "$<TARGET_FILE_NAME:OpenAL::OpenAL>"
+                    "$<TARGET_FILE_DIR:QuarkEngineTests>/libopenal.1.dylib"
+                COMMENT "Creating macOS runtime library compatibility symlinks for tests..."
+            )
+        else()
+            add_custom_command(TARGET QuarkEngineTests POST_BUILD
+                COMMAND ${CMAKE_COMMAND} -E rm -f
+                    "$<TARGET_FILE_DIR:QuarkEngineTests>/$<IF:$<CONFIG:Debug>,libfreetyped.so.6,libfreetype.so.6>"
+                COMMAND ${CMAKE_COMMAND} -E create_symlink
+                    "$<TARGET_FILE_NAME:freetype>"
+                    "$<TARGET_FILE_DIR:QuarkEngineTests>/$<IF:$<CONFIG:Debug>,libfreetyped.so.6,libfreetype.so.6>"
+                COMMAND ${CMAKE_COMMAND} -E rm -f
+                    "$<TARGET_FILE_DIR:QuarkEngineTests>/$<IF:$<CONFIG:Debug>,libassimpd.so.6,libassimp.so.6>"
+                COMMAND ${CMAKE_COMMAND} -E create_symlink
+                    "$<TARGET_FILE_NAME:assimp::assimp>"
+                    "$<TARGET_FILE_DIR:QuarkEngineTests>/$<IF:$<CONFIG:Debug>,libassimpd.so.6,libassimp.so.6>"
+                COMMAND ${CMAKE_COMMAND} -E rm -f
+                    "$<TARGET_FILE_DIR:QuarkEngineTests>/libSDL3.so.0"
+                COMMAND ${CMAKE_COMMAND} -E create_symlink
+                    "$<TARGET_FILE_NAME:SDL3::SDL3>"
+                    "$<TARGET_FILE_DIR:QuarkEngineTests>/libSDL3.so.0"
+                COMMAND ${CMAKE_COMMAND} -E rm -f
+                    "$<TARGET_FILE_DIR:QuarkEngineTests>/libopenal.so.1"
+                COMMAND ${CMAKE_COMMAND} -E create_symlink
+                    "$<TARGET_FILE_NAME:OpenAL::OpenAL>"
+                    "$<TARGET_FILE_DIR:QuarkEngineTests>/libopenal.so.1"
+                COMMENT "Creating Linux runtime library compatibility symlinks for tests..."
+            )
+        endif()
     endif()
 endif()
 
