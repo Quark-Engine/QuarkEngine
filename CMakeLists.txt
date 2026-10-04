@@ -217,6 +217,18 @@ if(BUILD_ENGINE)
 
     if(WIN32)
         target_sources(${PROJECT_NAME} PRIVATE QuarkEngine.rc)
+
+        if(MSVC)
+            target_link_options(${PROJECT_NAME} PRIVATE
+                "$<$<CONFIG:Release>:/SUBSYSTEM:WINDOWS>"
+                "$<$<CONFIG:Release>:/ENTRY:mainCRTStartup>"
+            )
+        else()
+            target_link_options(${PROJECT_NAME} PRIVATE
+                "$<$<CONFIG:Release>:-mwindows>"
+                "$<$<CONFIG:Release>:-Wl,-e,mainCRTStartup>"
+            )
+        endif()
     endif()
 
     target_include_directories(${PROJECT_NAME} PRIVATE
