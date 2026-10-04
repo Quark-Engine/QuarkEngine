@@ -78,15 +78,11 @@ void CSceneRuntime::RestoreSceneEntityModels(CScene& scene, CAssetLibrary& asset
             continue;
         }
 
+        CEntityTextureService::RestoreModelTextures(&entity);
         pMesh->ReleaseOwnedResources();
         pMesh->m_BoundsDirty = true;
 
         pMesh->m_pAsset = pMesh->m_AssetName.empty() ? nullptr : assets.FindModelByName(pMesh->m_AssetName);
-        if (!pMesh->m_pAsset)
-        {
-            continue;
-        }
-
         if ((pMesh->m_IsEditableMesh || pMesh->m_VertexGizmo) && !pMesh->m_EditableMesh.m_vVertices.empty())
         {
             pMesh->m_Model = {};
@@ -96,6 +92,10 @@ void CSceneRuntime::RestoreSceneEntityModels(CScene& scene, CAssetLibrary& asset
             CEntityTextureService::StoreMaterialTextures(&entity);
             CMeshOverrideService::Apply(entity);
             RestoreEntityMaterial(entity, assets);
+        }
+        else if (!pMesh->m_pAsset)
+        {
+            continue;
         }
         else if (pMesh->m_pAsset->m_IsProcedural)
         {

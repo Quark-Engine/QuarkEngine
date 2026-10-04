@@ -168,7 +168,7 @@ TEST(DirectTexture, assignment_survives_a_snapshot_round_trip)
     CHECK(pMaterial->m_TextureSource == TEXTURE_EXTERNAL);
 }
 
-TEST(DirectTexture, direct_texture_survives_creating_a_second_object_and_undoing_it)
+TEST(DirectTexture, direct_texture_survives_undoing_two_created_objects)
 {
     CComponentFactoryRegistry registry;
     CScene scene;
@@ -176,9 +176,14 @@ TEST(DirectTexture, direct_texture_survives_creating_a_second_object_and_undoing
 
     history.Save();
     AddEntity(scene, "crate");
-    AssignDirectTexture(scene, 0, "brick.png");
+    AssignDirectTexture(scene, 0, "grass.jpg");
     history.Save();
     AddEntity(scene, "lamp");
+    history.Save();
+    AddEntity(scene, "tree");
+    CHECK(CountEntities(scene) == 3);
+
+    CHECK(history.Undo());
     CHECK(CountEntities(scene) == 2);
 
     CHECK(history.Undo());
@@ -196,7 +201,7 @@ TEST(DirectTexture, direct_texture_survives_creating_a_second_object_and_undoing
     {
         return;
     }
-    CHECK_MSG(pMaterial->m_AlbedoTextureName == "brick.png",
+    CHECK_MSG(pMaterial->m_AlbedoTextureName == "grass.jpg",
         "undo of an unrelated action dropped the direct texture");
     CHECK(pMaterial->m_TextureName.empty());
     CHECK(pMaterial->m_TextureSource == TEXTURE_EXTERNAL);
@@ -327,6 +332,24 @@ TEST(DirectTexture, plan_falls_back_to_the_material_file_without_a_direct_textur
     const std::vector<STextureOption> library = MakeTextureLibrary();
     const quark::SMaterialTextureRestore restore = quark::PlanMaterialTextureRestore(material, library);
     CHECK(restore.Action == quark::EMaterialTextureRestore::MaterialFile);
+}
+
+TEST(DirectTexture, restores_asset_owned_texture_before_unloading_the_model)
+{
+    CMeshComponent mesh;
+    qc::Material modelMaterial = {};
+    qc::MaterialMap aMaps[qc::MATERIAL_MAP_BRDF + 1] = {};
+    modelMaterial.maps = aMaps;
+    mesh.m_Model.materials = &modelMaterial;
+    mesh.m_Model.materialCount = 1;
+
+    CMaterialComponent material;
+    material.m_vOriginalMaterialTextures.push_back(FakeTexture(22));
+    aMaps[qc::MATERIAL_MAP_ALBEDO].texture = FakeTexture(11);
+
+    quark::RestoreOriginalMaterialTextures(mesh, material);
+
+    CHECK(aMaps[qc::MATERIAL_MAP_ALBEDO].texture.id == 22);
 }
 
 TEST(DirectTexture, plan_restores_the_model_textures_for_a_model_sourced_material)

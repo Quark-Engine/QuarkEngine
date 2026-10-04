@@ -1,4 +1,5 @@
 #include "tex.h"
+#include "engine/material_texture_restore.h"
 #include "models.h"
 #include "editor/editor_preferences.h"
 #include <fstream>
@@ -375,23 +376,11 @@ void CEntityTextureService::RestoreModelTextures(CEntity* pEntity)
     }
     CMeshComponent* pMesh = pEntity->GetMeshComponent();
     CMaterialComponent* pMat = pEntity->GetMaterialComponent();
-    if (!pMesh)
+    if (!pMesh || !pMat)
     {
         return;
     }
-    if (pMat->m_vOriginalMaterialTextures.size() != static_cast<size_t>(pMesh->m_Model.materialCount))
-    {
-        return;
-    }
-
-    for (int i = 0; i < pMesh->m_Model.materialCount; i++)
-    {
-        if (pMesh->m_Model.materials[i].maps)
-        {
-            pMesh->m_Model.materials[i].maps[MATERIAL_MAP_DIFFUSE].texture =
-                pMat->m_vOriginalMaterialTextures[i];
-        }
-    }
+    quark::RestoreOriginalMaterialTextures(*pMesh, *pMat);
 }
 
 void CEntityTextureService::ClearMaterialTextures(CEntity* pEntity)

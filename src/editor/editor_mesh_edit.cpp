@@ -169,6 +169,7 @@ void CMeshEditor::ResetModel(CEntity& entity, const CFreetypeTextMesh& textMesh)
     }
     else if (pMesh->m_pAsset)
     {
+        CEntityTextureService::RestoreModelTextures(&entity);
         pMesh->ReleaseOwnedResources();
 
         if (!CModelService::LoadInstance(*pMesh->m_pAsset, pMesh->m_Model))

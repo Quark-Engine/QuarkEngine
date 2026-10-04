@@ -1,4 +1,5 @@
 #include "engine/material_texture_restore.h"
+#include "QuarkCore/QuarkCore.hpp"
 
 namespace quark
 {
@@ -39,6 +40,24 @@ SMaterialTextureRestore PlanMaterialTextureRestore(const CMaterialComponent& mat
     }
 
     return restore;
+}
+
+void RestoreOriginalMaterialTextures(CMeshComponent& mesh, const CMaterialComponent& material)
+{
+    if (!mesh.m_Model.materials ||
+        material.m_vOriginalMaterialTextures.size() != static_cast<size_t>(mesh.m_Model.materialCount))
+    {
+        return;
+    }
+
+    for (int index = 0; index < mesh.m_Model.materialCount; ++index)
+    {
+        if (mesh.m_Model.materials[index].maps)
+        {
+            mesh.m_Model.materials[index].maps[qc::MATERIAL_MAP_ALBEDO].texture =
+                material.m_vOriginalMaterialTextures[index];
+        }
+    }
 }
 
 } // quark

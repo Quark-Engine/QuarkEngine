@@ -138,6 +138,7 @@ void CSceneEntityCommands::Erase(CEditor& editor, int index)
 
     if (auto pMesh = entity.GetMeshComponent())
     {
+        CEntityTextureService::RestoreModelTextures(&entity);
         pMesh->ReleaseOwnedResources();
     }
 

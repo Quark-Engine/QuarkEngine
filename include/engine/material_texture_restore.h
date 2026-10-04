@@ -26,6 +26,8 @@ struct SMaterialTextureRestore
 SMaterialTextureRestore PlanMaterialTextureRestore(const CMaterialComponent& material,
     const std::vector<STextureOption>& vLibraryTextures);
 
+void RestoreOriginalMaterialTextures(CMeshComponent& mesh, const CMaterialComponent& material);
+
 } // quark
 
 #endif // __ENGINE_MATERIAL_TEXTURE_RESTORE_H__

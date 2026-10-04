@@ -1,4 +1,5 @@
 #include "models.h"
+#include "tex.h"
 #include "scene.h"
 #include "text_mesh.h"
 #include "editor/editor_utils.h"
@@ -520,6 +521,7 @@ void CModelService::UpdateModel(CEntity* pEntity, const CFreetypeTextMesh& textM
         return;
     }
 
+    CEntityTextureService::RestoreModelTextures(pEntity);
     pMesh->ReleaseOwnedResources();
 
     if (auto* pText3D = pEntity->GetComponents()->GetComponentOfType<CText3DComponent>().get())

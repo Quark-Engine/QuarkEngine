@@ -1,5 +1,6 @@
 #include "scene.h"
 #include "models.h"
+#include "tex.h"
 #include "application_plugin_bridge.h"
 #include <algorithm>
 #include <unordered_set>
@@ -74,6 +75,7 @@ void CScene::ReleaseResources()
         CMaterialComponent* pMaterial = entity.GetMaterialComponent();
         if (!pMesh) continue;
 
+        CEntityTextureService::RestoreModelTextures(&entity);
         pMesh->ReleaseOwnedResources();
         if (pMaterial) pMaterial->m_Texture = {0};
     }
