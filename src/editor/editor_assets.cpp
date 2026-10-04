@@ -432,7 +432,7 @@ void DrawAssetsUi(CEditor& editor)
                     {
                         fs::rename(drag.FilePath.string() + ".meta", dest.string() + ".meta", ec);
                     }
-                    editor.m_Assets.Refresh(editor.m_ProjectPath, editor.m_Scene);
+                    editor.m_Assets.RequestRefresh(editor.m_ProjectPath);
                     editor.m_SelectedAssetIndex = -1;
                 }
             }
@@ -689,7 +689,7 @@ void DrawAssetsUi(CEditor& editor)
                     fs::remove(CTextureMetadataStore::PathFromMeta(target), ec);
                 }
 
-                editor.m_Assets.Refresh(editor.m_ProjectPath, editor.m_Scene);
+                editor.m_Assets.RequestRefresh(editor.m_ProjectPath);
                 editor.m_SelectedAssetIndex = -1;
                 editor.m_SelectedAssetName.clear();
 
@@ -1017,7 +1017,7 @@ void DrawAssetsUi(CEditor& editor)
                     {
                         fs::rename(sourcePath.string() + ".meta", destPath.string() + ".meta", ec);
                     }
-                    editor.m_Assets.Refresh(editor.m_ProjectPath, editor.m_Scene);
+                    editor.m_Assets.RequestRefresh(editor.m_ProjectPath);
                     editor.m_SelectedAssetIndex = -1;
                 }
             }
@@ -1061,7 +1061,7 @@ void DrawAssetsUi(CEditor& editor)
                             {
                                 fs::rename(oldPath.string() + ".meta", newPath.string() + ".meta");
                             }
-                            editor.m_Assets.Refresh(editor.m_ProjectPath, editor.m_Scene);
+                            editor.m_Assets.RequestRefresh(editor.m_ProjectPath);
                             editor.m_SelectedAssetIndex = -1;
                             editor.m_SelectedAssetName.clear();
                         } catch (...)
@@ -1191,7 +1191,7 @@ void DrawAssetsUi(CEditor& editor)
                     f.close();
                 }
 
-                editor.m_Assets.Refresh(editor.m_ProjectPath, editor.m_Scene);
+                editor.m_Assets.RequestRefresh(editor.m_ProjectPath);
             }
 
             ImGui::CloseCurrentPopup();

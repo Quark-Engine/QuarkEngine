@@ -90,6 +90,15 @@ using FPluginEventCallback = void(*)(SPluginContext* pCtx, EPluginEvent event, i
  */
 using FPluginComponentFactory = void*(*)();
 
+struct SPluginThreadUsage
+{
+    const char* pName;
+    const char* pCurrentTask;
+    float utilizationPercent;
+    const float* pHistory;
+    int historyCount;
+};
+
 /**
  * @struct SPluginContext
  * @brief Per-frame host state passed into every plugin callback.
@@ -738,6 +747,24 @@ struct SPluginContext
      * @note This field is appended for ABI compatibility with older plugins.
      */
     const char* (*pfnEntityGetAssetName)(CScene* pScene, int index);
+
+    /**
+     * @brief Draws a line chart from a sequence of float samples.
+     * @param pLabel Widget label.
+     * @param pValues Samples to draw.
+     * @param valueCount Number of samples.
+     * @param minimum Y-axis minimum.
+     * @param maximum Y-axis maximum.
+     */
+    void (*pfnUiPlotLines)(const char* pLabel, const float* pValues,
+                           int valueCount, float minimum, float maximum);
+
+    /**
+     * @brief Per-thread utilization samples, valid only during the current
+     *        plugin callback.
+     */
+    const SPluginThreadUsage* pThreadUsages;
+    int threadUsageCount;
 };
 
 /**

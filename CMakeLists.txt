@@ -203,6 +203,7 @@ if(BUILD_ENGINE)
         src/assets/preview_cache.cpp
         src/assets/texture_cache.cpp
         src/engine/transform.cpp
+        src/engine/cpu_task_pool.cpp
         src/engine/component_factory_registry.cpp
         src/engine/scene_document.cpp
         src/engine/scene_runtime.cpp
@@ -403,8 +404,10 @@ if(QUARK_BUILD_TESTS)
         tests/test_light_registry.cpp
         tests/test_scene_document.cpp
         tests/test_direct_texture.cpp
+        tests/test_cpu_task_pool.cpp
         src/component.cpp
         src/editable_mesh.cpp
+        src/engine/cpu_task_pool.cpp
         src/engine/scene_document.cpp
         src/engine/material_texture_restore.cpp
         src/engine/transform.cpp
@@ -572,6 +575,30 @@ if(BUILD_PLUGIN)
         )
         set_target_properties(SceneDiagnostics PROPERTIES
             PREFIX ""
+            BUILD_RPATH "$ORIGIN/.."
+            INSTALL_RPATH "$ORIGIN/.."
+        )
+    endif()
+endif()
+
+if(BUILD_ENGINE)
+    add_library(ThreadMonitor SHARED
+        plugins/ThreadMonitor/plugin.cpp
+    )
+
+    target_include_directories(ThreadMonitor PRIVATE
+        ${CMAKE_SOURCE_DIR}/include
+    )
+
+    set_target_properties(ThreadMonitor PROPERTIES
+        PREFIX ""
+        RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/bin/$<CONFIG>/plugins
+        LIBRARY_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/bin/$<CONFIG>/plugins
+        ARCHIVE_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/bin/$<CONFIG>/plugins
+    )
+
+    if(UNIX)
+        set_target_properties(ThreadMonitor PROPERTIES
             BUILD_RPATH "$ORIGIN/.."
             INSTALL_RPATH "$ORIGIN/.."
         )

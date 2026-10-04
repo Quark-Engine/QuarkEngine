@@ -9,6 +9,7 @@
 #include "editor/editor_preferences.h"
 #include "editor/editor_state.h"
 #include "engine/component_factory_registry.h"
+#include "engine/cpu_task_pool.h"
 #include "engine/scene_document.h"
 #include "lighting.h"
 #include "scene.h"
@@ -19,6 +20,8 @@
 #include <optional>
 #include <stack>
 #include <string>
+#include <utility>
+#include <vector>
 
 class CFlyCamera;
 class CPluginManager;
@@ -80,7 +83,11 @@ public:
 
     std::filesystem::path m_CurrentAssetPath;
 
+    CTaskPool m_CpuTaskPool;
     std::future<quark::SParsedSceneDocument> m_HistoryRestoreFuture;
+    std::optional<quark::SParsedSceneDocument> m_PendingParsedSceneDocument;
+    std::vector<std::pair<size_t, std::future<SEditableMeshBuildData>>> m_vPendingGeometryFutures;
+    std::vector<std::optional<SEditableMeshBuildData>> m_vPendingGeometryResults;
     std::optional<quark::SSceneSnapshot> m_PendingHistorySnapshot;
     std::optional<quark::SSceneSnapshot> m_PendingCurrentSnapshot;
     bool m_PendingHistoryIsUndo = false;

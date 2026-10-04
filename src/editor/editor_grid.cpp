@@ -23,21 +23,21 @@ float EvaluateAtGround(const Plane& plane, float x, float z)
         - plane.normal.y*plane.point.y + plane.offset;
 }
 
-void ClipPolygon(const Plane& plane, std::vector<qc::Vec2>& polygon)
+void ClipPolygon(const Plane& plane, std::vector<qc::Vec2>& vPolygon)
 {
-    if (polygon.empty())
+    if (vPolygon.empty())
     {
         return;
     }
 
-    std::vector<qc::Vec2> clipped;
-    clipped.reserve(polygon.size() + 4);
+    std::vector<qc::Vec2> vClipped;
+    vClipped.reserve(vPolygon.size() + 4);
 
-    qc::Vec2 last = polygon.back();
+    qc::Vec2 last = vPolygon.back();
     float previousDistance = EvaluateAtGround(plane, last.x, last.y);
     bool previousInside = previousDistance >= 0.0f;
 
-    for (const qc::Vec2& current : polygon)
+    for (const qc::Vec2& current : vPolygon)
     {
         const float currentDistance = EvaluateAtGround(plane, current.x, current.y);
         const bool currentInside = currentDistance >= 0.0f;
@@ -48,7 +48,7 @@ void ClipPolygon(const Plane& plane, std::vector<qc::Vec2>& polygon)
             if (std::fabs(denominator) > kPlaneEpsilon)
             {
                 const float t = previousDistance / denominator;
-                clipped.push_back({
+                vClipped.push_back({
                     last.x + (current.x - last.x)*t,
                     last.y + (current.y - last.y)*t
                 });
@@ -57,7 +57,7 @@ void ClipPolygon(const Plane& plane, std::vector<qc::Vec2>& polygon)
 
         if (currentInside)
         {
-            clipped.push_back(current);
+            vClipped.push_back(current);
         }
 
         last = current;
@@ -65,7 +65,7 @@ void ClipPolygon(const Plane& plane, std::vector<qc::Vec2>& polygon)
         previousInside = currentInside;
     }
 
-    polygon.swap(clipped);
+    vPolygon.swap(vClipped);
 }
 
 Plane MakeSidePlane(const qc::Vec3& eye, const qc::Vec3& first, const qc::Vec3& second)
@@ -122,7 +122,7 @@ void CInfiniteGrid::Draw(const qc::Camera3D& camera, int viewportWidth, int view
     const qc::Vec3 rayTopRight = rayDirection(1.0f, 1.0f);
     const qc::Vec3 rayTopLeft = rayDirection(-1.0f, 1.0f);
 
-    std::vector<Plane> planes =
+    std::vector<Plane> vPlanes =
     {
         MakeSidePlane(camera.position, rayBottomLeft, rayTopLeft),
         MakeSidePlane(camera.position, rayBottomRight, rayTopRight),
@@ -132,7 +132,7 @@ void CInfiniteGrid::Draw(const qc::Camera3D& camera, int viewportWidth, int view
     };
 
     const qc::Vec3 viewCentre = camera.position + forward;
-    for (Plane& plane : planes)
+    for (Plane& plane : vPlanes)
     {
         const float side = plane.normal.dot(viewCentre - plane.point) + plane.offset;
         if (side < 0.0f)
@@ -144,7 +144,7 @@ void CInfiniteGrid::Draw(const qc::Camera3D& camera, int viewportWidth, int view
     const float centerX = std::floor(camera.position.x / spacing) * spacing;
     const float centerZ = std::floor(camera.position.z / spacing) * spacing;
 
-    std::vector<qc::Vec2> polygon =
+    std::vector<qc::Vec2> vPolygon =
     {
         { centerX - maxExtent, centerZ - maxExtent },
         { centerX + maxExtent, centerZ - maxExtent },
@@ -152,21 +152,21 @@ void CInfiniteGrid::Draw(const qc::Camera3D& camera, int viewportWidth, int view
         { centerX - maxExtent, centerZ + maxExtent }
     };
 
-    for (const Plane& plane : planes)
+    for (const Plane& plane : vPlanes)
     {
-        ClipPolygon(plane, polygon);
+        ClipPolygon(plane, vPolygon);
     }
 
-    if (polygon.size() < 3)
+    if (vPolygon.size() < 3)
     {
         return;
     }
 
-    float minX = polygon.front().x;
+    float minX = vPolygon.front().x;
     float maxX = minX;
-    float minZ = polygon.front().y;
+    float minZ = vPolygon.front().y;
     float maxZ = minZ;
-    for (const qc::Vec2& vertex : polygon)
+    for (const qc::Vec2& vertex : vPolygon)
     {
         minX = std::fmin(minX, vertex.x);
         maxX = std::fmax(maxX, vertex.x);

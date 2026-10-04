@@ -14,6 +14,7 @@
 #include "tex.h"
 #include "engine/transform.h"
 #include <cfloat>
+#include <chrono>
 #include <iostream>
 #include <SDL3/SDL_video.h>
 
@@ -347,6 +348,8 @@ void CApplication::UpdateFrame()
 
 void CApplication::RenderFrame()
 {
+    m_Editor.m_CpuTaskPool.SetMainThreadTask("Render editor and submit GPU work");
+    const auto renderStart = CTaskPool::CurrentThreadCpuTime();
     BeginDrawing();
         ClearBackground(DARKGRAY);
 
@@ -568,6 +571,9 @@ void CApplication::RenderFrame()
         }
 
         QcImGuiEnd();
+        m_Editor.m_CpuTaskPool.RecordMainThreadBusy(
+            CTaskPool::CurrentThreadCpuTime() - renderStart);
+        m_Editor.m_CpuTaskPool.SetMainThreadTask("");
     EndDrawing();
 }
 
@@ -578,10 +584,21 @@ void CApplication::Run()
         return;
     }
 
+    auto lastUsageSample = std::chrono::steady_clock::now();
     while (!WindowShouldClose())
     {
+        m_Editor.m_CpuTaskPool.SetMainThreadTask("Update editor and scene");
+        const auto frameStart = CTaskPool::CurrentThreadCpuTime();
         UpdateFrame();
+        m_Editor.m_CpuTaskPool.RecordMainThreadBusy(
+            CTaskPool::CurrentThreadCpuTime() - frameStart);
+        m_Editor.m_CpuTaskPool.SetMainThreadTask("");
         RenderFrame();
+
+        const auto sampleTime = std::chrono::steady_clock::now();
+        m_Editor.m_CpuTaskPool.SampleUsage(
+            std::chrono::duration_cast<std::chrono::nanoseconds>(sampleTime - lastUsageSample));
+        lastUsageSample = sampleTime;
     }
 }
 

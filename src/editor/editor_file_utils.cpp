@@ -74,21 +74,21 @@ bool CopyDirectory(const std::string& source, const std::string& destination)
 
 std::vector<std::string> GetDirectoryContents(const std::string& path)
 {
-    std::vector<std::string> contents;
+    std::vector<std::string> vContents;
     try
     {
-        if (!fs::exists(path) || !fs::is_directory(path)) return contents;
+        if (!fs::exists(path) || !fs::is_directory(path)) return vContents;
         
         for (const auto& entry : fs::directory_iterator(path))
         {
-            contents.push_back(entry.path().string());
+            vContents.push_back(entry.path().string());
         }
     }
     catch (...)
     {
     }
     
-    return contents;
+    return vContents;
 }
 
 bool IsDirectory(const std::string& path)

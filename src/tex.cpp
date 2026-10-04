@@ -304,10 +304,10 @@ void CEntityTextureService::StoreUV(CEntity* pEntity)
             continue;
         }
 
-        std::vector<float> uv(mesh.vertexCount * 2);
-        memcpy(uv.data(), mesh.texcoords, uv.size() * sizeof(float));
+        std::vector<float> vUv(mesh.vertexCount * 2);
+        memcpy(vUv.data(), mesh.texcoords, vUv.size() * sizeof(float));
 
-        pMatComponent->m_vOriginalTexcoords.push_back(uv);
+        pMatComponent->m_vOriginalTexcoords.push_back(vUv);
     }
 
     pMeshComponent->m_UvDirty = true;

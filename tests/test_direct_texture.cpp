@@ -25,11 +25,11 @@ qc::Texture2D FakeTexture(unsigned int id)
 
 std::vector<STextureOption> MakeTextureLibrary()
 {
-    std::vector<STextureOption> library;
-    library.push_back({ "None", {0} });
-    library.push_back({ "brick.png", FakeTexture(11) });
-    library.push_back({ "textures/rust.png", FakeTexture(22) });
-    return library;
+    std::vector<STextureOption> vLibrary;
+    vLibrary.push_back({ "None", {0} });
+    vLibrary.push_back({ "brick.png", FakeTexture(11) });
+    vLibrary.push_back({ "textures/rust.png", FakeTexture(22) });
+    return vLibrary;
 }
 
 int AddEntity(CScene& target, const std::string& name, int parentId = -1)
@@ -265,9 +265,9 @@ TEST(DirectTexture, undo_restores_the_name_so_the_runtime_can_rebind_the_handle)
     }
     CHECK_MSG(pMaterial->m_Texture.id == 0, "a gpu handle leaked into the serialized snapshot");
 
-    const std::vector<STextureOption> library = MakeTextureLibrary();
+    const std::vector<STextureOption> vLibrary = MakeTextureLibrary();
     const quark::SMaterialTextureRestore restore =
-        quark::PlanMaterialTextureRestore(*pMaterial, library);
+        quark::PlanMaterialTextureRestore(*pMaterial, vLibrary);
     CHECK(restore.Action == quark::EMaterialTextureRestore::DirectTexture);
     CHECK(restore.DirectTexture.id == 11);
 }
@@ -288,9 +288,9 @@ TEST(DirectTexture, plan_rebinds_the_direct_texture_from_the_asset_library)
         return;
     }
 
-    const std::vector<STextureOption> library = MakeTextureLibrary();
+    const std::vector<STextureOption> vLibrary = MakeTextureLibrary();
     const quark::SMaterialTextureRestore restore =
-        quark::PlanMaterialTextureRestore(*pMaterial, library);
+        quark::PlanMaterialTextureRestore(*pMaterial, vLibrary);
     CHECK(restore.Action == quark::EMaterialTextureRestore::DirectTexture);
     CHECK(restore.DirectTexture.id == 22);
 }
@@ -302,8 +302,8 @@ TEST(DirectTexture, plan_never_replaces_a_direct_texture_with_a_material_file)
     material.m_TextureName = "materials/crate.mtl";
     material.m_TextureSource = TEXTURE_EXTERNAL;
 
-    const std::vector<STextureOption> library = MakeTextureLibrary();
-    const quark::SMaterialTextureRestore restore = quark::PlanMaterialTextureRestore(material, library);
+    const std::vector<STextureOption> vLibrary = MakeTextureLibrary();
+    const quark::SMaterialTextureRestore restore = quark::PlanMaterialTextureRestore(material, vLibrary);
     CHECK_MSG(restore.Action == quark::EMaterialTextureRestore::DirectTexture,
         "the material file overrode the direct texture");
     CHECK(restore.DirectTexture.id == 11);
@@ -316,8 +316,8 @@ TEST(DirectTexture, plan_keeps_an_unresolved_direct_texture_instead_of_loading_a
     material.m_TextureName = "materials/crate.mtl";
     material.m_TextureSource = TEXTURE_EXTERNAL;
 
-    const std::vector<STextureOption> library = MakeTextureLibrary();
-    const quark::SMaterialTextureRestore restore = quark::PlanMaterialTextureRestore(material, library);
+    const std::vector<STextureOption> vLibrary = MakeTextureLibrary();
+    const quark::SMaterialTextureRestore restore = quark::PlanMaterialTextureRestore(material, vLibrary);
     CHECK_MSG(restore.Action == quark::EMaterialTextureRestore::None,
         "an unresolved direct texture fell back to another texture source");
     CHECK(material.m_AlbedoTextureName == "deleted.png");
@@ -329,8 +329,8 @@ TEST(DirectTexture, plan_falls_back_to_the_material_file_without_a_direct_textur
     material.m_TextureName = "materials/crate.mtl";
     material.m_TextureSource = TEXTURE_EXTERNAL;
 
-    const std::vector<STextureOption> library = MakeTextureLibrary();
-    const quark::SMaterialTextureRestore restore = quark::PlanMaterialTextureRestore(material, library);
+    const std::vector<STextureOption> vLibrary = MakeTextureLibrary();
+    const quark::SMaterialTextureRestore restore = quark::PlanMaterialTextureRestore(material, vLibrary);
     CHECK(restore.Action == quark::EMaterialTextureRestore::MaterialFile);
 }
 
@@ -357,8 +357,8 @@ TEST(DirectTexture, plan_restores_the_model_textures_for_a_model_sourced_materia
     CMaterialComponent material;
     material.m_TextureSource = TEXTURE_MODEL;
 
-    const std::vector<STextureOption> library = MakeTextureLibrary();
-    const quark::SMaterialTextureRestore restore = quark::PlanMaterialTextureRestore(material, library);
+    const std::vector<STextureOption> vLibrary = MakeTextureLibrary();
+    const quark::SMaterialTextureRestore restore = quark::PlanMaterialTextureRestore(material, vLibrary);
     CHECK(restore.Action == quark::EMaterialTextureRestore::ModelTextures);
 }
 
@@ -367,8 +367,8 @@ TEST(DirectTexture, plan_clears_textures_when_the_material_has_no_source)
     CMaterialComponent material;
     material.m_TextureSource = TEXTURE_NONE;
 
-    const std::vector<STextureOption> library = MakeTextureLibrary();
-    const quark::SMaterialTextureRestore restore = quark::PlanMaterialTextureRestore(material, library);
+    const std::vector<STextureOption> vLibrary = MakeTextureLibrary();
+    const quark::SMaterialTextureRestore restore = quark::PlanMaterialTextureRestore(material, vLibrary);
     CHECK(restore.Action == quark::EMaterialTextureRestore::ClearTextures);
 }
 
@@ -377,8 +377,8 @@ TEST(DirectTexture, plan_ignores_the_none_placeholder_of_the_asset_library)
     CMaterialComponent material;
     material.m_AlbedoTextureName = "None";
 
-    const std::vector<STextureOption> library = MakeTextureLibrary();
-    const quark::SMaterialTextureRestore restore = quark::PlanMaterialTextureRestore(material, library);
+    const std::vector<STextureOption> vLibrary = MakeTextureLibrary();
+    const quark::SMaterialTextureRestore restore = quark::PlanMaterialTextureRestore(material, vLibrary);
     CHECK_MSG(restore.Action == quark::EMaterialTextureRestore::DirectTexture,
         "the placeholder entry was skipped, so the texture could not be rebound");
     CHECK_MSG(restore.DirectTexture.id == 0, "the placeholder entry must not bind a gpu handle");
@@ -393,8 +393,8 @@ TEST(DirectTexture, plan_leaves_other_texture_names_untouched)
     material.m_AlbedoTextureName = "brick.png";
     material.m_TextureSource = TEXTURE_EXTERNAL;
 
-    const std::vector<STextureOption> library = MakeTextureLibrary();
-    const quark::SMaterialTextureRestore restore = quark::PlanMaterialTextureRestore(material, library);
+    const std::vector<STextureOption> vLibrary = MakeTextureLibrary();
+    const quark::SMaterialTextureRestore restore = quark::PlanMaterialTextureRestore(material, vLibrary);
     CHECK(restore.Action == quark::EMaterialTextureRestore::DirectTexture);
     CHECK(material.m_NormalTextureName == "brick_n.png");
     CHECK(material.m_RoughnessTextureName == "brick_r.png");

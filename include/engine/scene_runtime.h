@@ -5,6 +5,9 @@
 #include "../lighting.h"
 #include "../scene.h"
 
+#include <optional>
+#include <vector>
+
 namespace quark
 {
 
@@ -14,7 +17,8 @@ public:
     static void RestoreEntityMaterial(CEntity& entity, const CAssetLibrary& assets);
 
     static void RestoreSceneEntityModels(CScene& scene, CAssetLibrary& assets,
-        CScene* pPreviousScene = nullptr);
+        CScene* pPreviousScene = nullptr,
+        const std::vector<std::optional<SEditableMeshBuildData>>* pvEditableMeshBuildData = nullptr);
 
     static void ResetSceneLightRuntime(CScene& scene, CLightRegistry& lights);
 };

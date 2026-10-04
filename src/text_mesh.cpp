@@ -30,7 +30,7 @@ struct SFTContour
 
 struct SFTOutlineCtx
 {
-    std::vector<SFTContour> Contours;
+    std::vector<SFTContour> vContours;
     qc::Vector2 Current = {0, 0};
     float Scale = 1.0f;
 };
@@ -260,9 +260,9 @@ static int FtMoveTo(const FT_Vector* pTo, void* pUser)
 {
     SFTOutlineCtx* pCtx = (SFTOutlineCtx*)pUser;
 
-    pCtx->Contours.push_back({});
+    pCtx->vContours.push_back({});
     pCtx->Current = { (float)pTo->x * pCtx->Scale, (float)pTo->y * pCtx->Scale };
-    pCtx->Contours.back().vPoints.push_back(pCtx->Current);
+    pCtx->vContours.back().vPoints.push_back(pCtx->Current);
 
     return 0;
 }
@@ -273,9 +273,9 @@ static int FtLineTo(const FT_Vector* pTo, void* pUser)
 
     pCtx->Current = { (float)pTo->x * pCtx->Scale, (float)pTo->y * pCtx->Scale };
     
-    if (!pCtx->Contours.empty())
+    if (!pCtx->vContours.empty())
     {
-        pCtx->Contours.back().vPoints.push_back(pCtx->Current);
+        pCtx->vContours.back().vPoints.push_back(pCtx->Current);
     }
 
     return 0;
@@ -284,12 +284,12 @@ static int FtLineTo(const FT_Vector* pTo, void* pUser)
 static int FtConicTo(const FT_Vector* pCtrl, const FT_Vector* pTo, void* pUser)
 {
     SFTOutlineCtx* pCtx = (SFTOutlineCtx*)pUser;
-    if (pCtx->Contours.empty()) return 0;
+    if (pCtx->vContours.empty()) return 0;
 
     qc::Vector2 point1 = { (float)pCtrl->x * pCtx->Scale, (float)pCtrl->y * pCtx->Scale };
     qc::Vector2 point2 = { (float)pTo->x * pCtx->Scale, (float)pTo->y * pCtx->Scale };
 
-    PushQuadBezier(pCtx->Contours.back().vPoints, pCtx->Current, point1, point2);
+    PushQuadBezier(pCtx->vContours.back().vPoints, pCtx->Current, point1, point2);
     pCtx->Current = point2;
 
     return 0;
@@ -298,13 +298,13 @@ static int FtConicTo(const FT_Vector* pCtrl, const FT_Vector* pTo, void* pUser)
 static int FtCubicTo(const FT_Vector* pC1, const FT_Vector* pC2, const FT_Vector* pTo, void* pUser)
 {
     auto* pCtx = (SFTOutlineCtx*)pUser;
-    if (pCtx->Contours.empty()) return 0;
+    if (pCtx->vContours.empty()) return 0;
 
     qc::Vector2 point1 = { (float)pC1->x * pCtx->Scale, (float)pC1->y * pCtx->Scale };
     qc::Vector2 point2 = { (float)pC2->x * pCtx->Scale, (float)pC2->y * pCtx->Scale };
     qc::Vector2 point3 = { (float)pTo->x * pCtx->Scale, (float)pTo->y * pCtx->Scale };
     
-    PushCubicBezier(pCtx->Contours.back().vPoints, pCtx->Current, point1, point2, point3);
+    PushCubicBezier(pCtx->vContours.back().vPoints, pCtx->Current, point1, point2, point3);
     pCtx->Current = point3;
 
     return 0;
@@ -450,13 +450,13 @@ qc::Model CFreetypeTextMesh::Generate(const std::string& text, float size, float
         outlineCtx.Scale = scale;
         FT_Outline_Decompose(&pSlot->outline, &s_FtOutlineFuncs, &outlineCtx);
 
-        for (auto& contour : outlineCtx.Contours)
+        for (auto& contour : outlineCtx.vContours)
         {
             for (auto& point : contour.vPoints)
                 point.x += cursorX;
         }
 
-        for (auto& contour : outlineCtx.Contours)
+        for (auto& contour : outlineCtx.vContours)
         {
             if (contour.vPoints.size() < 3) continue;
             float area = PolygonSignedArea(contour.vPoints);

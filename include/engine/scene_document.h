@@ -2,6 +2,7 @@
 #define __ENGINE_SCENE_DOCUMENT_H__
 #include "../entity.h"
 #include "../scene.h"
+#include "../editable_mesh.h"
 #include "component_factory_registry.h"
 #include "nlohmann/json.hpp"
 #include <string>
@@ -20,6 +21,12 @@ struct SSceneSnapshot
 struct SParsedSceneDocument
 {
     nlohmann::json Document;
+    struct SEditableMeshSnapshot
+    {
+        size_t EntityIndex = 0;
+        CEditableMesh Mesh;
+    };
+    std::vector<SEditableMeshSnapshot> vEditableMeshes;
     bool IsValid = false;
 };
 

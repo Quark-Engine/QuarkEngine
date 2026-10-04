@@ -2,8 +2,10 @@
 #define __APPLICATION_PLUGIN_BRIDGE_H__
 
 #include "plugins/plugin_manager.h"
+#include "engine/cpu_task_pool.h"
 
 #include <memory>
+#include <vector>
 
 class CEditor;
 class CFlyCamera;
@@ -27,6 +29,8 @@ private:
     void SyncContext(CEditor& editor, CPluginManager& pluginManager);
 
     std::unique_ptr<SPluginContext> m_pContext;
+    std::vector<SThreadUsageSnapshot> m_vThreadUsageSnapshots;
+    std::vector<SPluginThreadUsage> m_vPluginThreadUsage;
     CFlyCamera* m_pCamera = nullptr;
 };
 

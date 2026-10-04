@@ -76,6 +76,12 @@ void AssignUiCallbacks(SPluginContext* pCtx)
     {
         ImGui::SameLine();
     };
+    pCtx->pfnUiPlotLines = [](const char* pLabel, const float* pValues,
+                              int valueCount, float minimum, float maximum)
+    {
+        ImGui::PlotLines(pLabel, pValues, valueCount, 0, nullptr,
+            minimum, maximum, ImVec2(0.0f, 60.0f));
+    };
 }
 
 bool RegisterComponentFactoryForPlugins(SPluginContext* pCtx, const char* pTypeName, FPluginComponentFactory create)
@@ -741,6 +747,24 @@ void CPluginBridge::SyncContext(CEditor& editor, CPluginManager& pluginManager)
     ctx.pSelected    = &scene.m_Selected;
     ctx.pAssets      = &editor.m_Assets;
     ctx.pProjectPath = editor.m_ProjectPath.c_str();
+
+    m_vThreadUsageSnapshots = editor.m_CpuTaskPool.GetThreadUsageSnapshot();
+    m_vPluginThreadUsage.clear();
+    m_vPluginThreadUsage.reserve(m_vThreadUsageSnapshots.size());
+    for (const SThreadUsageSnapshot& snapshot : m_vThreadUsageSnapshots)
+    {
+        m_vPluginThreadUsage.push_back({
+            snapshot.name.c_str(),
+            snapshot.currentTask.empty() ? nullptr : snapshot.currentTask.c_str(),
+            snapshot.utilizationPercent,
+            snapshot.vHistory.empty() ? nullptr : snapshot.vHistory.data(),
+            static_cast<int>(snapshot.vHistory.size())
+        });
+    }
+    ctx.pThreadUsages = m_vPluginThreadUsage.empty()
+        ? nullptr
+        : m_vPluginThreadUsage.data();
+    ctx.threadUsageCount = static_cast<int>(m_vPluginThreadUsage.size());
 
     AssignUiCallbacks(&ctx);
     AssignEntityAndSceneCallbacks(&ctx);

@@ -69,10 +69,12 @@ void CSceneRuntime::RestoreEntityMaterial(CEntity& entity, const CAssetLibrary& 
 }
 
 void CSceneRuntime::RestoreSceneEntityModels(CScene& scene, CAssetLibrary& assets,
-    CScene* pPreviousScene)
+    CScene* pPreviousScene,
+    const std::vector<std::optional<SEditableMeshBuildData>>* pvEditableMeshBuildData)
 {
-    for (auto& entity : scene.m_vEntities)
+    for (size_t entityIndex = 0; entityIndex < scene.m_vEntities.size(); ++entityIndex)
     {
+        CEntity& entity = scene.m_vEntities[entityIndex];
         CMeshComponent* pMesh = entity.GetMeshComponent();
         if (!pMesh)
         {
@@ -130,7 +132,15 @@ void CSceneRuntime::RestoreSceneEntityModels(CScene& scene, CAssetLibrary& asset
         if ((pMesh->m_IsEditableMesh || pMesh->m_VertexGizmo) && !pMesh->m_EditableMesh.m_vVertices.empty())
         {
             pMesh->m_Model = {};
-            RebuildMeshFromEditable(pMesh->m_Model, pMesh->m_EditableMesh);
+            if (pvEditableMeshBuildData && entityIndex < pvEditableMeshBuildData->size() &&
+                (*pvEditableMeshBuildData)[entityIndex])
+            {
+                UploadEditableMeshData(pMesh->m_Model, *(*pvEditableMeshBuildData)[entityIndex]);
+            }
+            else
+            {
+                RebuildMeshFromEditable(pMesh->m_Model, pMesh->m_EditableMesh);
+            }
             pMesh->m_OwnsModelInstance = true;
             CEntityTextureService::StoreUV(&entity);
             CEntityTextureService::StoreMaterialTextures(&entity);

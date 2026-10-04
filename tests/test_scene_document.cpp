@@ -80,6 +80,10 @@ TEST(CSceneDocumentParse, rejects_invalid_documents)
 {
     CHECK(!quark::CSceneDocument::Parse("not json").IsValid);
     CHECK(!quark::CSceneDocument::Parse("{\"version\":\"1\"}").IsValid);
+    CHECK(!quark::CSceneDocument::Parse(
+        "{\"entities\":[{\"components\":{}}]}").IsValid);
+    CHECK(!quark::CSceneDocument::Parse(
+        "{\"entities\":[{\"tags\":[1]}]}").IsValid);
 }
 
 TEST(SceneSnapshot, round_trips_entity_identity_and_hierarchy)
@@ -259,8 +263,19 @@ TEST(SceneSnapshot, round_trips_editable_mesh_vertices)
     pMesh->m_EditableMesh.m_vVertices.push_back(vertex);
     pMesh->m_EditableMesh.m_vTriangles.push_back({ 0, 0, 0 });
 
+    const std::string document = quark::CSceneDocument::Serialize(source);
+    const quark::SParsedSceneDocument parsed = quark::CSceneDocument::Parse(document);
+    CHECK(parsed.IsValid);
+    CHECK(parsed.vEditableMeshes.size() == 1);
+    if (!parsed.vEditableMeshes.empty())
+    {
+        CHECK(parsed.vEditableMeshes[0].EntityIndex == static_cast<size_t>(index));
+        CHECK(parsed.vEditableMeshes[0].Mesh.m_vVertices.size() == 1);
+        CHECK(parsed.vEditableMeshes[0].Mesh.m_vTriangles.size() == 1);
+    }
+
     CScene restored;
-    CHECK(quark::CSceneDocument::Deserialize(quark::CSceneDocument::Serialize(source), restored, registry));
+    CHECK(quark::CSceneDocument::Deserialize(document, restored, registry));
 
     const CMeshComponent* pRestored = restored.m_vEntities[0].GetMeshComponent();
     CHECK(pRestored != nullptr);
@@ -709,21 +724,21 @@ TEST(ComponentFactory, IsBuiltIn_separates_reserved_type_names_from_registered_o
 TEST(ComponentFactory, TypeNames_lists_built_ins_and_registrations_in_a_stable_order)
 {
     CComponentFactoryRegistry registry;
-    const std::vector<std::string> builtIns = registry.TypeNames();
-    CHECK(builtIns.size() == 7);
-    CHECK(builtIns.front() == "3D Text");
-    CHECK(builtIns.back() == "Transform");
+    const std::vector<std::string> vBuiltIns = registry.TypeNames();
+    CHECK(vBuiltIns.size() == 7);
+    CHECK(vBuiltIns.front() == "3D Text");
+    CHECK(vBuiltIns.back() == "Transform");
 
     registry.Register(s_GaugeTypeName, []()
     {
         return std::make_shared<CTestGaugeComponent>();
     });
-    const std::vector<std::string> withGauge = registry.TypeNames();
-    CHECK(withGauge.size() == builtIns.size() + 1);
-    CHECK(std::is_sorted(withGauge.begin(), withGauge.end()));
+    const std::vector<std::string> vWithGauge = registry.TypeNames();
+    CHECK(vWithGauge.size() == vBuiltIns.size() + 1);
+    CHECK(std::is_sorted(vWithGauge.begin(), vWithGauge.end()));
 
     registry.Unregister(s_GaugeTypeName);
-    CHECK(registry.TypeNames() == builtIns);
+    CHECK(registry.TypeNames() == vBuiltIns);
 }
 
 TEST(ComponentFactory, separate_registries_do_not_share_registrations)

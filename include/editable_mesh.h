@@ -25,6 +25,17 @@ public:
     std::vector<SEditableTriangle> m_vTriangles;
 };
 
+struct SEditableMeshBuildData
+{
+    std::vector<float> vVertices;
+    std::vector<float> vNormals;
+    std::vector<float> vTexcoords;
+    std::vector<unsigned short> vIndices;
+    bool IsValid = true;
+};
+
+SEditableMeshBuildData BuildEditableMeshData(const CEditableMesh& editableMesh);
+void UploadEditableMeshData(qc::Model& model, const SEditableMeshBuildData& buildData);
 void RebuildMeshFromEditable(qc::Model& model, CEditableMesh& editableMesh);
 
 #endif // __EDITABLE_MESH_H__

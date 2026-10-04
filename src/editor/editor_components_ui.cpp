@@ -401,7 +401,7 @@ void CComponentUIHelper::DrawMeshComponent(CEditor& editor, CEntity& entity, CMe
 
             const Mesh& m = pMesh->m_Model.meshes[0];
 
-            std::vector<int> remap(m.vertexCount, -1);
+            std::vector<int> vRemap(m.vertexCount, -1);
             for (int i = 0; i < m.vertexCount; i++)
             {
                 Vec3 pos = {
@@ -410,7 +410,7 @@ void CComponentUIHelper::DrawMeshComponent(CEditor& editor, CEntity& entity, CMe
                     m.vertices[i*3+2]
                 };
 
-                remap[i] = (int)pMesh->m_EditableMesh.m_vVertices.size();
+                vRemap[i] = (int)pMesh->m_EditableMesh.m_vVertices.size();
                 SEditableVertex ev;
                 ev.Position = pos;
                 if (m.texcoords)
@@ -443,9 +443,9 @@ void CComponentUIHelper::DrawMeshComponent(CEditor& editor, CEntity& entity, CMe
                 }
 
                 SEditableTriangle tri;
-                tri.A = remap[ia];
-                tri.B = remap[ib];
-                tri.C = remap[ic];
+                tri.A = vRemap[ia];
+                tri.B = vRemap[ib];
+                tri.C = vRemap[ic];
 
                 if (tri.A == tri.B || tri.B == tri.C || tri.A == tri.C)
                 {
