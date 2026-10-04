@@ -1,50 +1,55 @@
 #ifndef __APPLICATION_H__
 #define __APPLICATION_H__
 #include "QuarkCore/QuarkCore.hpp"
-#include "editor/editor.h"
+#include "application_plugin_bridge.h"
+#include "application_scene_renderer.h"
 #include "camera.h"
 #include "command_line.h"
-#include <array>
+#include "editor/editor.h"
+#include "hub.h"
+#include "plugins/plugin_manager.h"
+
 #include <string>
 
-struct Application {
-    CommandLineOptions options;
+class CApplication
+{
+public:
+    explicit CApplication(const SCommandLineOptions& options);
+    ~CApplication();
 
-    Editor editor;
-    FlyCamera camera;
+    CApplication(const CApplication&) = delete;
+    CApplication& operator=(const CApplication&) = delete;
 
-    Shader lighting_shader{};
-    Shader shadow_shader{};
+    void Initialize();
 
-    int shadows_enabled_loc = -1;
-    int shadow_bias_loc = -1;
-    int shadow_filter_loc = -1;
-    int use_tex_loc = -1;
-    int ambient_loc = -1;
-    int emission_color_loc = -1;
-    int emission_power_loc = -1;
+    void Run();
 
-    std::array<RenderTexture2D, QC_MAX_LIGHTS> shadow_maps{};
-    std::array<Camera3D, QC_MAX_LIGHTS> shadow_cameras{};
-    std::array<int, QC_MAX_LIGHTS> light_view_locations{};
-    std::array<int, QC_MAX_LIGHTS> light_projection_locations{};
+    void Shutdown();
 
-    std::string project_path;
-    std::string active_font_language;
-    double last_autosave_time = 0.0;
-    int last_selected_entity = -1;
+    void Unload();
 
-    bool headless = false;
-    bool ready_to_run = false;
+private:
+    void UpdateFrame();
+    void RenderFrame();
 
-    explicit Application(const CommandLineOptions& options);
+    SCommandLineOptions m_Options;
 
-    void initialize();
-    void run();
-    void shutdown();
+    CEditor m_Editor;
+    CFlyCamera m_Camera;
+    CHubApp m_Hub;
 
-    void update_frame();
-    void render_frame();
+    CPluginManager m_PluginManager;
+    CPluginBridge m_PluginBridge;
+    CSceneRenderer m_SceneRenderer;
+
+    std::string m_ProjectPath;
+    std::string m_ActiveFontLanguage;
+    double m_LastAutosaveTime = 0.0;
+    int m_LastSelectedEntity = -1;
+
+    bool m_Headless = false;
+    bool m_ReadyToRun = false;
+    bool m_WindowOpen = false;
 };
 
 #endif // __APPLICATION_H__

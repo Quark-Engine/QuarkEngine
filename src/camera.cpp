@@ -5,98 +5,116 @@
 #include "editor/editor_preferences.h"
 #include "SDL3/SDL_mouse.h"
 
-namespace {
+using namespace qc;
 
-void set_camera_capture(bool enabled) {
-    if (SDL_Window* window = GetNativeWindow()) {
-        SDL_SetWindowRelativeMouseMode(window, enabled);
+namespace
+{
+
+void SetCameraCapture(bool enabled)
+{
+    if (SDL_Window* pWindow = GetNativeWindow())
+    {
+        SDL_SetWindowRelativeMouseMode(pWindow, enabled);
     }
 
-    if (enabled) DisableCursor();
-    else EnableCursor();
+    if (enabled)
+    {
+        DisableCursor();
+    }
+    else
+    {
+        EnableCursor();
+    }
 }
 
-} // namespace
+} // anonymous
 
-FlyCamera::FlyCamera() {
-    cam.position = {5.0f, 5.0f, 5.0f};
-    cam.target = {0.0f, 0.0f, 0.0f};
-    cam.up = {0.0f, 1.0f, 0.0f};
-    cam.fovy = 45.0f;
-    cam.projection = CAMERA_PERSPECTIVE;
+CFlyCamera::CFlyCamera()
+{
+    m_Cam.position = {5.0f, 5.0f, 5.0f};
+    m_Cam.target = {0.0f, 0.0f, 0.0f};
+    m_Cam.up = {0.0f, 1.0f, 0.0f};
+    m_Cam.fovy = 45.0f;
+    m_Cam.projection = CAMERA_PERSPECTIVE;
 
-    Vec3 dir = cam.target - cam.position;
-    yaw = atan2f(dir.x, dir.z);
-    pitch = asinf(dir.y / sqrtf(dir.x*dir.x + dir.y*dir.y + dir.z*dir.z));
+    Vec3 direction = m_Cam.target - m_Cam.position;
+    m_Yaw = atan2f(direction.x, direction.z);
+    m_Pitch = asinf(direction.y / sqrtf(direction.x*direction.x + direction.y*direction.y + direction.z*direction.z));
 }
 
-void FlyCamera::update(Scene& scene) {
-    if (!active && ImGuizmo::IsUsing())
+void CFlyCamera::Update(CScene& scene, CPreferences& preferences)
+{
+    if (!m_Active && ImGuizmo::IsUsing())
         return;
 
-    Entity* selected = scene.get_selected();
-    MeshComponent* sel_mesh = selected ? selected->get_mesh_component() : nullptr;
-    if (sel_mesh && sel_mesh->vertex_gizmo) return;
+    CEntity* pSelected = scene.GetSelected();
+    CMeshComponent* pSelectedMesh = pSelected ? pSelected->GetMeshComponent() : nullptr;
+    if (pSelectedMesh && pSelectedMesh->m_VertexGizmo) return;
 
     const float wheel = GetMouseWheelMove();
-    if (fabsf(wheel) > 0.001f) {
-        cam.fovy -= wheel * zoom_sensitivity;
-        if (cam.fovy < 20.0f) cam.fovy = 20.0f;
-        if (cam.fovy > 120.0f) cam.fovy = 120.0f;
-        g_editor_preferences.camera_fov = cam.fovy;
+    if (fabsf(wheel) > 0.001f)
+    {
+        m_Cam.fovy -= wheel * m_ZoomSensitivity;
+        if (m_Cam.fovy < 20.0f) m_Cam.fovy = 20.0f;
+        if (m_Cam.fovy > 120.0f) m_Cam.fovy = 120.0f;
+        preferences.m_CameraFov = m_Cam.fovy;
     }
 
     if (IsMouseButtonPressed(MouseButton::Left) &&
-        !ImGuizmo::IsOver() && !ImGui::IsAnyItemActive()) {
-        set_camera_capture(true);
-        active = true;
+        !ImGuizmo::IsOver() && !ImGui::IsAnyItemActive())
+    {
+        SetCameraCapture(true);
+        m_Active = true;
     }
 
-    if (IsKeyPressed(KeyboardKey::Escape) || !IsWindowFocused()) {
-        set_camera_capture(false);
-        active = false;
+    if (IsKeyPressed(KeyboardKey::Escape) || !IsWindowFocused())
+    {
+        SetCameraCapture(false);
+        m_Active = false;
     }
 
-    if (!active) return;
+    if (!m_Active) return;
 
     float dt = GetDeltaTime();
-    float rel_x = 0.0f;
-    float rel_y = 0.0f;
-    SDL_GetRelativeMouseState(&rel_x, &rel_y);
-    Vec2 md = { rel_x, rel_y };
-    if (fabs(md.x) > 100 || fabs(md.y) > 100) md = {0,0};
+    float relativeX = 0.0f;
+    float relativeY = 0.0f;
+    SDL_GetRelativeMouseState(&relativeX, &relativeY);
+    Vec2 mouseDelta = { relativeX, relativeY };
+    if (fabs(mouseDelta.x) > 100 || fabs(mouseDelta.y) > 100) mouseDelta = {0,0};
 
-    yaw   -= md.x * sensitivity;
-    pitch -= md.y * sensitivity;
+    m_Yaw   -= mouseDelta.x * m_Sensitivity;
+    m_Pitch -= mouseDelta.y * m_Sensitivity;
 
-    if (pitch > 1.5f) pitch = 1.5f;
-    if (pitch < -1.5f) pitch = -1.5f;
+    if (m_Pitch > 1.5f) m_Pitch = 1.5f;
+    if (m_Pitch < -1.5f) m_Pitch = -1.5f;
 
     Vec3 forward = {
-        cosf(pitch) * sinf(yaw),
-        sinf(pitch),
-        cosf(pitch) * cosf(yaw)
+        cosf(m_Pitch) * sinf(m_Yaw),
+        sinf(m_Pitch),
+        cosf(m_Pitch) * cosf(m_Yaw)
     };
 
     forward.normalized();
-    Vec3 right = { sinf(yaw - PI/2), 0, cosf(yaw - PI/2) };
-    if (IsKeyDown(KeyboardKey::W)) cam.position = cam.position + (forward * (speed * dt));
-    if (IsKeyDown(KeyboardKey::S)) cam.position = cam.position - (forward * (speed * dt));
-    if (IsKeyDown(KeyboardKey::A)) cam.position = cam.position - (right * (speed * dt));
-    if (IsKeyDown(KeyboardKey::D)) cam.position = cam.position + (right * (speed * dt));
+    Vec3 right = { sinf(m_Yaw - PI/2), 0, cosf(m_Yaw - PI/2) };
+    if (IsKeyDown(KeyboardKey::W)) m_Cam.position = m_Cam.position + (forward * (m_Speed * dt));
+    if (IsKeyDown(KeyboardKey::S)) m_Cam.position = m_Cam.position - (forward * (m_Speed * dt));
+    if (IsKeyDown(KeyboardKey::A)) m_Cam.position = m_Cam.position - (right * (m_Speed * dt));
+    if (IsKeyDown(KeyboardKey::D)) m_Cam.position = m_Cam.position + (right * (m_Speed * dt));
 
-    cam.target = cam.position + forward;
+    m_Cam.target = m_Cam.position + forward;
 }
 
-void FlyCamera::focus_on(const Vec3& point) {
-    cam.position = point + Vec3{5.0f, 5.0f, 5.0f};
-    cam.target = point;
+void CFlyCamera::FocusOn(const Vec3& point)
+{
+    m_Cam.position = point + Vec3{5.0f, 5.0f, 5.0f};
+    m_Cam.target = point;
 
-    Vec3 dir = cam.target - cam.position;
-    yaw = atan2f(dir.x, dir.z);
-    pitch = asinf(dir.y / sqrtf(dir.x * dir.x + dir.y * dir.y + dir.z * dir.z));
+    Vec3 direction = m_Cam.target - m_Cam.position;
+    m_Yaw = atan2f(direction.x, direction.z);
+    m_Pitch = asinf(direction.y / sqrtf(direction.x * direction.x + direction.y * direction.y + direction.z * direction.z));
 }
 
-Camera3D& FlyCamera::get_camera() {
-    return cam;
+Camera3D& CFlyCamera::GetCamera()
+{
+    return m_Cam;
 }

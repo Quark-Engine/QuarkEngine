@@ -1,19 +1,28 @@
 #ifndef __EDITOR_ENTITY_H__
 #define __EDITOR_ENTITY_H__
 
-#include <filesystem>
-#include "scene.h"
+#include "assets/asset_library.h"
+#include "engine/component_factory_registry.h"
 #include "entity.h"
+#include "scene.h"
+
+#include <filesystem>
 
 namespace fs = std::filesystem;
 
-Entity make_entity_from_asset(Scene& scene, ModelAsset& asset);
+class CEntityFactory
+{
+public:
+    static CEntity FromAsset(CScene& scene, CModelAsset& asset);
 
-Entity make_light_entity(Scene& scene, int parent_index);
+    static CEntity Light(CScene& scene, int parentIndex);
 
-void assign_entity_name(Entity& entity, const char* new_name);
+    static void AssignName(CEntity& entity, const char* pNewName);
 
-void make_prefab(Entity entity, const fs::path path);
-Entity make_entity_from_prefab(Scene& scene, const fs::path filename);
+    static void SavePrefab(CEntity entity, const fs::path path);
+
+    static CEntity FromPrefab(CScene& scene, const CAssetLibrary& assets, const fs::path filename,
+                              const CComponentFactoryRegistry& factories);
+};
 
 #endif // __EDITOR_ENTITY_H__

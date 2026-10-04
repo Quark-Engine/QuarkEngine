@@ -2,13 +2,21 @@
 #define __PROJECT_H__
 #include <string>
 #include "scene.h"
+#include "assets/asset_library.h"
+#include "engine/component_factory_registry.h"
+#include "lighting.h"
 
-void project_new(const std::string& folder_path, Scene& scene);
-void project_save(const std::string& folder_path, const Scene& scene);
-void project_save_scene(const std::string& scene_file_path, const Scene& scene);
-bool project_load(const std::string& folder_path, Scene& scene, Shader shader);
-std::string project_resolve_root(const std::string& path);
-std::string get_project_version(const std::string& path);
-bool project_is_valid(const std::string& path);
+class CProjectService
+{
+public:
+    static std::string ResolveRoot(const std::string& path);
+    static std::string GetVersion(const std::string& path);
+    static bool IsValid(const std::string& path);
+    static void CreateNew(const std::string& folderPath, CScene& scene);
+    static void Save(const std::string& folderPath, const CScene& scene);
+    static void SaveScene(const std::string& sceneFilePath, const CScene& scene);
+    static bool Load(const std::string& folderPath, CScene& scene, CAssetLibrary& assets,
+                     CLightRegistry& lights, const CComponentFactoryRegistry& factories);
+};
 
 #endif // __PROJECT_H__

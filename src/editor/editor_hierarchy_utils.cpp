@@ -1,65 +1,75 @@
 #include "editor/editor_hierarchy_utils.h"
+using namespace qc;
 #include "imgui.h"
 #include <algorithm>
 #include <cmath>
 
-static Mat4 compose_local_transform(const Entity& entity) {
-    const TransformComponent* transform = entity.get_transform_component();
-    if (!transform) return Mat4::identity();
+static Mat4 ComposeLocalTransform(const CEntity& entity) 
+{
+    const CTransformComponent* pTransform = entity.GetTransformComponent();
+    if (!pTransform) 
+    {
+        return Mat4::identity();
+    }
 
-    return Mat4::translation(transform->position.x, transform->position.y, transform->position.z) *
-        Mat4::rotationX(transform->rotation.x * DEG2RAD) *
-        Mat4::rotationY(transform->rotation.y * DEG2RAD) *
-        Mat4::rotationZ(transform->rotation.z * DEG2RAD) *
-        Mat4::scale(transform->scale.x, transform->scale.y, transform->scale.z);
+    return Mat4::translation(pTransform->m_Position.x, pTransform->m_Position.y, pTransform->m_Position.z) *
+        Mat4::rotationX(pTransform->m_Rotation.x * DEG2RAD) *
+        Mat4::rotationY(pTransform->m_Rotation.y * DEG2RAD) *
+        Mat4::rotationZ(pTransform->m_Rotation.z * DEG2RAD) *
+        Mat4::scale(pTransform->m_Scale.x, pTransform->m_Scale.y, pTransform->m_Scale.z);
 }
 
-static Mat4 compose_world_transform(const Scene& scene, int entity_index, std::vector<int>& stack) {
-    if (entity_index < 0 || entity_index >= static_cast<int>(scene.entities.size())) return Mat4::identity();
-    if (std::find(stack.begin(), stack.end(), entity_index) != stack.end())
-        return compose_local_transform(scene.entities[entity_index]);
+static Mat4 ComposeWorldTransform(const CScene& scene, int entityIndex, std::vector<int>& vStack)
+{
+    if (entityIndex < 0 || entityIndex >= static_cast<int>(scene.m_vEntities.size()))
+    {
+        return Mat4::identity();
+    }
 
-    stack.push_back(entity_index);
-    const Entity& entity = scene.entities[entity_index];
-    Mat4 world = compose_local_transform(entity);
-    if (entity.parent_id >= 0 && entity.parent_id < static_cast<int>(scene.entities.size()))
-        world = compose_world_transform(scene, entity.parent_id, stack) * world;
-    stack.pop_back();
+    if (std::find(vStack.begin(), vStack.end(), entityIndex) != vStack.end())
+    {
+        return ComposeLocalTransform(scene.m_vEntities[entityIndex]);
+    }
+
+    vStack.push_back(entityIndex);
+    const CEntity& entity = scene.m_vEntities[entityIndex];
+    Mat4 world = ComposeLocalTransform(entity);
+    if (entity.m_ParentId >= 0 && entity.m_ParentId < static_cast<int>(scene.m_vEntities.size()))
+    {
+        world = ComposeWorldTransform(scene, entity.m_ParentId, vStack) * world;
+    }
+    vStack.pop_back();
     return world;
 }
 
-static Mat4 compose_world_transform(const Scene& scene, int entity_index) {
-    std::vector<int> stack;
-    return compose_world_transform(scene, entity_index, stack);
+static Mat4 ComposeWorldTransform(const CScene& scene, int entityIndex)
+{
+    std::vector<int> vStack;
+    return ComposeWorldTransform(scene, entityIndex, vStack);
 }
 
-static Vec3 normalize_or_forward(const Vec3& v) {
+static Vec3 NormalizeOrForward(const Vec3& v)
+{
     const float length = v.length();
-    if (length < 1e-9f) return Vec3{0.0f, 1.0f, 0.0f};
+    if (length < 1e-9f)
+    {
+        return Vec3{0.0f, 1.0f, 0.0f};
+    }
     return v * (1.0f / length);
 }
 
-static Vec3 matrix_column(const Mat4& matrix, int column) {
-    return Vec3{matrix.m[column * 4], matrix.m[column * 4 + 1], matrix.m[column * 4 + 2]};
-}
-
-static float vec3_dot(const Vec3& a, const Vec3& b) {
-    return a.x * b.x + a.y * b.y + a.z * b.z;
-}
-
-static float vec3_squared_length(const Vec3& v) {
-    return v.x * v.x + v.y * v.y + v.z * v.z;
-}
-
-static Mat4 polar_rotation(const Mat4& matrix) {
+static Mat4 PolarRotation(const Mat4& matrix)
+{
     Mat4 q = matrix;
-    for (int iteration = 0; iteration < 24; ++iteration) {
+    for (int iteration = 0; iteration < 24; ++iteration)
+    {
         const Mat4 inverted = q.inverted();
-        const Mat4 inverted_transpose = Mat4Transpose(inverted);
-        for (int i = 0; i < 16; ++i) q.m[i] = 0.5f * (q.m[i] + inverted_transpose.m[i]);
+        const Mat4 invertedTranspose = Mat4Transpose(inverted);
+        for (int i = 0; i < 16; ++i) q.m[i] = 0.5f * (q.m[i] + invertedTranspose.m[i]);
     }
-    for (int column = 0; column < 3; ++column) {
-        const Vec3 axis = normalize_or_forward(matrix_column(q, column));
+    for (int column = 0; column < 3; ++column)
+    {
+        const Vec3 axis = NormalizeOrForward(Mat4Column(q, column));
         q.m[column * 4] = axis.x;
         q.m[column * 4 + 1] = axis.y;
         q.m[column * 4 + 2] = axis.z;
@@ -67,159 +77,232 @@ static Mat4 polar_rotation(const Mat4& matrix) {
     return q;
 }
 
-static void decompose_transform(const Mat4& parent_transform, const Mat4& world_transform, TransformComponent& transform) {
-    const Mat4 local = parent_transform.inverted() * world_transform;
-    transform.position = {local.m[12], local.m[13], local.m[14]};
+static void DecomposeTransform(const Mat4& parentTransform, const Mat4& worldTransform, CTransformComponent& transform)
+{
+    const Mat4 local = parentTransform.inverted() * worldTransform;
+    transform.m_Position =
+    {
+        local.m[12],
+        local.m[13],
+        local.m[14]
+    };
 
-    Mat4 parent_3x3{};
-    Mat4 world_3x3{};
-    for (int column = 0; column < 3; ++column) {
-        for (int row = 0; row < 3; ++row) {
-            parent_3x3.m[column * 4 + row] = parent_transform.m[column * 4 + row];
-            world_3x3.m[column * 4 + row] = world_transform.m[column * 4 + row];
+    Mat4 parent3x3{};
+    Mat4 world3x3{};
+    for (int column = 0; column < 3; ++column)
+    {
+        for (int row = 0; row < 3; ++row)
+        {
+            parent3x3.m[column * 4 + row] = parentTransform.m[column * 4 + row];
+            world3x3.m[column * 4 + row] = worldTransform.m[column * 4 + row];
         }
     }
 
-    Vec3 scale = {
-        matrix_column(local, 0).length(),
-        matrix_column(local, 1).length(),
-        matrix_column(local, 2).length()
+    Vec3 scale =
+    {
+        Mat4Column(local, 0).length(),
+        Mat4Column(local, 1).length(),
+        Mat4Column(local, 2).length()
     };
-    if (scale.x < 1e-6f) scale.x = 1.0f;
-    if (scale.y < 1e-6f) scale.y = 1.0f;
-    if (scale.z < 1e-6f) scale.z = 1.0f;
+    if (scale.x < 1e-6f)
+    {
+        scale.x = 1.0f;
+    }
+    if (scale.y < 1e-6f)
+    {
+        scale.y = 1.0f;
+    }
+    if (scale.z < 1e-6f)
+    {
+        scale.z = 1.0f;
+    }
 
-    for (int iteration = 0; iteration < 16; ++iteration) {
-        Mat4 inverse_scale{};
-        inverse_scale.m[0] = (scale.x > 1e-6f) ? 1.0f / scale.x : 1.0f;
-        inverse_scale.m[5] = (scale.y > 1e-6f) ? 1.0f / scale.y : 1.0f;
-        inverse_scale.m[10] = (scale.z > 1e-6f) ? 1.0f / scale.z : 1.0f;
+    for (int iteration = 0; iteration < 16; ++iteration)
+    {
+        Mat4 inverseScale{};
+        inverseScale.m[0] = (scale.x > 1e-6f) ? 1.0f / scale.x : 1.0f;
+        inverseScale.m[5] = (scale.y > 1e-6f) ? 1.0f / scale.y : 1.0f;
+        inverseScale.m[10] = (scale.z > 1e-6f) ? 1.0f / scale.z : 1.0f;
 
-        Mat4 rotation = polar_rotation(Mat4Transpose(parent_3x3) * world_3x3 * inverse_scale);
+        Mat4 rotation = PolarRotation(Mat4Transpose(parent3x3) * world3x3 * inverseScale);
 
-        const Mat4 scaled_rotation = parent_3x3 * rotation;
-        for (int column = 0; column < 3; ++column) {
-            const Vec3 a = matrix_column(scaled_rotation, column);
-            const Vec3 b = matrix_column(world_3x3, column);
-            const float denominator = vec3_squared_length(a);
-            float next = (denominator > 1e-6f) ? vec3_dot(a, b) / denominator : 0.0f;
-            if (next < 0.0f) next = 0.0f;
-            if (column == 0) scale.x = next;
-            else if (column == 1) scale.y = next;
-            else scale.z = next;
+        const Mat4 scaledRotation = parent3x3 * rotation;
+        for (int column = 0; column < 3; ++column)
+        {
+            const Vec3 a = Mat4Column(scaledRotation, column);
+            const Vec3 b = Mat4Column(world3x3, column);
+
+            const float denominator = Vec3SquaredLength(a);
+            float next = (denominator > 1e-6f) ? Vec3Dot(a, b) / denominator : 0.0f;
+
+            if (next < 0.0f)
+            {
+                next = 0.0f;
+            }
+            if (column == 0)
+            {
+                scale.x = next;
+            }
+            else if (column == 1)
+            {
+                scale.y = next;
+            }
+            else
+            {
+                scale.z = next;
+            }
         }
 
-        if (iteration == 15) {
-            const Vec3 right = matrix_column(rotation, 0);
-            const Vec3 up = matrix_column(rotation, 1);
-            const Vec3 dir = matrix_column(rotation, 2);
-            transform.rotation = {
+        if (iteration == 15)
+        {
+            const Vec3 right = Mat4Column(rotation, 0);
+            const Vec3 up = Mat4Column(rotation, 1);
+            const Vec3 dir = Mat4Column(rotation, 2);
+
+            transform.m_Rotation =
+            {
                 atan2f(-dir.y, dir.z) * RAD2DEG,
                 asinf(dir.x) * RAD2DEG,
                 atan2f(-up.x, right.x) * RAD2DEG
             };
         }
     }
-    transform.scale = scale;
+    transform.m_Scale = scale;
 
     constexpr float kEpsilon = 0.0001f;
-    auto cleanup = [](float& value) {
-        if (fabsf(value) < kEpsilon) value = 0.0f;
-        if (fabsf(value - 1.0f) < kEpsilon) value = 1.0f;
+    auto cleanup = [](float& value)
+    {
+        if (fabsf(value) < kEpsilon)
+        {
+            value = 0.0f;
+        }
+        if (fabsf(value - 1.0f) < kEpsilon)
+        {
+            value = 1.0f;
+        }
     };
-    cleanup(transform.position.x); cleanup(transform.position.y); cleanup(transform.position.z);
-    cleanup(transform.rotation.x); cleanup(transform.rotation.y); cleanup(transform.rotation.z);
-    cleanup(transform.scale.x); cleanup(transform.scale.y); cleanup(transform.scale.z);
+    cleanup(transform.m_Position.x); cleanup(transform.m_Position.y); cleanup(transform.m_Position.z);
+    cleanup(transform.m_Rotation.x); cleanup(transform.m_Rotation.y); cleanup(transform.m_Rotation.z);
+    cleanup(transform.m_Scale.x); cleanup(transform.m_Scale.y); cleanup(transform.m_Scale.z);
 }
 
-std::vector<int> get_entity_children(const Scene& scene, int parent_id) {
-    std::vector<int> children;
-    for (int i = 0; i < static_cast<int>(scene.entities.size()); i++) {
-        if (scene.entities[i].parent_id == parent_id) {
-            children.push_back(i);
+std::vector<int> GetEntityChildren(const CScene& scene, int parentId)
+{
+    std::vector<int> vChildren;
+    for (int i = 0; i < static_cast<int>(scene.m_vEntities.size()); i++)
+    {
+        if (scene.m_vEntities[i].m_ParentId == parentId)
+        {
+            vChildren.push_back(i);
         }
     }
-    return children;
+    return vChildren;
 }
 
-std::vector<int> get_entity_descendants(const Scene& scene, int entity_id) {
-    std::vector<int> descendants;
-    std::vector<int> to_process = get_entity_children(scene, entity_id);
+std::vector<int> GetEntityDescendants(const CScene& scene, int entityId)
+{
+    std::vector<int> vDescendants;
+    std::vector<int> vToProcess = GetEntityChildren(scene, entityId);
     
-    while (!to_process.empty()) {
-        int current = to_process.back();
-        to_process.pop_back();
+    while (!vToProcess.empty())
+    {
+        int current = vToProcess.back();
+        vToProcess.pop_back();
         
-        descendants.push_back(current);
+        vDescendants.push_back(current);
         
-        auto children = get_entity_children(scene, current);
-        for (int child : children) {
-            to_process.push_back(child);
+        auto children = GetEntityChildren(scene, current);
+        for (int child : children)
+        {
+            vToProcess.push_back(child);
         }
     }
     
-    return descendants;
+    return vDescendants;
 }
 
-void move_entity_to_parent(Scene& scene, int entity_id, int new_parent_id) {
-    if (entity_id < 0 || entity_id >= static_cast<int>(scene.entities.size())) return;
-    if (new_parent_id == entity_id) return;
+void MoveEntityToParent(CScene& scene, int entityId, int newParentId)
+{
+    if (entityId < 0 || entityId >= static_cast<int>(scene.m_vEntities.size()))
+    {
+        return;
+    }
+    if (newParentId == entityId)
+    {
+        return;
+    }
     
-    if (new_parent_id >= 0) {
-        auto descendants = get_entity_descendants(scene, entity_id);
-        for (int desc : descendants) {
-            if (desc == new_parent_id) return;
+    if (newParentId >= 0)
+    {
+        auto descendants = GetEntityDescendants(scene, entityId);
+        for (int desc : descendants)
+        {
+            if (desc == newParentId) return;
         }
     }
     
-    const Mat4 world_transform = compose_world_transform(scene, entity_id);
-    const Mat4 parent_transform = new_parent_id >= 0
-        ? compose_world_transform(scene, new_parent_id)
+    const Mat4 worldTransform = ComposeWorldTransform(scene, entityId);
+    const Mat4 parentTransform = newParentId >= 0
+        ? ComposeWorldTransform(scene, newParentId)
         : Mat4::identity();
 
-    scene.entities[entity_id].parent_id = new_parent_id;
-    if (TransformComponent* transform = scene.entities[entity_id].get_transform_component()) {
-        decompose_transform(parent_transform, world_transform, *transform);
+    scene.m_vEntities[entityId].m_ParentId = newParentId;
+    if (CTransformComponent* pTransform = scene.m_vEntities[entityId].GetTransformComponent())
+    {
+        DecomposeTransform(parentTransform, worldTransform, *pTransform);
     }
 }
 
-int create_group(Scene& scene, const std::string& name, int parent_id) {
-    Entity group;
-    group.id = static_cast<int>(scene.entities.size());
-    group.name = name;
-    group.parent_id = parent_id;
-    group.is_group = true;
+int CreateGroup(CScene& scene, const std::string& name, int parentId)
+{
+    CEntity group;
+    group.m_Id = static_cast<int>(scene.m_vEntities.size());
+    group.m_Name = name;
+    group.m_ParentId = parentId;
+    group.m_IsGroup = true;
     
-    scene.entities.push_back(group);
-    return group.id;
+    scene.m_vEntities.push_back(group);
+    return group.m_Id;
 }
 
-void delete_group(Scene& scene, int group_id, bool reparent_to_parent) {
-    if (group_id < 0 || group_id >= static_cast<int>(scene.entities.size())) return;
+void DeleteGroup(CScene& scene, int groupId, bool reparentToParent)
+{
+    if (groupId < 0 || groupId >= static_cast<int>(scene.m_vEntities.size()))
+    {
+        return;
+    }
     
-    Entity& group = scene.entities[group_id];
-    if (!group.is_group) return;
+    CEntity& group = scene.m_vEntities[groupId];
+    if (!group.m_IsGroup)
+    {
+        return;
+    }
+
+    int parentOfGroup = group.m_ParentId;
     
-    int parent_of_group = group.parent_id;
-    
-    if (reparent_to_parent) {
-        auto children = get_entity_children(scene, group_id);
-        for (int child : children) {
-            scene.entities[child].parent_id = parent_of_group;
+    if (reparentToParent)
+    {
+        auto children = GetEntityChildren(scene, groupId);
+        for (int child : children)
+        {
+            scene.m_vEntities[child].m_ParentId = parentOfGroup;
         }
     }
     
-    scene.entities.erase(scene.entities.begin() + group_id);
+    scene.m_vEntities.erase(scene.m_vEntities.begin() + groupId);
     
-    for (int i = group_id; i < static_cast<int>(scene.entities.size()); i++) {
-        scene.entities[i].id = i;
+    for (int i = groupId; i < static_cast<int>(scene.m_vEntities.size()); i++)
+    {
+        scene.m_vEntities[i].m_Id = i;
     }
 }
 
-bool is_entity_group(const Entity& entity) {
-    return entity.is_group;
+bool IsEntityGroup(const CEntity& entity)
+{
+    return entity.m_IsGroup;
 }
 
-std::vector<int> get_root_entities(const Scene& scene) {
-    return get_entity_children(scene, -1);
+std::vector<int> GetRootEntities(const CScene& scene) 
+{
+    return GetEntityChildren(scene, -1);
 }

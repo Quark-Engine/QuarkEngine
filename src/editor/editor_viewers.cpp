@@ -12,77 +12,93 @@
 #include <cstdlib>
 #include <algorithm>
 #include "editor/editor_assets.h"
+#include "editor/editor_grid.h"
 
-#define lang LanguageManager::get()
+using namespace qc;
 
-static bool show_model_viewer = false;
-static Model viewer_model;
-static RenderTexture2D viewer_rt = { 0 };
+#define lang CLanguageManager::Get()
 
-static bool show_material_viewer = false;
-static int material_preview_primitive = 0;
-static Color material_albedo = WHITE;
-static float material_albedo_f[4] = {1,1,1,1};
-static float material_brightness = 1.0f;
-static Texture2D material_texture = {0};
-static bool material_texture_owned = false;
-static std::string material_texture_path = "";
-static Model viewer_mat_sphere;
-static RenderTexture2D viewer_mat_rt = { 0 };
-static std::filesystem::path current_material_path = "";
-static bool show_texture_picker = false;
-static std::vector<std::string> texture_files_in_dir;
-static std::string selected_texture_preview = "";
+static void ApplyMaterialSettings(CMaterialViewerState& state);
+static void RebuildMaterialPreviewMesh(CMaterialViewerState& state);
 
-static bool material_auto_uv = false;
-static bool material_texture_stretch = true;
-static float material_texture_repeat_u = 1.0f;
-static float material_texture_repeat_v = 1.0f;
-static float material_uv_scale_x = 1.0f;
-static float material_uv_scale_y = 1.0f;
-static Color material_outline_color = LIGHTGRAY;
-static float material_outline_color_f[4] = {0.827f, 0.827f, 0.827f, 1.0f};
+void CEditorUiState::Unload()
+{
+    m_Viewport.Unload();
+    m_ModelViewer.Unload();
+    m_MaterialViewer.Unload();
+}
 
-static Vec3 viewer_target = { 0, 0, 0 };
-static Vec3 viewer_model_center = { 0, 0, 0 };
-static Vec3 viewer_model_rotation = { 0, 0, 0 };
-static float viewer_phi = 20.0f, viewer_theta = 45.0f, viewer_radius = 5.0f;
-
-static void release_model_preview() {
-    if (viewer_model.meshCount > 0) {
-        UnloadModel(viewer_model);
-    } else {
-        viewer_model = {};
+void CModelViewerState::ReleasePreviewModel()
+{
+    if (m_PreviewModel.meshCount > 0)
+    {
+        UnloadModel(m_PreviewModel);
+    }
+    else
+    {
+        m_PreviewModel = {};
     }
 }
 
-static void release_material_preview_model() {
-    if (viewer_mat_sphere.meshCount <= 0) {
+void CModelViewerState::Unload()
+{
+    ReleasePreviewModel();
+
+    if (m_RenderTexture.id != 0)
+    {
+        UnloadRenderTexture(m_RenderTexture);
+        m_RenderTexture = { 0 };
+    }
+}
+
+void CMaterialViewerState::ReleasePreviewModel()
+{
+    if (m_PreviewSphere.meshCount <= 0)
+    {
         return;
     }
 
-    if (viewer_mat_sphere.materialCount > 0 && viewer_mat_sphere.materials && viewer_mat_sphere.materials[0].maps) {
-        viewer_mat_sphere.materials[0].maps[MATERIAL_MAP_DIFFUSE].texture = {0};
+    if (m_PreviewSphere.materialCount > 0 && m_PreviewSphere.materials && m_PreviewSphere.materials[0].maps)
+    {
+        m_PreviewSphere.materials[0].maps[MATERIAL_MAP_DIFFUSE].texture = {0};
     }
 
-    UnloadModel(viewer_mat_sphere);
-    viewer_mat_sphere = {};
+    UnloadModel(m_PreviewSphere);
+    m_PreviewSphere = {};
 }
 
-bool open_model_viewer_for_asset(const ModelAsset& asset) {
-    release_model_preview();
+void CMaterialViewerState::Unload()
+{
+    ReleasePreviewModel();
 
-    if (!load_model_instance(asset, viewer_model)) return false;
+    if (m_RenderTexture.id != 0)
+    {
+        UnloadRenderTexture(m_RenderTexture);
+        m_RenderTexture = { 0 };
+    }
 
-    show_model_viewer = true;
-    viewer_radius = 5.0f;
-    viewer_phi = 20.0f;
-    viewer_theta = 45.0f;
-    viewer_target = { 0, 0, 0 };
-    viewer_model_rotation = { 0, 0, 0 };
+    m_DiffuseTexture = { 0 };
+    m_DiffuseTextureName.clear();
+}
 
-    const BoundingBox box = GetModelBoundingBox(viewer_model);
-    viewer_model_center = {
+bool OpenModelViewerForAsset(CModelViewerState& state, const CModelAsset& asset)
+{
+    state.ReleasePreviewModel();
+
+    if (!CModelService::LoadInstance(asset, state.m_PreviewModel))
+    {
+        return false;
+    }
+
+    state.m_Visible = true;
+    state.m_Orbit.Radius = 5.0f;
+    state.m_Orbit.Phi = 20.0f;
+    state.m_Orbit.Theta = 45.0f;
+    state.m_Orbit.Target = qc::Vec3(0, 0, 0);
+    state.m_Orbit.ModelRotation = { 0, 0, 0 };
+
+    const BoundingBox box = GetModelBoundingBox(state.m_PreviewModel);
+    state.m_ModelCenter = {
         (box.min.x + box.max.x) * 0.5f,
         (box.min.y + box.max.y) * 0.5f,
         (box.min.z + box.max.z) * 0.5f
@@ -91,114 +107,139 @@ bool open_model_viewer_for_asset(const ModelAsset& asset) {
     return true;
 }
 
-bool open_material_viewer_for_path(const std::filesystem::path& material_path, std::unordered_map<std::string, Texture>& texture_cache) {
-    std::ifstream material_file(material_path);
-    if (!material_file.is_open()) return false;
-
-    current_material_path = material_path;
-    material_texture_path = "";
-
-    if (material_texture_owned && material_texture.id != 0) {
-        UnloadTexture(material_texture);
+bool OpenMaterialViewerForPath(CEditor& editor, CMaterialViewerState& state, const std::filesystem::path& materialPath)
+{
+    std::ifstream materialFile(materialPath);
+    if (!materialFile.is_open())
+    {
+        return false;
     }
-    material_texture = {0};
-    material_texture_owned = false;
 
-    release_material_preview_model();
+    state.m_CurrentPath = materialPath;
+    state.m_DiffuseTextureName = "";
 
-    viewer_mat_sphere = LoadModelFromMesh(GenMeshSphere(1.0f, 64, 64));
-    Material& material = viewer_mat_sphere.materials[0];
-    material_albedo = WHITE;
-    material_albedo_f[0] = 1.0f;
-    material_albedo_f[1] = 1.0f;
-    material_albedo_f[2] = 1.0f;
-    material_albedo_f[3] = 1.0f;
-    material_brightness = 1.0f;
+    state.m_DiffuseTexture = {0};
+
+    state.ReleasePreviewModel();
+
+    state.m_PreviewSphere = LoadModelFromMesh(GenMeshSphere(1.0f, 64, 64));
+    Material& material = state.m_PreviewSphere.materials[0];
+    state.m_Albedo = WHITE;
+    state.m_aAlbedo[0] = 1.0f;
+    state.m_aAlbedo[1] = 1.0f;
+    state.m_aAlbedo[2] = 1.0f;
+    state.m_aAlbedo[3] = 1.0f;
+    state.m_Brightness = 1.0f;
 
     std::string line;
-    while (std::getline(material_file, line)) {
-        if (line.empty() || line[0] == '#') continue;
+    while (std::getline(materialFile, line))
+    {
+        if (line.empty() || line[0] == '#')
+        {
+            continue;
+        }
 
         std::istringstream stream(line);
         std::string type;
         stream >> type;
 
-        if (type == "Kd") {
+        if (type == "Kd")
+        {
             float r = 1.0f;
             float g = 1.0f;
             float b = 1.0f;
-            if (stream >> r >> g >> b) {
+            if (stream >> r >> g >> b)
+            {
                 material.maps[MATERIAL_MAP_DIFFUSE].color = {
                     static_cast<unsigned char>(r * 255),
                     static_cast<unsigned char>(g * 255),
                     static_cast<unsigned char>(b * 255),
                     255
                 };
-                material_albedo = material.maps[MATERIAL_MAP_DIFFUSE].color;
-                material_albedo_f[0] = r;
-                material_albedo_f[1] = g;
-                material_albedo_f[2] = b;
-                material_albedo_f[3] = 1.0f;
+                state.m_Albedo = material.maps[MATERIAL_MAP_DIFFUSE].color;
+                state.m_aAlbedo[0] = r;
+                state.m_aAlbedo[1] = g;
+                state.m_aAlbedo[2] = b;
+                state.m_aAlbedo[3] = 1.0f;
             }
-        } else if (type == "map_Kd") {
-            std::string texture_name;
-            if (!(stream >> texture_name)) continue;
-
-            material_texture_path = texture_name;
-            const std::filesystem::path texture_path = material_path.parent_path() / texture_name;
-            const std::string cache_key = texture_path.string();
-            if (!texture_cache.count(cache_key) && std::filesystem::exists(texture_path)) {
-                texture_cache[cache_key] = LoadTexture(cache_key.c_str());
+        }
+        else if (type == "map_Kd")
+        {
+            std::string textureName;
+            if (!(stream >> textureName))
+            {
+                continue;
             }
 
-            if (texture_cache.count(cache_key)) {
-                material.maps[MATERIAL_MAP_DIFFUSE].texture = texture_cache[cache_key];
-                material_texture = texture_cache[cache_key];
-                material_texture_owned = false;
+            state.m_DiffuseTextureName = textureName;
+            const std::filesystem::path texturePath = materialPath.parent_path() / textureName;
+            const qc::Texture2D* pTexture = editor.m_Textures.Load(texturePath.string());
+
+            if (pTexture)
+            {
+                material.maps[MATERIAL_MAP_DIFFUSE].texture = *pTexture;
+                state.m_DiffuseTexture = *pTexture;
             }
         }
     }
 
-    rebuild_material_preview_mesh();
-    show_material_viewer = true;
-    viewer_radius = 2.5f;
-    viewer_phi = 20.0f;
-    viewer_theta = 45.0f;
-    viewer_target = { 0, 0, 0 };
-    viewer_model_rotation = { 0, 0, 0 };
+    RebuildMaterialPreviewMesh(state);
+    state.m_Visible = true;
+    state.m_Orbit.Radius = 2.5f;
+    state.m_Orbit.Phi = 20.0f;
+    state.m_Orbit.Theta = 45.0f;
+    state.m_Orbit.Target = qc::Vec3(0, 0, 0);
+    state.m_Orbit.ModelRotation = { 0, 0, 0 };
     return true;
 }
 
-void load_material_to_entity(Entity* entity, const std::filesystem::path& mtl_path, int material_slot) {
-    if (!entity || !std::filesystem::exists(mtl_path)) return;
+void LoadMaterialToEntity(CEntity* pEntity, const std::filesystem::path& mtlPath, int materialSlot)
+{
+    if (!pEntity || !std::filesystem::exists(mtlPath))
+    {
+        return;
+    }
 
-    std::ifstream material_file(mtl_path);
-    if (!material_file.is_open()) return;
+    std::ifstream materialFile(mtlPath);
+    if (!materialFile.is_open())
+    {
+        return;
+    }
 
-    MeshComponent* mesh = entity->get_mesh_component();
-    MaterialComponent* mat_comp = entity->get_material_component();
-    if (!mesh || !mat_comp) return;
-    const auto applies_to_slot = [mesh, material_slot](int material_index) {
-        return material_slot < 0 || material_index == material_slot;
+    CMeshComponent* pMesh = pEntity->GetMeshComponent();
+    CMaterialComponent* pMatComp = pEntity->GetMaterialComponent();
+    if (!pMesh || !pMatComp)
+    {
+        return;
+    }
+    const auto appliesToSlot = [pMesh, materialSlot](int materialIndex)
+    {
+        return materialSlot < 0 || materialIndex == materialSlot;
     };
 
     Color albedo = WHITE;
-    std::string texture_name;
-    std::string normal_texture_name;
-    std::string roughness_texture_name;
-    std::string metallic_texture_name;
-    
+    std::string textureName;
+    std::string normalTextureName;
+    std::string roughnessTextureName;
+    std::string metallicTextureName;
+
     std::string line;
-    while (std::getline(material_file, line)) {
-        if (line.empty() || line[0] == '#') continue;
+    while (std::getline(materialFile, line))
+    {
+        if (line.empty() || line[0] == '#')
+        {
+            continue;
+        }
 
         std::istringstream stream(line);
         std::string type;
         stream >> type;
 
-        if (type == "Kd") {
+        if (type == "Kd")
+        {
             float r = 1.0f, g = 1.0f, b = 1.0f;
-            if (stream >> r >> g >> b) {
+            if (stream >> r >> g >> b)
+            {
                 albedo = {
                     static_cast<unsigned char>(r * 255),
                     static_cast<unsigned char>(g * 255),
@@ -206,391 +247,512 @@ void load_material_to_entity(Entity* entity, const std::filesystem::path& mtl_pa
                     255
                 };
             }
-        } 
-        else if (type == "map_Kd") {
-            if (!(stream >> texture_name)) texture_name.clear();
-        } else if (type == "map_Bump" || type == "bump" || type == "norm") {
-            if (!(stream >> normal_texture_name)) normal_texture_name.clear();
-        } else if (type == "map_Pr" || type == "map_roughness") {
-            if (!(stream >> roughness_texture_name)) roughness_texture_name.clear();
-        } else if (type == "map_Pm" || type == "map_metallic") {
-            if (!(stream >> metallic_texture_name)) metallic_texture_name.clear();
+        }
+        else if (type == "map_Kd")
+        {
+            if (!(stream >> textureName))
+            {
+                textureName.clear();
+            }
+        }
+        else if (type == "map_Bump" || type == "bump" || type == "norm")
+        {
+            if (!(stream >> normalTextureName))
+            {
+                normalTextureName.clear();
+            }
+        }
+        else if (type == "map_Pr" || type == "map_roughness")
+        {
+            if (!(stream >> roughnessTextureName))
+            {
+                roughnessTextureName.clear();
+            }
+        }
+        else if (type == "map_Pm" || type == "map_metallic")
+        {
+            if (!(stream >> metallicTextureName))
+            {
+                metallicTextureName.clear();
+            }
         }
     }
 
-    material_file.close();
+    materialFile.close();
 
-    mat_comp->color = albedo;
-    mat_comp->albedo_texture_name.clear();
-    mat_comp->normal_texture_name = normal_texture_name;
-    mat_comp->roughness_texture_name = roughness_texture_name;
-    mat_comp->metallic_texture_name = metallic_texture_name;
-    if (mesh->model.materials) {
-        for (int i = 0; i < mesh->model.materialCount; i++) {
-            if (!applies_to_slot(i)) continue;
-            mesh->model.materials[i].maps[MATERIAL_MAP_DIFFUSE].color = albedo;
+    pMatComp->m_Color = albedo;
+    pMatComp->m_AlbedoTextureName.clear();
+    pMatComp->m_NormalTextureName = normalTextureName;
+    pMatComp->m_RoughnessTextureName = roughnessTextureName;
+    pMatComp->m_MetallicTextureName = metallicTextureName;
+    if (pMesh->m_Model.materials)
+    {
+        for (int i = 0; i < pMesh->m_Model.materialCount; i++)
+        {
+            if (!appliesToSlot(i))
+            {
+                continue;
+            }
+            pMesh->m_Model.materials[i].maps[MATERIAL_MAP_DIFFUSE].color = albedo;
         }
     }
 
-    if (!texture_name.empty()) {
-        std::filesystem::path texture_path = mtl_path.parent_path() / texture_name;
-        if (std::filesystem::exists(texture_path)) {
-            Texture2D tex = LoadTexture(texture_path.string().c_str());
-            if (tex.id != 0) {
-                mat_comp->texture = tex;
-                mat_comp->texture_name = texture_name;
-                mat_comp->texture_source = TEXTURE_EXTERNAL;
-                
-                if (mesh->model.materials) {
-                    for (int i = 0; i < mesh->model.materialCount; i++) {
-                        if (!applies_to_slot(i)) continue;
-                        mesh->model.materials[i].maps[MATERIAL_MAP_DIFFUSE].texture = tex;
+    if (!textureName.empty())
+    {
+        std::filesystem::path texturePath = mtlPath.parent_path() / textureName;
+        if (std::filesystem::exists(texturePath))
+        {
+            Texture2D tex = LoadTexture(texturePath.string().c_str());
+            if (tex.id != 0)
+            {
+                pMatComp->m_Texture = tex;
+                pMatComp->m_TextureName = textureName;
+                pMatComp->m_TextureSource = TEXTURE_EXTERNAL;
+
+                if (pMesh->m_Model.materials)
+                {
+                    for (int i = 0; i < pMesh->m_Model.materialCount; i++)
+                    {
+                        if (!appliesToSlot(i))
+                        {
+                            continue;
+                        }
+                        pMesh->m_Model.materials[i].maps[MATERIAL_MAP_DIFFUSE].texture = tex;
                     }
                 }
             }
         }
     }
 
-    const auto load_map = [&](const std::string& path, int map_type) {
-        if (path.empty() || !mesh->model.materials) return;
-        const std::filesystem::path texture_path = mtl_path.parent_path() / path;
-        if (!std::filesystem::exists(texture_path)) return;
-        Texture2D texture = LoadTexture(texture_path.string().c_str());
-        if (texture.id == 0) return;
-        for (int i = 0; i < mesh->model.materialCount; i++) {
-            if (!applies_to_slot(i)) continue;
-            if (mesh->model.materials[i].maps)
-                mesh->model.materials[i].maps[map_type].texture = texture;
+    const auto loadMap = [&](const std::string& path, int mapType)
+    {
+        if (path.empty() || !pMesh->m_Model.materials)
+        {
+            return;
+        }
+        const std::filesystem::path texturePath = mtlPath.parent_path() / path;
+        if (!std::filesystem::exists(texturePath))
+        {
+            return;
+        }
+        Texture2D texture = LoadTexture(texturePath.string().c_str());
+        if (texture.id == 0)
+        {
+            return;
+        }
+        for (int i = 0; i < pMesh->m_Model.materialCount; i++)
+        {
+            if (!appliesToSlot(i))
+            {
+                continue;
+            }
+            if (pMesh->m_Model.materials[i].maps)
+            {
+                pMesh->m_Model.materials[i].maps[mapType].texture = texture;
+            }
         }
     };
 
-    load_map(normal_texture_name, MATERIAL_MAP_NORMAL);
-    load_map(roughness_texture_name, MATERIAL_MAP_ROUGHNESS);
-    load_map(metallic_texture_name, MATERIAL_MAP_METALNESS);
-    
-    mat_comp->texture_name = mtl_path.string();
+    loadMap(normalTextureName, MATERIAL_MAP_NORMAL);
+    loadMap(roughnessTextureName, MATERIAL_MAP_ROUGHNESS);
+    loadMap(metallicTextureName, MATERIAL_MAP_METALNESS);
+
+    pMatComp->m_TextureName = mtlPath.string();
 }
 
-std::vector<std::string> get_all_materials_in_project() {
-    std::vector<std::string> materials;
-    try {
-        std::filesystem::path current_path = std::filesystem::current_path();
-        
-        for (const auto& entry : std::filesystem::recursive_directory_iterator(current_path)) {
-            if (entry.is_regular_file() && entry.path().extension() == ".mtl") {
-                std::filesystem::path rel_path = std::filesystem::relative(entry.path(), current_path);
-                materials.push_back(rel_path.generic_string());
+std::vector<std::string> GetAllMaterialsInProject()
+{
+    std::vector<std::string> vMaterials;
+    try
+    {
+        std::filesystem::path currentPath = std::filesystem::current_path();
+
+        for (const auto& entry : std::filesystem::recursive_directory_iterator(currentPath))
+        {
+            if (entry.is_regular_file() && entry.path().extension() == ".mtl")
+            {
+                std::filesystem::path relPath = std::filesystem::relative(entry.path(), currentPath);
+                vMaterials.push_back(relPath.generic_string());
             }
         }
-        
-        std::sort(materials.begin(), materials.end());
-    } catch (const std::exception&) {
+
+        std::sort(vMaterials.begin(), vMaterials.end());
+    } catch (const std::exception&)
+    {
     }
-    
-    return materials;
+
+    return vMaterials;
 }
 
-bool is_model_viewer_visible() {
-    return show_model_viewer;
-}
-
-bool is_material_viewer_visible() {
-    return show_material_viewer;
-}
-
-void show_model_viewer_window(bool show) {
-    show_model_viewer = show;
-    if (!show) release_model_preview();
-}
-
-void show_material_viewer_window(bool show) {
-    show_material_viewer = show;
-}
-
-void set_model_viewer_model(const Model& model) {
-    if (viewer_model.meshCount > 0) {
-        UnloadModel(viewer_model);
+static void ApplyMaterialSettings(CMaterialViewerState& state)
+{
+    if (state.m_PreviewSphere.meshCount == 0)
+    {
+        return;
     }
-    viewer_model = model;
-}
 
-void apply_material_settings() {
-    if (viewer_mat_sphere.meshCount == 0) return;
-
-    Material& mat = viewer_mat_sphere.materials[0];
+    Material& mat = state.m_PreviewSphere.materials[0];
 
     Color finalColor = {
-        (unsigned char)(material_albedo.r * material_brightness),
-        (unsigned char)(material_albedo.g * material_brightness),
-        (unsigned char)(material_albedo.b * material_brightness),
-        material_albedo.a
+        (unsigned char)(state.m_Albedo.r * state.m_Brightness),
+        (unsigned char)(state.m_Albedo.g * state.m_Brightness),
+        (unsigned char)(state.m_Albedo.b * state.m_Brightness),
+        state.m_Albedo.a
     };
 
     mat.maps[MATERIAL_MAP_DIFFUSE].color = finalColor;
 
-    if (material_texture.id != 0) {
-        mat.maps[MATERIAL_MAP_DIFFUSE].texture = material_texture;
+    if (state.m_DiffuseTexture.id != 0)
+    {
+        mat.maps[MATERIAL_MAP_DIFFUSE].texture = state.m_DiffuseTexture;
     }
 }
 
-void rebuild_material_preview_mesh() {
-    release_material_preview_model();
+static void RebuildMaterialPreviewMesh(CMaterialViewerState& state)
+{
+    state.ReleasePreviewModel();
 
     Mesh mesh = {0};
 
-    switch (material_preview_primitive) {
+    switch (state.m_PreviewPrimitive)
+    {
         case 0: mesh = GenMeshSphere(1.0f, 64, 64); break;
         case 1: mesh = GenMeshCube(2.0f, 2.0f, 2.0f); break;
         case 2: mesh = GenMeshPlane(3.0f, 3.0f, 1, 1); break;
     }
 
-    viewer_mat_sphere = LoadModelFromMesh(mesh);
-    apply_material_settings();
+    state.m_PreviewSphere = LoadModelFromMesh(mesh);
+    ApplyMaterialSettings(state);
 }
 
-void save_material_to_file(Editor& editor) {
-    if (current_material_path.empty()) return;
-
-    std::ofstream material_file(current_material_path);
-    if (!material_file.is_open()) return;
-
-    material_file << "# Material exported from QuarkEngine\n";
-    material_file << "Kd " << (material_albedo_f[0]) << " " << (material_albedo_f[1]) << " " << (material_albedo_f[2]) << "\n";
-    
-    if (!material_texture_path.empty()) {
-        material_file << "map_Kd " << material_texture_path << "\n";
+void SaveMaterialToFile(CEditor& editor, CMaterialViewerState& state)
+{
+    if (state.m_CurrentPath.empty())
+    {
+        return;
     }
 
-    material_file.close();
-    invalidate_material_previews();
+    std::ofstream materialFile(state.m_CurrentPath);
+    if (!materialFile.is_open())
+    {
+        return;
+    }
 
-    for (Entity& entity : editor.scene.entities) {
-        if (!&entity) continue;
+    materialFile << "# Material exported from QuarkEngine\n";
+    materialFile << "Kd " << (state.m_aAlbedo[0]) << " " << (state.m_aAlbedo[1]) << " " << (state.m_aAlbedo[2]) << "\n";
 
-        MaterialComponent* mat = entity.get_material_component();
-        if (!mat) continue;
+    if (!state.m_DiffuseTextureName.empty())
+    {
+        materialFile << "map_Kd " << state.m_DiffuseTextureName << "\n";
+    }
 
-        if (!mat->texture_name.empty() && std::filesystem::absolute(mat->texture_name) == std::filesystem::absolute(current_material_path))
+    materialFile.close();
+    editor.m_Previews.InvalidateMaterialPreviews();
+
+    for (CEntity& entity : editor.m_Scene.m_vEntities)
+    {
+        if (!&entity)
         {
-            load_material_to_entity(&entity, current_material_path);
+            continue;
+        }
+
+        CMaterialComponent* pMat = entity.GetMaterialComponent();
+        if (!pMat)
+        {
+            continue;
+        }
+
+        if (!pMat->m_TextureName.empty() && std::filesystem::absolute(pMat->m_TextureName) == std::filesystem::absolute(state.m_CurrentPath))
+        {
+            LoadMaterialToEntity(&entity, state.m_CurrentPath);
         }
     }
 }
 
-void load_textures_in_directory() {
-    texture_files_in_dir.clear();
-    if (current_material_path.empty()) return;
+static void LoadTexturesInDirectory(CMaterialViewerState& state)
+{
+    state.m_vTextureFilesInDir.clear();
+    if (state.m_CurrentPath.empty())
+    {
+        return;
+    }
 
-    const auto material_dir = current_material_path.parent_path();
-    if (!std::filesystem::exists(material_dir)) return;
+    const auto materialDir = state.m_CurrentPath.parent_path();
+    if (!std::filesystem::exists(materialDir))
+    {
+        return;
+    }
 
-    const std::vector<std::string> image_extensions = {".png", ".jpg", ".jpeg", ".bmp", ".tga", ".dds"};
+    const std::vector<std::string> vImageExtensions = {".png", ".jpg", ".jpeg", ".bmp", ".tga", ".dds"};
 
-    try {
-        for (const auto& entry : std::filesystem::directory_iterator(material_dir)) {
-            if (entry.is_regular_file()) {
+    try
+    {
+        for (const auto& entry : std::filesystem::directory_iterator(materialDir))
+        {
+            if (entry.is_regular_file())
+            {
                 auto ext = entry.path().extension().string();
                 std::transform(ext.begin(), ext.end(), ext.begin(), ::tolower);
-                
-                if (std::find(image_extensions.begin(), image_extensions.end(), ext) != image_extensions.end()) {
-                    texture_files_in_dir.push_back(entry.path().filename().string());
+
+                if (std::find(vImageExtensions.begin(), vImageExtensions.end(), ext) != vImageExtensions.end())
+                {
+                    state.m_vTextureFilesInDir.push_back(entry.path().filename().string());
                 }
             }
         }
-    } catch (...) {}
+    }
+    catch (...)
+    {
+    }
 }
 
-void load_material_texture(const std::string& texture_name) {
-    if (current_material_path.empty()) return;
-
-    const auto material_dir = current_material_path.parent_path();
-    const auto texture_full_path = material_dir / texture_name;
-
-    if (!std::filesystem::exists(texture_full_path)) return;
-
-    if (material_texture_owned && material_texture.id != 0) {
-        UnloadTexture(material_texture);
+static void LoadMaterialTexture(CEditor& editor, CMaterialViewerState& state, const std::string& textureName)
+{
+    if (state.m_CurrentPath.empty())
+    {
+        return;
     }
 
-    material_texture = LoadTexture(texture_full_path.string().c_str());
-    material_texture_owned = material_texture.id != 0;
-    material_texture_path = texture_name;
-    apply_material_settings();
+    const auto materialDir = state.m_CurrentPath.parent_path();
+    const auto textureFullPath = materialDir / textureName;
+
+    if (!std::filesystem::exists(textureFullPath))
+    {
+        return;
+    }
+
+    const qc::Texture2D* pTexture = editor.m_Textures.Load(textureFullPath.string());
+    if (!pTexture)
+    {
+        return;
+    }
+
+    state.m_DiffuseTexture = *pTexture;
+    state.m_DiffuseTextureName = textureName;
+    ApplyMaterialSettings(state);
 }
 
 
 
-void draw_model_viewer_window() {
-    if (!show_model_viewer) {
-        release_model_preview();
+void DrawModelViewerWindow(CModelViewerState& state)
+{
+    if (!state.m_Visible)
+    {
+        state.ReleasePreviewModel();
         return;
     }
 
     ImGui::SetNextWindowSize(ImVec2(600, 450), ImGuiCond_FirstUseEver);
-    if (ImGui::Begin(lang.word("model_preview"), &show_model_viewer)) {
+    if (ImGui::Begin(lang.Word("model_preview"), &state.m_Visible))
+    {
         ImVec2 size = ImGui::GetContentRegionAvail();
-        if (size.x < 1) size.x = 1;
-        if (size.y < 1) size.y = 1;
-
-        if (viewer_rt.id == 0 || viewer_rt.texture.width != (int)size.x || viewer_rt.texture.height != (int)size.y) {
-            if (viewer_rt.id != 0) UnloadRenderTexture(viewer_rt);
-            viewer_rt = LoadRenderTexture((int)size.x, (int)size.y);
+        if (size.x < 1)
+        {
+            size.x = 1;
+        }
+        if (size.y < 1)
+        {
+            size.y = 1;
         }
 
-        ImVec2 viewport_pos = ImGui::GetCursorScreenPos();
+        if (state.m_RenderTexture.id == 0 || state.m_RenderTexture.texture.width != (int)size.x || state.m_RenderTexture.texture.height != (int)size.y)
+        {
+            if (state.m_RenderTexture.id != 0)
+            {
+                UnloadRenderTexture(state.m_RenderTexture);
+            }
+            state.m_RenderTexture = LoadRenderTexture((int)size.x, (int)size.y);
+        }
+
+        ImVec2 viewportPos = ImGui::GetCursorScreenPos();
         ImGui::InvisibleButton("ModelViewport", size, ImGuiButtonFlags_MouseButtonLeft | ImGuiButtonFlags_MouseButtonRight);
-        bool is_hovered = ImGui::IsItemHovered();
-        bool is_active = ImGui::IsItemActive();
+        bool isHovered = ImGui::IsItemHovered();
+        bool isActive = ImGui::IsItemActive();
 
-        if (is_hovered) {
-            viewer_radius -= ImGui::GetIO().MouseWheel * 1.5f;
-            if (viewer_radius < 0.1f) viewer_radius = 0.1f;
+        if (isHovered)
+        {
+            state.m_Orbit.Radius -= ImGui::GetIO().MouseWheel * 1.5f;
+            if (state.m_Orbit.Radius < 0.1f)
+            {
+                state.m_Orbit.Radius = 0.1f;
+            }
         }
 
-        if (is_active) {
+        if (isActive)
+        {
             ImVec2 delta = ImGui::GetIO().MouseDelta;
 
-            if (ImGui::IsMouseDown(ImGuiMouseButton_Left)) {
-                viewer_model_rotation.y += delta.x * 0.5f;
-                viewer_model_rotation.x += delta.y * 0.5f;
+            if (ImGui::IsMouseDown(ImGuiMouseButton_Left))
+            {
+                state.m_Orbit.ModelRotation.y += delta.x * 0.5f;
+                state.m_Orbit.ModelRotation.x += delta.y * 0.5f;
             }
 
-            if (ImGui::IsMouseDown(ImGuiMouseButton_Right)) {
-                viewer_theta -= delta.x * 0.5f; 
-                viewer_phi -= delta.y * 0.5f;
+            if (ImGui::IsMouseDown(ImGuiMouseButton_Right))
+            {
+                state.m_Orbit.Theta -= delta.x * 0.5f;
+                state.m_Orbit.Phi -= delta.y * 0.5f;
             }
 
-            if (viewer_phi > 89.0f) viewer_phi = 89.0f;
-            if (viewer_phi < -89.0f) viewer_phi = -89.0f;
+            if (state.m_Orbit.Phi > 89.0f)
+            {
+                state.m_Orbit.Phi = 89.0f;
+            }
+            if (state.m_Orbit.Phi < -89.0f)
+            {
+                state.m_Orbit.Phi = -89.0f;
+            }
         }
 
         Camera3D cam;
         cam.fovy = 45.0f;
         cam.projection = CAMERA_PERSPECTIVE;
-        cam.target = viewer_target;
+        cam.target = state.m_Orbit.Target;
         cam.up = { 0, 1, 0 };
-        cam.position.x = viewer_target.x + viewer_radius * cosf(viewer_phi * DEG2RAD) * sinf(viewer_theta * DEG2RAD);
-        cam.position.y = viewer_target.y + viewer_radius * sinf(viewer_phi * DEG2RAD);
-        cam.position.z = viewer_target.z + viewer_radius * cosf(viewer_phi * DEG2RAD) * cosf(viewer_theta * DEG2RAD);
+        cam.position.x = state.m_Orbit.Target.x + state.m_Orbit.Radius * cosf(state.m_Orbit.Phi * DEG2RAD) * sinf(state.m_Orbit.Theta * DEG2RAD);
+        cam.position.y = state.m_Orbit.Target.y + state.m_Orbit.Radius * sinf(state.m_Orbit.Phi * DEG2RAD);
+        cam.position.z = state.m_Orbit.Target.z + state.m_Orbit.Radius * cosf(state.m_Orbit.Phi * DEG2RAD) * cosf(state.m_Orbit.Theta * DEG2RAD);
 
-        BeginTextureMode(viewer_rt);
+        BeginTextureMode(state.m_RenderTexture);
         ClearBackground({ 40, 40, 45, 255 });
         BeginMode3D(cam);
-        if (viewer_model.meshCount > 0) {
+        if (state.m_PreviewModel.meshCount > 0)
+        {
             Mat4 matCenter = Mat4::translation(
-                -viewer_model_center.x,
-                -viewer_model_center.y, 
-                -viewer_model_center.z
+                -state.m_ModelCenter.x,
+                -state.m_ModelCenter.y,
+                -state.m_ModelCenter.z
             );
 
             Mat4 matRotation =
-                Mat4::rotationX(viewer_model_rotation.x * DEG2RAD) *
-                Mat4::rotationY(viewer_model_rotation.y * DEG2RAD);
+                Mat4::rotationX(state.m_Orbit.ModelRotation.x * DEG2RAD) *
+                Mat4::rotationY(state.m_Orbit.ModelRotation.y * DEG2RAD);
 
-            viewer_model.transform = matCenter * matRotation;
+            state.m_PreviewModel.transform = matCenter * matRotation;
 
-            DrawModel(viewer_model, { 0, 0, 0 }, 1.0f, WHITE);
-            DrawModelWires(viewer_model, { 0, 0, 0 }, 1.0f, DARKGRAY);
+            DrawModel(state.m_PreviewModel, { 0, 0, 0 }, 1.0f, WHITE);
+            DrawModelWires(state.m_PreviewModel, { 0, 0, 0 }, 1.0f, DARKGRAY);
         }
-        DrawGrid(10, 1.0f);
+        CInfiniteGrid::Draw(
+            cam,
+            state.m_RenderTexture.texture.width,
+            state.m_RenderTexture.texture.height,
+            1.0f,
+            DARKGRAY
+        );
         EndMode3D();
         EndTextureMode();
 
-        ImGui::SetCursorScreenPos(viewport_pos);
-        Rectangle src = { 0, 0, (float)viewer_rt.texture.width, -(float)viewer_rt.texture.height };
-        qcImGuiImageRect(&viewer_rt.texture, (int)size.x, (int)size.y, src);
+        ImGui::SetCursorScreenPos(viewportPos);
+        Rectangle src = { 0, 0, (float)state.m_RenderTexture.texture.width, -(float)state.m_RenderTexture.texture.height };
+        QcImGuiImageRect(&state.m_RenderTexture.texture, (int)size.x, (int)size.y, src);
     }
     ImGui::End();
 }
 
-void draw_material_viewer_window(Editor& editor, Entity* selected_entity) {
-    if (!show_material_viewer) {
-        material_preview_primitive = 0;
+void DrawMaterialViewerWindow(CEditor& editor, CMaterialViewerState& state, CEntity* pSelectedEntity)
+{
+    if (!state.m_Visible)
+    {
+        state.m_PreviewPrimitive = 0;
 
-        release_material_preview_model();
+        state.ReleasePreviewModel();
         return;
     }
 
     ImGui::SetNextWindowSize(ImVec2(1000, 600), ImGuiCond_FirstUseEver);
 
-    if (ImGui::Begin(lang.word("material_editor"), &show_material_viewer)) {
+    if (ImGui::Begin(lang.Word("material_editor"), &state.m_Visible))
+    {
 
         ImGui::Columns(2, nullptr, true);
 
         ImGui::BeginChild("MaterialSettings");
 
-        ImGui::Text(lang.word("material"));
+        ImGui::Text("%s", lang.Word("material"));
 
-        if (ImGui::ColorEdit4(lang.word("albedo"), material_albedo_f)) {
-            material_albedo = {
-                (unsigned char)(material_albedo_f[0] * 255),
-                (unsigned char)(material_albedo_f[1] * 255),
-                (unsigned char)(material_albedo_f[2] * 255),
-                (unsigned char)(material_albedo_f[3] * 255)
+        if (ImGui::ColorEdit4(lang.Word("albedo"), state.m_aAlbedo))
+        {
+            state.m_Albedo = {
+                (unsigned char)(state.m_aAlbedo[0] * 255),
+                (unsigned char)(state.m_aAlbedo[1] * 255),
+                (unsigned char)(state.m_aAlbedo[2] * 255),
+                (unsigned char)(state.m_aAlbedo[3] * 255)
             };
 
-            apply_material_settings();
+            ApplyMaterialSettings(state);
         }
 
-        if (ImGui::SliderFloat(lang.word("brightness"), &material_brightness, 0.1f, 2.0f)) {
-            apply_material_settings();
-        }
-
-        ImGui::Separator();
-
-        ImGui::Text(lang.word("texture"));
-        ImGui::Text("%s: %s", lang.word("current"), material_texture_path.empty() ? lang.word("none") : material_texture_path.c_str());
-
-        if (ImGui::Button(lang.word("select_texture"))) {
-            load_textures_in_directory();
-            show_texture_picker = !show_texture_picker;
+        if (ImGui::SliderFloat(lang.Word("brightness"), &state.m_Brightness, 0.1f, 2.0f))
+        {
+            ApplyMaterialSettings(state);
         }
 
         ImGui::Separator();
 
-        ImGui::Text(lang.word("uv_settings"));
+        ImGui::Text("%s", lang.Word("texture"));
+        ImGui::Text("%s: %s", lang.Word("current"), state.m_DiffuseTextureName.empty() ? lang.Word("none") : state.m_DiffuseTextureName.c_str());
 
-        if (ImGui::Checkbox(lang.word("stretch_texture"), &material_texture_stretch)) {
+        if (ImGui::Button(lang.Word("select_texture")))
+        {
+            LoadTexturesInDirectory(state);
+            state.m_TexturePickerVisible = !state.m_TexturePickerVisible;
         }
 
-        if (!material_texture_stretch) {
-            if (ImGui::SliderFloat(lang.word("repeat_u"), &material_texture_repeat_u, 0.1f, 10.0f)) {
+        ImGui::Separator();
+
+        ImGui::Text("%s", lang.Word("uv_settings"));
+
+        if (ImGui::Checkbox(lang.Word("stretch_texture"), &state.m_TextureStretch))
+        {
+        }
+
+        if (!state.m_TextureStretch)
+        {
+            if (ImGui::SliderFloat(lang.Word("repeat_u"), &state.m_TextureRepeatU, 0.1f, 10.0f))
+            {
             }
 
-            if (ImGui::SliderFloat(lang.word("repeat_v"), &material_texture_repeat_v, 0.1f, 10.0f)) {
+            if (ImGui::SliderFloat(lang.Word("repeat_v"), &state.m_TextureRepeatV, 0.1f, 10.0f))
+            {
             }
 
-            if (ImGui::SliderFloat(lang.word("uv_scale_x"), &material_uv_scale_x, 0.1f, 5.0f)) {
+            if (ImGui::SliderFloat(lang.Word("uv_scale_x"), &state.m_UvScaleX, 0.1f, 5.0f))
+            {
             }
 
-            if (ImGui::SliderFloat(lang.word("uv_scale_y"), &material_uv_scale_y, 0.1f, 5.0f)) {
+            if (ImGui::SliderFloat(lang.Word("uv_scale_y"), &state.m_UvScaleY, 0.1f, 5.0f))
+            {
             }
         }
 
         ImGui::Separator();
 
-        if (ImGui::ColorEdit4(lang.word("outline_color"), material_outline_color_f)) {
-            material_outline_color = {
-                (unsigned char)(material_outline_color_f[0] * 255),
-                (unsigned char)(material_outline_color_f[1] * 255),
-                (unsigned char)(material_outline_color_f[2] * 255),
-                (unsigned char)(material_outline_color_f[3] * 255)
+        if (ImGui::ColorEdit4(lang.Word("outline_color"), state.m_aOutlineColor))
+        {
+            state.m_OutlineColor = {
+                (unsigned char)(state.m_aOutlineColor[0] * 255),
+                (unsigned char)(state.m_aOutlineColor[1] * 255),
+                (unsigned char)(state.m_aOutlineColor[2] * 255),
+                (unsigned char)(state.m_aOutlineColor[3] * 255)
             };
         }
 
         ImGui::Separator();
 
-        ImGui::Text(lang.word("primitive"));
+        ImGui::Text("%s", lang.Word("primitive"));
 
-        const char* primitives[] = { lang.word("sphere"), lang.word("cube"), lang.word("plane") };
-        if (ImGui::Combo(lang.word("mesh"), &material_preview_primitive, primitives, 3)) {
-            rebuild_material_preview_mesh();
+        const char* apPrimitives[] = { lang.Word("sphere"), lang.Word("cube"), lang.Word("plane") };
+        if (ImGui::Combo(lang.Word("mesh"), &state.m_PreviewPrimitive, apPrimitives, 3))
+        {
+            RebuildMaterialPreviewMesh(state);
         }
 
         ImGui::Separator();
 
-        if (ImGui::Button(lang.word("save_material"), ImVec2(-1, 0))) {
-            save_material_to_file(editor);
+        if (ImGui::Button(lang.Word("save_material"), ImVec2(-1, 0)))
+        {
+            SaveMaterialToFile(editor, state);
         }
 
         ImGui::EndChild();
@@ -598,101 +760,124 @@ void draw_material_viewer_window(Editor& editor, Entity* selected_entity) {
         ImGui::NextColumn();
 
         ImVec2 size = ImGui::GetContentRegionAvail();
-        if (size.x < 1) size.x = 1;
-        if (size.y < 1) size.y = 1;
-
-        if (viewer_mat_rt.id == 0 ||
-            viewer_mat_rt.texture.width != (int)size.x ||
-            viewer_mat_rt.texture.height != (int)size.y) {
-
-            if (viewer_mat_rt.id != 0) UnloadRenderTexture(viewer_mat_rt);
-            viewer_mat_rt = LoadRenderTexture((int)size.x, (int)size.y);
+        if (size.x < 1)
+        {
+            size.x = 1;
+        }
+        if (size.y < 1)
+        {
+            size.y = 1;
         }
 
-        ImVec2 viewport_pos = ImGui::GetCursorScreenPos();
+        if (state.m_RenderTexture.id == 0 ||
+            state.m_RenderTexture.texture.width != (int)size.x ||
+            state.m_RenderTexture.texture.height != (int)size.y)
+            {
+
+            if (state.m_RenderTexture.id != 0)
+            {
+                UnloadRenderTexture(state.m_RenderTexture);
+            }
+            state.m_RenderTexture = LoadRenderTexture((int)size.x, (int)size.y);
+        }
+
+        ImVec2 viewportPos = ImGui::GetCursorScreenPos();
 
         ImGui::InvisibleButton("Viewport", size,
             ImGuiButtonFlags_MouseButtonLeft | ImGuiButtonFlags_MouseButtonRight);
 
-        if (ImGui::IsItemHovered()) {
-            viewer_radius -= ImGui::GetIO().MouseWheel * 0.5f;
-            if (viewer_radius < 0.1f) viewer_radius = 0.1f;
+        if (ImGui::IsItemHovered())
+        {
+            state.m_Orbit.Radius -= ImGui::GetIO().MouseWheel * 0.5f;
+            if (state.m_Orbit.Radius < 0.1f)
+            {
+                state.m_Orbit.Radius = 0.1f;
+            }
         }
 
-        if (ImGui::IsItemActive()) {
+        if (ImGui::IsItemActive())
+        {
             ImVec2 delta = ImGui::GetIO().MouseDelta;
 
-            if (ImGui::IsMouseDown(ImGuiMouseButton_Left)) {
-                viewer_model_rotation.y += delta.x * 0.5f;
-                viewer_model_rotation.x += delta.y * 0.5f;
+            if (ImGui::IsMouseDown(ImGuiMouseButton_Left))
+            {
+                state.m_Orbit.ModelRotation.y += delta.x * 0.5f;
+                state.m_Orbit.ModelRotation.x += delta.y * 0.5f;
             }
 
-            if (ImGui::IsMouseDown(ImGuiMouseButton_Right)) {
-                viewer_theta -= delta.x * 0.5f; 
-                viewer_phi -= delta.y * 0.5f;
+            if (ImGui::IsMouseDown(ImGuiMouseButton_Right))
+            {
+                state.m_Orbit.Theta -= delta.x * 0.5f;
+                state.m_Orbit.Phi -= delta.y * 0.5f;
             }
 
-            viewer_phi = Clamp(viewer_phi, -89.0f, 89.0f);
+            state.m_Orbit.Phi = Clamp(state.m_Orbit.Phi, -89.0f, 89.0f);
         }
 
         Camera3D cam;
         cam.fovy = 45.0f;
         cam.projection = CAMERA_PERSPECTIVE;
-        cam.target = viewer_target;
+        cam.target = state.m_Orbit.Target;
         cam.up = { 0, 1, 0 };
 
-        cam.position.x = viewer_target.x + viewer_radius * cosf(viewer_phi * DEG2RAD) * sinf(viewer_theta * DEG2RAD);
-        cam.position.y = viewer_target.y + viewer_radius * sinf(viewer_phi * DEG2RAD);
-        cam.position.z = viewer_target.z + viewer_radius * cosf(viewer_phi * DEG2RAD) * cosf(viewer_theta * DEG2RAD);
+        cam.position.x = state.m_Orbit.Target.x + state.m_Orbit.Radius * cosf(state.m_Orbit.Phi * DEG2RAD) * sinf(state.m_Orbit.Theta * DEG2RAD);
+        cam.position.y = state.m_Orbit.Target.y + state.m_Orbit.Radius * sinf(state.m_Orbit.Phi * DEG2RAD);
+        cam.position.z = state.m_Orbit.Target.z + state.m_Orbit.Radius * cosf(state.m_Orbit.Phi * DEG2RAD) * cosf(state.m_Orbit.Theta * DEG2RAD);
 
-        BeginTextureMode(viewer_mat_rt);
+        BeginTextureMode(state.m_RenderTexture);
         ClearBackground({ 40, 40, 45, 255 });
 
         BeginMode3D(cam);
 
-        if (viewer_mat_sphere.meshCount > 0) {
+        if (state.m_PreviewSphere.meshCount > 0)
+        {
             Mat4 rot =
-                Mat4::rotationX(viewer_model_rotation.x * DEG2RAD) *
-                Mat4::rotationY(viewer_model_rotation.y * DEG2RAD);
+                Mat4::rotationX(state.m_Orbit.ModelRotation.x * DEG2RAD) *
+                Mat4::rotationY(state.m_Orbit.ModelRotation.y * DEG2RAD);
 
-            viewer_mat_sphere.transform = rot;
-            DrawModel(viewer_mat_sphere, {0,0,0}, 1.0f, WHITE);
+            state.m_PreviewSphere.transform = rot;
+            DrawModel(state.m_PreviewSphere, {0,0,0}, 1.0f, WHITE);
         }
 
         EndMode3D();
         EndTextureMode();
 
-        ImGui::SetCursorScreenPos(viewport_pos);
+        ImGui::SetCursorScreenPos(viewportPos);
 
         Rectangle src = {
             0, 0,
-            (float)viewer_mat_rt.texture.width,
-            -(float)viewer_mat_rt.texture.height
+            (float)state.m_RenderTexture.texture.width,
+            -(float)state.m_RenderTexture.texture.height
         };
 
-        qcImGuiImageRect(&viewer_mat_rt.texture, (int)size.x, (int)size.y, src);
+        QcImGuiImageRect(&state.m_RenderTexture.texture, (int)size.x, (int)size.y, src);
 
         ImGui::Columns(1);
     }
 
     ImGui::End();
 
-    if (show_texture_picker) {
+    if (state.m_TexturePickerVisible)
+    {
         ImGui::SetNextWindowSize(ImVec2(400, 500), ImGuiCond_FirstUseEver);
-        if (ImGui::Begin(lang.word("select_texture"), &show_texture_picker)) {
-            ImGui::Text(lang.word("textures_in_directory"));
+        if (ImGui::Begin(lang.Word("select_texture"), &state.m_TexturePickerVisible))
+        {
+            ImGui::Text("%s", lang.Word("textures_in_directory"));
             ImGui::Separator();
-            
-            for (const auto& texture_name : texture_files_in_dir) {
-                if (ImGui::Selectable(texture_name.c_str(), selected_texture_preview == texture_name)) {
-                    selected_texture_preview = texture_name;
-                    load_material_texture(texture_name);
-                    show_texture_picker = false;
+
+            for (const auto& textureName : state.m_vTextureFilesInDir)
+            {
+                if (ImGui::Selectable(textureName.c_str(), state.m_SelectedTextureName == textureName))
+                {
+                    state.m_SelectedTextureName = textureName;
+                    LoadMaterialTexture(editor, state, textureName);
+                    state.m_TexturePickerVisible = false;
                 }
             }
 
-            if (texture_files_in_dir.empty()) {
-                ImGui::TextDisabled(lang.word("no_textures_found"));
+            if (state.m_vTextureFilesInDir.empty())
+            {
+                ImGui::TextDisabled("%s", lang.Word("no_textures_found"));
             }
 
             ImGui::End();
@@ -700,24 +885,3 @@ void draw_material_viewer_window(Editor& editor, Entity* selected_entity) {
     }
 }
 
-void cleanup_viewers() {
-    release_model_preview();
-
-    if (viewer_rt.id != 0) {
-        UnloadRenderTexture(viewer_rt);
-        viewer_rt = { 0 };
-    }
-
-    release_material_preview_model();
-
-    if (viewer_mat_rt.id != 0) {
-        UnloadRenderTexture(viewer_mat_rt);
-        viewer_mat_rt = { 0 };
-    }
-
-    if (material_texture_owned && material_texture.id != 0) {
-        UnloadTexture(material_texture);
-    }
-    material_texture = {0};
-    material_texture_owned = false;
-}

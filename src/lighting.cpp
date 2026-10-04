@@ -1,78 +1,115 @@
 #include "lighting.h"
 #include <cstring>
 
-static bool used[QC_MAX_LIGHTS] = {false};
+using namespace qc;
 
-// lighting
-void update_lighting(Shader shader, Lighting& l) {
-    l.light.position = l.position;
-    l.light.target   = l.target;
-    l.light.color    = l.color;
-    l.light.enabled  = l.enabled;
+void UpdateLighting(Shader shader, CLightState& l)
+{
+    l.m_Light.position = l.m_Position;
+    l.m_Light.target   = l.m_Target;
+    l.m_Light.color    = l.m_Color;
+    l.m_Light.enabled  = l.m_Enabled;
 
-    int enabled_int = l.enabled ? 1 : 0;
-    int type = l.light.type;
-    float position[3] = { l.position.x, l.position.y, l.position.z };
-    float target[3] = { l.target.x, l.target.y, l.target.z };
-    float color[4] = {l.color.r / 255.f, l.color.g / 255.f, l.color.b / 255.f, l.color.a / 255.f};
+    int enabledInt = l.m_Enabled ? 1 : 0;
+    int type = l.m_Light.type;
+    float aPosition[3] = { l.m_Position.x, l.m_Position.y, l.m_Position.z };
+    float aTarget[3] = { l.m_Target.x, l.m_Target.y, l.m_Target.z };
+    float aColor[4] = {l.m_Color.r / 255.f, l.m_Color.g / 255.f, l.m_Color.b / 255.f, l.m_Color.a / 255.f};
 
-    SetShaderValue(shader, l.light.enabledLoc, &enabled_int, SHADER_UNIFORM_INT);
-    SetShaderValue(shader, l.light.typeLoc, &type, SHADER_UNIFORM_INT);
-    SetShaderValue(shader, l.light.positionLoc, position, SHADER_UNIFORM_VEC3);
-    SetShaderValue(shader, l.light.targetLoc, target, SHADER_UNIFORM_VEC3);
-    SetShaderValue(shader, l.light.colorLoc, color, SHADER_UNIFORM_VEC4);
+    SetShaderValue(shader, l.m_Light.enabledLoc, &enabledInt, SHADER_UNIFORM_INT);
+    SetShaderValue(shader, l.m_Light.typeLoc, &type, SHADER_UNIFORM_INT);
+    SetShaderValue(shader, l.m_Light.positionLoc, aPosition, SHADER_UNIFORM_VEC3);
+    SetShaderValue(shader, l.m_Light.targetLoc, aTarget, SHADER_UNIFORM_VEC3);
+    SetShaderValue(shader, l.m_Light.colorLoc, aColor, SHADER_UNIFORM_VEC4);
 
-    float intensity = l.intensity;
-    float range = l.range;
+    float intensity = l.m_Intensity;
+    float range = l.m_Range;
 
-    l.light.attenuation = 1.0f / (range * range > 0.0001f ? range * range : 0.0001f);
-    if (l.light.attenuationLoc >= 0)
-        SetShaderValue(shader, l.light.attenuationLoc, &l.light.attenuation, SHADER_UNIFORM_FLOAT);
+    l.m_Light.attenuation = 1.0f / (range * range > 0.0001f ? range * range : 0.0001f);
+    if (l.m_Light.attenuationLoc >= 0)
+    {
+        SetShaderValue(shader, l.m_Light.attenuationLoc, &l.m_Light.attenuation, SHADER_UNIFORM_FLOAT);
+    }
 
-    int intensity_loc = GetShaderLocation(shader, TextFormat("lights[%i].intensity", l.id));
-    int range_loc = GetShaderLocation(shader, TextFormat("lights[%i].range", l.id));
+    int intensityLoc = GetShaderLocation(shader, TextFormat("lights[%i].intensity", l.m_Id));
+    int rangeLoc = GetShaderLocation(shader, TextFormat("lights[%i].range", l.m_Id));
 
-    SetShaderValue(shader, intensity_loc, &intensity, SHADER_UNIFORM_FLOAT);
-    SetShaderValue(shader, range_loc, &range, SHADER_UNIFORM_FLOAT);
+    SetShaderValue(shader, intensityLoc, &intensity, SHADER_UNIFORM_FLOAT);
+    SetShaderValue(shader, rangeLoc, &range, SHADER_UNIFORM_FLOAT);
 
-    if (l.spot_angle_loc == -1)
-        l.spot_angle_loc = GetShaderLocation(shader, TextFormat("lights[%i].spotAngle", l.id));
+    if (l.m_SpotAngleLoc == -1)
+    {
+        l.m_SpotAngleLoc = GetShaderLocation(shader, TextFormat("lights[%i].spotAngle", l.m_Id));
+    }
 
-    SetShaderValue(shader, l.spot_angle_loc, &l.spot_angle, SHADER_UNIFORM_FLOAT);
+    SetShaderValue(shader, l.m_SpotAngleLoc, &l.m_SpotAngle, SHADER_UNIFORM_FLOAT);
 }
 
-void reset_light_registry() {
-    for (int i = 0; i < QC_MAX_LIGHTS; i++) {
-        used[i] = false;
+int CLightRegistry::Allocate()
+{
+    for (int id = 0; id < QC_MAX_LIGHTS; id++)
+    {
+        if (!m_aUsed[id])
+        {
+            m_aUsed[id] = true;
+            return id;
+        }
+    }
+
+    return INVALID_ID;
+}
+
+void CLightRegistry::Free(int id)
+{
+    if (id >= 0 && id < QC_MAX_LIGHTS)
+    {
+        m_aUsed[id] = false;
     }
 }
 
-int allocate_light_id() {
-    for (int i = 0; i < QC_MAX_LIGHTS; i++) {
-        if (!used[i]) { used[i] = true; return i; }
+void CLightRegistry::Reset()
+{
+    m_aUsed.fill(false);
+}
+
+bool CLightRegistry::IsAllocated(int id) const
+{
+    if (id < 0 || id >= QC_MAX_LIGHTS)
+    {
+        return false;
     }
-
-    return -1;
+    return m_aUsed[id];
 }
 
-void free_light_id(int id) {
-    if (id >= 0 && id < QC_MAX_LIGHTS) used[id] = false;
+int CLightRegistry::AllocatedCount() const
+{
+    int count = 0;
+    for (int id = 0; id < QC_MAX_LIGHTS; id++)
+    {
+        if (m_aUsed[id])
+        {
+            count++;
+        }
+    }
+    return count;
 }
 
-Lighting create_lighting(Vec3 pos, Color color) {
-    Lighting l   = {};
-    l.position   = pos;
-    l.target     = Vec3(0,0,0);
-    l.color      = color;
-    l.enabled    = true;
-    l.light.type = LIGHT_POINT;
-    l.intensity  = 1.0f;
-    l.range      = 5.0f;
-    l.spot_angle = 30.0f;
+CLightState CreateLighting(Vec3 pos, Color color)
+{
+    CLightState l  = {};
+    l.m_Position   = pos;
+    l.m_Target     = Vec3(0,0,0);
+    l.m_Color      = color;
+    l.m_Enabled    = true;
+    l.m_Light.type = LIGHT_TYPE_POINT;
+    l.m_Intensity  = 1.0f;
+    l.m_Range      = 5.0f;
+    l.m_SpotAngle  = 30.0f;
     return l;
 }
 
-Light create_light_at_slot(int slot, int type, Vec3 position, Vec3 target, Color color, Shader shader) {
+Light CreateLightAtSlot(int slot, int type, Vec3 position, Vec3 target, Color color, Shader shader)
+{
     Light light       = { 0 };
     light.enabled     = true;
     light.type        = type;
@@ -87,13 +124,10 @@ Light create_light_at_slot(int slot, int type, Vec3 position, Vec3 target, Color
     return light;
 }
 
-static void cache_extended_light_uniform_locations(Lighting& lighting, Shader shader, int slot) {
-    lighting.intensity_loc  = GetShaderLocation(shader, TextFormat("lights[%i].intensity", slot));
-    lighting.range_loc      = GetShaderLocation(shader, TextFormat("lights[%i].range", slot));
-    lighting.spot_angle_loc = GetShaderLocation(shader, TextFormat("lights[%i].spotAngle", slot));
-}
-
-void initialize_lighting_uniform_cache(Lighting& lighting, Shader shader, int slot) {
-    cache_extended_light_uniform_locations(lighting, shader, slot);
+void InitializeLightingUniformCache(CLightState& lighting, Shader shader, int slot)
+{
+    lighting.m_IntensityLoc  = GetShaderLocation(shader, TextFormat("lights[%i].intensity", slot));
+    lighting.m_RangeLoc      = GetShaderLocation(shader, TextFormat("lights[%i].range", slot));
+    lighting.m_SpotAngleLoc = GetShaderLocation(shader, TextFormat("lights[%i].spotAngle", slot));
 }
 

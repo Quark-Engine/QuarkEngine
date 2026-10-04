@@ -1,8 +1,18 @@
 #define NOMINMAX
 
-#include "QuarkCore/QuarkCore.hpp"
+#include "hub.h"
 
-using namespace qc;
+#include "version.h"
+#include "language_manager.h"
+#include "editor/editor_preferences.h"
+#include "project.h"
+#include "nlohmann/json.hpp"
+
+#include <algorithm>
+#include <cctype>
+#include <cstdio>
+#include <cstring>
+#include <fstream>
 
 #ifdef _WIN32
     #define WIN32_LEAN_AND_MEAN
@@ -21,578 +31,198 @@ using namespace qc;
     #undef Rectangle
 #endif
 
-#include "hub.h"
-#include "version.h"
-#include "language_manager.h"
-#include "editor/editor_preferences.h"
-#include "project.h"
-#include "imgui.h"
-#include "qcImGui.h"
-#include "nlohmann/json.hpp"
-#include <filesystem>
-#include <fstream>
-#include <vector>
-#include <string>
-#include <map>
-#include <algorithm>
-#include <cstdio>
-#include <cstring>
-
-#define lang LanguageManager::get()
-
 namespace fs = std::filesystem;
+
 using json = nlohmann::json;
 
-static const char* HUB_PROJECTS_ROOT = "projects";
-static const char* HUB_REGISTRY_FILE = "config.json";
+#define lang CLanguageManager::Get()
 
-struct HubProject {
-    std::string name;
-    std::string path;
-};
+namespace
+{
 
-static std::vector<HubProject> hub_projects;
-static int  hub_selected         = -1;
-static int  hub_rename_index     = -1;
-static bool hub_show_create      = false;
-static bool hub_show_rename      = false;
-static bool hub_show_delete      = false;
-static char hub_create_name[256] = "";
-static char hub_create_path[512] = "";
-static char hub_rename_buf[256]  = "";
+const char* const HUB_PROJECTS_ROOT = "projects";
+const char* const HUB_REGISTRY_FILE = "config.json";
 
-static bool        hub_show_version_warning = false;
-static std::string hub_pending_open_path    = "";
-static std::string hub_saved_version        = "";
-
-static ImU32 hub_card_color(bool selected) {
-    if (g_editor_preferences.light_theme)
-        return selected ? IM_COL32(190, 214, 245, 255) : IM_COL32(239, 242, 247, 255);
-    return selected ? IM_COL32(30, 80, 140, 255) : IM_COL32(26, 28, 31, 255);
+bool IsSupportedPluginExtension(const std::string& extension)
+{
+#ifdef _WIN32
+    return extension == ".dll";
+#elif __APPLE__
+    return extension == ".dylib";
+#else
+    return extension == ".so";
+#endif
 }
 
-static ImU32 hub_card_border_color(bool selected) {
-    if (g_editor_preferences.light_theme)
-        return selected ? IM_COL32(75, 130, 205, 255) : IM_COL32(190, 198, 210, 255);
-    return selected ? IM_COL32(50, 130, 220, 255) : IM_COL32(50, 52, 56, 255);
-}
-
-static ImU32 hub_card_hover_color() {
-    return g_editor_preferences.light_theme
-        ? IM_COL32(215, 226, 242, 220)
-        : IM_COL32(40, 42, 46, 180);
-}
-
-// Plugin Management
-static bool hub_show_plugin_manager = false;
-
-struct HubPluginInfo {
-    std::string name;
-    std::string path;
-    std::string description;
-    bool enabled;
-    Texture2D icon;
-};
-
-static std::vector<HubPluginInfo> hub_plugin_list;
-static int hub_plugin_selected = -1;
-
-static fs::path hub_plugin_disabled_sentinel(const std::string& plugin_path) {
-    fs::path p(plugin_path);
-    return p.parent_path() / (p.stem().string() + ".disabled");
-}
-
-static bool hub_plugin_is_enabled(const std::string& plugin_path) {
-    return !fs::exists(hub_plugin_disabled_sentinel(plugin_path));
-}
-
-static void hub_plugin_set_enabled(const std::string& plugin_path, bool enabled) {
-    fs::path sentinel = hub_plugin_disabled_sentinel(plugin_path);
-
-    if (enabled) {
-        if (fs::exists(sentinel)) fs::remove(sentinel);
+std::string ReadMetaLine(const fs::path& metaPath, const char* pKey)
+{
+    const std::string prefix = std::string(pKey) + "=";
+    if (!fs::exists(metaPath))
+    {
+        return "";
     }
 
-    else    
-        std::ofstream f(sentinel);
-}
-
-static std::string hub_plugin_read_meta_description(const fs::path& plugin_path) {
-    fs::path meta = plugin_path.parent_path() / (plugin_path.stem().string() + ".meta");
-    if (!fs::exists(meta)) return "";
-
-    std::ifstream f(meta);
+    std::ifstream file(metaPath);
     std::string line;
-
-    while (std::getline(f, line)) {
-        if (line.rfind("description=", 0) == 0)
-            return line.substr(12);
+    while (std::getline(file, line))
+    {
+        if (line.rfind(prefix, 0) == 0)
+        {
+            return line.substr(prefix.size());
+        }
     }
 
     return "";
 }
 
-static void hub_refresh_plugins() {
-    for (auto& p : hub_plugin_list)
-        if (p.icon.id != 0) UnloadTexture(p.icon);
+} // anonymous
 
-    hub_plugin_list.clear();
-    hub_plugin_selected = -1;
-
-    const std::string plugins_dir = "plugins";
-    if (!fs::exists(plugins_dir)) return;
-
-    for (auto& entry : fs::directory_iterator(plugins_dir)) {
-        HubPluginInfo info;
-
-        if (entry.is_directory()) {
-            fs::path bin;
-            for (auto& f : fs::directory_iterator(entry.path())) {
-                std::string ext = f.path().extension().string();
-#ifdef _WIN32
-                if (ext == ".dll") { bin = f.path(); break; }
-#elif __APPLE__
-                if (ext == ".dylib") { bin = f.path(); break; }
-#else
-                if (ext == ".so") { bin = f.path(); break; }
-#endif
-            }
-            if (bin.empty()) continue;
-
-            info.path = bin.string();
-            info.name = entry.path().filename().string();
-
-            fs::path icon_path = entry.path() / "icon.png";
-            fs::path meta_path = entry.path() / "meta.txt";
-
-            info.icon = fs::exists(icon_path)
-                ? LoadTexture(icon_path.string().c_str())
-                : Texture2D{0};
-
-            if (fs::exists(meta_path)) {
-                std::ifstream f(meta_path);
-                std::string line;
-                while (std::getline(f, line)) {
-                    if (line.rfind("description=", 0) == 0) {
-                        info.description = line.substr(12);
-                        break;
-                    }
-                }
-            }
-
-        } 
-        
-        else if (entry.is_regular_file()) {
-            std::string ext = entry.path().extension().string();
-#ifdef _WIN32
-            if (ext != ".dll") continue;
-#elif __APPLE__
-            if (ext != ".dylib") continue;
-#else
-            if (ext != ".so") continue;
-#endif
-            info.path = entry.path().string();
-            info.name = entry.path().stem().string();
-
-            fs::path icon_path = entry.path().parent_path() / (info.name + ".png");
-            fs::path meta_path = entry.path().parent_path() / (info.name + ".meta");
-
-            info.icon = fs::exists(icon_path)
-                ? LoadTexture(icon_path.string().c_str())
-                : Texture2D{0};
-
-            if (fs::exists(meta_path)) {
-                std::ifstream f(meta_path);
-                std::string line;
-                while (std::getline(f, line)) {
-                    if (line.rfind("description=", 0) == 0) {
-                        info.description = line.substr(12);
-                        break;
-                    }
-                }
-            }
-
-        } 
-        
-        else {
-            continue;
+CHubApp::~CHubApp()
+{
+    for (auto& plugin : m_State.vPlugins)
+    {
+        if (plugin.Icon.id != 0)
+        {
+            qc::UnloadTexture(plugin.Icon);
         }
-
-        info.enabled = hub_plugin_is_enabled(info.path);
-        if (info.description.empty()) info.description = "No description provided.";
-        hub_plugin_list.push_back(info);
     }
-
-    std::sort(hub_plugin_list.begin(), hub_plugin_list.end(),
-        [](const HubPluginInfo& a, const HubPluginInfo& b){ return a.name < b.name; });
 }
 
-static ImVec4 hub_plugin_badge_color(const std::string& name) {
-    static const ImVec4 palette[] = {
-        {0.20f, 0.55f, 0.95f, 1.f},
-        {0.18f, 0.72f, 0.56f, 1.f},
-        {0.85f, 0.45f, 0.20f, 1.f},
-        {0.65f, 0.35f, 0.90f, 1.f},
-        {0.90f, 0.70f, 0.10f, 1.f},
-        {0.85f, 0.25f, 0.35f, 1.f},
+const char* CHubApp::ProjectsRoot()
+{
+    return HUB_PROJECTS_ROOT;
+}
+
+const char* CHubApp::RegistryFile()
+{
+    return HUB_REGISTRY_FILE;
+}
+
+ImU32 CHubApp::CardColor(bool selected) const
+{
+    if (UsesLightTheme())
+    {
+        return selected ? IM_COL32(190, 214, 245, 255) : IM_COL32(239, 242, 247, 255);
+    }
+    return selected ? IM_COL32(30, 80, 140, 255) : IM_COL32(26, 28, 31, 255);
+}
+
+ImU32 CHubApp::CardBorderColor(bool selected) const
+{
+    if (UsesLightTheme())
+    {
+        return selected ? IM_COL32(75, 130, 205, 255) : IM_COL32(190, 198, 210, 255);
+    }
+    return selected ? IM_COL32(50, 130, 220, 255) : IM_COL32(50, 52, 56, 255);
+}
+
+ImU32 CHubApp::CardHoverColor() const
+{
+    return UsesLightTheme()
+        ? IM_COL32(215, 226, 242, 220)
+        : IM_COL32(40, 42, 46, 180);
+}
+
+bool CHubApp::UsesLightTheme() const
+{
+    return m_pPreferences != nullptr && m_pPreferences->m_LightTheme;
+}
+
+ImVec4 CHubApp::PluginBadgeColor(const std::string& name)
+{
+    static const ImVec4 s_aPalette[] = {
+        { 0.20f, 0.55f, 0.95f, 1.0f },
+        { 0.18f, 0.72f, 0.56f, 1.0f },
+        { 0.85f, 0.45f, 0.20f, 1.0f },
+        { 0.65f, 0.35f, 0.90f, 1.0f },
+        { 0.90f, 0.70f, 0.10f, 1.0f },
+        { 0.85f, 0.25f, 0.35f, 1.0f },
     };
 
-    size_t h = 0;
-    for (char c : name) h = h * 31 + (unsigned char)c;
-    return palette[h % 6];
-}
-
-static void hub_draw_plugin_manager() {
-    if (!hub_show_plugin_manager) return;
-
-    ImGuiIO& io = ImGui::GetIO();
-    float W = io.DisplaySize.x;
-    float H = io.DisplaySize.y;
-
-    const float WND_W = 720.f, WND_H = 480.f;
-    ImGui::SetNextWindowSize(ImVec2(WND_W, WND_H), ImGuiCond_Always);
-    ImGui::SetNextWindowPos(ImVec2(W * 0.5f, H * 0.5f), ImGuiCond_Always, ImVec2(0.5f, 0.5f));
-
-    bool open = true;
-    ImGui::Begin("Plugin Manager##pmgr", &open);
-
-    if (!open) {
-        hub_show_plugin_manager = false;
-        hub_plugin_selected = -1;
-        ImGui::End();
-        return;
+    size_t hash = 0;
+    for (char c : name)
+    {
+        hash = hash * 31 + static_cast<unsigned char>(c);
     }
-
-    if (ImGui::BeginTabBar("##pmgr_tabs")) {
-        if (ImGui::BeginTabItem("Installed")) {
-            ImGui::BeginChild("##pmgr_list", ImVec2(220, -1), true);
-
-            if (hub_plugin_list.empty()) {
-                ImVec2 avail = ImGui::GetContentRegionAvail();
-                const char* msg = "No plugins installed.";
-                ImVec2 ts = ImGui::CalcTextSize(msg);
-                ImGui::SetCursorPos(ImVec2((avail.x - ts.x) * 0.5f, (avail.y - ts.y) * 0.5f));
-                ImGui::TextDisabled("%s", msg);
-            }
-
-            for (int i = 0; i < (int)hub_plugin_list.size(); i++) {
-                auto& pi = hub_plugin_list[i];
-                ImGui::PushID(i);
-
-                bool is_sel = (hub_plugin_selected == i);
-
-                ImVec2 card_pos = ImGui::GetCursorScreenPos();
-                float card_w    = ImGui::GetContentRegionAvail().x;
-                float card_h    = 46.f;
-
-                ImU32 bg_col = hub_card_color(is_sel);
-
-                ImGui::GetWindowDrawList()->AddRectFilled( card_pos, ImVec2(card_pos.x + card_w, card_pos.y + card_h), bg_col);
-                ImGui::GetWindowDrawList()->AddRect(
-                    card_pos, ImVec2(card_pos.x + card_w, card_pos.y + card_h),
-                    hub_card_border_color(is_sel)
-                );
-
-                ImVec4 badge = hub_plugin_badge_color(pi.name);
-                ImVec2 badge_min = ImVec2(card_pos.x + 8, card_pos.y + 10);
-                ImVec2 badge_max = ImVec2(badge_min.x + 26, badge_min.y + 26);
-
-                char letter[2] = { (char)toupper((unsigned char)pi.name[0]), '\0' };
-                ImVec2 letter_sz = ImGui::CalcTextSize(letter);
-
-                if (pi.icon.id != 0) {
-                    qcImGuiAddImage(ImGui::GetWindowDrawList(), &pi.icon, badge_min, badge_max);
-                } 
-                
-                else {
-                    ImGui::GetWindowDrawList()->AddRectFilled(badge_min, badge_max, ImGui::ColorConvertFloat4ToU32(badge), 4.f);
-                    ImGui::GetWindowDrawList()->AddText(ImVec2(badge_min.x + (26 - letter_sz.x) * 0.5f, badge_min.y + (26 - letter_sz.y) * 0.5f), IM_COL32(255,255,255,230), letter);
-                }
-
-                if (!pi.enabled) {
-                    ImGui::GetWindowDrawList()->AddCircleFilled(ImVec2(badge_max.x - 2, badge_min.y + 2), 5.f, IM_COL32(200, 60, 60, 255));
-                }
-
-                ImGui::SetCursorScreenPos(ImVec2(card_pos.x + 44, card_pos.y + 14));
-                if (!pi.enabled) ImGui::TextDisabled("%s", pi.name.c_str());
-                else ImGui::Text("%s", pi.name.c_str());
-
-                ImGui::SetCursorScreenPos(card_pos);
-                ImGui::InvisibleButton("##card", ImVec2(card_w, card_h));
-                if (ImGui::IsItemClicked()) hub_plugin_selected = i;
-
-                ImGui::SetCursorScreenPos(ImVec2(card_pos.x, card_pos.y + card_h + 3));
-                ImGui::Dummy(ImVec2(card_w, 0));
-                ImGui::PopID();
-            }
-            ImGui::EndChild();
-
-            ImGui::SameLine();
-            ImGui::BeginChild("##pmgr_detail", ImVec2(-1, -1), false);
-
-            if (hub_plugin_selected >= 0 && hub_plugin_selected < (int)hub_plugin_list.size()) {
-                HubPluginInfo& pi = hub_plugin_list[hub_plugin_selected];
-
-                ImVec4 badge = hub_plugin_badge_color(pi.name);
-                ImDrawList* dl = ImGui::GetWindowDrawList();
-                ImVec2 icon_pos = ImGui::GetCursorScreenPos();
-
-                icon_pos.x += 8; icon_pos.y += 8;
-                ImVec2 icon_max = ImVec2(icon_pos.x + 64, icon_pos.y + 64);
-
-                char letter[2] = { (char)toupper((unsigned char)pi.name[0]), '\0' };
-                ImVec2 lsz = ImGui::CalcTextSize(letter);
-
-                if (pi.icon.id != 0) {
-                    qcImGuiAddImage(dl, &pi.icon, icon_pos, icon_max);
-                } 
-                
-                else {
-                    dl->AddRectFilled(icon_pos, icon_max, ImGui::ColorConvertFloat4ToU32(badge), 8.f);
-                    dl->AddText(
-                        nullptr, 28.f,
-                        ImVec2(icon_pos.x + (64 - 16) * 0.5f,
-                        icon_pos.y + (64 - 28) * 0.5f),
-                        IM_COL32(255,255,255,230), letter
-                    );
-                }
-
-                ImGui::SetCursorScreenPos(ImVec2(icon_max.x + 14, icon_pos.y + 4));
-                ImGui::Text("%s", pi.name.c_str());
-
-                ImGui::SetCursorScreenPos(ImVec2(icon_max.x + 14, icon_pos.y + 26));
-
-                if (pi.enabled) ImGui::TextColored(ImVec4(0.3f,0.8f,0.4f,1.f), "Enabled");
-                else ImGui::TextColored(ImVec4(0.7f,0.3f,0.3f,1.f), "Disabled");
-
-                ImGui::SetCursorScreenPos(ImVec2(icon_pos.x - 8, icon_max.y + 18));
-
-                ImGui::Separator();
-                ImGui::Spacing();
-
-                ImGui::TextWrapped("%s", pi.description.c_str());
-                ImGui::Spacing();
-                ImGui::TextDisabled("Path: %s", pi.path.c_str());
-
-                float bottom_y = ImGui::GetWindowPos().y + ImGui::GetWindowHeight() - 44;
-                ImGui::SetCursorScreenPos(ImVec2(icon_pos.x - 8, bottom_y));
-                ImGui::Separator();
-                ImGui::Spacing();
-
-                const char* toggle_lbl = pi.enabled ? "Disable" : "Enable";
-                ImVec4 tog_col = pi.enabled ? ImVec4(0.70f, 0.30f, 0.30f, 1.f) : ImVec4(0.20f, 0.60f, 0.30f, 1.f);
-
-                ImGui::PushStyleColor(ImGuiCol_Button, tog_col);
-                ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImVec4(tog_col.x+0.1f, tog_col.y+0.1f, tog_col.z+0.1f, 1.f));
-                ImGui::PushStyleColor(ImGuiCol_ButtonActive, ImVec4(tog_col.x-0.05f, tog_col.y-0.05f, tog_col.z-0.05f, 1.f));
-
-                if (ImGui::Button(toggle_lbl, ImVec2(110, 28))) {
-                    pi.enabled = !pi.enabled;
-                    hub_plugin_set_enabled(pi.path, pi.enabled);
-                }
-                ImGui::PopStyleColor(3);
-
-                ImGui::SameLine();
-
-                ImGui::PushStyleColor(ImGuiCol_Button,        ImVec4(0.55f,0.15f,0.15f,1.f));
-                ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImVec4(0.70f,0.20f,0.20f,1.f));
-                ImGui::PushStyleColor(ImGuiCol_ButtonActive,  ImVec4(0.40f,0.10f,0.10f,1.f));
-
-                if (ImGui::Button("Delete", ImVec2(90, 28))) {
-                    ImGui::OpenPopup("Confirm Delete");
-                }
-                ImGui::PopStyleColor(3);
-
-                ImGui::SetNextWindowSize(ImVec2(320, 100), ImGuiCond_Always);
-                ImGui::SetNextWindowPos(ImVec2(W * 0.5f, H * 0.5f), ImGuiCond_Always, ImVec2(0.5f,0.5f));
-
-                if (ImGui::BeginPopupModal("Confirm Delete", nullptr, ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoMove)) {
-
-                    ImGui::Spacing();
-                    ImGui::Text("Delete plugin \"%s\"?", pi.name.c_str());
-                    ImGui::TextDisabled("This removes the file from disk.");
-                    ImGui::Spacing(); ImGui::Separator(); ImGui::Spacing();
-
-                    ImGui::PushStyleColor(ImGuiCol_Button,        ImVec4(0.55f,0.15f,0.15f,1.f));
-                    ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImVec4(0.70f,0.20f,0.20f,1.f));
-                    ImGui::PushStyleColor(ImGuiCol_ButtonActive,  ImVec4(0.40f,0.10f,0.10f,1.f));
-
-                    if (ImGui::Button("Delete", ImVec2(90, 26))) {
-                        if (pi.icon.id != 0) UnloadTexture(pi.icon);
-
-                        fs::path bin(pi.path);
-                        fs::path parent = bin.parent_path();
-                        fs::path plugins_root = fs::canonical("plugins");
-
-                        if (fs::canonical(parent) != plugins_root) fs::remove_all(parent);
-                        else fs::remove(bin);
-
-                        fs::path sentinel = bin.parent_path() / (bin.stem().string() + ".disabled");
-                        if (fs::exists(sentinel)) fs::remove(sentinel);
-
-                        hub_refresh_plugins();
-                        ImGui::CloseCurrentPopup();
-                    }
-
-                    ImGui::PopStyleColor(3);
-                    ImGui::SameLine();
-
-                    if (ImGui::Button("Cancel", ImVec2(80, 26)))
-                        ImGui::CloseCurrentPopup();
-
-                    ImGui::EndPopup();
-                }
-
-            } 
-            
-            else {
-                ImVec2 avail = ImGui::GetContentRegionAvail();
-                const char* msg = "Select a plugin to view details.";
-                ImVec2 ts = ImGui::CalcTextSize(msg);
-
-                ImGui::SetCursorPos(ImVec2((avail.x - ts.x) * 0.5f, (avail.y - ts.y) * 0.5f));
-                ImGui::TextDisabled("%s", msg);
-            }
-
-            ImGui::EndChild();
-            ImGui::EndTabItem();
-        }
-
-        if (ImGui::BeginTabItem("Explore")) {
-            ImVec2 avail = ImGui::GetContentRegionAvail();
-            const char* line1 = "Browse online plugins";
-            const char* line2 = "Coming soon.";
-
-            ImVec2 s1 = ImGui::CalcTextSize(line1);
-            ImVec2 s2 = ImGui::CalcTextSize(line2);
-            float total_h = s1.y + 6 + s2.y;
-
-            ImGui::SetCursorPos(ImVec2((avail.x - s1.x) * 0.5f, (avail.y - total_h) * 0.5f));
-            ImGui::Text("%s", line1);
-            ImGui::SetCursorPosX((avail.x - s2.x) * 0.5f);
-            ImGui::TextDisabled("%s", line2);
-            ImGui::EndTabItem();
-        }
-
-        ImGui::EndTabBar();
-    }
-
-    ImGui::End();
+    return s_aPalette[hash % 6];
 }
 
-// Hub
-static void hub_save_registry() {
-    json j;
-    
-    if (fs::exists(HUB_REGISTRY_FILE)) {
-        std::ifstream f(HUB_REGISTRY_FILE);
-        try {
-            f >> j;
-        } catch (...) {}
-    }
-    
-    if (!j.contains("language")) {
-        j["language"] = "english";
-    }
-
-    json projects = json::array();
-    for (auto& p : hub_projects)
-        projects.push_back( { {"name", p.name}, {"path", p.path} } );
-    
-    j["projects"] = projects;
-    
-    std::ofstream f(HUB_REGISTRY_FILE);
-    f << j.dump(4);
+fs::path CHubApp::PluginDisabledSentinel(const std::string& pluginPath)
+{
+    const fs::path path(pluginPath);
+    return path.parent_path() / (path.stem().string() + ".disabled");
 }
 
-static void hub_refresh() {
-    hub_projects.clear();
-
-    if (fs::exists(HUB_REGISTRY_FILE)) {
-        std::ifstream f(HUB_REGISTRY_FILE);
-        json j;
-        try {
-            f >> j;
-            json projects = j.contains("projects") ? j["projects"] : json::array();
-            if (projects.is_array()) {
-                for (auto& entry : projects) {
-                    std::string path = entry["path"];
-                    if (project_is_valid(path)) {
-                        HubProject p;
-                        p.name = entry["name"];
-                        p.path = project_resolve_root(path);
-                        hub_projects.push_back(p);
-                    }
-                }
-            }
-        } catch (...) {}
-    }
-
-    std::sort(hub_projects.begin(), hub_projects.end(),
-        [](const HubProject& a, const HubProject& b) { return a.name < b.name; });
+bool CHubApp::PluginIsEnabled(const std::string& pluginPath)
+{
+    return !fs::exists(PluginDisabledSentinel(pluginPath));
 }
 
-static void hub_create_project(const std::string& name, const std::string& base) {
-    fs::path proj = fs::path(base) / name;
-    Scene empty_scene;
-    project_new(proj.string(), empty_scene);
-
-    HubProject p;
-    p.name = name;
-    p.path = fs::absolute(proj).string();
-    hub_projects.push_back(p);
-    hub_save_registry();
-}
-
-static void hub_delete_project(const std::string& path) {
-    fs::remove_all(path);
-    hub_projects.erase(std::remove_if(hub_projects.begin(), hub_projects.end(),
-        [&](const HubProject& p) { return p.path == path; }), hub_projects.end());
-    hub_save_registry();
-}
-
-static void hub_rename_project(const std::string& old_path, const std::string& new_name) {
-    fs::path p(old_path);
-    fs::path new_path = p.parent_path() / new_name;
-    fs::rename(p, new_path);
-
-    for (auto& proj : hub_projects) {
-        if (proj.path == old_path) {
-            proj.name = new_name;
-            proj.path = fs::absolute(new_path).string();
-            break;
+void CHubApp::PluginSetEnabled(const std::string& pluginPath, bool enabled)
+{
+    const fs::path sentinel = PluginDisabledSentinel(pluginPath);
+    if (enabled)
+    {
+        if (fs::exists(sentinel))
+        {
+            fs::remove(sentinel);
         }
     }
-    hub_save_registry();
+    else
+    {
+        std::ofstream file(sentinel);
+    }
 }
 
-static std::string hub_browse_folder() {
+std::string CHubApp::PluginReadMetaDescription(const fs::path& pluginPath)
+{
+    const fs::path meta = pluginPath.parent_path() / (pluginPath.stem().string() + ".meta");
+    return ReadMetaLine(meta, "description");
+}
+
+std::string CHubApp::BrowseFolder()
+{
 #ifdef _WIN32
     char path[MAX_PATH] = {};
-    BROWSEINFOA bi = {};
-    bi.lpszTitle = lang.word("select_project_loc");
-    bi.ulFlags   = BIF_RETURNONLYFSDIRS | BIF_NEWDIALOGSTYLE;
-    LPITEMIDLIST pidl = SHBrowseForFolderA(&bi);
-    if (pidl) {
-        SHGetPathFromIDListA(pidl, path);
-        CoTaskMemFree(pidl);
+    BROWSEINFOA info = {};
+    info.lpszTitle = lang.Word("select_project_loc");
+    info.ulFlags = BIF_RETURNONLYFSDIRS | BIF_NEWDIALOGSTYLE;
+
+    LPITEMIDLIST pidl = SHBrowseForFolderA(&info);
+    if (!pidl)
+    {
+        return "";
     }
+
+    SHGetPathFromIDListA(pidl, path);
+    CoTaskMemFree(pidl);
     return path;
 
 #elif __linux__
-    FILE* pipe = popen("zenity --file-selection --directory 2>/dev/null", "r");
-    if (!pipe) return "";
-    char result[512] = {};
-    if (fgets(result, sizeof(result), pipe)) {
-        size_t len = strlen(result);
-        if (len > 0 && result[len - 1] == '\n') result[len - 1] = '\0';
+    FILE* pPipe = popen("zenity --file-selection --directory 2>/dev/null", "r");
+    if (!pPipe)
+    {
+        return "";
     }
-    pclose(pipe);
-    return result;
+
+    char aResult[512] = {};
+    if (fgets(aResult, sizeof(aResult), pPipe))
+    {
+        size_t length = strlen(aResult);
+        if (length > 0 && aResult[length - 1] == '\n')
+        {
+            aResult[length - 1] = '\0';
+        }
+    }
+    pclose(pPipe);
+    return aResult;
+#else
+    return "";
 #endif
 }
 
-static std::string hub_browse_project_file() {
+std::string CHubApp::BrowseProjectFile()
+{
 #ifdef _WIN32
     char path[MAX_PATH] = {};
     OPENFILENAMEA ofn = {};
@@ -603,346 +233,996 @@ static std::string hub_browse_project_file() {
     ofn.nMaxFile = MAX_PATH;
     ofn.Flags = OFN_FILEMUSTEXIST | OFN_PATHMUSTEXIST | OFN_NOCHANGEDIR;
     ofn.lpstrDefExt = "quarkproj";
-    if (GetOpenFileNameA(&ofn)) return path;
+    if (GetOpenFileNameA(&ofn))
+    {
+        return path;
+    }
     return "";
 
 #elif __linux__
-    FILE* pipe = popen("zenity --file-selection --file-filter='*.quarkproj' 2>/dev/null", "r");
-    if (!pipe) return "";
-    char result[512] = {};
-    if (fgets(result, sizeof(result), pipe)) {
-        size_t len = strlen(result);
-        if (len > 0 && result[len - 1] == '\n') result[len - 1] = '\0';
+    FILE* pPipe = popen("zenity --file-selection --file-filter='*.quarkproj' 2>/dev/null", "r");
+    if (!pPipe)
+    {
+        return "";
     }
-    pclose(pipe);
-    return result;
+
+    char aResult[512] = {};
+    if (fgets(aResult, sizeof(aResult), pPipe))
+    {
+        size_t length = strlen(aResult);
+        if (length > 0 && aResult[length - 1] == '\n')
+        {
+            aResult[length - 1] = '\0';
+        }
+    }
+    pclose(pPipe);
+    return aResult;
 #else
     return "";
 #endif
 }
 
-static void hub_import_project(const std::string& manifest_or_path) {
-    if (!project_is_valid(manifest_or_path)) return;
+void CHubApp::SaveRegistry()
+{
+    json root;
 
-    const std::string root_path = project_resolve_root(manifest_or_path);
-    const fs::path root(root_path);
-    const std::string name = root.filename().string().empty() ? root.stem().string() : root.filename().string();
-
-    for (auto& existing : hub_projects) {
-        if (existing.path == root_path) return;
-    }
-
-    HubProject project;
-    project.name = name;
-    project.path = root_path;
-    hub_projects.push_back(project);
-    hub_save_registry();
-}
-
-std::string run_hub() {
-    fs::create_directories(HUB_PROJECTS_ROOT);
-    if (!fs::exists(HUB_REGISTRY_FILE)) {
-        for (auto& entry : fs::directory_iterator(HUB_PROJECTS_ROOT)) {
-            if (!entry.is_directory()) continue;
-            if (!project_is_valid(entry.path().string())) continue;
-
-            HubProject p;
-            p.name = entry.path().filename().string();
-            p.path = fs::absolute(entry.path()).string();
-            hub_projects.push_back(p);
+    if (fs::exists(RegistryFile()))
+    {
+        std::ifstream file(RegistryFile());
+        try
+        {
+            file >> root;
+        }
+        catch (...)
+        {
         }
     }
-    hub_refresh();
-    snprintf(hub_create_path, sizeof(hub_create_path), "%s", HUB_PROJECTS_ROOT);
 
-    std::string result_path = "";
-    bool should_exit = false;
+    if (!root.contains("language"))
+    {
+        root["language"] = "english";
+    }
 
-    while (!WindowShouldClose() && !should_exit) {
-        BeginDrawing();
-        ClearBackground(g_editor_preferences.light_theme
-            ? Color{ 238, 241, 246, 255 }
-            : Color{ 33, 35, 38, 255 });
-        qcImGuiBegin();
+    json projects = json::array();
+    for (auto& project : m_State.vProjects)
+    {
+        projects.push_back({ { "name", project.Name }, { "path", project.Path } });
+    }
+    root["projects"] = projects;
+
+    std::ofstream file(RegistryFile());
+    file << root.dump(4);
+}
+
+void CHubApp::Refresh()
+{
+    m_State.vProjects.clear();
+
+    if (fs::exists(RegistryFile()))
+    {
+        std::ifstream file(RegistryFile());
+        json root;
+        try
+        {
+            file >> root;
+            json projects = root.contains("projects") ? root["projects"] : json::array();
+            if (projects.is_array())
+            {
+                for (auto& entry : projects)
+                {
+                    std::string path = entry["path"];
+                    if (!CProjectService::IsValid(path))
+                    {
+                        continue;
+                    }
+
+                    SHubProject project;
+                    project.Name = entry["name"];
+                    project.Path = CProjectService::ResolveRoot(path);
+                    m_State.vProjects.push_back(project);
+                }
+            }
+        }
+        catch (...)
+        {
+        }
+    }
+
+    std::sort(m_State.vProjects.begin(), m_State.vProjects.end(),
+        [](const SHubProject& a, const SHubProject& b)
+        {
+            return a.Name < b.Name;
+        });
+}
+
+void CHubApp::RefreshPlugins()
+{
+    for (auto& plugin : m_State.vPlugins)
+    {
+        if (plugin.Icon.id != 0)
+        {
+            qc::UnloadTexture(plugin.Icon);
+        }
+    }
+
+    m_State.vPlugins.clear();
+    m_State.SelectedPlugin = -1;
+
+    const std::string pluginsDir = "plugins";
+    if (!fs::exists(pluginsDir))
+    {
+        return;
+    }
+
+    for (auto& entry : fs::directory_iterator(pluginsDir))
+    {
+        SHubPlugin plugin;
+
+        if (entry.is_directory())
+        {
+            fs::path binary;
+            for (auto& file : fs::directory_iterator(entry.path()))
+            {
+                if (IsSupportedPluginExtension(file.path().extension().string()))
+                {
+                    binary = file.path();
+                    break;
+                }
+            }
+            if (binary.empty())
+            {
+                continue;
+            }
+
+            plugin.Path = binary.string();
+            plugin.Name = entry.path().filename().string();
+
+            const fs::path iconPath = entry.path() / "icon.png";
+            const fs::path metaPath = entry.path() / "meta.txt";
+            plugin.Icon = fs::exists(iconPath) ? qc::LoadTexture(iconPath.string().c_str()) : qc::Texture2D{ 0 };
+            plugin.Description = ReadMetaLine(metaPath, "description");
+        }
+        else if (entry.is_regular_file())
+        {
+            if (!IsSupportedPluginExtension(entry.path().extension().string()))
+            {
+                continue;
+            }
+
+            plugin.Path = entry.path().string();
+            plugin.Name = entry.path().stem().string();
+
+            const fs::path iconPath = entry.path().parent_path() / (plugin.Name + ".png");
+            const fs::path metaPath = entry.path().parent_path() / (plugin.Name + ".meta");
+            plugin.Icon = fs::exists(iconPath) ? qc::LoadTexture(iconPath.string().c_str()) : qc::Texture2D{ 0 };
+            plugin.Description = ReadMetaLine(metaPath, "description");
+        }
+        else
+        {
+            continue;
+        }
+
+        plugin.Enabled = PluginIsEnabled(plugin.Path);
+        if (plugin.Description.empty())
+        {
+            plugin.Description = "No description provided.";
+        }
+        m_State.vPlugins.push_back(plugin);
+    }
+
+    std::sort(m_State.vPlugins.begin(), m_State.vPlugins.end(),
+        [](const SHubPlugin& a, const SHubPlugin& b)
+        {
+            return a.Name < b.Name;
+        });
+}
+
+void CHubApp::CreateProject(const std::string& name, const std::string& base)
+{
+    const fs::path project = fs::path(base) / name;
+    CScene emptyScene;
+    CProjectService::CreateNew(project.string(), emptyScene);
+
+    SHubProject entry;
+    entry.Name = name;
+    entry.Path = fs::absolute(project).string();
+    m_State.vProjects.push_back(entry);
+    SaveRegistry();
+}
+
+void CHubApp::DeleteProject(const std::string& path)
+{
+    fs::remove_all(path);
+    m_State.vProjects.erase(
+        std::remove_if(m_State.vProjects.begin(), m_State.vProjects.end(),
+            [&](const SHubProject& project)
+            {
+                return project.Path == path;
+            }),
+        m_State.vProjects.end());
+    SaveRegistry();
+}
+
+void CHubApp::RenameProject(const std::string& oldPath, const std::string& newName)
+{
+    const fs::path oldProject(oldPath);
+    const fs::path newPath = oldProject.parent_path() / newName;
+    fs::rename(oldProject, newPath);
+
+    for (auto& project : m_State.vProjects)
+    {
+        if (project.Path != oldPath)
+        {
+            continue;
+        }
+        project.Name = newName;
+        project.Path = fs::absolute(newPath).string();
+        break;
+    }
+    SaveRegistry();
+}
+
+void CHubApp::ImportProject(const std::string& manifestOrPath)
+{
+    if (!CProjectService::IsValid(manifestOrPath))
+    {
+        return;
+    }
+
+    const std::string rootPath = CProjectService::ResolveRoot(manifestOrPath);
+    const fs::path root(rootPath);
+    const std::string name = root.filename().string().empty()
+        ? root.stem().string()
+        : root.filename().string();
+
+    for (auto& existing : m_State.vProjects)
+    {
+        if (existing.Path == rootPath)
+        {
+            return;
+        }
+    }
+
+    SHubProject project;
+    project.Name = name;
+    project.Path = rootPath;
+    m_State.vProjects.push_back(project);
+    SaveRegistry();
+}
+
+void CHubApp::DrawProjectCard(int index)
+{
+    ImGui::PushID(index);
+
+    const bool isSelected = m_State.SelectedProject == index;
+    const ImVec2 cardPos = ImGui::GetCursorScreenPos();
+    const float cardWidth = ImGui::GetContentRegionAvail().x;
+    const float cardHeight = 62.0f;
+
+    ImGui::GetWindowDrawList()->AddRectFilled(
+        cardPos,
+        ImVec2(cardPos.x + cardWidth, cardPos.y + cardHeight),
+        CardColor(isSelected));
+
+    ImGui::GetWindowDrawList()->AddRect(
+        cardPos,
+        ImVec2(cardPos.x + cardWidth, cardPos.y + cardHeight),
+        CardBorderColor(isSelected));
+
+    ImGui::InvisibleButton("##card", ImVec2(cardWidth, cardHeight));
+
+    if (ImGui::IsItemHovered() && !isSelected)
+    {
+        ImGui::GetWindowDrawList()->AddRectFilled(
+            cardPos,
+            ImVec2(cardPos.x + cardWidth, cardPos.y + cardHeight),
+            CardHoverColor());
+    }
+
+    if (ImGui::IsItemClicked(ImGuiMouseButton_Left))
+    {
+        m_State.SelectedProject = index;
+    }
+
+    if (ImGui::IsItemHovered() && ImGui::IsMouseDoubleClicked(ImGuiMouseButton_Left))
+    {
+        const std::string savedVersion = CProjectService::GetVersion(m_State.vProjects[index].Path);
+        if (!savedVersion.empty() && savedVersion != QUARK_ENGINE_VERSION)
+        {
+            m_State.PendingOpenPath = m_State.vProjects[index].Path;
+            m_State.SavedVersion = savedVersion;
+            m_State.ShowVersionWarning = true;
+        }
+        else
+        {
+            m_PendingResult = m_State.vProjects[index].Path;
+            m_ShouldExit = true;
+        }
+    }
+
+    if (ImGui::BeginPopupContextItem("##ctx"))
+    {
+        if (ImGui::MenuItem(lang.Word("open")))
+        {
+            m_PendingResult = m_State.vProjects[index].Path;
+            m_ShouldExit = true;
+        }
+
+        ImGui::Separator();
+        if (ImGui::MenuItem(lang.Word("rename")))
+        {
+            m_State.RenameProjectIndex = index;
+            snprintf(m_State.aRenameBuffer, sizeof(m_State.aRenameBuffer), "%s",
+                m_State.vProjects[index].Name.c_str());
+            m_State.ShowRename = true;
+        }
+
+        if (ImGui::MenuItem(lang.Word("delete")))
+        {
+            m_State.SelectedProject = index;
+            m_State.ShowDelete = true;
+        }
+        ImGui::EndPopup();
+    }
+
+    ImGui::SetCursorScreenPos(ImVec2(cardPos.x + 14, cardPos.y + 11));
+    ImGui::Text("%s", m_State.vProjects[index].Name.c_str());
+
+    ImGui::SetCursorScreenPos(ImVec2(cardPos.x + 14, cardPos.y + 36));
+    ImGui::TextDisabled("%s", m_State.vProjects[index].Path.c_str());
+
+    ImGui::SetCursorScreenPos(ImVec2(cardPos.x, cardPos.y + cardHeight + 4));
+    ImGui::Dummy(ImVec2(cardWidth, 0));
+
+    ImGui::PopID();
+}
+
+void CHubApp::DrawProjectList()
+{
+    ImGui::BeginChild("##list", ImVec2(0, static_cast<float>(qc::GetScreenHeight()) - 90), false);
+
+    if (m_State.vProjects.empty())
+    {
+        const ImVec2 available = ImGui::GetContentRegionAvail();
+        const char* pMessage = lang.Word("no_projects");
+        const ImVec2 textSize = ImGui::CalcTextSize(pMessage);
+        ImGui::SetCursorPos(ImVec2(
+            (available.x - textSize.x) * 0.5f,
+            (available.y - textSize.y) * 0.5f));
+        ImGui::TextDisabled("%s", pMessage);
+    }
+
+    for (int index = 0; index < static_cast<int>(m_State.vProjects.size()); index++)
+    {
+        DrawProjectCard(index);
+    }
+
+    ImGui::EndChild();
+
+    if (m_State.SelectedProject < 0 ||
+        m_State.SelectedProject >= static_cast<int>(m_State.vProjects.size()))
+    {
+        return;
+    }
+
+    if (ImGui::Button(lang.Word("open_selected"), ImVec2(140, 30)))
+    {
+        m_PendingResult = m_State.vProjects[m_State.SelectedProject].Path;
+        m_ShouldExit = true;
+    }
+}
+
+void CHubApp::DrawHeader()
+{
+    ImGui::SetCursorPosY(ImGui::GetCursorPosY() + 4);
+    ImGui::Text("QUARK HUB");
+    ImGui::SameLine();
+    ImGui::TextDisabled("  %s", lang.Word("project_manager"));
+    ImGui::SameLine(ImGui::GetContentRegionAvail().x - 354);
+
+    if (ImGui::Button(lang.Word("import_project"), ImVec2(120, 28)))
+    {
+        const std::string picked = BrowseProjectFile();
+        if (!picked.empty())
+        {
+            ImportProject(picked);
+            Refresh();
+        }
+    }
+
+    ImGui::SameLine();
+
+    if (ImGui::Button(("+ %s", lang.Word("create_project")), ImVec2(134, 28)))
+    {
+        memset(m_State.aCreateName, 0, sizeof(m_State.aCreateName));
+        snprintf(m_State.aCreatePath, sizeof(m_State.aCreatePath), "%s", ProjectsRoot());
+        m_State.ShowCreate = true;
+    }
+
+    ImGui::SameLine();
+
+    if (ImGui::Button("Plugins", ImVec2(80, 28)))
+    {
+        RefreshPlugins();
+        m_State.ShowPluginManager = true;
+    }
+
+    ImGui::Separator();
+    ImGui::Spacing();
+}
+
+void CHubApp::DrawCreatePopup()
+{
+    if (m_State.ShowCreate)
+    {
+        ImGui::OpenPopup(lang.Word("create_project"));
+        m_State.ShowCreate = false;
+    }
+
+    ImGui::SetNextWindowSize(ImVec2(460, 182), ImGuiCond_Always);
+    ImGui::SetNextWindowPos(
+        ImVec2(qc::GetScreenWidth() * 0.5f, qc::GetScreenHeight() * 0.5f),
+        ImGuiCond_Always, ImVec2(0.5f, 0.5f));
+
+    if (!ImGui::BeginPopupModal(lang.Word("create_project"), nullptr, ImGuiWindowFlags_NoResize))
+    {
+        return;
+    }
+
+    ImGui::Spacing();
+    ImGui::Text("%s", lang.Word("project_name"));
+    ImGui::SetNextItemWidth(-1);
+    ImGui::InputText("##cname", m_State.aCreateName, sizeof(m_State.aCreateName));
+
+    ImGui::Spacing();
+    ImGui::Text("%s", lang.Word("location"));
+    ImGui::SetNextItemWidth(-64);
+    ImGui::InputText("##cpath", m_State.aCreatePath, sizeof(m_State.aCreatePath));
+    ImGui::SameLine();
+
+    if (ImGui::Button("Browse", ImVec2(56, 0)))
+    {
+        const std::string picked = BrowseFolder();
+        if (!picked.empty())
+        {
+            snprintf(m_State.aCreatePath, sizeof(m_State.aCreatePath), "%s", picked.c_str());
+        }
+    }
+
+    ImGui::Spacing();
+    ImGui::Separator();
+    ImGui::Spacing();
+
+    const bool canCreate = m_State.aCreateName[0] != '\0' && m_State.aCreatePath[0] != '\0';
+    if (!canCreate)
+    {
+        ImGui::BeginDisabled();
+    }
+
+    if (ImGui::Button(lang.Word("create"), ImVec2(110, 30)))
+    {
+        CreateProject(m_State.aCreateName, m_State.aCreatePath);
+        Refresh();
+        ImGui::CloseCurrentPopup();
+    }
+
+    if (!canCreate)
+    {
+        ImGui::EndDisabled();
+    }
+
+    ImGui::SameLine();
+    if (ImGui::Button(lang.Word("cancel"), ImVec2(110, 30)))
+    {
+        ImGui::CloseCurrentPopup();
+    }
+
+    ImGui::EndPopup();
+}
+
+void CHubApp::DrawRenamePopup()
+{
+    if (m_State.ShowRename)
+    {
+        ImGui::OpenPopup(lang.Word("rename_project"));
+        m_State.ShowRename = false;
+    }
+
+    ImGui::SetNextWindowSize(ImVec2(380, 130), ImGuiCond_Always);
+    ImGui::SetNextWindowPos(
+        ImVec2(qc::GetScreenWidth() * 0.5f, qc::GetScreenHeight() * 0.5f),
+        ImGuiCond_Always, ImVec2(0.5f, 0.5f));
+
+    if (!ImGui::BeginPopupModal(lang.Word("rename_project"), nullptr, ImGuiWindowFlags_NoResize))
+    {
+        return;
+    }
+
+    ImGui::Spacing();
+    ImGui::Text("%s", lang.Word("new_name"));
+    ImGui::SetNextItemWidth(-1);
+    ImGui::InputText("##rname", m_State.aRenameBuffer, sizeof(m_State.aRenameBuffer));
+    ImGui::Spacing();
+    ImGui::Separator();
+    ImGui::Spacing();
+
+    if (ImGui::Button(lang.Word("rename"), ImVec2(110, 28)))
+    {
+        if (m_State.RenameProjectIndex >= 0 && m_State.aRenameBuffer[0] != '\0')
+        {
+            RenameProject(
+                m_State.vProjects[m_State.RenameProjectIndex].Path,
+                m_State.aRenameBuffer);
+            Refresh();
+            m_State.SelectedProject = -1;
+        }
+        ImGui::CloseCurrentPopup();
+    }
+
+    ImGui::SameLine();
+    if (ImGui::Button(lang.Word("cancel"), ImVec2(110, 28)))
+    {
+        ImGui::CloseCurrentPopup();
+    }
+
+    ImGui::EndPopup();
+}
+
+void CHubApp::DrawDeletePopup()
+{
+    if (m_State.ShowDelete)
+    {
+        ImGui::OpenPopup(lang.Word("delete_project"));
+        m_State.ShowDelete = false;
+    }
+
+    ImGui::SetNextWindowSize(ImVec2(380, 105), ImGuiCond_Always);
+    ImGui::SetNextWindowPos(
+        ImVec2(qc::GetScreenWidth() * 0.5f, qc::GetScreenHeight() * 0.5f),
+        ImGuiCond_Always, ImVec2(0.5f, 0.5f));
+
+    if (!ImGui::BeginPopupModal(lang.Word("delete_project"), nullptr, ImGuiWindowFlags_NoResize))
+    {
+        return;
+    }
+
+    ImGui::Spacing();
+    if (m_State.SelectedProject >= 0 &&
+        m_State.SelectedProject < static_cast<int>(m_State.vProjects.size()))
+    {
+        ImGui::Text(lang.Word("delete_project_ask"),
+            m_State.vProjects[m_State.SelectedProject].Name.c_str());
+    }
+
+    ImGui::Spacing();
+    ImGui::Separator();
+    ImGui::Spacing();
+
+    if (ImGui::Button(lang.Word("delete"), ImVec2(110, 28)))
+    {
+        if (m_State.SelectedProject >= 0)
+        {
+            DeleteProject(m_State.vProjects[m_State.SelectedProject].Path);
+            Refresh();
+            m_State.SelectedProject = -1;
+        }
+        ImGui::CloseCurrentPopup();
+    }
+
+    ImGui::SameLine();
+    if (ImGui::Button(lang.Word("cancel"), ImVec2(110, 28)))
+    {
+        ImGui::CloseCurrentPopup();
+    }
+
+    ImGui::EndPopup();
+}
+
+void CHubApp::DrawVersionWarningPopup()
+{
+    if (m_State.ShowVersionWarning)
+    {
+        ImGui::OpenPopup(lang.Word("version_mismatch"));
+        m_State.ShowVersionWarning = false;
+    }
+
+    ImGui::SetNextWindowSize(ImVec2(480, 155), ImGuiCond_Always);
+    ImGui::SetNextWindowPos(
+        ImVec2(qc::GetScreenWidth() * 0.5f, qc::GetScreenHeight() * 0.5f),
+        ImGuiCond_Always, ImVec2(0.5f, 0.5f));
+
+    if (!ImGui::BeginPopupModal(lang.Word("version_mismatch"), nullptr, ImGuiWindowFlags_NoResize))
+    {
+        return;
+    }
+
+    ImGui::Spacing();
+    ImGui::TextWrapped(lang.Word("version_mismatch_msg"),
+        m_State.SavedVersion.c_str(), QUARK_ENGINE_VERSION);
+    ImGui::Spacing();
+    ImGui::Separator();
+    ImGui::Spacing();
+
+    if (ImGui::Button(lang.Word("open_anyway"), ImVec2(130, 28)))
+    {
+        m_PendingResult = m_State.PendingOpenPath;
+        m_ShouldExit = true;
+        ImGui::CloseCurrentPopup();
+    }
+
+    ImGui::SameLine();
+    if (ImGui::Button(lang.Word("cancel"), ImVec2(110, 28)))
+    {
+        m_State.PendingOpenPath.clear();
+        ImGui::CloseCurrentPopup();
+    }
+
+    ImGui::EndPopup();
+}
+
+void CHubApp::DrawPluginManager()
+{
+    if (!m_State.ShowPluginManager)
+    {
+        return;
+    }
+
+    ImGuiIO& io = ImGui::GetIO();
+    const float screenWidth = io.DisplaySize.x;
+    const float screenHeight = io.DisplaySize.y;
+
+    ImGui::SetNextWindowSize(ImVec2(720.0f, 480.0f), ImGuiCond_Always);
+    ImGui::SetNextWindowPos(
+        ImVec2(screenWidth * 0.5f, screenHeight * 0.5f),
+        ImGuiCond_Always, ImVec2(0.5f, 0.5f));
+
+    bool open = true;
+    ImGui::Begin("Plugin Manager##pmgr", &open);
+
+    if (!open)
+    {
+        m_State.ShowPluginManager = false;
+        m_State.SelectedPlugin = -1;
+        ImGui::End();
+        return;
+    }
+
+    if (ImGui::BeginTabBar("##pmgr_tabs"))
+    {
+        if (ImGui::BeginTabItem("Installed"))
+        {
+            ImGui::BeginChild("##pmgr_list", ImVec2(220, -1), true);
+
+            if (m_State.vPlugins.empty())
+            {
+                const ImVec2 available = ImGui::GetContentRegionAvail();
+                const char* pMessage = "No plugins installed.";
+                const ImVec2 textSize = ImGui::CalcTextSize(pMessage);
+                ImGui::SetCursorPos(ImVec2(
+                    (available.x - textSize.x) * 0.5f,
+                    (available.y - textSize.y) * 0.5f));
+                ImGui::TextDisabled("%s", pMessage);
+            }
+
+            for (int index = 0; index < static_cast<int>(m_State.vPlugins.size()); index++)
+            {
+                SHubPlugin& plugin = m_State.vPlugins[index];
+                ImGui::PushID(index);
+
+                const bool isSelected = m_State.SelectedPlugin == index;
+                const ImVec2 cardPos = ImGui::GetCursorScreenPos();
+                const float cardWidth = ImGui::GetContentRegionAvail().x;
+                const float cardHeight = 46.0f;
+
+                ImGui::GetWindowDrawList()->AddRectFilled(
+                    cardPos,
+                    ImVec2(cardPos.x + cardWidth, cardPos.y + cardHeight),
+                    CardColor(isSelected));
+
+                ImGui::GetWindowDrawList()->AddRect(
+                    cardPos,
+                    ImVec2(cardPos.x + cardWidth, cardPos.y + cardHeight),
+                    CardBorderColor(isSelected));
+
+                const ImVec4 badge = PluginBadgeColor(plugin.Name);
+                const ImVec2 badgeMin = ImVec2(cardPos.x + 8, cardPos.y + 10);
+                const ImVec2 badgeMax = ImVec2(badgeMin.x + 26, badgeMin.y + 26);
+
+                char aLetter[2] = { static_cast<char>(toupper(static_cast<unsigned char>(plugin.Name[0]))), '\0' };
+                const ImVec2 letterSize = ImGui::CalcTextSize(aLetter);
+
+                if (plugin.Icon.id != 0)
+                {
+                    qc::QcImGuiAddImage(ImGui::GetWindowDrawList(), &plugin.Icon, badgeMin, badgeMax);
+                }
+                else
+                {
+                    ImGui::GetWindowDrawList()->AddRectFilled(
+                        badgeMin, badgeMax, ImGui::ColorConvertFloat4ToU32(badge), 4.0f);
+                    ImGui::GetWindowDrawList()->AddText(
+                        ImVec2(
+                            badgeMin.x + (26 - letterSize.x) * 0.5f,
+                            badgeMin.y + (26 - letterSize.y) * 0.5f),
+                        IM_COL32(255, 255, 255, 230), aLetter);
+                }
+
+                if (!plugin.Enabled)
+                {
+                    ImGui::GetWindowDrawList()->AddCircleFilled(
+                        ImVec2(badgeMax.x - 2, badgeMin.y + 2), 5.0f, IM_COL32(200, 60, 60, 255));
+                }
+
+                ImGui::SetCursorScreenPos(ImVec2(cardPos.x + 44, cardPos.y + 14));
+                if (!plugin.Enabled)
+                {
+                    ImGui::TextDisabled("%s", plugin.Name.c_str());
+                }
+                else
+                {
+                    ImGui::Text("%s", plugin.Name.c_str());
+                }
+
+                ImGui::SetCursorScreenPos(cardPos);
+                ImGui::InvisibleButton("##card", ImVec2(cardWidth, cardHeight));
+                if (ImGui::IsItemClicked())
+                {
+                    m_State.SelectedPlugin = index;
+                }
+
+                ImGui::SetCursorScreenPos(ImVec2(cardPos.x, cardPos.y + cardHeight + 3));
+                ImGui::Dummy(ImVec2(cardWidth, 0));
+                ImGui::PopID();
+            }
+            ImGui::EndChild();
+
+            ImGui::SameLine();
+            ImGui::BeginChild("##pmgr_detail", ImVec2(-1, -1), false);
+
+            if (m_State.SelectedPlugin < 0 ||
+                m_State.SelectedPlugin >= static_cast<int>(m_State.vPlugins.size()))
+            {
+                const ImVec2 available = ImGui::GetContentRegionAvail();
+                const char* pMessage = "Select a plugin to view details.";
+                const ImVec2 textSize = ImGui::CalcTextSize(pMessage);
+                ImGui::SetCursorPos(ImVec2(
+                    (available.x - textSize.x) * 0.5f,
+                    (available.y - textSize.y) * 0.5f));
+                ImGui::TextDisabled("%s", pMessage);
+            }
+            else
+            {
+                SHubPlugin& plugin = m_State.vPlugins[m_State.SelectedPlugin];
+                ImDrawList* pDrawList = ImGui::GetWindowDrawList();
+
+                ImVec2 iconPos = ImGui::GetCursorScreenPos();
+                iconPos.x += 8;
+                iconPos.y += 8;
+                const ImVec2 iconMax = ImVec2(iconPos.x + 64, iconPos.y + 64);
+
+                const ImVec4 badge = PluginBadgeColor(plugin.Name);
+                char aLetter[2] = { static_cast<char>(toupper(static_cast<unsigned char>(plugin.Name[0]))), '\0' };
+                const ImVec2 letterSize = ImGui::CalcTextSize(aLetter);
+
+                if (plugin.Icon.id != 0)
+                {
+                    qc::QcImGuiAddImage(pDrawList, &plugin.Icon, iconPos, iconMax);
+                }
+                else
+                {
+                    pDrawList->AddRectFilled(
+                        iconPos, iconMax, ImGui::ColorConvertFloat4ToU32(badge), 8.0f);
+                    pDrawList->AddText(
+                        nullptr, 28.0f,
+                        ImVec2(
+                            iconPos.x + (64 - 16) * 0.5f,
+                            iconPos.y + (64 - 28) * 0.5f),
+                        IM_COL32(255, 255, 255, 230), aLetter);
+                }
+
+                ImGui::SetCursorScreenPos(ImVec2(iconMax.x + 14, iconPos.y + 4));
+                ImGui::Text("%s", plugin.Name.c_str());
+
+                ImGui::SetCursorScreenPos(ImVec2(iconMax.x + 14, iconPos.y + 26));
+                if (plugin.Enabled)
+                {
+                    ImGui::TextColored(ImVec4(0.3f, 0.8f, 0.4f, 1.0f), "Enabled");
+                }
+                else
+                {
+                    ImGui::TextColored(ImVec4(0.7f, 0.3f, 0.3f, 1.0f), "Disabled");
+                }
+
+                ImGui::SetCursorScreenPos(ImVec2(iconPos.x - 8, iconMax.y + 18));
+                ImGui::Separator();
+                ImGui::Spacing();
+                ImGui::TextWrapped("%s", plugin.Description.c_str());
+                ImGui::Spacing();
+                ImGui::TextDisabled("Path: %s", plugin.Path.c_str());
+
+                const float bottomY = ImGui::GetWindowPos().y + ImGui::GetWindowHeight() - 44;
+                ImGui::SetCursorScreenPos(ImVec2(iconPos.x - 8, bottomY));
+                ImGui::Separator();
+                ImGui::Spacing();
+
+                const char* pToggleLabel = plugin.Enabled ? "Disable" : "Enable";
+                const ImVec4 toggleColor = plugin.Enabled
+                    ? ImVec4(0.70f, 0.30f, 0.30f, 1.0f)
+                    : ImVec4(0.20f, 0.60f, 0.30f, 1.0f);
+
+                ImGui::PushStyleColor(ImGuiCol_Button, toggleColor);
+                ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImVec4(
+                    toggleColor.x + 0.1f, toggleColor.y + 0.1f, toggleColor.z + 0.1f, 1.0f));
+                ImGui::PushStyleColor(ImGuiCol_ButtonActive, ImVec4(
+                    toggleColor.x - 0.05f, toggleColor.y - 0.05f, toggleColor.z - 0.05f, 1.0f));
+
+                if (ImGui::Button(pToggleLabel, ImVec2(110, 28)))
+                {
+                    plugin.Enabled = !plugin.Enabled;
+                    PluginSetEnabled(plugin.Path, plugin.Enabled);
+                }
+                ImGui::PopStyleColor(3);
+
+                ImGui::SameLine();
+                ImGui::PushStyleColor(ImGuiCol_Button,        ImVec4(0.55f, 0.15f, 0.15f, 1.0f));
+                ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImVec4(0.70f, 0.20f, 0.20f, 1.0f));
+                ImGui::PushStyleColor(ImGuiCol_ButtonActive,  ImVec4(0.40f, 0.10f, 0.10f, 1.0f));
+
+                if (ImGui::Button("Delete", ImVec2(90, 28)))
+                {
+                    ImGui::OpenPopup("Confirm Delete");
+                }
+                ImGui::PopStyleColor(3);
+
+                ImGui::SetNextWindowSize(ImVec2(320, 100), ImGuiCond_Always);
+                ImGui::SetNextWindowPos(
+                    ImVec2(screenWidth * 0.5f, screenHeight * 0.5f),
+                    ImGuiCond_Always, ImVec2(0.5f, 0.5f));
+
+                if (ImGui::BeginPopupModal("Confirm Delete", nullptr,
+                    ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoMove))
+                {
+                    ImGui::Spacing();
+                    ImGui::Text("Delete plugin \"%s\"?", plugin.Name.c_str());
+                    ImGui::TextDisabled("This removes the file from disk.");
+                    ImGui::Spacing();
+                    ImGui::Separator();
+                    ImGui::Spacing();
+
+                    ImGui::PushStyleColor(ImGuiCol_Button,        ImVec4(0.55f, 0.15f, 0.15f, 1.0f));
+                    ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImVec4(0.70f, 0.20f, 0.20f, 1.0f));
+                    ImGui::PushStyleColor(ImGuiCol_ButtonActive,  ImVec4(0.40f, 0.10f, 0.10f, 1.0f));
+
+                    if (ImGui::Button("Delete", ImVec2(90, 26)))
+                    {
+                        if (plugin.Icon.id != 0)
+                        {
+                            qc::UnloadTexture(plugin.Icon);
+                        }
+
+                        const fs::path binary(plugin.Path);
+                        const fs::path parent = binary.parent_path();
+                        const fs::path pluginsRoot = fs::canonical("plugins");
+
+                        if (fs::canonical(parent) != pluginsRoot)
+                        {
+                            fs::remove_all(parent);
+                        }
+                        else
+                        {
+                            fs::remove(binary);
+                        }
+
+                        const fs::path sentinel = binary.parent_path() / (binary.stem().string() + ".disabled");
+                        if (fs::exists(sentinel))
+                        {
+                            fs::remove(sentinel);
+                        }
+
+                        RefreshPlugins();
+                        ImGui::CloseCurrentPopup();
+                    }
+
+                    ImGui::PopStyleColor(3);
+                    ImGui::SameLine();
+
+                    if (ImGui::Button("Cancel", ImVec2(80, 26)))
+                    {
+                        ImGui::CloseCurrentPopup();
+                    }
+
+                    ImGui::EndPopup();
+                }
+            }
+
+            ImGui::EndChild();
+            ImGui::EndTabItem();
+        }
+
+        if (ImGui::BeginTabItem("Explore"))
+        {
+            const ImVec2 available = ImGui::GetContentRegionAvail();
+            const char* pTitle = "Browse online plugins";
+            const char* pSubtitle = "Coming soon.";
+
+            const ImVec2 titleSize = ImGui::CalcTextSize(pTitle);
+            const ImVec2 subtitleSize = ImGui::CalcTextSize(pSubtitle);
+            const float totalHeight = titleSize.y + 6 + subtitleSize.y;
+
+            ImGui::SetCursorPos(ImVec2(
+                (available.x - titleSize.x) * 0.5f,
+                (available.y - totalHeight) * 0.5f));
+            ImGui::Text("%s", pTitle);
+            ImGui::SetCursorPosX((available.x - subtitleSize.x) * 0.5f);
+            ImGui::TextDisabled("%s", pSubtitle);
+            ImGui::EndTabItem();
+        }
+
+        ImGui::EndTabBar();
+    }
+
+    ImGui::End();
+}
+
+std::string CHubApp::Run(CPreferences& preferences)
+{
+    m_pPreferences = &preferences;
+
+    fs::create_directories(ProjectsRoot());
+
+    if (!fs::exists(RegistryFile()))
+    {
+        for (auto& entry : fs::directory_iterator(ProjectsRoot()))
+        {
+            if (!entry.is_directory() || !CProjectService::IsValid(entry.path().string()))
+            {
+                continue;
+            }
+
+            SHubProject project;
+            project.Name = entry.path().filename().string();
+            project.Path = fs::absolute(entry.path()).string();
+            m_State.vProjects.push_back(project);
+        }
+    }
+
+    Refresh();
+    snprintf(m_State.aCreatePath, sizeof(m_State.aCreatePath), "%s", ProjectsRoot());
+
+    m_PendingResult.clear();
+    m_ShouldExit = false;
+
+    while (!qc::WindowShouldClose() && !m_ShouldExit)
+    {
+        qc::BeginDrawing();
+        qc::ClearBackground(UsesLightTheme()
+            ? qc::Color{ 238, 241, 246, 255 }
+            : qc::Color{ 33, 35, 38, 255 });
+        qc::QcImGuiBegin();
 
         ImGui::SetNextWindowPos(ImVec2(0, 0));
-        ImGui::SetNextWindowSize(ImVec2((float)GetScreenWidth(), (float)GetScreenHeight()));
+        ImGui::SetNextWindowSize(ImVec2(
+            static_cast<float>(qc::GetScreenWidth()),
+            static_cast<float>(qc::GetScreenHeight())));
         ImGui::Begin(
             "##hub", nullptr,
             ImGuiWindowFlags_NoResize   | ImGuiWindowFlags_NoMove       |
             ImGuiWindowFlags_NoTitleBar | ImGuiWindowFlags_NoScrollbar  |
-            ImGuiWindowFlags_NoBringToFrontOnFocus
-        );
+            ImGuiWindowFlags_NoBringToFrontOnFocus);
 
-        ImGui::SetCursorPosY(ImGui::GetCursorPosY() + 4);
-        ImGui::Text("QUARK HUB");
-        ImGui::SameLine();
-        ImGui::TextDisabled("  %s", lang.word("project_manager"));
-        ImGui::SameLine(ImGui::GetContentRegionAvail().x - 354);
-
-        if (ImGui::Button(lang.word("import_project"), ImVec2(120, 28))) {
-            std::string picked = hub_browse_project_file();
-            if (!picked.empty()) {
-                hub_import_project(picked);
-                hub_refresh();
-            }
-        }
-
-        ImGui::SameLine();
-
-        if (ImGui::Button(("+ %s", lang.word("create_project")), ImVec2(134, 28))) {
-            memset(hub_create_name, 0, sizeof(hub_create_name));
-            snprintf(hub_create_path, sizeof(hub_create_path), "%s", HUB_PROJECTS_ROOT);
-            hub_show_create = true;
-        }
-
-        ImGui::SameLine();
-        
-        if (ImGui::Button("Plugins", ImVec2(80, 28))) {
-            hub_refresh_plugins();
-            hub_show_plugin_manager = true;
-        }
-
-        ImGui::Separator();
-        ImGui::Spacing();
-
-        ImGui::BeginChild("##list", ImVec2(0, (float)GetScreenHeight() - 90), false);
-
-        if (hub_projects.empty()) {
-            ImVec2 avail = ImGui::GetContentRegionAvail();
-            const char* msg = lang.word("no_projects");
-            ImVec2 ts = ImGui::CalcTextSize(msg);
-            ImGui::SetCursorPos(ImVec2((avail.x - ts.x) * 0.5f, (avail.y - ts.y) * 0.5f));
-            ImGui::TextDisabled("%s", msg);
-        }
-
-        for (int i = 0; i < (int)hub_projects.size(); i++) {
-            ImGui::PushID(i);
-
-            bool is_sel = (hub_selected == i);
-            ImVec2 card_pos = ImGui::GetCursorScreenPos();
-            float  card_w   = ImGui::GetContentRegionAvail().x;
-            float  card_h   = 62.0f;
-
-            ImGui::GetWindowDrawList()->AddRectFilled(
-                card_pos,
-                ImVec2(card_pos.x + card_w, card_pos.y + card_h),
-                hub_card_color(is_sel)
-            );
-
-            ImGui::GetWindowDrawList()->AddRect(
-                card_pos,
-                ImVec2(card_pos.x + card_w, card_pos.y + card_h),
-                hub_card_border_color(is_sel)
-            );
-
-            ImGui::InvisibleButton("##card", ImVec2(card_w, card_h));
-
-            if (ImGui::IsItemHovered() && !is_sel) {
-                ImGui::GetWindowDrawList()->AddRectFilled(
-                    card_pos,
-                    ImVec2(card_pos.x + card_w, card_pos.y + card_h),
-                    hub_card_hover_color()
-                );
-            }
-
-            if (ImGui::IsItemClicked(ImGuiMouseButton_Left))
-                hub_selected = i;
-
-            if (ImGui::IsItemHovered() && ImGui::IsMouseDoubleClicked(ImGuiMouseButton_Left)) {
-                std::string saved_ver = get_project_version(hub_projects[i].path);
-                if (!saved_ver.empty() && saved_ver != QUARK_ENGINE_VERSION) {
-                    hub_pending_open_path = hub_projects[i].path;
-                    hub_saved_version = saved_ver;
-                    hub_show_version_warning = true;
-                } 
-                
-                else {
-                    result_path = hub_projects[i].path;
-                    should_exit = true;
-                }
-            }
-
-            if (ImGui::BeginPopupContextItem("##ctx")) {
-                if (ImGui::MenuItem(lang.word("open"))) {
-                    result_path = hub_projects[i].path;
-                    should_exit = true;
-                }
-
-                ImGui::Separator();
-                if (ImGui::MenuItem(lang.word("rename"))) {
-                    hub_rename_index = i;
-                    snprintf(hub_rename_buf, sizeof(hub_rename_buf), "%s", hub_projects[i].name.c_str());
-                    hub_show_rename = true;
-                }
-
-                if (ImGui::MenuItem(lang.word("delete"))) {
-                    hub_selected    = i;
-                    hub_show_delete = true;
-                }
-                ImGui::EndPopup();
-            }
-
-            ImGui::SetCursorScreenPos(ImVec2(card_pos.x + 14, card_pos.y + 11));
-            ImGui::Text("%s", hub_projects[i].name.c_str());
-
-            ImGui::SetCursorScreenPos(ImVec2(card_pos.x + 14, card_pos.y + 36));
-            ImGui::TextDisabled("%s", hub_projects[i].path.c_str());
-
-            ImGui::SetCursorScreenPos(ImVec2(card_pos.x, card_pos.y + card_h + 4));
-            ImGui::Dummy(ImVec2(card_w, 0));
-
-            ImGui::PopID();
-        }
-
-        ImGui::EndChild();
-
-        if (hub_selected >= 0 && hub_selected < (int)hub_projects.size()) {
-            if (ImGui::Button(lang.word("open_selected"), ImVec2(140, 30))) {
-                result_path = hub_projects[hub_selected].path;
-                should_exit = true;
-            }
-        }
-
+        DrawHeader();
+        DrawProjectList();
         ImGui::End();
 
-        if (hub_show_create) { ImGui::OpenPopup(lang.word("create_project")); hub_show_create = false; }
+        DrawCreatePopup();
+        DrawRenamePopup();
+        DrawDeletePopup();
+        DrawVersionWarningPopup();
+        DrawPluginManager();
 
-        ImGui::SetNextWindowSize(ImVec2(460, 182), ImGuiCond_Always);
-        ImGui::SetNextWindowPos(
-            ImVec2(GetScreenWidth() * 0.5f, GetScreenHeight() * 0.5f),
-            ImGuiCond_Always, ImVec2(0.5f, 0.5f));
-
-        if (ImGui::BeginPopupModal(lang.word("create_project"), nullptr, ImGuiWindowFlags_NoResize)) {
-            ImGui::Spacing();
-            ImGui::Text(lang.word("project_name"));
-            ImGui::SetNextItemWidth(-1);
-            ImGui::InputText("##cname", hub_create_name, sizeof(hub_create_name));
-
-            ImGui::Spacing();
-            ImGui::Text(lang.word("location"));
-            ImGui::SetNextItemWidth(-64);
-            ImGui::InputText("##cpath", hub_create_path, sizeof(hub_create_path));
-            ImGui::SameLine();
-
-            if (ImGui::Button("Browse", ImVec2(56, 0))) {
-                std::string picked = hub_browse_folder();
-                if (!picked.empty())
-                    snprintf(hub_create_path, sizeof(hub_create_path), "%s", picked.c_str());
-            }
-
-            ImGui::Spacing();
-            ImGui::Separator();
-            ImGui::Spacing();
-
-            bool can_create = hub_create_name[0] != '\0' && hub_create_path[0] != '\0';
-            if (!can_create) ImGui::BeginDisabled();
-
-            if (ImGui::Button(lang.word("create"), ImVec2(110, 30))) {
-                hub_create_project(hub_create_name, hub_create_path);
-                hub_refresh();
-                ImGui::CloseCurrentPopup();
-            }
-
-            if (!can_create) ImGui::EndDisabled();
-            ImGui::SameLine();
-            if (ImGui::Button(lang.word("cancel"), ImVec2(110, 30))) ImGui::CloseCurrentPopup();
-
-            ImGui::EndPopup();
-        }
-
-        if (hub_show_rename) { ImGui::OpenPopup(lang.word("rename_project")); hub_show_rename = false; }
-
-        ImGui::SetNextWindowSize(ImVec2(380, 130), ImGuiCond_Always);
-        ImGui::SetNextWindowPos(
-            ImVec2(GetScreenWidth() * 0.5f, GetScreenHeight() * 0.5f),
-            ImGuiCond_Always, ImVec2(0.5f, 0.5f));
-
-        if (ImGui::BeginPopupModal(lang.word("rename_project"), nullptr, ImGuiWindowFlags_NoResize)) {
-            ImGui::Spacing();
-            ImGui::Text(lang.word("new_name"));
-            ImGui::SetNextItemWidth(-1);
-            ImGui::InputText("##rname", hub_rename_buf, sizeof(hub_rename_buf));
-            ImGui::Spacing();
-            ImGui::Separator();
-            ImGui::Spacing();
-
-            if (ImGui::Button(lang.word("rename"), ImVec2(110, 28))) {
-                if (hub_rename_index >= 0 && hub_rename_buf[0] != '\0') {
-                    hub_rename_project(hub_projects[hub_rename_index].path, hub_rename_buf);
-                    hub_refresh();
-                    hub_selected = -1;
-                }
-                ImGui::CloseCurrentPopup();
-            }
-
-            ImGui::SameLine();
-            if (ImGui::Button(lang.word("cancel"), ImVec2(110, 28))) ImGui::CloseCurrentPopup();
-            ImGui::EndPopup();
-        }
-
-        if (hub_show_delete) { ImGui::OpenPopup(lang.word("delete_project")); hub_show_delete = false; }
-
-        ImGui::SetNextWindowSize(ImVec2(380, 105), ImGuiCond_Always);
-        ImGui::SetNextWindowPos(
-            ImVec2(GetScreenWidth() * 0.5f, GetScreenHeight() * 0.5f),
-            ImGuiCond_Always, ImVec2(0.5f, 0.5f));
-
-        if (ImGui::BeginPopupModal(lang.word("delete_project"), nullptr, ImGuiWindowFlags_NoResize)) {
-            ImGui::Spacing();
-            if (hub_selected >= 0 && hub_selected < (int)hub_projects.size())
-                ImGui::Text(lang.word("delete_project_ask"),
-                    hub_projects[hub_selected].name.c_str());
-
-            ImGui::Spacing();
-            ImGui::Separator();
-            ImGui::Spacing();
-
-            if (ImGui::Button(lang.word("delete"), ImVec2(110, 28))) {
-                if (hub_selected >= 0) {
-                    hub_delete_project(hub_projects[hub_selected].path);
-                    hub_refresh();
-                    hub_selected = -1;
-                }
-                ImGui::CloseCurrentPopup();
-            }
-
-            ImGui::SameLine();
-            if (ImGui::Button(lang.word("cancel"), ImVec2(110, 28))) ImGui::CloseCurrentPopup();
-            ImGui::EndPopup();
-        }
-
-        if (hub_show_version_warning) { ImGui::OpenPopup(lang.word("version_mismatch")); hub_show_version_warning = false; }
-
-        ImGui::SetNextWindowSize(ImVec2(480, 155), ImGuiCond_Always);
-        ImGui::SetNextWindowPos(
-            ImVec2(GetScreenWidth() * 0.5f, GetScreenHeight() * 0.5f),
-            ImGuiCond_Always, ImVec2(0.5f, 0.5f));
-
-        if (ImGui::BeginPopupModal(lang.word("version_mismatch"), nullptr, ImGuiWindowFlags_NoResize)) {
-            ImGui::Spacing();
-            ImGui::TextWrapped(lang.word("version_mismatch_msg"), hub_saved_version.c_str(), QUARK_ENGINE_VERSION);
-            ImGui::Spacing();
-            ImGui::Separator();
-            ImGui::Spacing();
-
-            if (ImGui::Button(lang.word("open_anyway"), ImVec2(130, 28))) {
-                result_path = hub_pending_open_path;
-                should_exit = true;
-                ImGui::CloseCurrentPopup();
-            }
-            ImGui::SameLine();
-            if (ImGui::Button(lang.word("cancel"), ImVec2(110, 28))) {
-                hub_pending_open_path.clear();
-                ImGui::CloseCurrentPopup();
-            }
-            ImGui::EndPopup();
-        }
-
-        hub_draw_plugin_manager();
-        qcImGuiEnd();
-        EndDrawing();
+        qc::QcImGuiEnd();
+        qc::EndDrawing();
     }
 
-    return result_path;
+    m_pPreferences = nullptr;
+    return m_PendingResult;
 }

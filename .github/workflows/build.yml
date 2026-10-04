@@ -46,14 +46,30 @@ jobs:
 
       - name: Configure CMake (Linux/macOS)
         if: runner.os != 'Windows'
-        run: cmake -S . -B build -DCMAKE_BUILD_TYPE=${{ matrix.build_type }}
+        run: cmake -S . -B build -DCMAKE_BUILD_TYPE=${{ matrix.build_type }} -DQUARK_BUILD_TESTS=ON
 
       - name: Configure CMake (Windows)
         if: runner.os == 'Windows'
-        run: cmake -S . -B build
+        run: cmake -S . -B build -DQUARK_BUILD_TESTS=ON
 
       - name: Build
         run: cmake --build build --config ${{ matrix.build_type }} --parallel
+
+      - name: Run unit tests (Linux/macOS)
+        if: runner.os != 'Windows'
+        run: ctest --test-dir build -C ${{ matrix.build_type }} --output-on-failure
+
+      - name: Run unit tests (Windows)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          $dir = "build/bin/${{ matrix.build_type }}"
+          if (!(Test-Path "$dir/QuarkEngineTests.exe")) { $dir = "build/bin" }
+          & "$dir/QuarkEngineTests.exe"
+          if ($LASTEXITCODE -ne 0) {
+            Write-Error "QuarkEngineTests exited with code $LASTEXITCODE"
+            exit $LASTEXITCODE
+          }
 
       - name: Collect artifacts (Windows)
         if: runner.os == 'Windows'

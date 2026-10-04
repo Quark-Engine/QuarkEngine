@@ -2,26 +2,29 @@
 #define __EDITABLE_MESH_H__
 
 #include "QuarkCore/QuarkCore.hpp"
-using namespace qc;
 #include <vector>
 
-struct EditableVertex {
-    Vec3 position;
-    float u = 0.0f;
-    float v = 0.0f;
+struct SEditableVertex
+{
+    qc::Vec3 Position;
+    float U = 0.0f;
+    float V = 0.0f;
 };
 
-struct EditableTriangle {
-    int a;
-    int b;
-    int c;
+struct SEditableTriangle
+{
+    int A;
+    int B;
+    int C;
 };
 
-struct EditableMesh {
-    std::vector<EditableVertex> vertices;
-    std::vector<EditableTriangle> triangles;
+class CEditableMesh
+{
+public:
+    std::vector<SEditableVertex> m_vVertices;
+    std::vector<SEditableTriangle> m_vTriangles;
 };
 
-void rebuild_mesh_from_editable(Model& model, EditableMesh& editable);
+void RebuildMeshFromEditable(qc::Model& model, CEditableMesh& editableMesh);
 
 #endif // __EDITABLE_MESH_H__

@@ -4,20 +4,20 @@
 #include <string>
 #include <vector>
 
-bool move_file(const std::string& source, const std::string& destination);
+bool MoveFile(const std::string& source, const std::string& destination);
 
-bool move_directory(const std::string& source, const std::string& destination);
+bool MoveDirectory(const std::string& source, const std::string& destination);
 
-bool copy_file(const std::string& source, const std::string& destination);
+bool CopyFile(const std::string& source, const std::string& destination);
 
-bool copy_directory(const std::string& source, const std::string& destination);
+bool CopyDirectory(const std::string& source, const std::string& destination);
 
-std::vector<std::string> get_directory_contents(const std::string& path);
+std::vector<std::string> GetDirectoryContents(const std::string& path);
 
-bool is_directory(const std::string& path);
+bool IsDirectory(const std::string& path);
 
-bool is_file(const std::string& path);
+bool IsFile(const std::string& path);
 
-bool delete_file_or_directory(const std::string& path);
+bool DeleteFileOrDirectory(const std::string& path);
 
 #endif // __EDITOR_FILE_UTILS_H__

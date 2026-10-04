@@ -1,11 +1,38 @@
-#include <string>
-#include <vector>
+#ifndef __TEXT_MESH_H__
+#define __TEXT_MESH_H__
+
 #include "QuarkCore/QuarkCore.hpp"
-using namespace qc;
 
-void init_freetype();
-void shutdown_freetype();
+#include <string>
+#include <utility>
+#include <vector>
 
-std::vector<std::pair<std::string, std::string>> get_system_fonts();
-std::string get_default_font_path();
-Model generate_text_mesh(const std::string& text, float size, float thickness, float letter_spacing, const std::string& font_path);
+struct FT_LibraryRec_;
+
+class CFreetypeTextMesh
+{
+public:
+    CFreetypeTextMesh() = default;
+    ~CFreetypeTextMesh();
+
+    CFreetypeTextMesh(const CFreetypeTextMesh&) = delete;
+    CFreetypeTextMesh& operator=(const CFreetypeTextMesh&) = delete;
+
+    void Init();
+
+    void Unload();
+
+    bool IsReady() const;
+
+    qc::Model Generate(const std::string& text, float size, float thickness,
+                       float letterSpacing, const std::string& fontPath) const;
+
+    static std::vector<std::pair<std::string, std::string>> GetSystemFonts();
+
+    static std::string GetDefaultFontPath();
+
+private:
+    FT_LibraryRec_* m_pLibrary = nullptr;
+};
+
+#endif // __TEXT_MESH_H__

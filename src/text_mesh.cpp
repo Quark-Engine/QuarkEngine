@@ -23,401 +23,478 @@
 
 namespace fs = std::filesystem;
 
-FT_Library g_ft = nullptr;
-
-struct FTContour { std::vector<Vector2> pts; };
-struct FTOutlineCtx {
-    std::vector<FTContour> contours;
-    Vector2 current = {0, 0};
-    float scale = 1.0f;
+struct SFTContour
+{
+    std::vector<qc::Vector2> vPoints;
 };
 
-static std::string lowercase_copy(const std::string& str) {
+struct SFTOutlineCtx
+{
+    std::vector<SFTContour> Contours;
+    qc::Vector2 Current = {0, 0};
+    float Scale = 1.0f;
+};
+
+static std::string LowercaseCopy(const std::string& str)
+{
     std::string result = str;
 
-    std::transform(result.begin(), result.end(), result.begin(), [](unsigned char c) {
+    std::transform(result.begin(), result.end(), result.begin(), [](unsigned char c)
+    {
         return std::tolower(c);
     });
 
     return result;
 }
 
-void init_freetype() {
-    if (FT_Init_FreeType(&g_ft)) {
-        TraceLog(LogLevel::Error, "Freetype", "failed to init");
+CFreetypeTextMesh::~CFreetypeTextMesh()
+{
+    Unload();
+}
+
+void CFreetypeTextMesh::Init()
+{
+    if (m_pLibrary)
+    {
+        return;
+    }
+
+    FT_Library library = nullptr;
+    if (FT_Init_FreeType(&library))
+    {
+        qc::TraceLog(qc::LogLevel::Error, "Freetype", "failed to init");
+        return;
+    }
+    m_pLibrary = library;
+}
+
+void CFreetypeTextMesh::Unload()
+{
+    if (m_pLibrary)
+    {
+        FT_Done_FreeType(m_pLibrary);
+        m_pLibrary = nullptr;
     }
 }
 
-void shutdown_freetype() {
-    if (g_ft) {
-        FT_Done_FreeType(g_ft);
-        g_ft = nullptr;
-    }
+bool CFreetypeTextMesh::IsReady() const
+{
+    return m_pLibrary != nullptr;
 }
 
-std::vector<std::pair<std::string, std::string>> get_system_fonts() {
-    std::vector<std::pair<std::string, std::string>> result;
+std::vector<std::pair<std::string, std::string>> CFreetypeTextMesh::GetSystemFonts()
+{
+    std::vector<std::pair<std::string, std::string>> vResult;
 
-    auto scan_dir = [&](const fs::path& dir) {
+    auto scanDir = [&](const fs::path& dir)
+    {
         if (!fs::exists(dir)) return;
         std::error_code ec;
 
-        for (auto& entry : fs::recursive_directory_iterator(dir, fs::directory_options::skip_permission_denied, ec)) {
+        for (auto& entry : fs::recursive_directory_iterator(dir, fs::directory_options::skip_permission_denied, ec))
+        {
             if (!entry.is_regular_file(ec)) continue;
             
-            auto ext = lowercase_copy(entry.path().extension().string());
+            auto ext = LowercaseCopy(entry.path().extension().string());
             if (ext != ".ttf" && ext != ".otf") continue;
 
             std::string name = entry.path().stem().string();
-            result.push_back({name, entry.path().string()});
+            vResult.push_back({name, entry.path().string()});
         }
     };
 
 #if _WIN32
-    char windir[512] = {};
-    size_t windir_length = 0;
-    char* win = nullptr;
-    if (_dupenv_s(&win, &windir_length, "WINDIR") == 0 && win) {
-        snprintf(windir, sizeof(windir), "%s", win);
-        free(win);
-        win = windir;
+    char aWindir[512] = {};
+    size_t windirLength = 0;
+    char* pWin = nullptr;
+    if (_dupenv_s(&pWin, &windirLength, "WINDIR") == 0 && pWin)
+    {
+        snprintf(aWindir, sizeof(aWindir), "%s", pWin);
+        free(pWin);
+        pWin = aWindir;
     }
 
-    if (win) {
-        scan_dir(std::string(win) + "\\Fonts");
+    if (pWin)
+    {
+        scanDir(std::string(pWin) + "\\Fonts");
     }
 
 #elif __APPLE__
-    scan_dir("/System/Library/Fonts");
-    scan_dir("/Library/Fonts");
+    scanDir("/System/Library/Fonts");
+    scanDir("/Library/Fonts");
 
-    const char* home = getenv("HOME");
-    if (home) scan_dir(std::string(home) + "/Library/Fonts");
+    const char* pHome = getenv("HOME");
+    if (pHome) scanDir(std::string(pHome) + "/Library/Fonts");
 
 #else
-    scan_dir("/usr/share/fonts");
-    scan_dir("/usr/local/share/fonts");
+    scanDir("/usr/share/fonts");
+    scanDir("/usr/local/share/fonts");
     
-    const char* home = getenv("HOME");
-    if (home) scan_dir(std::string(home) + "/.fonts");
-    if (home) scan_dir(std::string(home) + "/.local/share/fonts");
+    const char* pHome = getenv("HOME");
+    if (pHome) scanDir(std::string(pHome) + "/.fonts");
+    if (pHome) scanDir(std::string(pHome) + "/.local/share/fonts");
 
     #endif
 
-    std::sort(result.begin(), result.end(), [](auto& a, auto& b) { return a.first < b.first; });
-    return result;
+    std::sort(vResult.begin(), vResult.end(), [](auto& a, auto& b)
+    {
+        return a.first < b.first;
+    });
+    return vResult;
 }
 
-static float cross2(Vector2 o, Vector2 a, Vector2 b) {
-    return (a.x - o.x) * (b.y - o.y) - (a.y - o.y) * (b.x - o.x);
+static float Cross2(qc::Vector2 origin, qc::Vector2 a, qc::Vector2 b)
+{
+    return (a.x - origin.x) * (b.y - origin.y) - (a.y - origin.y) * (b.x - origin.x);
 }
 
-static void push_quad_bezier(std::vector<Vector2>& out, Vector2 p0, Vector2 p1, Vector2 p2, int steps = 8) {
-    for (int i = 1; i <= steps; i++) {
+static void PushQuadBezier(std::vector<qc::Vector2>& vOut, qc::Vector2 point0, qc::Vector2 point1, qc::Vector2 point2, int steps = 8)
+{
+    for (int i = 1; i <= steps; i++)
+    {
         float t = (float)i / steps;
         float it = 1.f - t;
 
-       out.push_back({ 
-            it*it*p0.x + 2*it*t*p1.x + t*t*p2.x,
-            it*it*p0.y + 2*it*t*p1.y + t*t*p2.y
+       vOut.push_back({
+            it*it*point0.x + 2*it*t*point1.x + t*t*point2.x,
+            it*it*point0.y + 2*it*t*point1.y + t*t*point2.y
         });
     }
 }
 
-static void push_cubic_bezier(std::vector<Vector2>& out, Vector2 p0, Vector2 p1, Vector2 p2, Vector2 p3, int steps = 8) {
-    for (int i = 1; i <= steps; i++) {
+static void PushCubicBezier(std::vector<qc::Vector2>& vOut, qc::Vector2 point0, qc::Vector2 point1, qc::Vector2 point2, qc::Vector2 point3, int steps = 8)
+{
+    for (int i = 1; i <= steps; i++)
+    {
         float t = (float)i/steps, it = 1.f-t;
-        out.push_back({
-            it*it*it*p0.x + 3*it*it*t*p1.x + 3*it*t*t*p2.x + t*t*t*p3.x,
-            it*it*it*p0.y + 3*it*it*t*p1.y + 3*it*t*t*p2.y + t*t*t*p3.y 
+        vOut.push_back({
+            it*it*it*point0.x + 3*it*it*t*point1.x + 3*it*t*t*point2.x + t*t*t*point3.x,
+            it*it*it*point0.y + 3*it*it*t*point1.y + 3*it*t*t*point2.y + t*t*t*point3.y
         });
     }
 }
 
-static float polygon_signed_area(const std::vector<Vector2>& p) {
+static float PolygonSignedArea(const std::vector<qc::Vector2>& vPoints)
+{
     float a = 0;
-    int n = (int)p.size();
+    int n = (int)vPoints.size();
 
-    for (int i = 0; i < n; i++) {
+    for (int i = 0; i < n; i++)
+    {
         int j = (i + 1) % n;
-        a += p[i].x * p[j].y - p[j].x * p[i].y;
+        a += vPoints[i].x * vPoints[j].y - vPoints[j].x * vPoints[i].y;
     }
 
     return a * .5f;
 }
 
-static std::vector<int> ear_clip(const std::vector<Vector2>& pts) {
-    std::vector<int> result;
-    int n = (int)pts.size();
-    if (n < 3) return result;
+static std::vector<int> EarClip(const std::vector<qc::Vector2>& vPoints)
+{
+    std::vector<int> vResult;
+    int n = (int)vPoints.size();
+    if (n < 3) return vResult;
 
-    std::vector<int> idx(n);
-    std::iota(idx.begin(), idx.end(), 0);
+    std::vector<int> vIndices(n);
+    std::iota(vIndices.begin(), vIndices.end(), 0);
 
     float a = 0;
-    for (int i = 0; i < n; i++) {
+    for (int i = 0; i < n; i++)
+    {
         int j = (i+1)%n;
-        a += pts[i].x*pts[j].y - pts[j].x*pts[i].y;
+        a += vPoints[i].x*vPoints[j].y - vPoints[j].x*vPoints[i].y;
     }
     
-    if (a < 0) std::reverse(idx.begin(), idx.end());
+    if (a < 0) std::reverse(vIndices.begin(), vIndices.end());
 
-    auto point_in_tri = [&](Vector2 p, Vector2 a, Vector2 b, Vector2 c) {
-        return cross2(a,b,p) >= 0 && cross2(b,c,p) >= 0 && cross2(c,a,p) >= 0;
+    auto pointInTriangle = [&](qc::Vector2 p, qc::Vector2 a, qc::Vector2 b, qc::Vector2 c)
+    {
+        return Cross2(a,b,p) >= 0 && Cross2(b,c,p) >= 0 && Cross2(c,a,p) >= 0;
     };
 
     int safety = n * n + 10;
     int i = 0;
 
-    while ((int)idx.size() > 3 && safety-- > 0) {
-        int sz   = (int)idx.size();
+    while ((int)vIndices.size() > 3 && safety-- > 0)
+    {
+        int sz   = (int)vIndices.size();
         int prev = (i - 1 + sz) % sz;
         int next = (i + 1) % sz;
 
-        Vector2 a = pts[idx[prev]], b = pts[idx[i]], c = pts[idx[next]];
-        bool ear = cross2(a, b, c) > 0;
-        if (ear) {
-            for (int k = 0; k < sz && ear; k++) {
+        qc::Vector2 a = vPoints[vIndices[prev]], b = vPoints[vIndices[i]], c = vPoints[vIndices[next]];
+        bool ear = Cross2(a, b, c) > 0;
+        if (ear)
+        {
+            for (int k = 0; k < sz && ear; k++)
+            {
                 if (k == prev || k == i || k == next) continue;
-                if (point_in_tri(pts[idx[k]], a, b, c)) ear = false;
+                if (pointInTriangle(vPoints[vIndices[k]], a, b, c)) ear = false;
             }
         }
 
-        if (ear) {
-            result.push_back(idx[prev]);
-            result.push_back(idx[i]);
-            result.push_back(idx[next]);
-            idx.erase(idx.begin() + i);
+        if (ear)
+        {
+            vResult.push_back(vIndices[prev]);
+            vResult.push_back(vIndices[i]);
+            vResult.push_back(vIndices[next]);
+            vIndices.erase(vIndices.begin() + i);
             sz--;
             if (i >= sz) i = 0;
-        } 
-        
-        else {
+        }
+        else
+        {
             i = (i + 1) % sz;
         }
     }
 
-    if ((int)idx.size() == 3) {
-        result.push_back(idx[0]);
-        result.push_back(idx[1]);
-        result.push_back(idx[2]);
+    if ((int)vIndices.size() == 3)
+    {
+        vResult.push_back(vIndices[0]);
+        vResult.push_back(vIndices[1]);
+        vResult.push_back(vIndices[2]);
     }
 
-    return result;
+    return vResult;
 }
 
-static int ft_move_to(const FT_Vector* to, void* user) {
-    FTOutlineCtx* ctx = (FTOutlineCtx*)user;
+static int FtMoveTo(const FT_Vector* pTo, void* pUser)
+{
+    SFTOutlineCtx* pCtx = (SFTOutlineCtx*)pUser;
 
-    ctx->contours.push_back({});
-    ctx->current = { (float)to->x * ctx->scale, (float)to->y * ctx->scale };
-    ctx->contours.back().pts.push_back(ctx->current);
+    pCtx->Contours.push_back({});
+    pCtx->Current = { (float)pTo->x * pCtx->Scale, (float)pTo->y * pCtx->Scale };
+    pCtx->Contours.back().vPoints.push_back(pCtx->Current);
 
     return 0;
 }
 
-static int ft_line_to(const FT_Vector* to, void* user) {
-    FTOutlineCtx* ctx = (FTOutlineCtx*)user;
+static int FtLineTo(const FT_Vector* pTo, void* pUser)
+{
+    SFTOutlineCtx* pCtx = (SFTOutlineCtx*)pUser;
 
-    ctx->current = { (float)to->x * ctx->scale, (float)to->y * ctx->scale };
+    pCtx->Current = { (float)pTo->x * pCtx->Scale, (float)pTo->y * pCtx->Scale };
     
-    if (!ctx->contours.empty()) {
-        ctx->contours.back().pts.push_back(ctx->current);
+    if (!pCtx->Contours.empty())
+    {
+        pCtx->Contours.back().vPoints.push_back(pCtx->Current);
     }
 
     return 0;
 }
 
-static int ft_conic_to(const FT_Vector* ctrl, const FT_Vector* to, void* user) {
-    FTOutlineCtx* ctx = (FTOutlineCtx*)user;
-    if (ctx->contours.empty()) return 0;
+static int FtConicTo(const FT_Vector* pCtrl, const FT_Vector* pTo, void* pUser)
+{
+    SFTOutlineCtx* pCtx = (SFTOutlineCtx*)pUser;
+    if (pCtx->Contours.empty()) return 0;
 
-    Vector2 p1 = { (float)ctrl->x * ctx->scale, (float)ctrl->y * ctx->scale };
-    Vector2 p2 = { (float)to->x * ctx->scale, (float)to->y * ctx->scale };
+    qc::Vector2 point1 = { (float)pCtrl->x * pCtx->Scale, (float)pCtrl->y * pCtx->Scale };
+    qc::Vector2 point2 = { (float)pTo->x * pCtx->Scale, (float)pTo->y * pCtx->Scale };
 
-    push_quad_bezier(ctx->contours.back().pts, ctx->current, p1, p2);
-    ctx->current = p2;
+    PushQuadBezier(pCtx->Contours.back().vPoints, pCtx->Current, point1, point2);
+    pCtx->Current = point2;
 
     return 0;
 }
 
-static int ft_cubic_to(const FT_Vector* c1, const FT_Vector* c2, const FT_Vector* to, void* user) {
-    auto* ctx = (FTOutlineCtx*)user;
-    if (ctx->contours.empty()) return 0;
+static int FtCubicTo(const FT_Vector* pC1, const FT_Vector* pC2, const FT_Vector* pTo, void* pUser)
+{
+    auto* pCtx = (SFTOutlineCtx*)pUser;
+    if (pCtx->Contours.empty()) return 0;
 
-    Vector2 p1 = { (float)c1->x * ctx->scale, (float)c1->y * ctx->scale };
-    Vector2 p2 = { (float)c2->x * ctx->scale, (float)c2->y * ctx->scale };
-    Vector2 p3 = { (float)to->x * ctx->scale, (float)to->y * ctx->scale };
+    qc::Vector2 point1 = { (float)pC1->x * pCtx->Scale, (float)pC1->y * pCtx->Scale };
+    qc::Vector2 point2 = { (float)pC2->x * pCtx->Scale, (float)pC2->y * pCtx->Scale };
+    qc::Vector2 point3 = { (float)pTo->x * pCtx->Scale, (float)pTo->y * pCtx->Scale };
     
-    push_cubic_bezier(ctx->contours.back().pts, ctx->current, p1, p2, p3);
-    ctx->current = p3;
+    PushCubicBezier(pCtx->Contours.back().vPoints, pCtx->Current, point1, point2, point3);
+    pCtx->Current = point3;
 
     return 0;
 }
 
-static const FT_Outline_Funcs g_ft_outline_funcs = {
-    ft_move_to, ft_line_to, ft_conic_to, ft_cubic_to, 0, 0
+static const FT_Outline_Funcs s_FtOutlineFuncs = {
+    FtMoveTo, FtLineTo, FtConicTo, FtCubicTo, 0, 0
 };
 
-struct MeshBuilder {
-    std::vector<float>          verts;
-    std::vector<float>          norms;
-    std::vector<float>          uvs;
-    std::vector<unsigned short> indices;
-    int base = 0;
+struct SMeshBuilder
+{
+    std::vector<float>          vVerts;
+    std::vector<float>          vNorms;
+    std::vector<float>          vUvs;
+    std::vector<unsigned short> vIndices;
+    int Base = 0;
 
-    void add_vertex(float x, float y, float z, float nx, float ny, float nz, float u, float v) {
-        verts.insert(verts.end(), { x, y, z });
-        norms.insert(norms.end(), { nx, ny, nz });
-        uvs.insert(uvs.end(), { u, v });
+    void AddVertex(float x, float y, float z, float nx, float ny, float nz, float u, float v)
+    {
+        vVerts.insert(vVerts.end(), { x, y, z });
+        vNorms.insert(vNorms.end(), { nx, ny, nz });
+        vUvs.insert(vUvs.end(), { u, v });
     }
 
-    void add_face(const std::vector<Vector2>& contour, float z, float normal_z, bool flip_winding) {
-        auto tris = ear_clip(contour);
-        int n = (int)contour.size();
+    void AddFace(const std::vector<qc::Vector2>& vContour, float z, float normalZ, bool flipWinding)
+    {
+        auto vTris = EarClip(vContour);
+        int n = (int)vContour.size();
 
-        for (int i = 0; i < n; i++) {
-            add_vertex(contour[i].x, contour[i].y, z, 0, 0, normal_z, contour[i].x, contour[i].y);
+        for (int i = 0; i < n; i++)
+        {
+            AddVertex(vContour[i].x, vContour[i].y, z, 0, 0, normalZ, vContour[i].x, vContour[i].y);
         }
 
-        for (int k = 0; k + 2 < (int)tris.size(); k += 3) {
-            int a = base + tris[k];
-            int b = base + tris[k+1];
-            int c = base + tris[k+2];
+        for (int k = 0; k + 2 < (int)vTris.size(); k += 3)
+        {
+            int a = Base + vTris[k];
+            int b = Base + vTris[k+1];
+            int c = Base + vTris[k+2];
 
-            if (flip_winding) std::swap(b, c);
+            if (flipWinding) std::swap(b, c);
 
-            indices.push_back((unsigned short)a);
-            indices.push_back((unsigned short)b);
-            indices.push_back((unsigned short)c);
+            vIndices.push_back((unsigned short)a);
+            vIndices.push_back((unsigned short)b);
+            vIndices.push_back((unsigned short)c);
         }
 
-        base += n;
+        Base += n;
     }
 
-    void add_wall(const std::vector<Vector2>& contour, float depth) {
-        int n = (int)contour.size();
+    void AddWall(const std::vector<qc::Vector2>& vContour, float depth)
+    {
+        int n = (int)vContour.size();
 
-        for (int i = 0; i < n; i++) {
+        for (int i = 0; i < n; i++)
+        {
             int j = (i + 1) % n;
-            Vector2 a = contour[i], b = contour[j];
+            qc::Vector2 a = vContour[i], b = vContour[j];
 
             float ex = b.y - a.y, ey = -(b.x - a.x);
             float len = sqrtf(ex*ex + ey*ey);
 
-            if (len > 0.00001f) { ex /= len; ey /= len; }
+            if (len > 0.00001f)
+            {
+                ex /= len; ey /= len;
+            }
 
-            int v0 = base;
-            add_vertex(a.x, a.y, 0,     ex, ey, 0, 0, 0);
-            add_vertex(b.x, b.y, 0,     ex, ey, 0, 1, 0);
-            add_vertex(b.x, b.y, depth, ex, ey, 0, 1, 1);
-            add_vertex(a.x, a.y, depth, ex, ey, 0, 0, 1);
-            base += 4;
+            int v0 = Base;
+            AddVertex(a.x, a.y, 0,     ex, ey, 0, 0, 0);
+            AddVertex(b.x, b.y, 0,     ex, ey, 0, 1, 0);
+            AddVertex(b.x, b.y, depth, ex, ey, 0, 1, 1);
+            AddVertex(a.x, a.y, depth, ex, ey, 0, 0, 1);
+            Base += 4;
 
-            indices.push_back(v0);     indices.push_back(v0+1);
-            indices.push_back(v0+2);   indices.push_back(v0);
-            indices.push_back(v0+2);   indices.push_back(v0+3);
+            vIndices.push_back(v0);     vIndices.push_back(v0+1);
+            vIndices.push_back(v0+2);   vIndices.push_back(v0);
+            vIndices.push_back(v0+2);   vIndices.push_back(v0+3);
         }
     }
 
-    Mesh build() {
-        Mesh m = {0};
-        if (verts.empty()) return m;
+    qc::Mesh Build()
+    {
+        qc::Mesh m = {0};
+        if (vVerts.empty()) return m;
 
-        m.vertexCount   = (int)(verts.size() / 3);
-        m.triangleCount = (int)(indices.size() / 3);
+        m.vertexCount   = (int)(vVerts.size() / 3);
+        m.triangleCount = (int)(vIndices.size() / 3);
 
-        m.vertices  = (float*)malloc((unsigned int)verts.size()   * sizeof(float));
-        m.normals   = (float*)malloc((unsigned int)norms.size()   * sizeof(float));
-        m.texcoords = (float*)malloc((unsigned int)uvs.size()     * sizeof(float));
-        m.indices   = (unsigned short*)malloc((unsigned int)indices.size() * sizeof(unsigned short));
+        m.vertices  = (float*)malloc((unsigned int)vVerts.size()   * sizeof(float));
+        m.normals   = (float*)malloc((unsigned int)vNorms.size()   * sizeof(float));
+        m.texcoords = (float*)malloc((unsigned int)vUvs.size()     * sizeof(float));
+        m.indices   = (unsigned short*)malloc((unsigned int)vIndices.size() * sizeof(unsigned short));
 
-        memcpy(m.vertices,  verts.data(),   verts.size()   * sizeof(float));
-        memcpy(m.normals,   norms.data(),   norms.size()   * sizeof(float));
-        memcpy(m.texcoords, uvs.data(),     uvs.size()     * sizeof(float));
-        memcpy(m.indices,   indices.data(), indices.size() * sizeof(unsigned short));
+        memcpy(m.vertices,  vVerts.data(),   vVerts.size()   * sizeof(float));
+        memcpy(m.normals,   vNorms.data(),   vNorms.size()   * sizeof(float));
+        memcpy(m.texcoords, vUvs.data(),     vUvs.size()     * sizeof(float));
+        memcpy(m.indices,   vIndices.data(), vIndices.size() * sizeof(unsigned short));
 
         UploadMesh(&m, false);
         return m;
     }
 };
 
-Model generate_text_mesh(const std::string& text, float size, float thickness, float letter_spacing, const std::string& font_path)
+qc::Model CFreetypeTextMesh::Generate(const std::string& text, float size, float thickness, float letterSpacing, const std::string& fontPath) const
 {
-    auto make_fallback = []() {
-        return LoadModelFromMesh(GenMeshCube(0.001f, 0.001f, 0.001f));
+    auto makeFallback = []()
+    {
+        return qc::LoadModelFromMesh(qc::GenMeshCube(0.001f, 0.001f, 0.001f));
     };
 
-    if (!g_ft) { TraceLog(LogLevel::Warn, "Freetype", "not initialised"); return make_fallback(); }
-    if (text.empty() || font_path.empty()) return make_fallback();
+    if (!m_pLibrary)
+    {
+        qc::TraceLog(qc::LogLevel::Warn, "Freetype", "not initialised"); return makeFallback();
+    }
+    if (text.empty() || fontPath.empty()) return makeFallback();
 
-    FT_Face face;
-    if (FT_New_Face(g_ft, font_path.c_str(), 0, &face)) {
-        TraceLog(LogLevel::Warn, "Freetype", TextFormat("cannot load font %s", font_path.c_str()));
-        return make_fallback();
+    FT_Face pFace;
+    if (FT_New_Face(m_pLibrary, fontPath.c_str(), 0, &pFace))
+    {
+        qc::TraceLog(qc::LogLevel::Warn, "Freetype", qc::TextFormat("cannot load font %s", fontPath.c_str()));
+        return makeFallback();
     }
 
-    const int FT_RES = 128;
-    FT_Set_Pixel_Sizes(face, 0, FT_RES);
-    float scale = size / (float)FT_RES;
+    const int resolution = 128;
+    FT_Set_Pixel_Sizes(pFace, 0, resolution);
+    float scale = size / (float)resolution;
 
-    MeshBuilder builder;
-    float cursor_x = 0.f;
+    SMeshBuilder builder;
+    float cursorX = 0.f;
 
-    for (unsigned char ch : text) {
-        if (FT_Load_Char(face, ch, FT_LOAD_NO_BITMAP | FT_LOAD_NO_HINTING)) continue;
+    for (unsigned char ch : text)
+    {
+        if (FT_Load_Char(pFace, ch, FT_LOAD_NO_BITMAP | FT_LOAD_NO_HINTING)) continue;
 
-        FT_GlyphSlot slot = face->glyph;
-        if (slot->format != FT_GLYPH_FORMAT_OUTLINE) {
-            cursor_x += (slot->advance.x >> 6) * scale + letter_spacing;
+        FT_GlyphSlot pSlot = pFace->glyph;
+        if (pSlot->format != FT_GLYPH_FORMAT_OUTLINE)
+        {
+            cursorX += (pSlot->advance.x >> 6) * scale + letterSpacing;
             continue;
         }
 
-        FTOutlineCtx ctx;
-        ctx.scale = scale;
-        FT_Outline_Decompose(&slot->outline, &g_ft_outline_funcs, &ctx);
+        SFTOutlineCtx outlineCtx;
+        outlineCtx.Scale = scale;
+        FT_Outline_Decompose(&pSlot->outline, &s_FtOutlineFuncs, &outlineCtx);
 
-        for (auto& c : ctx.contours) {
-            for (auto& p : c.pts)
-                p.x += cursor_x;
+        for (auto& contour : outlineCtx.Contours)
+        {
+            for (auto& point : contour.vPoints)
+                point.x += cursorX;
         }
 
-        for (auto& c : ctx.contours) {
-            if (c.pts.size() < 3) continue;
-            float area = polygon_signed_area(c.pts);
-            bool is_hole = area < 0;
+        for (auto& contour : outlineCtx.Contours)
+        {
+            if (contour.vPoints.size() < 3) continue;
+            float area = PolygonSignedArea(contour.vPoints);
+            bool isHole = area < 0;
 
-            builder.add_face(c.pts, thickness, 1.f, is_hole);
-            builder.add_face(c.pts, 0.f,       -1.f, !is_hole);
-            builder.add_wall(c.pts, thickness);
+            builder.AddFace(contour.vPoints, thickness, 1.f, isHole);
+            builder.AddFace(contour.vPoints, 0.f,       -1.f, !isHole);
+            builder.AddWall(contour.vPoints, thickness);
         }
 
-        cursor_x += (slot->advance.x >> 6) * scale + letter_spacing;
+        cursorX += (pSlot->advance.x >> 6) * scale + letterSpacing;
     }
 
-    FT_Done_Face(face);
+    FT_Done_Face(pFace);
 
-    Mesh mesh = builder.build();
-    if (mesh.vertexCount == 0) return make_fallback();
+    qc::Mesh mesh = builder.Build();
+    if (mesh.vertexCount == 0) return makeFallback();
 
-    float half_w = cursor_x * 0.5f;
+    float halfWidth = cursorX * 0.5f;
     for (int i = 0; i < mesh.vertexCount; i++)
-        mesh.vertices[i * 3] -= half_w;
+        mesh.vertices[i * 3] -= halfWidth;
 
-    UpdateMeshBuffer(mesh, 0, mesh.vertices, mesh.vertexCount * 3 * sizeof(float), 0);
+    qc::UpdateMeshBuffer(mesh, 0, mesh.vertices, mesh.vertexCount * 3 * sizeof(float), 0);
 
-    Model model = LoadModelFromMesh(mesh);
+    qc::Model model = qc::LoadModelFromMesh(mesh);
 
-    if (model.materialCount == 0) {
-        model.materials  = (Material*)malloc(sizeof(Material));
-        model.materials[0] = LoadMaterialDefault();
+    if (model.materialCount == 0)
+    {
+        model.materials  = (qc::Material*)malloc(sizeof(qc::Material));
+        model.materials[0] = qc::LoadMaterialDefault();
         model.materialCount = 1;
     }
     return model;
 }
 
-std::string get_default_font_path() {
-    auto fonts = get_system_fonts();
-    if (!fonts.empty()) return fonts[0].second;
+std::string CFreetypeTextMesh::GetDefaultFontPath()
+{
+    auto vFonts = GetSystemFonts();
+    if (!vFonts.empty()) return vFonts[0].second;
     return "";
 }

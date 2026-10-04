@@ -3,34 +3,21 @@
 #include "component.h"
 #include "entity.h"
 #include "imgui.h"
-#include "editor/editor.h"
 #include <string>
 
-class ComponentUIHelper {
+class CEditor;
+
+class CComponentUIHelper
+{
 public:
-    static void draw_entity_inspector(Editor& editor, Entity& entity, Shader shader);
-    
-    static void draw_transform_component(Editor& editor, Entity& entity, TransformComponent* transform);
-    static void draw_mesh_component(Editor& editor, Entity& entity, MeshComponent* mesh);
-    static void draw_light_component(Editor& editor, Entity& entity, LightComponent* light, Shader shader);
-    static void draw_material_component(Editor& editor, Entity& entity, MaterialComponent* material);
-    static void draw_collision_component(Editor& editor, Entity& entity, CollisionComponent* collision);
-    static void draw_3d_text_component(Editor& editor, Entity& entity, Text3DComponent* text);
-    
-private:
-    static bool should_show_component_menu;
-    static int component_to_remove;
-};
+    static void DrawEntityInspector(CEditor& editor, CEntity& entity, qc::Shader shader);
 
-struct ComponentMenuItem {
-    const char* name;
-    const char* type_name;
+    static void DrawTransformComponent(CEditor& editor, CEntity& entity, CTransformComponent* pTransform);
+    static void DrawMeshComponent(CEditor& editor, CEntity& entity, CMeshComponent* pMesh);
+    static void DrawLightComponent(CEditor& editor, CEntity& entity, CLightComponent* pLight, qc::Shader shader);
+    static void DrawMaterialComponent(CEditor& editor, CEntity& entity, CMaterialComponent* pMaterial);
+    static void DrawCollisionComponent(CEditor& editor, CEntity& entity, CCollisionComponent* pCollision);
+    static void Draw3dTextComponent(CEditor& editor, CEntity& entity, CText3DComponent* pText);
 };
-
-static const ComponentMenuItem available_components[] = {
-    {"Light", "Light"},
-};
-
-static const int available_components_count = sizeof(available_components) / sizeof(ComponentMenuItem);
 
 #endif // __EDITOR_COMPONENTS_UI_H__

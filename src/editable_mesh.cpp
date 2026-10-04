@@ -4,8 +4,10 @@
 
 using namespace qc;
 
-void rebuild_mesh_from_editable(Model& model, EditableMesh& editable) {
-    if (model.meshCount <= 0) {
+void RebuildMeshFromEditable(Model& model, CEditableMesh& editable)
+{
+    if (model.meshCount <= 0)
+    {
         model.meshCount = 1;
         model.meshes = new Mesh[1];
         model.meshes[0] = {};
@@ -13,13 +15,14 @@ void rebuild_mesh_from_editable(Model& model, EditableMesh& editable) {
 
     Mesh& mesh = model.meshes[0];
 
-    if (mesh.vaoId > 0 || mesh.vertices || mesh.normals || mesh.texcoords || mesh.indices) {
+    if (mesh.vaoId > 0 || mesh.vertices || mesh.normals || mesh.texcoords || mesh.indices)
+    {
         UnloadMesh(mesh);
         mesh = {};
     }
 
-    mesh.vertexCount   = (int)editable.vertices.size();
-    mesh.triangleCount = (int)editable.triangles.size();
+    mesh.vertexCount   = (int)editable.m_vVertices.size();
+    mesh.triangleCount = (int)editable.m_vTriangles.size();
 
     if (mesh.vertexCount == 0 || mesh.triangleCount == 0)
         return;
@@ -29,8 +32,9 @@ void rebuild_mesh_from_editable(Model& model, EditableMesh& editable) {
     mesh.texcoords = new float[mesh.vertexCount * 2];
     mesh.indices   = new unsigned short[mesh.triangleCount * 3];
 
-    for (int i = 0; i < mesh.vertexCount; i++) {
-        Vec3 p = editable.vertices[i].position;
+    for (int i = 0; i < mesh.vertexCount; i++)
+    {
+        Vec3 p = editable.m_vVertices[i].Position;
         mesh.vertices[i * 3 + 0] = p.x;
         mesh.vertices[i * 3 + 1] = p.y;
         mesh.vertices[i * 3 + 2] = p.z;
@@ -39,21 +43,23 @@ void rebuild_mesh_from_editable(Model& model, EditableMesh& editable) {
         mesh.normals[i * 3 + 1] = 1;
         mesh.normals[i * 3 + 2] = 0;
 
-        mesh.texcoords[i * 2 + 0] = editable.vertices[i].u;
-        mesh.texcoords[i * 2 + 1] = editable.vertices[i].v;
+        mesh.texcoords[i * 2 + 0] = editable.m_vVertices[i].U;
+        mesh.texcoords[i * 2 + 1] = editable.m_vVertices[i].V;
     }
 
-    for (int i = 0; i < mesh.triangleCount; i++) {
-        EditableTriangle& tri = editable.triangles[i];
-        mesh.indices[i * 3 + 0] = (unsigned short)tri.a;
-        mesh.indices[i * 3 + 1] = (unsigned short)tri.b;
-        mesh.indices[i * 3 + 2] = (unsigned short)tri.c;
+    for (int i = 0; i < mesh.triangleCount; i++)
+    {
+        SEditableTriangle& tri = editable.m_vTriangles[i];
+        mesh.indices[i * 3 + 0] = (unsigned short)tri.A;
+        mesh.indices[i * 3 + 1] = (unsigned short)tri.B;
+        mesh.indices[i * 3 + 2] = (unsigned short)tri.C;
     }
 
     for (int i = 0; i < mesh.vertexCount * 3; i++)
         mesh.normals[i] = 0.0f;
 
-    for (int i = 0; i < mesh.triangleCount; i++) {
+    for (int i = 0; i < mesh.triangleCount; i++)
+    {
         int ia = mesh.indices[i * 3 + 0];
         int ib = mesh.indices[i * 3 + 1];
         int ic = mesh.indices[i * 3 + 2];
@@ -67,14 +73,19 @@ void rebuild_mesh_from_editable(Model& model, EditableMesh& editable) {
                 .cross(c - a)
                 .normalized();
 
-        for (int v : {ia, ib, ic}) {
+        for (int v :
+        {
+            ia, ib, ic
+        })
+        {
             mesh.normals[v*3+0] += n.x;
             mesh.normals[v*3+1] += n.y;
             mesh.normals[v*3+2] += n.z;
         }
     }
 
-    for (int i = 0; i < mesh.vertexCount; i++) {
+    for (int i = 0; i < mesh.vertexCount; i++)
+    {
         Vec3 n = Vec3(
             mesh.normals[i * 3 + 0],
             mesh.normals[i * 3 + 1],
@@ -88,7 +99,8 @@ void rebuild_mesh_from_editable(Model& model, EditableMesh& editable) {
 
     UploadMesh(&mesh, true);
 
-    if (model.materialCount <= 0) {
+    if (model.materialCount <= 0)
+    {
         model.materialCount = 1;
         model.materials = new Material[1];
         model.materials[0] = LoadMaterialDefault();

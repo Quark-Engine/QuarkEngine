@@ -1,28 +1,36 @@
 #ifndef __MODELS_H__
 #define __MODELS_H__
 #include "entity.h"
-#include <functional>
+#include "text_mesh.h"
+
 #include <filesystem>
 
-extern std::vector<ModelAsset> assets;
+class CModelService
+{
+public:
+    static void UpdateModel(CEntity* pEntity, const CFreetypeTextMesh& textMesh);
+    static void RebuildMeshNormals(qc::Mesh& mesh);
+    static bool EnsureAssetLoaded(CModelAsset& asset);
+    static bool LoadInstance(const CModelAsset& asset, qc::Model& model);
+    static bool IsModelFile(const std::filesystem::path& path);
 
-struct Scene;
+private:
+#if defined(__unix__) || defined(__APPLE__)
+    class CModelLoadGuard;
 
-void load_models();
-void update_model(Entity* e);
-void unload_models();
-void rebuild_mesh_normals(Mesh& mesh);
-void load_external_models(std::string project_path);
-void refresh_models(std::string project_path, Scene& scene);
-bool ensure_model_asset_loaded(ModelAsset& asset);
-bool load_model_instance(const ModelAsset& asset, Model& model);
-bool is_model_file(const std::filesystem::path& p);
-bool entity_owns_model(const Entity& entity);
-void clear_mesh_overrides(Entity& entity);
-bool entity_has_mesh_overrides(const Entity& entity);
-void capture_mesh_overrides_from_model(Entity& entity);
-bool apply_mesh_overrides(Entity& entity);
-bool get_mesh_triangle_vertex_indices(const Mesh& mesh, int triangle_index, int out_indices[3]);
-bool detach_mesh_triangles(Entity& entity);
+    static CModelLoadGuard ms_LoadGuard;
+#endif
+};
+
+class CMeshOverrideService
+{
+public:
+    static void Clear(CEntity& entity);
+    static bool Has(const CEntity& entity);
+    static void CaptureFromModel(CEntity& entity);
+    static bool Apply(CEntity& entity);
+    static bool GetTriangleVertexIndices(const qc::Mesh& mesh, int triangleIndex, int aOutIndices[3]);
+    static bool DetachTriangles(CEntity& entity);
+};
 
 #endif // __MODELS_H__

@@ -1,5 +1,6 @@
 build/
 build-plugin/
+build-tests/
 .vscode/
 /projects
 run.bat

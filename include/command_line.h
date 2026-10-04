@@ -2,44 +2,51 @@
 #define __COMMAND_LINE_H__
 #include <string>
 
-enum class RendererOverride {
-    None,
-    OpenGL,
-    Vulkan
+enum class ERendererOverride
+{
+    NONE,
+    OPENGL,
+    VULKAN
 };
 
-enum class TriState {
-    Unset,
-    On,
-    Off
+enum class ETriState
+{
+    UNSET,
+    ON,
+    OFF
 };
 
-struct CommandLineOptions {
-    bool headless = false;
-    bool test_mode = false;
-    std::string project_path;
+struct SCommandLineOptions
+{
+    bool Headless = false;
+    bool TestMode = false;
+    std::string ProjectPath;
 
-    RendererOverride renderer_override = RendererOverride::None;
-    TriState vsync_override = TriState::Unset;
-    int fps_override = -1;
+    ERendererOverride RendererOverride = ERendererOverride::NONE;
+    ETriState VsyncOverride = ETriState::UNSET;
+    int FpsOverride = -1;
 
-    bool no_plugins = false;
-    std::string plugins_dir = "plugins";
+    bool NoPlugins = false;
+    std::string PluginsDir = "plugins";
 
-    std::string lang_override;
-    std::string log_level;
+    std::string LangOverride;
+    std::string LogLevel;
 
-    bool no_autosave = false;
-    bool new_project = false;
+    bool NoAutosave = false;
+    bool NewProject = false;
 
-    bool help_requested = false;
-    bool version_requested = false;
+    bool HelpRequested = false;
+    bool VersionRequested = false;
 
-    int dump_frames = 0;
+    int DumpFrames = 0;
 };
 
-CommandLineOptions parse_command_line(int argc, char** argv);
-void print_usage(const char* program_name);
-void print_version();
+class CCommandLineParser
+{
+public:
+    static void PrintVersion();
+    static void PrintUsage(const char* pProgramName);
+    static SCommandLineOptions Parse(int argc, char** ppArgv);
+};
 
 #endif // __COMMAND_LINE_H__

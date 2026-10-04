@@ -1,124 +1,146 @@
 #include "editor/editor_entity.h"
-#include "editor/editor_assets.h"
-#include "editor/editor_utils.h"
 #include "editor/editor_viewers.h"
-#include "nlohmann/json.hpp"
 #include "models.h"
-#include "entity.h"
-#include <fstream>
+#include "nlohmann/json.hpp"
 
-void assign_entity_name(Entity& entity, const char* new_name) {
-    if (!new_name || new_name[0] == '\0') return;
-    entity.name = new_name;
+#include <fstream>
+#include <memory>
+
+using namespace qc;
+
+void CEntityFactory::AssignName(CEntity& entity, const char* pNewName)
+{
+    if (!pNewName || pNewName[0] == '\0')
+    {
+        return;
+    }
+    entity.m_Name = pNewName;
 }
 
-Entity make_entity_from_asset(Scene& scene, ModelAsset& asset) {
-    Entity entity;
-    MeshComponent* mesh = entity.get_mesh_component();
-    if (!mesh) return entity;
+CEntity CEntityFactory::FromAsset(CScene& scene, CModelAsset& asset)
+{
+    CEntity entity;
+    CMeshComponent* pMesh = entity.GetMeshComponent();
+    if (!pMesh)
+    {
+        return entity;
+    }
 
-    entity.id = static_cast<int>(scene.entities.size());
-    mesh->type = asset.type;
-    mesh->asset = &asset;
-    mesh->asset_name = asset.name;
-    mesh->segments = 16;
-    const std::string base_name = asset.is_procedural ? asset.name : fs::path(asset.name).stem().string();
-    entity.name = scene.make_unique_name(base_name.empty() ? "Model" : base_name);
+    entity.m_Id = static_cast<int>(scene.m_vEntities.size());
+    pMesh->m_Type = asset.m_Type;
+    pMesh->m_pAsset = &asset;
+    pMesh->m_AssetName = asset.m_Name;
+    pMesh->m_Segments = 16;
+    const std::string baseName = asset.m_IsProcedural ? asset.m_Name : fs::path(asset.m_Name).stem().string();
+    entity.m_Name = scene.MakeUniqueName(baseName.empty() ? "Model" : baseName);
 
-    auto mat_comp = std::make_shared<MaterialComponent>();
-    entity.get_components()->add_component(mat_comp);
-    MaterialComponent* mat = mat_comp.get();
+    auto pMatComp = std::make_shared<CMaterialComponent>();
+    entity.GetComponents()->AddComponent(pMatComp);
+    CMaterialComponent* pMat = pMatComp.get();
 
-    if (asset.is_procedural) {
-        mesh->model = asset.generator(mesh->segments);
-        mesh->owns_model_instance = true;
-        clear_mesh_overrides(entity);
-        store_uv(&entity);
-        store_material_textures(&entity);
-        mat->texture_source = TEXTURE_NONE;
-        mat->texture_name.clear();
+    if (asset.m_IsProcedural)
+    {
+        pMesh->m_Model = asset.pfnGenerator(pMesh->m_Segments);
+        pMesh->m_OwnsModelInstance = true;
+        CMeshOverrideService::Clear(entity);
+        CEntityTextureService::StoreUV(&entity);
+        CEntityTextureService::StoreMaterialTextures(&entity);
+        pMat->m_TextureSource = TEXTURE_NONE;
+        pMat->m_TextureName.clear();
 
-        if (asset.name == "Text") {
-            auto text_comp = std::make_shared<Text3DComponent>();
-            entity.get_components()->add_component(text_comp);
+        if (asset.m_Name == "Text")
+        {
+            auto pTextComp = std::make_shared<CText3DComponent>();
+            entity.GetComponents()->AddComponent(pTextComp);
         }
-    } 
-
-    else {
-        if (!load_model_instance(asset, mesh->model)) {
-            mesh->asset = nullptr;
-            mesh->asset_name.clear();
-            mesh->model;
+    }
+    else
+    {
+        if (!CModelService::LoadInstance(asset, pMesh->m_Model))
+        {
+            pMesh->m_pAsset = nullptr;
+            pMesh->m_AssetName.clear();
+            pMesh->m_Model;
             return entity;
         }
 
-        mesh->owns_model_instance = true;
-        clear_mesh_overrides(entity);
-        store_uv(&entity);
-        store_material_textures(&entity);
+        pMesh->m_OwnsModelInstance = true;
+        CMeshOverrideService::Clear(entity);
+        CEntityTextureService::StoreUV(&entity);
+        CEntityTextureService::StoreMaterialTextures(&entity);
 
-        bool has_embedded = false;
-        for (int i = 0; i < mesh->model.materialCount; i++) {
-            if (mesh->model.materials[i].maps[MATERIAL_MAP_DIFFUSE].texture.id != 0) {
-                has_embedded = true;
+        bool hasEmbedded = false;
+        for (int i = 0; i < pMesh->m_Model.materialCount; i++)
+        {
+            if (pMesh->m_Model.materials[i].maps[MATERIAL_MAP_DIFFUSE].texture.id != 0)
+            {
+                hasEmbedded = true;
                 break;
             }
         }
 
-        mat->texture_source = has_embedded ? TEXTURE_MODEL : TEXTURE_NONE;
+        pMat->m_TextureSource = hasEmbedded ? TEXTURE_MODEL : TEXTURE_NONE;
 
-        if (!asset.filepath.empty()) {
-            std::filesystem::path model_path(asset.filepath);
-            std::filesystem::path mtl_path = model_path.parent_path() / (model_path.stem().string() + ".mtl");
-            
-            if (std::filesystem::exists(mtl_path)) {
-                load_material_to_entity(&entity, mtl_path);
+        if (!asset.m_FilePath.empty())
+        {
+            std::filesystem::path modelPath(asset.m_FilePath);
+            std::filesystem::path mtlPath = modelPath.parent_path() / (modelPath.stem().string() + ".mtl");
+
+            if (std::filesystem::exists(mtlPath))
+            {
+                LoadMaterialToEntity(&entity, mtlPath);
                 return entity;
             }
         }
     }
 
-    mat->texture = {0};
+    pMat->m_Texture = {0};
     return entity;
 }
 
-Entity make_light_entity(Scene& scene, int parent_index) {
-    Entity entity;
-    entity.name = scene.make_unique_name("Light");
-    entity.id = static_cast<int>(scene.entities.size());
-    entity.parent_id = parent_index;
+CEntity CEntityFactory::Light(CScene& scene, int parentIndex)
+{
+    CEntity entity;
+    entity.m_Name = scene.MakeUniqueName("Light");
+    entity.m_Id = static_cast<int>(scene.m_vEntities.size());
+    entity.m_ParentId = parentIndex;
 
-    ComponentManager* cm = entity.get_components();
-    for (size_t i = 0; i < cm->get_component_count(); ++i) {
-        if (cm->get_component(i)->get_type() == COMPONENT_MESH) {
-            cm->remove_component(i);
+    CComponentManager* pCm = entity.GetComponents();
+    for (size_t i = 0; i < pCm->GetComponentCount(); ++i)
+    {
+        if (pCm->GetComponent(i)->GetType() == COMPONENT_MESH)
+        {
+            pCm->RemoveComponent(i);
             break;
         }
     }
 
-    auto light = std::make_shared<LightComponent>();
-    light->light = create_lighting({0, 0, 0}, WHITE);
-    cm->add_component(light);
+    auto pLight = std::make_shared<CLightComponent>();
+    pLight->m_Light = CreateLighting({0, 0, 0}, WHITE);
+    pCm->AddComponent(pLight);
 
     return entity;
 }
 
-void make_prefab(Entity entity, const fs::path path) {
+void CEntityFactory::SavePrefab(CEntity entity, const fs::path path)
+{
     nlohmann::json j;
 
-    j["name"] = entity.name;
-    j["tags"] = entity.tags;
-    j["is_group"] = entity.is_group;
-    j["parent_id"] = entity.parent_id;
+    j["name"] = entity.m_Name;
+    j["tags"] = entity.m_vTags;
+    j["is_group"] = entity.m_IsGroup;
+    j["parent_id"] = entity.m_ParentId;
 
-    if (entity.components) {
-        entity.components->serialize(j);
+    if (entity.m_pComponents)
+    {
+        entity.m_pComponents->Serialize(j);
     }
 
-    std::ofstream f(path / (entity.name + ".prefab"));
+    std::ofstream f(path / (entity.m_Name + ".prefab"));
 
-    if (!f.is_open()) {
-        TraceLog(LogLevel::Error, "PREFAB", TextFormat("Failed to open %s.prefab ", entity.name.c_str()));
+    if (!f.is_open())
+    {
+        TraceLog(LogLevel::Error, "PREFAB", TextFormat("Failed to open %s.prefab ", entity.m_Name.c_str()));
         return;
     }
 
@@ -126,9 +148,12 @@ void make_prefab(Entity entity, const fs::path path) {
     f.close();
 }
 
-Entity make_entity_from_prefab(Scene& scene, const fs::path filename) {
+CEntity CEntityFactory::FromPrefab(CScene& scene, const CAssetLibrary& assets, const fs::path filename,
+                                   const CComponentFactoryRegistry& factories)
+{
     std::ifstream f(filename);
-    if (!f.is_open()) {
+    if (!f.is_open())
+    {
         TraceLog(LogLevel::Error, "PREFAB", TextFormat("Failed to open prefab %s", filename.string().c_str()));
         return {};
     }
@@ -136,31 +161,35 @@ Entity make_entity_from_prefab(Scene& scene, const fs::path filename) {
     nlohmann::json j;
     f >> j;
 
-    Entity entity;
-    
-    entity.name = j.value("name", "Entity");
-    if (j.contains("tags") && j["tags"].is_array()) {
-        entity.tags = j["tags"].get<std::vector<std::string>>();
-    }
-    entity.is_group = j.value("is_group", false);
-    entity.parent_id = j.value("parent_id", -1);
-    entity.id = static_cast<int>(scene.entities.size());
+    CEntity entity;
 
-    if (j.contains("components")) {
-        entity.components->deserialize(j);
+    entity.m_Name = j.value("name", "Entity");
+    if (j.contains("tags") && j["tags"].is_array())
+    {
+        entity.m_vTags = j["tags"].get<std::vector<std::string>>();
     }
+    entity.m_IsGroup = j.value("is_group", false);
+    entity.m_ParentId = j.value("parent_id", -1);
+    entity.m_Id = static_cast<int>(scene.m_vEntities.size());
 
-    auto mesh = entity.get_mesh_component();
-    if (mesh && !mesh->asset_name.empty()) {
-        load_model_instance(*find_asset_by_name(mesh->asset_name), mesh->model);
+    if (j.contains("components"))
+    {
+        entity.m_pComponents->Deserialize(j, factories);
     }
 
-    auto mat = entity.get_material_component();
-    if (mat && !mat->texture_name.empty()) {
-        load_material_to_entity(&entity, mat->texture_name);
+    auto pMesh = entity.GetMeshComponent();
+    if (pMesh && !pMesh->m_AssetName.empty())
+    {
+        CModelService::LoadInstance(*assets.FindModelByName(pMesh->m_AssetName), pMesh->m_Model);
     }
 
-    TraceLog(LogLevel::Info, "PREFAB", TextFormat("[TEXTURE_NAME] %s", mat->texture_name.c_str()));
+    auto pMat = entity.GetMaterialComponent();
+    if (pMat && !pMat->m_TextureName.empty())
+    {
+        LoadMaterialToEntity(&entity, pMat->m_TextureName);
+    }
+
+    TraceLog(LogLevel::Info, "PREFAB", TextFormat("[TEXTURE_NAME] %s", pMat->m_TextureName.c_str()));
 
     return entity;
 }

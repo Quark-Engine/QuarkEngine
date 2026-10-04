@@ -2,66 +2,73 @@
 #define __ENTITY_H__
 #include "lighting.h"
 #include "component.h"
-#include <string>
-#include <functional>
-#include <vector>
+
 #include <memory>
+#include <string>
+#include <vector>
 
-class ComponentManager;
+class CComponentManager;
 
-inline const char* object_type_name(ObjectType type) {
-    switch (type) {
-        case CUBE: return "Cube";
-        case SPHERE: return "Sphere";
-        case CONE: return "Cone";
-        case CYLINDER: return "Cylinder";
-        case HEMISPHERE: return "HemiSphere";
-        case TORUS: return "Torus";
-        default: return "Object";
-    }
-}
+const char* ObjectTypeName(EObjectType type);
 
-struct ModelAsset {
-    std::string name;
-    std::string filepath;
-    
-    ObjectType type;
-    bool is_procedural;
-    std::function<Model(int)> generator;
-    Model loaded_model;
+class CModelAsset
+{
+public:
+    CModelAsset();
+    ~CModelAsset();
+
+    CModelAsset(const CModelAsset&) = delete;
+    CModelAsset& operator=(const CModelAsset&) = delete;
+
+    CModelAsset(CModelAsset&& other) noexcept;
+    CModelAsset& operator=(CModelAsset&& other) noexcept;
+
+    std::string m_Name;
+    std::string m_FilePath;
+
+    EObjectType m_Type = OBJECT_CUBE;
+    bool m_IsProcedural = false;
+    std::function<qc::Model(int)> pfnGenerator;
+    qc::Model m_LoadedModel;
+
+    qc::Model TakeLoadedModel();
+    void Unload();
 };
 
-struct Entity {
-    int id;
-    std::string name;
-    std::vector<std::string> tags;
-    int parent_id = -1;
-    bool is_group = false;
-    
-    std::unique_ptr<ComponentManager> components;
+class CEntity
+{
+public:
+    CEntity();
+    explicit CEntity(int entityId);
+    ~CEntity();
 
-    Entity();
-    Entity(int _id);
-    ~Entity();
-    
-    Entity(const Entity& other);
-    Entity& operator=(const Entity& other);
-    
-    Entity(Entity&& other) noexcept = default;
-    Entity& operator=(Entity&& other) noexcept = default;
+    CEntity(const CEntity& other);
+    CEntity& operator=(const CEntity& other);
 
-    ComponentManager* get_components();
-    const ComponentManager* get_components() const;
-    TransformComponent* get_transform_component();
-    const TransformComponent* get_transform_component() const;
-    MeshComponent* get_mesh_component();
-    const MeshComponent* get_mesh_component() const;
-    LightComponent* get_light_component();
-    const LightComponent* get_light_component() const;
-    MaterialComponent* get_material_component();
-    const MaterialComponent* get_material_component() const;
-    CollisionComponent* get_collision_component();
-    const CollisionComponent* get_collision_component() const;
+    CEntity(CEntity&& other) noexcept = default;
+    CEntity& operator=(CEntity&& other) noexcept = default;
+
+    CComponentManager* GetComponents();
+    const CComponentManager* GetComponents() const;
+
+    CTransformComponent* GetTransformComponent();
+    const CTransformComponent* GetTransformComponent() const;
+    CMeshComponent* GetMeshComponent();
+    const CMeshComponent* GetMeshComponent() const;
+    CLightComponent* GetLightComponent();
+    const CLightComponent* GetLightComponent() const;
+    CMaterialComponent* GetMaterialComponent();
+    const CMaterialComponent* GetMaterialComponent() const;
+    CCollisionComponent* GetCollisionComponent();
+    const CCollisionComponent* GetCollisionComponent() const;
+
+    int m_Id = 0;
+    std::string m_Name;
+    std::vector<std::string> m_vTags;
+    int m_ParentId = -1;
+    bool m_IsGroup = false;
+
+    std::unique_ptr<CComponentManager> m_pComponents;
 };
 
 #endif // __ENTITY_H__

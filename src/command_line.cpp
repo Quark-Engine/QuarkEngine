@@ -2,13 +2,25 @@
 #include "version.h"
 #include <iostream>
 
-void print_version() {
+namespace
+{
+
+bool HasValue(int argc, char** ppArgv, int index)
+{
+    return index + 1 < argc;
+}
+
+} // anonymous
+
+void CCommandLineParser::PrintVersion()
+{
     std::cout << "Quark Engine " << QUARK_ENGINE_VERSION << "\n";
 }
 
-void print_usage(const char* program_name) {
+void CCommandLineParser::PrintUsage(const char* pProgramName)
+{
     std::cout <<
-        "Usage: " << program_name << " [options] [project_path]\n"
+        "Usage: " << pProgramName << " [options] [project_path]\n"
         "\n"
         "General:\n"
         "  project_path              Path to the project to open (positional)\n"
@@ -35,85 +47,161 @@ void print_usage(const char* program_name) {
         "  --dump-frame [n]             Print full render state for the first n frames, then exit (debug)\n";
 }
 
-static bool has_value(int argc, char** argv, int index) {
-    return index + 1 < argc;
-}
+SCommandLineOptions CCommandLineParser::Parse(int argc, char** ppArgv)
+{
+    SCommandLineOptions options;
 
-CommandLineOptions parse_command_line(int argc, char** argv) {
-    CommandLineOptions options;
+    for (int argumentIndex = 1; argumentIndex < argc; ++argumentIndex)
+    {
+        const std::string argument = ppArgv[argumentIndex];
 
-    for (int argument_index = 1; argument_index < argc; ++argument_index) {
-        const std::string argument = argv[argument_index];
-
-        if (argument == "--headless") {
-            options.headless = true;
-        } else if (argument == "--test") {
-            options.test_mode = true;
-        } else if (argument == "--new-project") {
-            options.new_project = true;
-        } else if (argument == "-h" || argument == "--help") {
-            options.help_requested = true;
-        } else if (argument == "--version") {
-            options.version_requested = true;
-        } else if (argument == "--no-plugins") {
-            options.no_plugins = true;
-        } else if (argument == "--no-autosave") {
-            options.no_autosave = true;
-        } else if (argument == "--project") {
-            if (has_value(argc, argv, argument_index))
-                options.project_path = argv[++argument_index];
-        } else if (argument == "--renderer") {
-            if (has_value(argc, argv, argument_index)) {
-                const std::string value = argv[++argument_index];
-                if (value == "opengl") options.renderer_override = RendererOverride::OpenGL;
-                else if (value == "vulkan") options.renderer_override = RendererOverride::Vulkan;
-                else std::cerr << "Unknown renderer '" << value << "', ignoring.\n";
+        if (argument == "--headless")
+        {
+            options.Headless = true;
+        }
+        else if (argument == "--test")
+        {
+            options.TestMode = true;
+        }
+        else if (argument == "--new-project")
+        {
+            options.NewProject = true;
+        }
+        else if (argument == "-h" || argument == "--help")
+        {
+            options.HelpRequested = true;
+        }
+        else if (argument == "--version")
+        {
+            options.VersionRequested = true;
+        }
+        else if (argument == "--no-plugins")
+        {
+            options.NoPlugins = true;
+        }
+        else if (argument == "--no-autosave")
+        {
+            options.NoAutosave = true;
+        }
+        else if (argument == "--project")
+        {
+            if (HasValue(argc, ppArgv, argumentIndex))
+            {
+                options.ProjectPath = ppArgv[++argumentIndex];
             }
-        } else if (argument == "--vsync") {
-            if (has_value(argc, argv, argument_index)) {
-                const std::string value = argv[++argument_index];
-                if (value == "on") options.vsync_override = TriState::On;
-                else if (value == "off") options.vsync_override = TriState::Off;
-                else std::cerr << "Unknown vsync value '" << value << "', ignoring.\n";
+        }
+        else if (argument == "--renderer")
+        {
+            if (HasValue(argc, ppArgv, argumentIndex))
+            {
+                const std::string value = ppArgv[++argumentIndex];
+                if (value == "opengl")
+                {
+                    options.RendererOverride = ERendererOverride::OPENGL;
+                }
+                else if (value == "vulkan")
+                {
+                    options.RendererOverride = ERendererOverride::VULKAN;
+                }
+                else
+                {
+                    std::cerr << "Unknown renderer '" << value << "', ignoring.\n";
+                }
             }
-        } else if (argument == "--fps") {
-            if (has_value(argc, argv, argument_index)) {
-                const std::string value = argv[++argument_index];
-                try {
-                    options.fps_override = std::stoi(value);
-                } catch (...) {
+        }
+        else if (argument == "--vsync")
+        {
+            if (HasValue(argc, ppArgv, argumentIndex))
+            {
+                const std::string value = ppArgv[++argumentIndex];
+                if (value == "on")
+                {
+                    options.VsyncOverride = ETriState::ON;
+                }
+                else if (value == "off")
+                {
+                    options.VsyncOverride = ETriState::OFF;
+                }
+                else
+                {
+                    std::cerr << "Unknown vsync value '" << value << "', ignoring.\n";
+                }
+            }
+        }
+        else if (argument == "--fps")
+        {
+            if (HasValue(argc, ppArgv, argumentIndex))
+            {
+                const std::string value = ppArgv[++argumentIndex];
+                try
+                {
+                    options.FpsOverride = std::stoi(value);
+                }
+                catch (...)
+                {
                     std::cerr << "Invalid --fps value '" << value << "', ignoring.\n";
                 }
             }
-        } else if (argument == "--plugins-dir") {
-            if (has_value(argc, argv, argument_index))
-                options.plugins_dir = argv[++argument_index];
-        } else if (argument == "--lang") {
-            if (has_value(argc, argv, argument_index))
-                options.lang_override = argv[++argument_index];
-        } else if (argument == "--log-level") {
-            if (has_value(argc, argv, argument_index))
-                options.log_level = argv[++argument_index];
-        } else if (argument == "--dump-frame") {
-            if (has_value(argc, argv, argument_index)) {
-                try {
-                    options.dump_frames = std::stoi(argv[argument_index + 1]);
-                    if (options.dump_frames > 0) ++argument_index;
-                } catch (...) {
-                    options.dump_frames = 2;
-                }
-            } else {
-                options.dump_frames = 2;
+        }
+        else if (argument == "--plugins-dir")
+        {
+            if (HasValue(argc, ppArgv, argumentIndex))
+            {
+                options.PluginsDir = ppArgv[++argumentIndex];
             }
-        } else if (options.project_path.empty()) {
-            options.project_path = argument;
+        }
+        else if (argument == "--lang")
+        {
+            if (HasValue(argc, ppArgv, argumentIndex))
+            {
+                options.LangOverride = ppArgv[++argumentIndex];
+            }
+        }
+        else if (argument == "--log-level")
+        {
+            if (HasValue(argc, ppArgv, argumentIndex))
+            {
+                options.LogLevel = ppArgv[++argumentIndex];
+            }
+        }
+        else if (argument == "--dump-frame")
+        {
+            if (HasValue(argc, ppArgv, argumentIndex))
+            {
+                try
+                {
+                    options.DumpFrames = std::stoi(ppArgv[argumentIndex + 1]);
+                    if (options.DumpFrames > 0)
+                    {
+                        ++argumentIndex;
+                    }
+                }
+                catch (...)
+                {
+                    options.DumpFrames = 2;
+                }
+            }
+            else
+            {
+                options.DumpFrames = 2;
+            }
+        }
+        else if (options.ProjectPath.empty())
+        {
+            options.ProjectPath = argument;
         }
     }
 
-    options.headless = options.headless || options.test_mode;
+    options.Headless = options.Headless || options.TestMode;
 
-    if (options.help_requested) print_usage(argv[0]);
-    if (options.version_requested) print_version();
+    if (options.HelpRequested)
+    {
+        CCommandLineParser::PrintUsage(ppArgv[0]);
+    }
+    if (options.VersionRequested)
+    {
+        CCommandLineParser::PrintVersion();
+    }
 
     return options;
 }

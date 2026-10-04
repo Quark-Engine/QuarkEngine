@@ -1,7 +1,6 @@
 #ifndef __COMPONENT_H__
 #define __COMPONENT_H__
 #include "QuarkCore/QuarkCore.hpp"
-using namespace qc;
 #include "lighting.h"
 #include "nlohmann/json.hpp"
 #include "editable_mesh.h"
@@ -10,19 +9,32 @@ using namespace qc;
 #include <memory>
 #include <functional>
 #include <typeinfo>
+#include <unordered_map>
+#include <cstdlib>
 
-struct Entity;
-struct ModelAsset;
+class CEntity;
+class CModelAsset;
+class CComponentFactoryRegistry;
 
-enum ObjectType { CUBE, SPHERE, CONE, CYLINDER, HEMISPHERE, TORUS };
+enum EObjectType
+{
+    OBJECT_CUBE = 0,
+    OBJECT_SPHERE = 1,
+    OBJECT_CONE = 2,
+    OBJECT_CYLINDER = 3,
+    OBJECT_HEMISPHERE = 4,
+    OBJECT_TORUS = 5
+};
 
-enum TextureSource {
+enum ETextureSource
+{
     TEXTURE_NONE,
     TEXTURE_EXTERNAL,
     TEXTURE_MODEL
 };
 
-enum ComponentType {
+enum EComponentType
+{
     COMPONENT_TRANSFORM,
     COMPONENT_MESH,
     COMPONENT_MATERIAL,
@@ -31,338 +43,510 @@ enum ComponentType {
     COMPONENT_CUSTOM
 };
 
-enum ColliderType {
+enum EColliderType
+{
     COLLIDER_BOX,
     COLLIDER_SPHERE,
     COLLIDER_CAPSULE,
     COLLIDER_MESH
 };
 
-class Component {
+class IComponent
+{
 public:
-    std::string name;
-    bool enabled = true;
-    ComponentType type;
+    std::string m_Name;
+    bool m_Enabled = true;
+    EComponentType m_Type;
 
-    Component() = default;
-    Component(ComponentType type_val, const std::string& name_val)
-        : name(name_val), type(type_val) {}
+    IComponent() = default;
+    IComponent(EComponentType typeVal, const std::string& nameVal)
+        : m_Name(nameVal), m_Type(typeVal)
+        {
+        }
 
-    virtual ~Component() = default;
-    virtual void serialize(nlohmann::json& json) const {}
-    virtual void deserialize(const nlohmann::json& json) {}
-    virtual ComponentType get_type() const { return COMPONENT_CUSTOM; }
-    virtual std::string get_type_name() const { return "Custom"; }
-    virtual void on_entity_transform_changed() {}
+    virtual ~IComponent() = default;
+    virtual void Serialize(nlohmann::json& json) const
+    {
+    }
+    virtual void Deserialize(const nlohmann::json& json)
+    {
+    }
+    virtual EComponentType GetType() const
+    {
+        return COMPONENT_CUSTOM;
+    }
+    virtual std::string GetTypeName() const
+    {
+        return "Custom";
+    }
+    virtual void OnEntityTransformChanged()
+    {
+    }
 };
 
-class TransformComponent : public Component {
+using FComponentFactory = std::function<std::shared_ptr<IComponent>()>;
+
+class CTransformComponent : public IComponent
+{
 public:
-    Vec3 position = {0, 0, 0};
-    Vec3 rotation = {0, 0, 0};
-    Vec3 scale = {1, 1, 1};
+    qc::Vec3 m_Position = {0, 0, 0};
+    qc::Vec3 m_Rotation = {0, 0, 0};
+    qc::Vec3 m_Scale = {1, 1, 1};
 
-    TransformComponent() {
-        name = "Transform";
-        type = COMPONENT_TRANSFORM;
+    CTransformComponent()
+    {
+        m_Name = "Transform";
+        m_Type = COMPONENT_TRANSFORM;
     }
 
-    ComponentType get_type() const override { return COMPONENT_TRANSFORM; }
-    std::string get_type_name() const override { return "Transform"; }
-
-    void serialize(nlohmann::json& json) const override {
-        json["position"] = {position.x, position.y, position.z};
-        json["rotation"] = {rotation.x, rotation.y, rotation.z};
-        json["scale"] = {scale.x, scale.y, scale.z};
+    EComponentType GetType() const override
+    {
+        return COMPONENT_TRANSFORM;
+    }
+    std::string GetTypeName() const override
+    {
+        return "Transform";
     }
 
-    void deserialize(const nlohmann::json& json) override {
-        if (json.contains("position")) {
+    void Serialize(nlohmann::json& json) const override
+    {
+        json["position"] = {m_Position.x, m_Position.y, m_Position.z};
+        json["rotation"] = {m_Rotation.x, m_Rotation.y, m_Rotation.z};
+        json["scale"] = {m_Scale.x, m_Scale.y, m_Scale.z};
+    }
+
+    void Deserialize(const nlohmann::json& json) override
+    {
+        if (json.contains("position"))
+        {
             auto& p = json["position"];
-            position = {p[0], p[1], p[2]};
+            m_Position = {p[0], p[1], p[2]};
         }
-        if (json.contains("rotation")) {
+        if (json.contains("rotation"))
+        {
             auto& r = json["rotation"];
-            rotation = {r[0], r[1], r[2]};
+            m_Rotation = {r[0], r[1], r[2]};
         }
-        if (json.contains("scale")) {
+        if (json.contains("scale"))
+        {
             auto& s = json["scale"];
-            scale = {s[0], s[1], s[2]};
+            m_Scale = {s[0], s[1], s[2]};
         }
     }
 };
 
-class MeshComponent : public Component {
+class CMeshComponent : public IComponent
+{
 public:
-    Model model;
-    bool owns_model_instance = false;
-    ModelAsset* asset = nullptr;
-    std::string asset_name;
-    bool mesh_triangles_detached = false;
-    std::vector<std::vector<float>> mesh_vertex_overrides;
+    qc::Model m_Model;
+    bool m_OwnsModelInstance = false;
+    CModelAsset* m_pAsset = nullptr;
+    std::string m_AssetName;
+    bool m_MeshTrianglesDetached = false;
+    std::vector<std::vector<float>> m_vMeshVertexOverrides;
 
-    int segments = 16;
-    ObjectType type = CUBE;
+    int m_Segments = 16;
+    EObjectType m_Type = OBJECT_CUBE;
 
-    bool shader_assigned = false;
-    bool owns_materials = false;
-    bool uv_dirty = true;
-    bool bounds_dirty = true;
-    BoundingBox cached_local_bounds = {{0, 0, 0}, {0, 0, 0}};
+    bool m_ShaderAssigned = false;
+    bool m_OwnsMaterials = false;
+    bool m_UvDirty = true;
+    bool m_BoundsDirty = true;
+    qc::BoundingBox m_CachedLocalBounds = {{0, 0, 0}, {0, 0, 0}};
 
-    EditableMesh editable_mesh;
-    bool is_editable_mesh = false;
-    bool vertex_gizmo = false;
+    CEditableMesh m_EditableMesh;
+    bool m_IsEditableMesh = false;
+    bool m_VertexGizmo = false;
 
-    MeshComponent() {
-        name = "Mesh";
+    CMeshComponent()
+    {
+        m_Name = "Mesh";
     }
 
-    ComponentType get_type() const override { return COMPONENT_MESH; }
-    std::string get_type_name() const override { return "Mesh"; }
+    CMeshComponent(const CMeshComponent& other)
+        : IComponent(other),
+          m_Model{},
+          m_OwnsModelInstance(false),
+          m_pAsset(other.m_pAsset),
+          m_AssetName(other.m_AssetName),
+          m_MeshTrianglesDetached(false),
+          m_vMeshVertexOverrides(other.m_vMeshVertexOverrides),
+          m_Segments(other.m_Segments),
+          m_Type(other.m_Type),
+          m_ShaderAssigned(false),
+          m_OwnsMaterials(false),
+          m_UvDirty(other.m_UvDirty),
+          m_BoundsDirty(other.m_BoundsDirty),
+          m_CachedLocalBounds(other.m_CachedLocalBounds),
+          m_EditableMesh(other.m_EditableMesh),
+          m_IsEditableMesh(other.m_IsEditableMesh),
+          m_VertexGizmo(other.m_VertexGizmo)
+    {
+    }
 
-    void serialize(nlohmann::json& json) const override;
-    void deserialize(const nlohmann::json& json) override;
+    CMeshComponent& operator=(const CMeshComponent& other)
+    {
+        if (this == &other) return *this;
+
+        IComponent::operator=(other);
+        m_Model = {};
+        m_OwnsModelInstance = false;
+        m_pAsset = other.m_pAsset;
+        m_AssetName = other.m_AssetName;
+        m_MeshTrianglesDetached = false;
+        m_vMeshVertexOverrides = other.m_vMeshVertexOverrides;
+        m_Segments = other.m_Segments;
+        m_Type = other.m_Type;
+        m_ShaderAssigned = false;
+        m_OwnsMaterials = false;
+        m_UvDirty = other.m_UvDirty;
+        m_BoundsDirty = other.m_BoundsDirty;
+        m_CachedLocalBounds = other.m_CachedLocalBounds;
+        m_EditableMesh = other.m_EditableMesh;
+        m_IsEditableMesh = other.m_IsEditableMesh;
+        m_VertexGizmo = other.m_VertexGizmo;
+        return *this;
+    }
+
+    EComponentType GetType() const override
+    {
+        return COMPONENT_MESH;
+    }
+    std::string GetTypeName() const override
+    {
+        return "Mesh";
+    }
+
+    void ReleaseOwnedResources()
+    {
+        if (m_OwnsMaterials)
+        {
+            if (m_Model.materials)
+            {
+                free(m_Model.materials);
+                m_Model.materials = nullptr;
+            }
+
+            if (m_Model.meshMaterial)
+            {
+                free(m_Model.meshMaterial);
+                m_Model.meshMaterial = nullptr;
+            }
+
+            m_Model.materialCount = 0;
+            m_OwnsMaterials = false;
+        }
+
+        if (m_OwnsModelInstance && m_Model.meshCount > 0 && m_Model.meshes)
+        {
+            UnloadModel(m_Model);
+        }
+
+        m_Model = {};
+        m_OwnsModelInstance = false;
+    }
+
+    void Serialize(nlohmann::json& json) const override;
+    void Deserialize(const nlohmann::json& json) override;
 };
 
-class MaterialComponent : public Component {
+class CMaterialComponent : public IComponent
+{
 public:
-    Texture2D texture = {0};
-    TextureSource texture_source = TEXTURE_NONE;
-    std::string albedo_texture_name;
-    std::string texture_name;
-    std::string normal_texture_name;
-    std::string roughness_texture_name;
-    std::string metallic_texture_name;
-    std::vector<std::string> material_slot_sources;
+    qc::Texture2D m_Texture = {0};
+    ETextureSource m_TextureSource = TEXTURE_NONE;
+    std::string m_AlbedoTextureName;
+    std::string m_TextureName;
+    std::string m_NormalTextureName;
+    std::string m_RoughnessTextureName;
+    std::string m_MetallicTextureName;
+    std::vector<std::string> m_vMaterialSlotSources;
 
-    Color color = WHITE;
-    Color outline_color = LIGHTGRAY;
+    qc::Color m_Color = qc::WHITE;
+    qc::Color m_OutlineColor = qc::LIGHTGRAY;
 
-    bool auto_uv = false;
-    bool texture_stretch = true;
-    float texture_repeat_u = 1.0f;
-    float texture_repeat_v = 1.0f;
+    bool m_AutoUv = false;
+    bool m_TextureStretch = true;
+    float m_TextureRepeatU = 1.0f;
+    float m_TextureRepeatV = 1.0f;
 
-    Vec2 uv_scale = {1, 1};
-    std::vector<std::vector<float>> original_texcoords;
-    std::vector<Texture2D> original_material_textures;
+    qc::Vec2 m_UvScale = {1, 1};
+    std::vector<std::vector<float>> m_vOriginalTexcoords;
+    std::vector<qc::Texture2D> m_vOriginalMaterialTextures;
 
-    MaterialComponent() {
-        name = "Material";
-        type = COMPONENT_MATERIAL;
+    CMaterialComponent()
+    {
+        m_Name = "Material";
+        m_Type = COMPONENT_MATERIAL;
     }
 
-    ComponentType get_type() const override { return COMPONENT_MATERIAL; };
-    std::string get_type_name() const override { return "Material"; };
+    EComponentType GetType() const override
+    {
+        return COMPONENT_MATERIAL;
+    };
+    std::string GetTypeName() const override
+    {
+        return "Material";
+    };
 
-    void serialize(nlohmann::json& json) const override {
-        json["color"] = { color.r, color.g, color.b, color.a };
-        json["outline_color"] = { outline_color.r, outline_color.g, outline_color.b, outline_color.a };
+    void Serialize(nlohmann::json& json) const override
+    {
+        json["color"] = { m_Color.r, m_Color.g, m_Color.b, m_Color.a };
+        json["outline_color"] = { m_OutlineColor.r, m_OutlineColor.g, m_OutlineColor.b, m_OutlineColor.a };
 
-        json["texture_source"] = static_cast<int>(texture_source);
-        json["albedo_texture_name"] = albedo_texture_name;
-        json["texture_name"] = texture_name;
-        json["normal_texture_name"] = normal_texture_name;
-        json["roughness_texture_name"] = roughness_texture_name;
-        json["metallic_texture_name"] = metallic_texture_name;
-        json["material_slot_sources"] = material_slot_sources;
-        json["texture_stretch"] = texture_stretch;
+        json["texture_source"] = static_cast<int>(m_TextureSource);
+        json["albedo_texture_name"] = m_AlbedoTextureName;
+        json["texture_name"] = m_TextureName;
+        json["normal_texture_name"] = m_NormalTextureName;
+        json["roughness_texture_name"] = m_RoughnessTextureName;
+        json["metallic_texture_name"] = m_MetallicTextureName;
+        json["material_slot_sources"] = m_vMaterialSlotSources;
+        json["texture_stretch"] = m_TextureStretch;
 
-        json["auto_uv"] = auto_uv;
-        json["repeat_u"] = texture_repeat_u;
-        json["repeat_v"] = texture_repeat_v;
-        json["uv_scale"] = { uv_scale.x, uv_scale.y };
+        json["auto_uv"] = m_AutoUv;
+        json["repeat_u"] = m_TextureRepeatU;
+        json["repeat_v"] = m_TextureRepeatV;
+        json["uv_scale"] = { m_UvScale.x, m_UvScale.y };
     }
 
-    void deserialize(const nlohmann::json& json) override {
-        if (json.contains("color")) {
+    void Deserialize(const nlohmann::json& json) override
+    {
+        if (json.contains("color"))
+        {
             auto& c = json["color"];
-            color = { c[0], c[1], c[2], c[3] };
+            m_Color = { c[0], c[1], c[2], c[3] };
         }
 
-        if (json.contains("outline_color")) {
+        if (json.contains("outline_color"))
+        {
             auto& c = json["outline_color"];
-            outline_color = { c[0], c[1], c[2], c[3] };
+            m_OutlineColor = { c[0], c[1], c[2], c[3] };
         }
 
-        if (json.contains("texture_source")) texture_source = static_cast<TextureSource>(json["texture_source"].get<int>());
-        if (json.contains("albedo_texture_name")) albedo_texture_name = json["albedo_texture_name"];
-        if (json.contains("texture_name")) texture_name = json["texture_name"];
-        if (json.contains("normal_texture_name")) normal_texture_name = json["normal_texture_name"];
-        if (json.contains("roughness_texture_name")) roughness_texture_name = json["roughness_texture_name"];
-        if (json.contains("metallic_texture_name")) metallic_texture_name = json["metallic_texture_name"];
-        if (json.contains("material_slot_sources")) material_slot_sources = json["material_slot_sources"].get<std::vector<std::string>>();
-        if (json.contains("texture_stretch")) texture_stretch = json["texture_stretch"];
-        
-        if (json.contains("auto_uv")) auto_uv = json["auto_uv"];
-        if (json.contains("repeat_u")) texture_repeat_u = json["repeat_u"];
-        if (json.contains("repeat_v")) texture_repeat_v = json["repeat_v"];
-        if (json.contains("uv_scale")) {
+        if (json.contains("texture_source")) m_TextureSource = static_cast<ETextureSource>(json["texture_source"].get<int>());
+        if (json.contains("albedo_texture_name")) m_AlbedoTextureName = json["albedo_texture_name"];
+        if (json.contains("texture_name")) m_TextureName = json["texture_name"];
+        if (json.contains("normal_texture_name")) m_NormalTextureName = json["normal_texture_name"];
+        if (json.contains("roughness_texture_name")) m_RoughnessTextureName = json["roughness_texture_name"];
+        if (json.contains("metallic_texture_name")) m_MetallicTextureName = json["metallic_texture_name"];
+        if (json.contains("material_slot_sources")) m_vMaterialSlotSources = json["material_slot_sources"].get<std::vector<std::string>>();
+        if (json.contains("texture_stretch")) m_TextureStretch = json["texture_stretch"];
+
+        if (json.contains("auto_uv")) m_AutoUv = json["auto_uv"];
+        if (json.contains("repeat_u")) m_TextureRepeatU = json["repeat_u"];
+        if (json.contains("repeat_v")) m_TextureRepeatV = json["repeat_v"];
+        if (json.contains("uv_scale"))
+        {
             auto& scale = json["uv_scale"];
-            uv_scale = { scale[0], scale[1] };
+            m_UvScale = { scale[0], scale[1] };
         }
     }
 };
 
-class LightComponent : public Component {
+class CLightComponent : public IComponent
+{
 public:
-    bool created = false;
-    Lighting light;
-    LightComponent();
+    bool m_Created = false;
+    CLightState m_Light;
+    CLightComponent();
 
-    ComponentType get_type() const override { return COMPONENT_LIGHT; }
-    std::string get_type_name() const override { return "Light"; }
+    EComponentType GetType() const override
+    {
+        return COMPONENT_LIGHT;
+    }
+    std::string GetTypeName() const override
+    {
+        return "Light";
+    }
 
-    void serialize(nlohmann::json& json) const override;
-    void deserialize(const nlohmann::json& json) override;
-    void on_entity_transform_changed() override;
+    void Serialize(nlohmann::json& json) const override;
+    void Deserialize(const nlohmann::json& json) override;
+    void OnEntityTransformChanged() override;
 };
 
-class CollisionComponent : public Component {
+class CCollisionComponent : public IComponent
+{
 public:
-    ColliderType collider_type = COLLIDER_BOX;
+    EColliderType m_ColliderType = COLLIDER_BOX;
 
-    bool is_trigger = false;
-    bool visualize = true;
+    bool m_IsTrigger = false;
+    bool m_Visualize = true;
 
     // box
-    Vec3 size = {1, 1, 1};
+    qc::Vec3 m_Size = {1, 1, 1};
 
     // sphere/capsule
-    float radius = 0.5f;
-    float height = 2.0f;
+    float m_Radius = 0.5f;
+    float m_Height = 2.0f;
 
-    Vec3 center = {0, 0, 0};
+    qc::Vec3 m_Center = {0, 0, 0};
 
-    BoundingBox world_bounds = {{0, 0, 0}, {0, 0, 0}};
-    bool dirty = true;
+    qc::BoundingBox m_WorldBounds = {{0, 0, 0}, {0, 0, 0}};
+    bool m_Dirty = true;
 
-    CollisionComponent() {
-        name = "Collision";
-        type = COMPONENT_COLLISION;
+    CCollisionComponent()
+    {
+        m_Name = "Collision";
+        m_Type = COMPONENT_COLLISION;
     }
 
-    ComponentType get_type() const override { return COMPONENT_COLLISION; }
-    std::string get_type_name() const override { return "Collision"; }
+    EComponentType GetType() const override
+    {
+        return COMPONENT_COLLISION;
+    }
+    std::string GetTypeName() const override
+    {
+        return "Collision";
+    }
 
-    void serialize(nlohmann::json& json) const override;
-    void deserialize(const nlohmann::json& json) override;
-    void on_entity_transform_changed() override;
+    void Serialize(nlohmann::json& json) const override;
+    void Deserialize(const nlohmann::json& json) override;
+    void OnEntityTransformChanged() override;
 };
 
-class ComponentManager {
+class CComponentManager
+{
 private:
-    std::vector<std::shared_ptr<Component>> components;
+    std::vector<std::shared_ptr<IComponent>> m_vComponents;
 
 public:
-    void add_component(std::shared_ptr<Component> component) {
-        components.push_back(component);
+    void AddComponent(std::shared_ptr<IComponent> pComponent)
+    {
+        m_vComponents.push_back(pComponent);
     }
 
-    void remove_component(size_t index) {
-        if (index < components.size()) {
-            components.erase(components.begin() + index);
+    void RemoveComponent(size_t index)
+    {
+        if (index < m_vComponents.size())
+        {
+            m_vComponents.erase(m_vComponents.begin() + index);
         }
     }
 
-    std::shared_ptr<Component> get_component(size_t index) {
-        if (index < components.size()) {
-            return components[index];
+    std::shared_ptr<IComponent> GetComponent(size_t index)
+    {
+        if (index < m_vComponents.size())
+        {
+            return m_vComponents[index];
         }
         return nullptr;
     }
 
-    size_t get_component_count() const {
-        return components.size();
+    size_t GetComponentCount() const
+    {
+        return m_vComponents.size();
     }
 
     template<typename T>
-    std::shared_ptr<T> get_component_of_type() {
-        for (auto& comp : components) {
+    std::shared_ptr<T> GetComponentOfType()
+    {
+        for (auto& comp : m_vComponents)
+        {
             auto casted = std::dynamic_pointer_cast<T>(comp);
             if (casted) return casted;
         }
         return nullptr;
     }
 
-    TransformComponent* get_transform() {
-        auto comp = get_component_of_type<TransformComponent>();
-        return comp ? comp.get() : nullptr;
+    CTransformComponent* GetTransform()
+    {
+        auto pComp = GetComponentOfType<CTransformComponent>();
+        return pComp ? pComp.get() : nullptr;
     }
 
-    MeshComponent* get_mesh() {
-        auto comp = get_component_of_type<MeshComponent>();
-        return comp ? comp.get() : nullptr;
+    CMeshComponent* GetMesh()
+    {
+        auto pComp = GetComponentOfType<CMeshComponent>();
+        return pComp ? pComp.get() : nullptr;
     }
 
-    LightComponent* get_light() {
-        auto comp = get_component_of_type<LightComponent>();
-        return comp ? comp.get() : nullptr;
+    CLightComponent* GetLight()
+    {
+        auto pComp = GetComponentOfType<CLightComponent>();
+        return pComp ? pComp.get() : nullptr;
     }
 
-    MaterialComponent* get_material() {
-        auto comp = get_component_of_type<MaterialComponent>();
-        return comp ? comp.get() : nullptr;
+    CMaterialComponent* GetMaterial()
+    {
+        auto pComp = GetComponentOfType<CMaterialComponent>();
+        return pComp ? pComp.get() : nullptr;
     }
 
-    CollisionComponent* get_collision() {
-        auto comp = get_component_of_type<CollisionComponent>();
-        return comp ? comp.get() : nullptr;
+    CCollisionComponent* GetCollision()
+    {
+        auto pComp = GetComponentOfType<CCollisionComponent>();
+        return pComp ? pComp.get() : nullptr;
     }
 
-    const std::vector<std::shared_ptr<Component>>& get_all_components() const {
-        return components;
+    const std::vector<std::shared_ptr<IComponent>>& GetAllComponents() const
+    {
+        return m_vComponents;
     }
 
-    std::vector<std::shared_ptr<Component>>& get_all_components() {
-        return components;
+    std::vector<std::shared_ptr<IComponent>>& GetAllComponents()
+    {
+        return m_vComponents;
     }
 
-    void serialize(nlohmann::json& json) const {
+    void Serialize(nlohmann::json& json) const
+    {
         json["components"] = nlohmann::json::array();
-        for (const auto& comp : components) {
-            nlohmann::json comp_json;
-            comp_json["type"] = comp->get_type_name();
-            comp_json["enabled"] = comp->enabled;
+        for (const auto& comp : m_vComponents)
+        {
+            nlohmann::json compJson;
+            compJson["type"] = comp->GetTypeName();
+            compJson["enabled"] = comp->m_Enabled;
             nlohmann::json data;
-            comp->serialize(data);
-            comp_json["data"] = data;
-            json["components"].push_back(comp_json);
+            comp->Serialize(data);
+            compJson["data"] = data;
+            json["components"].push_back(compJson);
         }
     }
 
-    void deserialize(const nlohmann::json& json);
+    void Deserialize(const nlohmann::json& json, const CComponentFactoryRegistry& factories);
+
+    void CloneInto(const CComponentManager& source);
 };
 
-class Text3DComponent : public Component {
+class CText3DComponent : public IComponent
+{
 public:
-    std::string text = "3D Text";
-    float size = 1.0f;
-    float thickness = 0.2f;
-    float letter_spacing = 0.1f;
-    std::string font_path;
-    
+    std::string m_Text = "3D Text";
+    float m_Size = 1.0f;
+    float m_Thickness = 0.2f;
+    float m_LetterSpacing = 0.1f;
+    std::string m_FontPath;
 
-    Text3DComponent() { name = "3D Text"; type = COMPONENT_CUSTOM; }
-
-    std::string get_type_name() const override { return "3D Text"; }
-    ComponentType get_type() const override { return COMPONENT_CUSTOM; }
-
-    void serialize(nlohmann::json& j) const override {
-        j["text"] = text;
-        j["size"] = size;
-        j["thickness"] = thickness;
-        j["letter_spacing"] = letter_spacing;
-        j["font_path"] = font_path;
+    CText3DComponent()
+    {
+        m_Name = "3D Text"; m_Type = COMPONENT_CUSTOM;
     }
 
-    void deserialize(const nlohmann::json& j) override {
-        if (j.contains("text")) text = j["text"];
-        if (j.contains("size")) size = j["size"];
-        if (j.contains("thickness")) thickness = j["thickness"];
-        if (j.contains("letter_spacing")) letter_spacing = j["letter_spacing"];
-        if (j.contains("font_path")) font_path = j["font_path"];
+    std::string GetTypeName() const override
+    {
+        return "3D Text";
+    }
+    EComponentType GetType() const override
+    {
+        return COMPONENT_CUSTOM;
+    }
+
+    void Serialize(nlohmann::json& j) const override
+    {
+        j["text"] = m_Text;
+        j["size"] = m_Size;
+        j["thickness"] = m_Thickness;
+        j["letter_spacing"] = m_LetterSpacing;
+        j["font_path"] = m_FontPath;
+    }
+
+    void Deserialize(const nlohmann::json& j) override
+    {
+        if (j.contains("text")) m_Text = j["text"];
+        if (j.contains("size")) m_Size = j["size"];
+        if (j.contains("thickness")) m_Thickness = j["thickness"];
+        if (j.contains("letter_spacing")) m_LetterSpacing = j["letter_spacing"];
+        if (j.contains("font_path")) m_FontPath = j["font_path"];
     }
 };
 

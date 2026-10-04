@@ -3,67 +3,68 @@
 
 #include <string>
 
-struct EditorPreferences {
-    bool wireframe_enabled = false;
-    bool show_grid = true;
-    bool show_axes = false;
-    bool show_colliders = false;
-    bool limit_fps = true;
-    int target_fps = 0;
-    float camera_speed = 2.0f;
-    float camera_sensitivity = 0.003f;
-    float camera_zoom_sensitivity = 1.0f;
-    float camera_fov = 45.0f;
-    int background_red = 36;
-    int background_green = 38;
-    int background_blue = 42;
-    bool autosave_enabled = false;
-    bool autosave_backup_enabled = true;
-    int autosave_interval_minutes = 5;
-    bool gizmo_snap_enabled = false;
-    float gizmo_translation_snap = 0.5f;
-    float gizmo_rotation_snap = 15.0f;
-    float gizmo_scale_snap = 0.1f;
-    bool show_bounding_boxes = false;
-    bool show_selection_visualization = true;
-    int selection_red = 80;
-    int selection_green = 140;
-    int selection_blue = 255;
-    int wireframe_red = 80;
-    int wireframe_green = 80;
-    int wireframe_blue = 80;
-    int bounds_red = 255;
-    int bounds_green = 220;
-    int bounds_blue = 40;
-    bool confirm_delete = true;
-    bool focus_on_selection = false;
-    bool shadows_enabled = true;
-    int shadow_map_size = 1024;
-    float shadow_bias = 0.004f;
-    int shadow_filter_quality = 1;
-    int undo_history_limit = 100;
-    bool vsync_enabled = true;
-    float interface_scale = 1.0f;
-    bool light_theme = false;
-    bool show_light_helpers = false;
-    bool show_cameras = false;
-    int renderer_backend = 1;
-    int msaa_samples = 1;
-    int texture_filter = 1;
-    bool confirm_exit = true;
-    bool open_last_project = false;
-    std::string last_project_path;
-    bool show_hierarchy = true;
-    bool show_inspector = true;
-    bool show_assets = true;
-    bool show_scene = true;
-    int asset_preview_size = 64;
-    int asset_filter = 0;
+class CPreferences
+{
+public:
+    void Load();
+
+    void Save() const;
+
+    bool m_WireframeEnabled = false;
+    bool m_ShowGrid = true;
+    bool m_ShowAxes = false;
+    bool m_ShowColliders = false;
+    bool m_LimitFps = true;
+    int m_TargetFps = 0;
+    float m_CameraSpeed = 2.0f;
+    float m_CameraSensitivity = 0.003f;
+    float m_CameraZoomSensitivity = 1.0f;
+    float m_CameraFov = 45.0f;
+    int m_BackgroundRed = 36;
+    int m_BackgroundGreen = 38;
+    int m_BackgroundBlue = 42;
+    bool m_AutosaveEnabled = false;
+    bool m_AutosaveBackupEnabled = true;
+    int m_AutosaveIntervalMinutes = 5;
+    bool m_GizmoSnapEnabled = false;
+    float m_GizmoTranslationSnap = 0.5f;
+    float m_GizmoRotationSnap = 15.0f;
+    float m_GizmoScaleSnap = 0.1f;
+    bool m_ShowBoundingBoxes = false;
+    bool m_ShowSelectionVisualization = true;
+    int m_SelectionRed = 80;
+    int m_SelectionGreen = 140;
+    int m_SelectionBlue = 255;
+    int m_WireframeRed = 80;
+    int m_WireframeGreen = 80;
+    int m_WireframeBlue = 80;
+    int m_BoundsRed = 255;
+    int m_BoundsGreen = 220;
+    int m_BoundsBlue = 40;
+    bool m_ConfirmDelete = true;
+    bool m_FocusOnSelection = false;
+    bool m_ShadowsEnabled = true;
+    int m_ShadowMapSize = 1024;
+    float m_ShadowBias = 0.004f;
+    int m_ShadowFilterQuality = 1;
+    int m_UndoHistoryLimit = 100;
+    bool m_VsyncEnabled = true;
+    float m_InterfaceScale = 1.0f;
+    bool m_LightTheme = false;
+    bool m_ShowLightHelpers = false;
+    bool m_ShowCameras = false;
+    int m_RendererBackend = 1;
+    int m_MsaaSamples = 1;
+    int m_TextureFilter = 1;
+    bool m_ConfirmExit = true;
+    bool m_OpenLastProject = false;
+    std::string m_LastProjectPath;
+    bool m_ShowHierarchy = true;
+    bool m_ShowInspector = true;
+    bool m_ShowAssets = true;
+    bool m_ShowScene = true;
+    int m_AssetPreviewSize = 64;
+    int m_AssetFilter = 0;
 };
-
-extern EditorPreferences g_editor_preferences;
-
-void load_editor_preferences();
-void save_editor_preferences();
 
 #endif // __EDITOR_PREFERENCES_H__

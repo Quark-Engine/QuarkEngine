@@ -1,80 +1,92 @@
 #ifndef __EDITOR_H__
 #define __EDITOR_H__
+
+#include "QuarkCore/QuarkCore.hpp"
+
+#include "assets/asset_library.h"
+#include "assets/preview_cache.h"
+#include "assets/texture_cache.h"
+#include "editor/editor_preferences.h"
+#include "editor/editor_state.h"
+#include "engine/component_factory_registry.h"
+#include "engine/scene_document.h"
+#include "lighting.h"
 #include "scene.h"
-#include "camera.h"
-#include "tex.h"
-#include "models.h"
-#include <stack>
+#include "text_mesh.h"
+
 #include <filesystem>
-#include "plugins/plugin_manager.h"
+#include <stack>
+#include <string>
 
-struct SceneState {
-    std::vector<Entity> entities;
-    int selected;
-    std::vector<int> selected_entities;
-    bool light_only = false;
-    std::vector<Lighting> lights;
-    bool hierarchy_only = false;
-    std::vector<int> parent_ids;
-    std::vector<Vec3> positions;
-    std::vector<Vec3> rotations;
-    std::vector<Vec3> scales;
-    bool duplicate_only = false;
-    int duplicate_index = -1;
-    int duplicate_source_index = -1;
-    bool tags_only = false;
-    std::vector<std::vector<std::string>> tags;
-    bool component_only = false;
-    int component_entity_index = -1;
-    std::string component_data;
-    bool material_only = false;
-    struct MaterialSnapshot {
-        TextureSource texture_source = TEXTURE_NONE;
-        Texture2D texture = {0};
-        std::string albedo_texture_name;
-        std::string texture_name;
-        std::string normal_texture_name;
-        std::vector<std::string> material_slot_sources;
-        Color color = WHITE;
-        Color outline_color = LIGHTGRAY;
-        bool auto_uv = false;
-        bool texture_stretch = true;
-        float texture_repeat_u = 1.0f;
-        float texture_repeat_v = 1.0f;
-        Vec2 uv_scale = {1, 1};
-    };
-    std::vector<MaterialSnapshot> materials;
-};
+class CFlyCamera;
+class CPluginManager;
 
-struct Editor {
-    Scene scene;
-    std::string project_path = "projects/TestProject";
-    int selected_asset_index = -1;
-    std::string selected_asset_name;
-    bool scene_dirty = false;
+struct SPluginContext;
 
-    std::stack<SceneState> undo_stack;
-    std::stack<SceneState> redo_stack;
+class CEditor
+{
+public:
+    CEditor();
+    ~CEditor();
 
-    PluginManager* plugin_manager = nullptr;
+    CEditor(const CEditor&) = delete;
+    CEditor& operator=(const CEditor&) = delete;
 
-    std::filesystem::path current_asset_path;
-    
-    void draw_ui(Shader shader, FlyCamera& camera, PluginContext* ctx);
-    void draw_assets_ui();
-    void handle_input();
-    void draw_entity_with_texture(Entity& e);
-    void save_state();
-    void save_light_state();
-    void save_hierarchy_state();
-    void save_component_state(int entity_index);
-    void save_transform_state(Entity* entity, const Vec3& position, const Vec3& rotation, const Vec3& scale);
-    void save_duplicate_state(int source_index);
-    void save_tags_state();
-    void save_material_state();
-    void save_material_state_before(Entity* entity, const MaterialComponent& material);
-    void undo();
-    void redo();
+    void DrawUi(qc::Shader shader, CFlyCamera& camera, SPluginContext* pCtx);
+    void DrawAssetsUi();
+    void HandleInput();
+    void SaveState();
+    void Undo();
+    void Redo();
+
+    void Unload();
+
+    CAssetLibrary m_Assets;
+    CPreviewCache m_Previews;
+
+    CTextureCache m_Textures;
+    CLightRegistry m_Lights;
+
+    CComponentFactoryRegistry m_ComponentFactories;
+
+    CPreferences m_Preferences;
+
+    CFreetypeTextMesh m_Text;
+
+    CScene m_Scene;
+    std::string m_ProjectPath = "projects/TestProject";
+
+    CEditorUiState m_Ui;
+
+    int m_SelectedAssetIndex = -1;
+    std::string m_SelectedAssetName;
+    bool m_SceneDirty = false;
+
+    std::stack<quark::SSceneSnapshot> m_UndoStack;
+    std::stack<quark::SSceneSnapshot> m_RedoStack;
+
+    CPluginManager* m_pPluginManager = nullptr;
+
+    std::filesystem::path m_CurrentAssetPath;
+
+private:
+    void DrawMainMenuBar(SPluginContext* pCtx, ImGuiID dockspaceId);
+    void DrawHierarchyPanel(SPluginContext* pCtx);
+    void DrawInspectorPanel(qc::Shader shader, SPluginContext* pCtx);
+    void DrawScenePanel(CFlyCamera& camera, SPluginContext* pCtx);
+    void DrawRenameModal();
+    void DrawAboutModal();
+    void DrawPreferencesUi(CFlyCamera& camera);
+    void DrawConfirmationModals();
+
+    void HierarchyAcceptEntityDrop(int targetIndex);
+    void HierarchyDrawCreateMenu(int parentIndex);
+    void HierarchyDrawEntityItem(int entityIndex);
+    void HierarchyDrawEntityTree(int parentId);
+
+    bool DrawPreferencesGeneralTab();
+    bool DrawPreferencesRenderingTab(CFlyCamera& camera);
+    bool DrawPreferencesInterfaceTab();
 };
 
 #endif // __EDITOR_H__

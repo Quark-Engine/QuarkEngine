@@ -2,42 +2,59 @@
 #define __LIGHTING_H__
 #include "QuarkCore/QuarkCore.hpp"
 #include "QuarkCore/QuarkLights.hpp"
-using namespace qc;
 
+#include <array>
 #include <string>
 
-#define LIGHT_DIRECTIONAL 0
-#define LIGHT_POINT       1
-#define LIGHT_SPOT        2
-#define LIGHT_AREA        3
-
-struct Lighting {
-    int id = -1;
-
-    Light light;
-    Vec3 position;
-    Vec3 target;
-    Vec3 rotation;
-
-    Color color = WHITE;
-    bool enabled = true;
-
-    float spot_angle = 30.0f;
-    int spot_angle_loc = -1;
-    int intensity_loc = -1;
-    int range_loc = -1;
-
-    float intensity = 1.0f;
-    float range = 5.0f;
+enum ELightType
+{
+    LIGHT_TYPE_DIRECTIONAL = 0,
+    LIGHT_TYPE_POINT       = 1,
+    LIGHT_TYPE_SPOT        = 2,
+    LIGHT_TYPE_AREA        = 3
 };
 
-// lighting
-Lighting create_lighting(Vec3 pos, Color color);
-Light create_light_at_slot(int slot, int type, Vec3 position, Vec3 target, Color color, Shader shader);
-void initialize_lighting_uniform_cache(Lighting& lighting, Shader shader, int slot);
-void update_lighting(Shader shader, Lighting& l);
-void free_light_id(int id);
-int allocate_light_id();
-void reset_light_registry();
+class CLightState
+{
+public:
+    int m_Id = -1;
+
+    qc::Light m_Light;
+    qc::Vec3 m_Position;
+    qc::Vec3 m_Target;
+    qc::Vec3 m_Rotation;
+
+    qc::Color m_Color = qc::WHITE;
+    bool m_Enabled = true;
+
+    float m_SpotAngle = 30.0f;
+    int m_SpotAngleLoc = -1;
+    int m_IntensityLoc = -1;
+    int m_RangeLoc = -1;
+
+    float m_Intensity = 1.0f;
+    float m_Range = 5.0f;
+};
+
+CLightState CreateLighting(qc::Vec3 pos, qc::Color color);
+qc::Light CreateLightAtSlot(int slot, int type, qc::Vec3 position, qc::Vec3 target, qc::Color color, qc::Shader shader);
+void InitializeLightingUniformCache(CLightState& lighting, qc::Shader shader, int slot);
+void UpdateLighting(qc::Shader shader, CLightState& lighting);
+
+class CLightRegistry
+{
+public:
+    static constexpr int INVALID_ID = -1;
+
+    int Allocate();
+    void Free(int id);
+    void Reset();
+
+    bool IsAllocated(int id) const;
+    int AllocatedCount() const;
+
+private:
+    std::array<bool, QC_MAX_LIGHTS> m_aUsed = {};
+};
 
 #endif // __LIGHTING_H__

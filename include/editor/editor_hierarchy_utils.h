@@ -6,13 +6,13 @@
 #include <vector>
 #include <string>
 
-std::vector<int> get_entity_children(const Scene& scene, int parent_id);
-std::vector<int> get_entity_descendants(const Scene& scene, int entity_id);
-std::vector<int> get_root_entities(const Scene& scene);
+std::vector<int> GetEntityChildren(const CScene& scene, int parentId);
+std::vector<int> GetEntityDescendants(const CScene& scene, int entityId);
+std::vector<int> GetRootEntities(const CScene& scene);
 
-void move_entity_to_parent(Scene& scene, int entity_id, int new_parent_id);
-int create_group(Scene& scene, const std::string& name, int parent_id = -1);
-void delete_group(Scene& scene, int group_id, bool reparent_to_parent = true);
-bool is_entity_group(const Entity& entity);
+void MoveEntityToParent(CScene& scene, int entityId, int newParentId);
+int CreateGroup(CScene& scene, const std::string& name, int parentId = -1);
+void DeleteGroup(CScene& scene, int groupId, bool reparentToParent = true);
+bool IsEntityGroup(const CEntity& entity);
 
 #endif // __EDITOR_HIERARCHY_UTILS_H__

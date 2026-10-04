@@ -5,26 +5,28 @@
 #include <string>
 
 
-class LanguageManager {
+class CLanguageManager
+{
 public:
-    static LanguageManager& get() {
-        static LanguageManager instance;
-        return instance;
+    static CLanguageManager& Get()
+    {
+        static CLanguageManager s_Instance;
+        return s_Instance;
     }
 
-    std::string current;
+    std::string m_Current;
 
-    bool load(const std::string& path);
-    void set_lang(const std::string& lang);
-    const char* word(const std::string& key) const;
-    std::string editor_font_path() const;
-    std::string editor_font_merge_path() const;
+    bool Load(const std::string& path);
+    void SetLang(const std::string& lang);
+    const char* Word(const std::string& key) const;
+    std::string EditorFontPath() const;
+    std::string EditorFontMergePath() const;
 
 private:
-    nlohmann::json data;
-    mutable std::unordered_map<std::string, std::string> cache;
+    nlohmann::json m_Data;
+    mutable std::unordered_map<std::string, std::string> m_Cache;
 };
 
-std::string load_or_create_config();
+std::string LoadOrCreateConfig();
 
 #endif // __LANGUAGE_MANAGER_H__

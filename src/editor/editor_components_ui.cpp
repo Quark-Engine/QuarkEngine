@@ -1,73 +1,101 @@
+#include "tex.h"
 #include "editor/editor_components_ui.h"
 #include "editor/editor_utils.h"
-#include "editor/editor_ui.h"
 #include "editor/editor_viewers.h"
 #include "imgui.h"
 #include "text_mesh.h"
 #include "models.h"
 #include "entity.h"
-#include "editor/editor_ui.h"
 #include "editor/editor.h"
 #include "language_manager.h"
 #include <filesystem>
 #include <cstring>
 
-#define lang LanguageManager::get()
+using namespace qc;
 
-bool ComponentUIHelper::should_show_component_menu = false;
-int ComponentUIHelper::component_to_remove = -1;
+#define lang CLanguageManager::Get()
 
-void ComponentUIHelper::draw_entity_inspector(Editor& editor, Entity& entity, Shader shader) {
+void CComponentUIHelper::DrawEntityInspector(CEditor& editor, CEntity& entity, Shader shader)
+{
     ImGui::Spacing();
-    
-    if (entity.get_components()) {
-        auto components_manager = entity.get_components();
-        size_t component_count = components_manager->get_component_count();
-        component_to_remove = -1;
 
-        for (size_t i = 0; i < component_count; ++i) {
-            auto comp = components_manager->get_component(i);
-            if (!comp) continue;
+    if (entity.GetComponents())
+    {
+        auto pComponentsManager = entity.GetComponents();
+        size_t componentCount = pComponentsManager->GetComponentCount();
+        editor.m_Ui.m_Inspector.ComponentToRemove = -1;
 
-            std::string tab_label = comp->get_type_name();
+        for (size_t i = 0; i < componentCount; ++i)
+        {
+            auto pComp = pComponentsManager->GetComponent(i);
+            if (!pComp)
+            {
+                continue;
+            }
+
+            std::string tabLabel = pComp->GetTypeName();
             ImGui::PushID(static_cast<int>(i));
-            bool open = ImGui::CollapsingHeader(tab_label.c_str(), ImGuiTreeNodeFlags_DefaultOpen);
-            
-            if (open) {
+            bool open = ImGui::CollapsingHeader(tabLabel.c_str(), ImGuiTreeNodeFlags_DefaultOpen);
+
+            if (open)
+            {
                 ImGui::Spacing();
 
-                bool is_enabled = comp->enabled;
-                if (ImGui::Checkbox(lang.word("enabled"), &is_enabled)) {
-                    editor.save_state();
-                    comp->enabled = is_enabled;
+                bool isEnabled = pComp->m_Enabled;
+                if (ImGui::Checkbox(lang.Word("enabled"), &isEnabled))
+                {
+                    editor.SaveState();
+                    pComp->m_Enabled = isEnabled;
                 }
 
                 ImGui::Spacing();
 
-                if (auto transform = std::dynamic_pointer_cast<TransformComponent>(comp)) draw_transform_component(editor, entity, transform.get());
-                else if (auto mesh = std::dynamic_pointer_cast<MeshComponent>(comp)) draw_mesh_component(editor, entity, mesh.get());
-                else if (auto light = std::dynamic_pointer_cast<LightComponent>(comp)) draw_light_component(editor, entity, light.get(), shader);
-                else if (auto material = std::dynamic_pointer_cast<MaterialComponent>(comp)) draw_material_component(editor, entity, material.get());
-                else if (auto collision = std::dynamic_pointer_cast<CollisionComponent>(comp)) draw_collision_component(editor, entity, collision.get());
-                else if (auto text = std::dynamic_pointer_cast<Text3DComponent>(comp)) draw_3d_text_component(editor, entity, text.get());
+                if (auto pTransform = std::dynamic_pointer_cast<CTransformComponent>(pComp))
+                {
+                    DrawTransformComponent(editor, entity, pTransform.get());
+                }
+                else if (auto pMesh = std::dynamic_pointer_cast<CMeshComponent>(pComp))
+                {
+                    DrawMeshComponent(editor, entity, pMesh.get());
+                }
+                else if (auto pLight = std::dynamic_pointer_cast<CLightComponent>(pComp))
+                {
+                    DrawLightComponent(editor, entity, pLight.get(), shader);
+                }
+                else if (auto pMaterial = std::dynamic_pointer_cast<CMaterialComponent>(pComp))
+                {
+                    DrawMaterialComponent(editor, entity, pMaterial.get());
+                }
+                else if (auto pCollision = std::dynamic_pointer_cast<CCollisionComponent>(pComp))
+                {
+                    DrawCollisionComponent(editor, entity, pCollision.get());
+                }
+                else if (auto pText = std::dynamic_pointer_cast<CText3DComponent>(pComp))
+                {
+                    Draw3dTextComponent(editor, entity, pText.get());
+                }
 
                 ImGui::Spacing();
 
-                bool can_remove = (comp->get_type() != COMPONENT_TRANSFORM && comp->get_type() != COMPONENT_MESH);
-                if (!can_remove) {
+                bool canRemove = (pComp->GetType() != COMPONENT_TRANSFORM && pComp->GetType() != COMPONENT_MESH);
+                if (!canRemove)
+                {
                     ImGui::BeginDisabled();
                 }
-                
-                if (can_remove) {
+
+                if (canRemove)
+                {
                     ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.8f, 0.2f, 0.2f, 1.0f));
                     ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImVec4(1.0f, 0.3f, 0.3f, 1.0f));
-                    if (ImGui::Button(lang.word("remove_component"), ImVec2(-1, 0))) {
-                        component_to_remove = static_cast<int>(i);
+                    if (ImGui::Button(lang.Word("remove_component"), ImVec2(-1, 0)))
+                    {
+                        editor.m_Ui.m_Inspector.ComponentToRemove = static_cast<int>(i);
                     }
                     ImGui::PopStyleColor(2);
                 }
-                
-                if (!can_remove) {
+
+                if (!canRemove)
+                {
                     ImGui::EndDisabled();
                 }
             }
@@ -77,387 +105,459 @@ void ComponentUIHelper::draw_entity_inspector(Editor& editor, Entity& entity, Sh
         }
 
         ImGui::Spacing();
-        if (ImGui::Button(lang.word("add_component"), ImVec2(-1, 0))) {
+        if (ImGui::Button(lang.Word("add_component"), ImVec2(-1, 0)))
+        {
             ImGui::OpenPopup("AddComponentPopup");
         }
 
-        if (ImGui::BeginPopup("AddComponentPopup")) {
-            auto components_manager = entity.get_components();
+        if (ImGui::BeginPopup("AddComponentPopup"))
+        {
+            auto pComponentsManager = entity.GetComponents();
 
-            const bool has_material = [&]() {
-                for (size_t j = 0; j < components_manager->get_component_count(); ++j) {
-                    auto existing = components_manager->get_component(j);
-                    if (existing && existing->get_type() == COMPONENT_MATERIAL) return true;
-                }
-                return false;
-            }();
-            if (ImGui::MenuItem(lang.word("material"))) {
-                if (!has_material) {
-                    editor.save_component_state(static_cast<int>(&entity - editor.scene.entities.data()));
-                    components_manager->add_component(std::make_shared<MaterialComponent>());
-                }
-            }
-
-            const bool has_collision = [&]() {
-                for (size_t j = 0; j < components_manager->get_component_count(); ++j) {
-                    auto existing = components_manager->get_component(j);
-                    if (existing && existing->get_type() == COMPONENT_COLLISION) return true;
-                }
-                return false;
-            }();
-            if (ImGui::MenuItem(lang.word("collision"))) {
-                if (!has_collision) {
-                    editor.save_component_state(static_cast<int>(&entity - editor.scene.entities.data()));
-                    components_manager->add_component(std::make_shared<CollisionComponent>());
-                }
-            }
-
-            const bool has_light = [&]() {
-                for (size_t j = 0; j < components_manager->get_component_count(); ++j) {
-                    auto existing = components_manager->get_component(j);
-                    if (existing && existing->get_type() == COMPONENT_LIGHT) return true;
-                }
-                return false;
-            }();
-            if (ImGui::MenuItem(lang.word("light"))) {
-                if (!has_light) {
-                    editor.save_component_state(static_cast<int>(&entity - editor.scene.entities.data()));
-                    auto light = std::make_shared<LightComponent>();
-                    if (auto transform = entity.get_transform_component()) {
-                        light->light.position = transform->position;
+            const bool hasMaterial = [&]()
+            {
+                for (size_t j = 0; j < pComponentsManager->GetComponentCount(); ++j)
+                {
+                    auto pExisting = pComponentsManager->GetComponent(j);
+                    if (pExisting && pExisting->GetType() == COMPONENT_MATERIAL)
+                    {
+                        return true;
                     }
-                    components_manager->add_component(light);
-                }
-            }
-
-            const bool has_text = [&]() {
-                for (size_t j = 0; j < components_manager->get_component_count(); ++j) {
-                    auto existing = components_manager->get_component(j);
-                    if (existing && existing->get_type() == COMPONENT_CUSTOM) return true;
                 }
                 return false;
             }();
-            if (ImGui::MenuItem(lang.word("text"))) {
-                if (!has_text) {
-                    editor.save_component_state(static_cast<int>(&entity - editor.scene.entities.data()));
-                    components_manager->add_component(std::make_shared<Text3DComponent>());
+            if (ImGui::MenuItem(lang.Word("material")))
+            {
+                if (!hasMaterial)
+                {
+                    editor.SaveState();
+                    pComponentsManager->AddComponent(std::make_shared<CMaterialComponent>());
+                }
+            }
+
+            const bool hasCollision = [&]()
+            {
+                for (size_t j = 0; j < pComponentsManager->GetComponentCount(); ++j)
+                {
+                    auto pExisting = pComponentsManager->GetComponent(j);
+                    if (pExisting && pExisting->GetType() == COMPONENT_COLLISION)
+                    {
+                        return true;
+                    }
+                }
+                return false;
+            }();
+            if (ImGui::MenuItem(lang.Word("collision")))
+            {
+                if (!hasCollision)
+                {
+                    editor.SaveState();
+                    pComponentsManager->AddComponent(std::make_shared<CCollisionComponent>());
+                }
+            }
+
+            const bool hasLight = [&]()
+            {
+                for (size_t j = 0; j < pComponentsManager->GetComponentCount(); ++j)
+                {
+                    auto pExisting = pComponentsManager->GetComponent(j);
+                    if (pExisting && pExisting->GetType() == COMPONENT_LIGHT)
+                    {
+                        return true;
+                    }
+                }
+                return false;
+            }();
+            if (ImGui::MenuItem(lang.Word("light")))
+            {
+                if (!hasLight)
+                {
+                    editor.SaveState();
+                    auto pLight = std::make_shared<CLightComponent>();
+                    if (auto pTransform = entity.GetTransformComponent())
+                    {
+                        pLight->m_Light.m_Position = pTransform->m_Position;
+                    }
+                    pComponentsManager->AddComponent(pLight);
+                }
+            }
+
+            const bool hasText = [&]()
+            {
+                for (size_t j = 0; j < pComponentsManager->GetComponentCount(); ++j)
+                {
+                    auto pExisting = pComponentsManager->GetComponent(j);
+                    if (pExisting && pExisting->GetType() == COMPONENT_CUSTOM)
+                    {
+                        return true;
+                    }
+                }
+                return false;
+            }();
+            if (ImGui::MenuItem(lang.Word("text")))
+            {
+                if (!hasText)
+                {
+                    editor.SaveState();
+                    pComponentsManager->AddComponent(std::make_shared<CText3DComponent>());
                 }
             }
             ImGui::EndPopup();
         }
 
-        if (component_to_remove != -1) {
-            const int entity_index = static_cast<int>(&entity - editor.scene.entities.data());
-            editor.save_component_state(entity_index);
-            std::shared_ptr<Component> comp = components_manager->get_component(component_to_remove);
+if (editor.m_Ui.m_Inspector.ComponentToRemove != -1)
+    {
+        const int componentToRemove = editor.m_Ui.m_Inspector.ComponentToRemove;
+        const int entityIndex = static_cast<int>(&entity - editor.m_Scene.m_vEntities.data());
+        editor.SaveState();
+        std::shared_ptr<IComponent> pComp = pComponentsManager->GetComponent(componentToRemove);
 
-            if (std::shared_ptr<LightComponent> light = std::dynamic_pointer_cast<LightComponent>(comp)) {
-                if (light->created) {
-                    light->light.enabled = false;
-                    
-                    if (light->light.id != -1) {
-                        update_lighting(shader, light->light);
-                        free_light_id(light->light.id);
+            if (std::shared_ptr<CLightComponent> pLight = std::dynamic_pointer_cast<CLightComponent>(pComp))
+            {
+                if (pLight->m_Created)
+                {
+                    pLight->m_Light.m_Enabled = false;
+
+                    if (pLight->m_Light.m_Id != -1)
+                    {
+                        UpdateLighting(shader, pLight->m_Light);
+                        editor.m_Lights.Free(pLight->m_Light.m_Id);
                     }
                 }
             }
 
-            components_manager->remove_component(component_to_remove);
-            component_to_remove = -1;
+pComponentsManager->RemoveComponent(componentToRemove);
+        editor.m_Ui.m_Inspector.ComponentToRemove = -1;
         }
     }
 }
 
-void ComponentUIHelper::draw_transform_component(Editor& editor, Entity& entity, TransformComponent* transform) {
-    if (!transform) return;
+void CComponentUIHelper::DrawTransformComponent(CEditor& editor, CEntity& entity, CTransformComponent* pTransform)
+{
+    if (!pTransform)
+    {
+        return;
+    }
 
-    static bool transform_edit_pending = false;
-    static Vec3 pending_position = {};
-    static Vec3 pending_rotation = {};
-    static Vec3 pending_scale = {1, 1, 1};
-
-    const auto begin_transform_edit = [&](const Vec3& before_position,
-        const Vec3& before_rotation, const Vec3& before_scale) {
-        if (ImGui::IsItemActivated()) {
-            transform_edit_pending = true;
-            pending_position = before_position;
-            pending_rotation = before_rotation;
-            pending_scale = before_scale;
+    const auto trackTransformEdit = [&]()
+    {
+        if (ImGui::IsItemActivated())
+        {
+            editor.SaveState();
         }
     };
 
-    const auto finish_transform_edit = [&]() {
-        if (ImGui::IsItemDeactivatedAfterEdit() && transform_edit_pending) {
-            editor.save_transform_state(&entity, pending_position, pending_rotation, pending_scale);
-            transform_edit_pending = false;
-        }
-    };
+    float aPosition[3] = {pTransform->m_Position.x, pTransform->m_Position.y, pTransform->m_Position.z};
+    float aRotation[3] = {pTransform->m_Rotation.x, pTransform->m_Rotation.y, pTransform->m_Rotation.z};
+    float aScale[3] = {pTransform->m_Scale.x, pTransform->m_Scale.y, pTransform->m_Scale.z};
 
-    float position[3] = {transform->position.x, transform->position.y, transform->position.z};
-    float rotation[3] = {transform->rotation.x, transform->rotation.y, transform->rotation.z};
-    float scale[3] = {transform->scale.x, transform->scale.y, transform->scale.z};
-
-    const Vec3 before_position = transform->position;
-    if (ImGui::DragFloat3(lang.word("position"), position, 0.1f)) {
-        transform->position = {position[0], position[1], position[2]};
-        mark_entity_bounds_dirty(&entity);
+    if (ImGui::DragFloat3(lang.Word("position"), aPosition, 0.1f))
+    {
+        pTransform->m_Position = qc::Vec3(aPosition[0], aPosition[1], aPosition[2]);
+        CEntityTextureService::MarkEntityBoundsDirty(&entity);
     }
-    begin_transform_edit(before_position, transform->rotation, transform->scale);
-    finish_transform_edit();
+    trackTransformEdit();
 
-    const Vec3 before_rotation = transform->rotation;
-    if (ImGui::DragFloat3(lang.word("rotation"), rotation, 1.0f)) {
-        transform->rotation = {rotation[0], rotation[1], rotation[2]};
-        mark_entity_bounds_dirty(&entity);
+    if (ImGui::DragFloat3(lang.Word("rotation"), aRotation, 1.0f))
+    {
+        pTransform->m_Rotation = qc::Vec3(aRotation[0], aRotation[1], aRotation[2]);
+        CEntityTextureService::MarkEntityBoundsDirty(&entity);
     }
-    begin_transform_edit(transform->position, before_rotation, transform->scale);
-    finish_transform_edit();
+    trackTransformEdit();
 
-    const Vec3 before_scale = transform->scale;
-    if (ImGui::DragFloat3(lang.word("scale"), scale, 0.1f)) {
-        auto count_neg = [](float x, float y, float z) {
+    if (ImGui::DragFloat3(lang.Word("scale"), aScale, 0.1f))
+    {
+        auto countNeg = [](float x, float y, float z)
+        {
             return (x < 0.0f ? 1 : 0) + (y < 0.0f ? 1 : 0) + (z < 0.0f ? 1 : 0);
         };
 
-        bool was_flipped = count_neg(transform->scale.x, transform->scale.y, transform->scale.z) % 2 != 0;
-        bool will_flip = count_neg(scale[0], scale[1], scale[2]) % 2 != 0;
+        bool wasFlipped = countNeg(pTransform->m_Scale.x, pTransform->m_Scale.y, pTransform->m_Scale.z) % 2 != 0;
+        bool willFlip = countNeg(aScale[0], aScale[1], aScale[2]) % 2 != 0;
 
-        transform->scale = {scale[0], scale[1], scale[2]};
-        mark_entity_bounds_dirty(&entity);
-        mark_entity_uv_dirty(&entity);
+        pTransform->m_Scale = qc::Vec3(aScale[0], aScale[1], aScale[2]);
+        CEntityTextureService::MarkEntityBoundsDirty(&entity);
+        CEntityTextureService::MarkEntityUVDirty(&entity);
 
-        if (was_flipped != will_flip) {
-            update_model(&entity);
+        if (wasFlipped != willFlip)
+        {
+            CModelService::UpdateModel(&entity, editor.m_Text);
         }
     }
-    begin_transform_edit(transform->position, transform->rotation, before_scale);
-    finish_transform_edit();
+    trackTransformEdit();
 }
 
-void ComponentUIHelper::draw_mesh_component(Editor& editor, Entity& entity, MeshComponent* mesh) {
-    if (!mesh) return;
+void CComponentUIHelper::DrawMeshComponent(CEditor& editor, CEntity& entity, CMeshComponent* pMesh)
+{
+    SVertexEditState& edit = editor.m_Ui.m_VertexEdit;
 
-    ImGui::Text(lang.word("mesh_config"));
-    ImGui::Spacing();
-
-    if (mesh->asset) {
-        ImGui::Text("%s: %s", lang.word("asset"), mesh->asset->name.c_str());
-    } else {
-        ImGui::Text("%s: %s", lang.word("asset"), lang.word("none"));
+    if (!pMesh)
+    {
+        return;
     }
 
-    const char* object_type_names[] = {
-        lang.word("cube"),
-        lang.word("sphere"),
-        lang.word("cone"),
-        lang.word("cylinder"),
-        lang.word("hemisphere"),
-        lang.word("torus")
+    ImGui::Text("%s", lang.Word("mesh_config"));
+    ImGui::Spacing();
+
+    if (pMesh->m_pAsset)
+    {
+        ImGui::Text("%s: %s", lang.Word("asset"), pMesh->m_pAsset->m_Name.c_str());
+    }
+    else
+    {
+        ImGui::Text("%s: %s", lang.Word("asset"), lang.Word("none"));
+    }
+
+    const char* apObjectTypeNames[] = {
+        lang.Word("cube"),
+        lang.Word("sphere"),
+        lang.Word("cone"),
+        lang.Word("cylinder"),
+        lang.Word("hemisphere"),
+        lang.Word("torus")
     };
 
-    int current_object_type_index = static_cast<int>(mesh->type);
-    bool is_procedural_asset = mesh->asset && mesh->asset->is_procedural;
+    int currentObjectTypeIndex = static_cast<int>(pMesh->m_Type);
+    bool isProceduralAsset = pMesh->m_pAsset && pMesh->m_pAsset->m_IsProcedural;
 
-    if (!is_procedural_asset) {
-        ImGui::Text(lang.word("mesh_type"), mesh->asset_name.c_str());
+    if (!isProceduralAsset)
+    {
+        ImGui::Text(lang.Word("mesh_type"), pMesh->m_AssetName.c_str());
         ImGui::BeginDisabled();
     }
 
-    if (ImGui::Combo(lang.word("mesh_type_combo"), &current_object_type_index, object_type_names, IM_ARRAYSIZE(object_type_names))) {
-        if (current_object_type_index != static_cast<int>(mesh->type)) {
-            editor.save_state();
-            ObjectType new_type = static_cast<ObjectType>(current_object_type_index);
+    if (ImGui::Combo(lang.Word("mesh_type_combo"), &currentObjectTypeIndex, apObjectTypeNames, IM_ARRAYSIZE(apObjectTypeNames)))
+    {
+        if (currentObjectTypeIndex != static_cast<int>(pMesh->m_Type))
+        {
+            editor.SaveState();
+            EObjectType newType = static_cast<EObjectType>(currentObjectTypeIndex);
 
-            ModelAsset* new_asset = nullptr;
-            for (auto& asset_entry : assets) {
-                if (asset_entry.is_procedural && asset_entry.type == new_type) {
-                    new_asset = &asset_entry;
+            CModelAsset* pNewAsset = nullptr;
+            for (auto& assetEntry : editor.m_Assets.Models())
+            {
+                if (assetEntry.m_IsProcedural && assetEntry.m_Type == newType)
+                {
+                    pNewAsset = &assetEntry;
                     break;
                 }
             }
 
-            if (new_asset) {
-                mesh->type = new_type;
-                mesh->asset = new_asset;
-                mesh->asset_name = new_asset->name;
-                update_model(&entity);
-                mark_entity_bounds_dirty(&entity);
-                mark_entity_uv_dirty(&entity);
-                store_uv(&entity);
-                store_material_textures(&entity);
+            if (pNewAsset)
+            {
+                pMesh->m_Type = newType;
+                pMesh->m_pAsset = pNewAsset;
+                pMesh->m_AssetName = pNewAsset->m_Name;
+                CModelService::UpdateModel(&entity, editor.m_Text);
+                CEntityTextureService::MarkEntityBoundsDirty(&entity);
+                CEntityTextureService::MarkEntityUVDirty(&entity);
+                CEntityTextureService::StoreUV(&entity);
+                CEntityTextureService::StoreMaterialTextures(&entity);
             }
         }
     }
 
-    if (!is_procedural_asset) {
+    if (!isProceduralAsset)
+    {
         ImGui::EndDisabled();
     }
 
-    if (mesh->asset && mesh->asset->is_procedural) {
-        if (ImGui::DragInt(lang.word("segments"), &mesh->segments, 1, 3, 100)) {
-            editor.save_state();
-            update_model(&entity);
-            store_uv(&entity);
-            store_material_textures(&entity);
-            mark_entity_bounds_dirty(&entity);
-            mark_entity_uv_dirty(&entity);
+    if (pMesh->m_pAsset && pMesh->m_pAsset->m_IsProcedural)
+    {
+        if (ImGui::DragInt(lang.Word("segments"), &pMesh->m_Segments, 1, 3, 100))
+        {
+            editor.SaveState();
+            CModelService::UpdateModel(&entity, editor.m_Text);
+            CEntityTextureService::StoreUV(&entity);
+            CEntityTextureService::StoreMaterialTextures(&entity);
+            CEntityTextureService::MarkEntityBoundsDirty(&entity);
+            CEntityTextureService::MarkEntityUVDirty(&entity);
         }
-    } else {
-        ImGui::Text(lang.word("segments_loaded"), mesh->segments);
+    }
+    else
+    {
+        ImGui::Text(lang.Word("segments_loaded"), pMesh->m_Segments);
     }
 
     ImGui::Separator();
 
-    if (ImGui::Checkbox(lang.word("vertex_gizmo"), &mesh->vertex_gizmo)) {
-        if (mesh->vertex_gizmo && mesh->editable_mesh.vertices.empty() && has_valid_model_data(mesh->model)) {
-            mesh->editable_mesh.vertices.clear();
-            mesh->editable_mesh.triangles.clear();
-            mesh->is_editable_mesh = true;
+    if (ImGui::Checkbox(lang.Word("vertex_gizmo"), &pMesh->m_VertexGizmo))
+    {
+        if (pMesh->m_VertexGizmo && pMesh->m_EditableMesh.m_vVertices.empty() && HasValidModelData(pMesh->m_Model))
+        {
+            pMesh->m_EditableMesh.m_vVertices.clear();
+            pMesh->m_EditableMesh.m_vTriangles.clear();
+            pMesh->m_IsEditableMesh = true;
 
-            const Mesh& m = mesh->model.meshes[0];
+            const Mesh& m = pMesh->m_Model.meshes[0];
 
             std::vector<int> remap(m.vertexCount, -1);
-            for (int i = 0; i < m.vertexCount; i++) {
+            for (int i = 0; i < m.vertexCount; i++)
+            {
                 Vec3 pos = {
                     m.vertices[i*3+0],
                     m.vertices[i*3+1],
                     m.vertices[i*3+2]
                 };
 
-                remap[i] = (int)mesh->editable_mesh.vertices.size();
-                EditableVertex ev;
-                ev.position = pos;
-                if (m.texcoords) {
-                    ev.u = m.texcoords[i * 2 + 0];
-                    ev.v = m.texcoords[i * 2 + 1];
+                remap[i] = (int)pMesh->m_EditableMesh.m_vVertices.size();
+                SEditableVertex ev;
+                ev.Position = pos;
+                if (m.texcoords)
+                {
+                    ev.U = m.texcoords[i * 2 + 0];
+                    ev.V = m.texcoords[i * 2 + 1];
                 }
-                mesh->editable_mesh.vertices.push_back(ev);
+                pMesh->m_EditableMesh.m_vVertices.push_back(ev);
             }
 
-            for (int t = 0; t < m.triangleCount; t++) {
+            for (int t = 0; t < m.triangleCount; t++)
+            {
                 int ia, ib, ic;
-                if (m.indices) {
+                if (m.indices)
+                {
                     ia = m.indices[t*3+0];
                     ib = m.indices[t*3+1];
                     ic = m.indices[t*3+2];
                 }
-
-                else {
+                else
+                {
                     ia = t*3+0;
                     ib = t*3+1;
                     ic = t*3+2;
                 }
 
-                if (ia >= m.vertexCount || ib >= m.vertexCount || ic >= m.vertexCount) continue;
-
-                EditableTriangle tri;
-                tri.a = remap[ia];
-                tri.b = remap[ib];
-                tri.c = remap[ic];
-
-                if (tri.a == tri.b || tri.b == tri.c || tri.a == tri.c) {
+                if (ia >= m.vertexCount || ib >= m.vertexCount || ic >= m.vertexCount)
+                {
                     continue;
                 }
 
-                mesh->editable_mesh.triangles.push_back(tri);
+                SEditableTriangle tri;
+                tri.A = remap[ia];
+                tri.B = remap[ib];
+                tri.C = remap[ic];
+
+                if (tri.A == tri.B || tri.B == tri.C || tri.A == tri.C)
+                {
+                    continue;
+                }
+
+                pMesh->m_EditableMesh.m_vTriangles.push_back(tri);
             }
 
-            if (g_selected_vertices.empty() && !mesh->editable_mesh.vertices.empty())
-                g_selected_vertices.push_back(0);
+            if (edit.vSelectedVertices.empty() && !pMesh->m_EditableMesh.m_vVertices.empty())
+            {
+                edit.vSelectedVertices.push_back(0);
+            }
         }
     }
 
-    if (mesh->vertex_gizmo) {
-        ImGui::Text(lang.word("vertices"), (int)mesh->editable_mesh.vertices.size());
-        ImGui::Text(lang.word("triangles"), (int)mesh->editable_mesh.triangles.size());
+    if (pMesh->m_VertexGizmo)
+    {
+        ImGui::Text(lang.Word("vertices"), (int)pMesh->m_EditableMesh.m_vVertices.size());
+        ImGui::Text(lang.Word("triangles"), (int)pMesh->m_EditableMesh.m_vTriangles.size());
 
-        if (!g_selected_vertices.empty()) {
-            EditableVertex& selected_vertex = mesh->editable_mesh.vertices[g_selected_vertices[0]];
-            float vertex_pos[3] = { selected_vertex.position.x, selected_vertex.position.y, selected_vertex.position.z };
+        if (!edit.vSelectedVertices.empty())
+        {
+            SEditableVertex& selectedVertex = pMesh->m_EditableMesh.m_vVertices[edit.vSelectedVertices[0]];
+            float aVertexPos[3] = { selectedVertex.Position.x, selectedVertex.Position.y, selectedVertex.Position.z };
 
             ImGui::Separator();
 
-            if (ImGui::DragFloat3("##vertex_position", vertex_pos, 0.1f)) {
-                editor.save_state();
+            if (ImGui::DragFloat3("##vertex_position", aVertexPos, 0.1f))
+            {
+                editor.SaveState();
 
-                selected_vertex.position = {
-                    vertex_pos[0],
-                    vertex_pos[1],
-                    vertex_pos[2]
-                };
+                selectedVertex.Position = qc::Vec3(aVertexPos[0],
+                    aVertexPos[1],
+                    aVertexPos[2]);
 
-                rebuild_mesh_from_editable(mesh->model, mesh->editable_mesh);
+                RebuildMeshFromEditable(pMesh->m_Model, pMesh->m_EditableMesh);
 
-                mark_entity_bounds_dirty(&entity);
-                mark_entity_uv_dirty(&entity);
+                CEntityTextureService::MarkEntityBoundsDirty(&entity);
+                CEntityTextureService::MarkEntityUVDirty(&entity);
             }
 
-            ImGui::Text(lang.word("vertex_position"));
+            ImGui::Text("%s", lang.Word("vertex_position"));
         }
     }
 }
 
-void ComponentUIHelper::draw_material_component(Editor& editor, Entity& entity, MaterialComponent* material) {
-    if (!material) return;
+void CComponentUIHelper::DrawMaterialComponent(CEditor& editor, CEntity& entity, CMaterialComponent* pMaterial)
+{
+    if (!pMaterial)
+    {
+        return;
+    }
 
-    ImGui::Text(lang.word("material_properties"));
+    ImGui::Text("%s", lang.Word("material_properties"));
     ImGui::Spacing();
 
-    MaterialComponent* mat = entity.get_material_component();
-    MeshComponent* mesh = entity.get_mesh_component();
-    if (!mat || !mesh) return;
+    CMaterialComponent* pMat = entity.GetMaterialComponent();
+    CMeshComponent* pMesh = entity.GetMeshComponent();
+    if (!pMat || !pMesh)
+    {
+        return;
+    }
 
-    ImGui::Text("Material slots: %d", mesh->model.materialCount);
-    for (int slot = 0; slot < mesh->model.materialCount; ++slot) {
-        const int material_index = slot;
-        if (material_index < 0 || material_index >= mesh->model.materialCount || !mesh->model.materials) continue;
+    ImGui::Text("Material slots: %d", pMesh->m_Model.materialCount);
+    for (int slot = 0; slot < pMesh->m_Model.materialCount; ++slot)
+    {
+        const int materialIndex = slot;
+        if (materialIndex < 0 || materialIndex >= pMesh->m_Model.materialCount || !pMesh->m_Model.materials)
+        {
+            continue;
+        }
 
-        const Material& material = mesh->model.materials[material_index];
-        const bool has_albedo = material.maps && material.maps[MATERIAL_MAP_ALBEDO].texture.valid;
-        const bool has_normal = material.maps && material.maps[MATERIAL_MAP_NORMAL].texture.valid;
-        const bool has_roughness = material.maps && material.maps[MATERIAL_MAP_ROUGHNESS].texture.valid;
-        const bool has_metallic = material.maps && material.maps[MATERIAL_MAP_METALNESS].texture.valid;
+        const Material& material = pMesh->m_Model.materials[materialIndex];
+        const bool hasAlbedo = material.maps && material.maps[MATERIAL_MAP_ALBEDO].texture.valid;
+        const bool hasNormal = material.maps && material.maps[MATERIAL_MAP_NORMAL].texture.valid;
+        const bool hasRoughness = material.maps && material.maps[MATERIAL_MAP_ROUGHNESS].texture.valid;
+        const bool hasMetallic = material.maps && material.maps[MATERIAL_MAP_METALNESS].texture.valid;
         ImGui::Text("Slot %d: Albedo %s | Normal %s | Roughness %s | Metallic %s",
             slot,
-            has_albedo ? "yes" : "no",
-            has_normal ? "yes" : "no",
-            has_roughness ? "yes" : "no",
-            has_metallic ? "yes" : "no");
+            hasAlbedo ? "yes" : "no",
+            hasNormal ? "yes" : "no",
+            hasRoughness ? "yes" : "no",
+            hasMetallic ? "yes" : "no");
     }
 
-    static std::vector<std::string> available_materials;
-    static std::vector<std::string> material_display_names;
-    static std::vector<const char*> material_names_cstr;
-    static int selected_material_index = -1;
-    static bool materials_list_needs_update = true;
+    SMaterialPickerState& picker = editor.m_Ui.m_MaterialPicker;
 
-    if (materials_list_needs_update) {
-        available_materials = get_all_materials_in_project();
-        available_materials.insert(available_materials.begin(), "None");
-        material_display_names.clear();
-        material_names_cstr.clear();
-        
-        for (const auto& mat_path : available_materials) {
-            material_display_names.push_back(
-                mat_path == "None" ? "None" : std::filesystem::path(mat_path).filename().generic_string()
+    if (picker.NeedsUpdate)
+    {
+        picker.vMaterialPaths = GetAllMaterialsInProject();
+        picker.vMaterialPaths.insert(picker.vMaterialPaths.begin(), "None");
+        picker.vDisplayNames.clear();
+        picker.vMaterialNames.clear();
+
+        for (const auto& matPath : picker.vMaterialPaths)
+        {
+            picker.vDisplayNames.push_back(
+                matPath == "None" ? "None" : std::filesystem::path(matPath).filename().generic_string()
             );
         }
-        for (const auto& display_name : material_display_names) {
-            material_names_cstr.push_back(display_name.c_str());
+        for (const auto& displayName : picker.vDisplayNames)
+        {
+            picker.vMaterialNames.push_back(displayName.c_str());
         }
-        
-        materials_list_needs_update = false;
+
+        picker.NeedsUpdate = false;
     }
 
-    if (mesh->model.materialCount > 0) {
-        mat->material_slot_sources.resize(mesh->model.materialCount);
+    if (pMesh->m_Model.materialCount > 0)
+    {
+        pMat->m_vMaterialSlotSources.resize(pMesh->m_Model.materialCount);
         ImGui::Separator();
         ImGui::Text("Material assignment by slot");
-        for (int slot = 0; slot < mesh->model.materialCount; ++slot) {
-            int slot_material_index = 0;
-            for (int i = 1; i < static_cast<int>(available_materials.size()); ++i) {
-                if (available_materials[i] == mat->material_slot_sources[slot]) {
-                    slot_material_index = i;
+        for (int slot = 0; slot < pMesh->m_Model.materialCount; ++slot)
+        {
+            int slotMaterialIndex = 0;
+            for (int i = 1; i < static_cast<int>(picker.vMaterialPaths.size()); ++i)
+            {
+                if (picker.vMaterialPaths[i] == pMat->m_vMaterialSlotSources[slot])
+                {
+                    slotMaterialIndex = i;
                     break;
                 }
             }
@@ -465,343 +565,431 @@ void ComponentUIHelper::draw_material_component(Editor& editor, Entity& entity, 
             ImGui::PushID(slot);
             ImGui::Text("Slot %d", slot);
             ImGui::SameLine();
-            if (ImGui::Combo("##slot_material", &slot_material_index, material_names_cstr.data(),
-                             static_cast<int>(material_names_cstr.size()))) {
-                editor.save_material_state();
-                if (slot_material_index == 0) {
-                    if (mesh->model.materials && mesh->model.materials[slot].maps) {
-                        mesh->model.materials[slot].maps[MATERIAL_MAP_ALBEDO].texture = {0};
-                        mesh->model.materials[slot].maps[MATERIAL_MAP_NORMAL].texture = {0};
-                        mesh->model.materials[slot].maps[MATERIAL_MAP_ROUGHNESS].texture = {0};
-                        mesh->model.materials[slot].maps[MATERIAL_MAP_METALNESS].texture = {0};
+            if (ImGui::Combo("##slot_material", &slotMaterialIndex, picker.vMaterialNames.data(),
+                             static_cast<int>(picker.vMaterialNames.size())))
+                             {
+                editor.SaveState();
+                if (slotMaterialIndex == 0)
+                {
+                    if (pMesh->m_Model.materials && pMesh->m_Model.materials[slot].maps)
+                    {
+                        pMesh->m_Model.materials[slot].maps[MATERIAL_MAP_ALBEDO].texture = {0};
+                        pMesh->m_Model.materials[slot].maps[MATERIAL_MAP_NORMAL].texture = {0};
+                        pMesh->m_Model.materials[slot].maps[MATERIAL_MAP_ROUGHNESS].texture = {0};
+                        pMesh->m_Model.materials[slot].maps[MATERIAL_MAP_METALNESS].texture = {0};
                     }
-                    mat->material_slot_sources[slot].clear();
-                } else if (slot_material_index < static_cast<int>(available_materials.size())) {
-                    load_material_to_entity(&entity, available_materials[slot_material_index], slot);
-                    mat->material_slot_sources[slot] = available_materials[slot_material_index];
+                    pMat->m_vMaterialSlotSources[slot].clear();
+                }
+                else if (slotMaterialIndex < static_cast<int>(picker.vMaterialPaths.size()))
+                {
+                    LoadMaterialToEntity(&entity, picker.vMaterialPaths[slotMaterialIndex], slot);
+                    pMat->m_vMaterialSlotSources[slot] = picker.vMaterialPaths[slotMaterialIndex];
                 }
             }
             ImGui::PopID();
         }
     }
 
-    selected_material_index = 0;
-    if (!mat->texture_name.empty()) {
-        const std::filesystem::path current_path = std::filesystem::current_path();
-        std::filesystem::path material_path(mat->texture_name);
-        if (material_path.is_absolute()) {
-            std::error_code relative_error;
-            material_path = std::filesystem::relative(material_path, current_path, relative_error);
-            if (relative_error) material_path = std::filesystem::path(mat->texture_name).filename();
+    picker.SelectedIndex = 0;
+    if (!pMat->m_TextureName.empty())
+    {
+        const std::filesystem::path currentPath = std::filesystem::current_path();
+        std::filesystem::path materialPath(pMat->m_TextureName);
+        if (materialPath.is_absolute())
+        {
+            std::error_code relativeError;
+            materialPath = std::filesystem::relative(materialPath, currentPath, relativeError);
+            if (relativeError)
+            {
+                materialPath = std::filesystem::path(pMat->m_TextureName).filename();
+            }
         }
 
-        const std::string display_path = material_path.generic_string();
-        for (int i = 1; i < static_cast<int>(available_materials.size()); ++i) {
-            if (available_materials[i] == display_path) {
-                selected_material_index = i;
+        const std::string displayPath = materialPath.generic_string();
+        for (int i = 1; i < static_cast<int>(picker.vMaterialPaths.size()); ++i)
+        {
+            if (picker.vMaterialPaths[i] == displayPath)
+            {
+                picker.SelectedIndex = i;
                 break;
             }
         }
     }
 
-    ImGui::Text(lang.word("material_file"));
-    if (!material_names_cstr.empty()) {
-        if (ImGui::Combo("##material_combo", &selected_material_index, material_names_cstr.data(), 
-                         static_cast<int>(material_names_cstr.size()))) {
-            editor.save_material_state();
-            if (selected_material_index == 0) {
-                clear_material_textures(&entity);
-                mat->texture_name.clear();
-                mat->texture = {0};
-                mat->texture_source = TEXTURE_NONE;
-            } else if (selected_material_index > 0 && selected_material_index < static_cast<int>(available_materials.size())) {
-                const std::string& selected_path = available_materials[selected_material_index];
-                if (std::filesystem::exists(selected_path)) {
-                    load_material_to_entity(&entity, selected_path);
+    ImGui::Text("%s", lang.Word("material_file"));
+    if (!picker.vMaterialNames.empty())
+    {
+        if (ImGui::Combo("##material_combo", &picker.SelectedIndex, picker.vMaterialNames.data(),
+                         static_cast<int>(picker.vMaterialNames.size())))
+                         {
+            editor.SaveState();
+            if (picker.SelectedIndex == 0)
+            {
+                CEntityTextureService::ClearMaterialTextures(&entity);
+                pMat->m_TextureName.clear();
+                pMat->m_Texture = {0};
+                pMat->m_TextureSource = TEXTURE_NONE;
+            }
+            else if (picker.SelectedIndex > 0 && picker.SelectedIndex < static_cast<int>(picker.vMaterialPaths.size()))
+            {
+                const std::string& selectedPath = picker.vMaterialPaths[picker.SelectedIndex];
+                if (std::filesystem::exists(selectedPath))
+                {
+                    LoadMaterialToEntity(&entity, selectedPath);
                 }
             }
         }
-    } else {
-        ImGui::Text(lang.word("no_materials_found"));
+    }
+    else
+    {
+        ImGui::Text("%s", lang.Word("no_materials_found"));
     }
 
-    static int selected_texture_index = 0;
-    std::vector<const char*> texture_names;
-    texture_names.reserve(texture_options.size());
-    selected_texture_index = 0;
-    for (size_t i = 0; i < texture_options.size(); ++i) {
-        texture_names.push_back(texture_options[i].name.c_str());
-        if (texture_options[i].name == mat->albedo_texture_name)
-            selected_texture_index = static_cast<int>(i);
+    std::vector<const char*> vTextureNames;
+    vTextureNames.reserve(editor.m_Assets.TextureCount());
+    editor.m_Ui.m_Inspector.SelectedTextureIndex = 0;
+    for (size_t i = 0; i < editor.m_Assets.TextureCount(); ++i)
+    {
+        vTextureNames.push_back(editor.m_Assets.TextureByIndex(i).Name.c_str());
+        if (editor.m_Assets.TextureByIndex(i).Name == pMat->m_AlbedoTextureName)
+        {
+            editor.m_Ui.m_Inspector.SelectedTextureIndex = static_cast<int>(i);
+        }
     }
 
     ImGui::Text("Direct texture");
-    if (!texture_names.empty() && ImGui::Combo("##direct_texture", &selected_texture_index,
-        texture_names.data(), static_cast<int>(texture_names.size()))) {
-        editor.save_material_state();
-        if (selected_texture_index == 0) {
-            mat->albedo_texture_name.clear();
-            mat->texture = {0};
-            if (mat->texture_name.empty()) {
-                mat->texture_source = TEXTURE_NONE;
-                clear_material_textures(&entity);
-            } else if (std::filesystem::exists(mat->texture_name)) {
-                load_material_to_entity(&entity, mat->texture_name);
+    if (!vTextureNames.empty() && ImGui::Combo("##direct_texture", &editor.m_Ui.m_Inspector.SelectedTextureIndex,
+        vTextureNames.data(), static_cast<int>(vTextureNames.size())))
+        {
+        editor.SaveState();
+        const int selectedTextureIndex = editor.m_Ui.m_Inspector.SelectedTextureIndex;
+        if (selectedTextureIndex == 0)
+        {
+            pMat->m_AlbedoTextureName.clear();
+            pMat->m_Texture = {0};
+            if (pMat->m_TextureName.empty())
+            {
+                pMat->m_TextureSource = TEXTURE_NONE;
+                CEntityTextureService::ClearMaterialTextures(&entity);
             }
-        } else {
-            mat->albedo_texture_name = texture_options[selected_texture_index].name;
-            mat->texture_name.clear();
-            mat->texture = texture_options[selected_texture_index].texture;
-            mat->texture_source = TEXTURE_EXTERNAL;
+            else if (std::filesystem::exists(pMat->m_TextureName))
+            {
+                LoadMaterialToEntity(&entity, pMat->m_TextureName);
+            }
         }
-        mark_entity_uv_dirty(&entity);
+        else
+        {
+            pMat->m_AlbedoTextureName = editor.m_Assets.TextureByIndex(selectedTextureIndex).Name;
+            pMat->m_TextureName.clear();
+            pMat->m_Texture = editor.m_Assets.TextureByIndex(selectedTextureIndex).Texture;
+            pMat->m_TextureSource = TEXTURE_EXTERNAL;
+        }
+        CEntityTextureService::MarkEntityUVDirty(&entity);
     }
 
-    static int selected_normal_index = 0;
-    selected_normal_index = 0;
-    for (size_t i = 0; i < texture_options.size(); ++i) {
-        if (texture_options[i].name == mat->normal_texture_name) {
-            selected_normal_index = static_cast<int>(i);
+    editor.m_Ui.m_Inspector.SelectedNormalIndex = 0;
+    for (size_t i = 0; i < editor.m_Assets.TextureCount(); ++i)
+    {
+        if (editor.m_Assets.TextureByIndex(i).Name == pMat->m_NormalTextureName)
+        {
+            editor.m_Ui.m_Inspector.SelectedNormalIndex = static_cast<int>(i);
             break;
         }
     }
     ImGui::Text("Normal map");
-    if (!texture_names.empty() && ImGui::Combo("##normal_map", &selected_normal_index,
-        texture_names.data(), static_cast<int>(texture_names.size()))) {
-        editor.save_material_state();
-        if (selected_normal_index == 0) {
-            mat->normal_texture_name.clear();
-            for (int m = 0; m < mesh->model.materialCount; ++m) {
-                if (mesh->model.materials[m].maps) {
-                    mesh->model.materials[m].maps[MATERIAL_MAP_NORMAL].texture = {0};
+    if (!vTextureNames.empty() && ImGui::Combo("##normal_map", &editor.m_Ui.m_Inspector.SelectedNormalIndex,
+        vTextureNames.data(), static_cast<int>(vTextureNames.size())))
+        {
+        editor.SaveState();
+        const int selectedNormalIndex = editor.m_Ui.m_Inspector.SelectedNormalIndex;
+        if (selectedNormalIndex == 0)
+        {
+            pMat->m_NormalTextureName.clear();
+            for (int m = 0; m < pMesh->m_Model.materialCount; ++m)
+            {
+                if (pMesh->m_Model.materials[m].maps)
+                {
+                    pMesh->m_Model.materials[m].maps[MATERIAL_MAP_NORMAL].texture = {0};
                 }
             }
-        } else {
-            mat->normal_texture_name = texture_options[selected_normal_index].name;
-            const Texture2D normal_texture = texture_options[selected_normal_index].texture;
-            for (int m = 0; m < mesh->model.materialCount; ++m) {
-                if (mesh->model.materials[m].maps) {
-                    mesh->model.materials[m].maps[MATERIAL_MAP_NORMAL].texture = normal_texture;
+        }
+        else
+        {
+            pMat->m_NormalTextureName = editor.m_Assets.TextureByIndex(selectedNormalIndex).Name;
+            const Texture2D normalTexture = editor.m_Assets.TextureByIndex(selectedNormalIndex).Texture;
+            for (int m = 0; m < pMesh->m_Model.materialCount; ++m)
+            {
+                if (pMesh->m_Model.materials[m].maps)
+                {
+                    pMesh->m_Model.materials[m].maps[MATERIAL_MAP_NORMAL].texture = normalTexture;
                 }
             }
         }
     }
 
-    if (!mat->texture_name.empty() && mat->texture_name.length() > 4 && 
-        mat->texture_name.substr(mat->texture_name.length() - 4) == ".mtl") {
-        ImGui::TextDisabled("%s: %s", lang.word("current"), mat->texture_name.c_str());
-    } else {
-        ImGui::TextDisabled("%s: %s", lang.word("current"), lang.word("none"));
+    if (!pMat->m_TextureName.empty() && pMat->m_TextureName.length() > 4 &&
+        pMat->m_TextureName.substr(pMat->m_TextureName.length() - 4) == ".mtl")
+        {
+        ImGui::TextDisabled("%s: %s", lang.Word("current"), pMat->m_TextureName.c_str());
+    }
+    else
+    {
+        ImGui::TextDisabled("%s: %s", lang.Word("current"), lang.Word("none"));
     }
 
     ImGui::Spacing();
     ImGui::Separator();
-    ImGui::Text(lang.word("uv_settings"));
+    ImGui::Text("%s", lang.Word("uv_settings"));
     ImGui::Spacing();
 
-    bool uv_changed = false;
+    bool uvChanged = false;
 
-    const MaterialComponent before_stretch = *mat;
-    if (ImGui::Checkbox(lang.word("stretch_texture"), &mat->texture_stretch)) {
-        if (ImGui::IsItemActivated()) editor.save_material_state_before(&entity, before_stretch);
-        uv_changed = true;
+    const auto trackMaterialEdit = [&]()
+    {
+        if (ImGui::IsItemActivated())
+        {
+            editor.SaveState();
+        }
+    };
+
+    bool textureStretch = pMat->m_TextureStretch;
+    if (ImGui::Checkbox(lang.Word("stretch_texture"), &textureStretch))
+    {
+        trackMaterialEdit();
+        pMat->m_TextureStretch = textureStretch;
+        uvChanged = true;
     }
 
-    if (!mat->texture_stretch) {
-        const MaterialComponent before_repeat_u = *mat;
-        if (ImGui::DragFloat(lang.word("repeat_u"), &mat->texture_repeat_u, 0.1f, 0.1f, 10.0f)) {
-            if (ImGui::IsItemActivated()) editor.save_material_state_before(&entity, before_repeat_u);
-            uv_changed = true;
+    if (!pMat->m_TextureStretch)
+    {
+        if (ImGui::DragFloat(lang.Word("repeat_u"), &pMat->m_TextureRepeatU, 0.1f, 0.1f, 10.0f))
+        {
+            trackMaterialEdit();
+            uvChanged = true;
         }
 
-        const MaterialComponent before_repeat_v = *mat;
-        if (ImGui::DragFloat(lang.word("repeat_v"), &mat->texture_repeat_v, 0.1f, 0.1f, 10.0f)) {
-            if (ImGui::IsItemActivated()) editor.save_material_state_before(&entity, before_repeat_v);
-            uv_changed = true;
+        if (ImGui::DragFloat(lang.Word("repeat_v"), &pMat->m_TextureRepeatV, 0.1f, 0.1f, 10.0f))
+        {
+            trackMaterialEdit();
+            uvChanged = true;
         }
 
-        float uv_scale[2] = {mat->uv_scale.x, mat->uv_scale.y};
-        const MaterialComponent before_uv_scale = *mat;
-        if (ImGui::DragFloat2(lang.word("uv_scale_x"), uv_scale, 0.1f, 0.1f, 5.0f)) {
-            if (ImGui::IsItemActivated()) editor.save_material_state_before(&entity, before_uv_scale);
-            mat->uv_scale = {uv_scale[0], uv_scale[1]};
-            uv_changed = true;
+        float aUvScale[2] = {pMat->m_UvScale.x, pMat->m_UvScale.y};
+        if (ImGui::DragFloat2(lang.Word("uv_scale_x"), aUvScale, 0.1f, 0.1f, 5.0f))
+        {
+            trackMaterialEdit();
+            pMat->m_UvScale = {aUvScale[0], aUvScale[1]};
+            uvChanged = true;
         }
     }
 
-    const MaterialComponent before_auto_uv = *mat;
-    if (ImGui::Checkbox(lang.word("auto_uv"), &mat->auto_uv)) {
-        if (ImGui::IsItemActivated()) editor.save_material_state_before(&entity, before_auto_uv);
-        uv_changed = true;
+    bool autoUv = pMat->m_AutoUv;
+    if (ImGui::Checkbox(lang.Word("auto_uv"), &autoUv))
+    {
+        trackMaterialEdit();
+        pMat->m_AutoUv = autoUv;
+        uvChanged = true;
     }
 
-    if (uv_changed) {
-        mark_entity_uv_dirty(&entity);
+    if (uvChanged)
+    {
+        CEntityTextureService::MarkEntityUVDirty(&entity);
     }
 }
 
-void ComponentUIHelper::draw_light_component(Editor& editor, Entity& entity, LightComponent* light, Shader shader) {
-    if (!light) return;
-
-    if (ImGui::IsWindowHovered() && ImGui::IsMouseClicked(ImGuiMouseButton_Left)) {
-        editor.save_light_state();
+void CComponentUIHelper::DrawLightComponent(CEditor& editor, CEntity& entity, CLightComponent* pLight, Shader shader)
+{
+    if (!pLight)
+    {
+        return;
     }
 
-    ImGui::Text(lang.word("light_properties"));
+    if (ImGui::IsWindowHovered() && ImGui::IsMouseClicked(ImGuiMouseButton_Left))
+    {
+        editor.SaveState();
+    }
+
+    ImGui::Text("%s", lang.Word("light_properties"));
     ImGui::Spacing();
 
     bool changed = false;
 
-    TransformComponent* transform = entity.get_transform_component();
-    float light_position[3] = {
-        transform ? transform->position.x : light->light.position.x,
-        transform ? transform->position.y : light->light.position.y,
-        transform ? transform->position.z : light->light.position.z
+    CTransformComponent* pTransform = entity.GetTransformComponent();
+    float aLightPosition[3] = {
+        pTransform ? pTransform->m_Position.x : pLight->m_Light.m_Position.x,
+        pTransform ? pTransform->m_Position.y : pLight->m_Light.m_Position.y,
+        pTransform ? pTransform->m_Position.z : pLight->m_Light.m_Position.z
     };
-    if (ImGui::DragFloat3(lang.word("position"), light_position, 0.1f)) {
-        if (transform) {
-            transform->position = { light_position[0], light_position[1], light_position[2] };
-            mark_entity_bounds_dirty(&entity);
+    if (ImGui::DragFloat3(lang.Word("position"), aLightPosition, 0.1f))
+    {
+        if (pTransform)
+        {
+            pTransform->m_Position = qc::Vec3(aLightPosition[0], aLightPosition[1], aLightPosition[2]);
+            CEntityTextureService::MarkEntityBoundsDirty(&entity);
         }
-        light->light.position = { light_position[0], light_position[1], light_position[2] };
+        pLight->m_Light.m_Position = qc::Vec3(aLightPosition[0], aLightPosition[1], aLightPosition[2]);
         changed = true;
     }
-    changed |= ImGui::DragFloat3(lang.word("target"), (float*)&light->light.target, 0.1f);
+    changed |= ImGui::DragFloat3(lang.Word("target"), (float*)&pLight->m_Light.m_Target, 0.1f);
 
-    float light_color[4] = {
-        light->light.color.r / 255.0f,
-        light->light.color.g / 255.0f,
-        light->light.color.b / 255.0f,
-        light->light.color.a / 255.0f
+    float aLightColor[4] = {
+        pLight->m_Light.m_Color.r / 255.0f,
+        pLight->m_Light.m_Color.g / 255.0f,
+        pLight->m_Light.m_Color.b / 255.0f,
+        pLight->m_Light.m_Color.a / 255.0f
     };
-    if (ImGui::ColorEdit4(lang.word("color"), light_color)) {
-        light->light.color = {
-            static_cast<unsigned char>(light_color[0] * 255.0f),
-            static_cast<unsigned char>(light_color[1] * 255.0f),
-            static_cast<unsigned char>(light_color[2] * 255.0f),
-            static_cast<unsigned char>(light_color[3] * 255.0f)
+    if (ImGui::ColorEdit4(lang.Word("color"), aLightColor))
+    {
+        pLight->m_Light.m_Color = {
+            static_cast<unsigned char>(aLightColor[0] * 255.0f),
+            static_cast<unsigned char>(aLightColor[1] * 255.0f),
+            static_cast<unsigned char>(aLightColor[2] * 255.0f),
+            static_cast<unsigned char>(aLightColor[3] * 255.0f)
         };
         changed = true;
     }
 
-    changed |= ImGui::DragFloat(lang.word("intensity"), &light->light.intensity, 0.1f, 0.0f, 10.0f);
-    changed |= ImGui::DragFloat(lang.word("range"), &light->light.range, 0.1f, 0.1f, 100.0f);
-    changed |= ImGui::DragFloat(lang.word("spot_angle"), &light->light.spot_angle, 1.0f, 5.0f, 180.0f);
+    changed |= ImGui::DragFloat(lang.Word("intensity"), &pLight->m_Light.m_Intensity, 0.1f, 0.0f, 10.0f);
+    changed |= ImGui::DragFloat(lang.Word("range"), &pLight->m_Light.m_Range, 0.1f, 0.1f, 100.0f);
+    changed |= ImGui::DragFloat(lang.Word("spot_angle"), &pLight->m_Light.m_SpotAngle, 1.0f, 5.0f, 180.0f);
 
-    const char* light_types[] = {
-        lang.word("directional"),
-        lang.word("point"),
-        lang.word("spot")
+    const char* apLightTypes[] = {
+        lang.Word("directional"),
+        lang.Word("point"),
+        lang.Word("spot")
     };
 
-    const int light_type_values[] = {
-        LIGHT_DIRECTIONAL,
-        LIGHT_POINT,
-        LIGHT_SPOT
+    const int aLightTypeValues[] = {
+        LIGHT_TYPE_DIRECTIONAL,
+        LIGHT_TYPE_POINT,
+        LIGHT_TYPE_SPOT
     };
 
-    int light_type_index = 0;
-    for (int i = 0; i < IM_ARRAYSIZE(light_type_values); i++) {
-        if (light->light.light.type == light_type_values[i]) {
-            light_type_index = i;
+    int lightTypeIndex = 0;
+    for (int i = 0; i < IM_ARRAYSIZE(aLightTypeValues); i++)
+    {
+        if (pLight->m_Light.m_Light.type == aLightTypeValues[i])
+        {
+            lightTypeIndex = i;
             break;
         }
     }
 
-    if (ImGui::Combo(lang.word("light_type"), &light_type_index, light_types, IM_ARRAYSIZE(light_types))) {
-        light->light.light.type = light_type_values[light_type_index];
+    if (ImGui::Combo(lang.Word("light_type"), &lightTypeIndex, apLightTypes, IM_ARRAYSIZE(apLightTypes)))
+    {
+        pLight->m_Light.m_Light.type = aLightTypeValues[lightTypeIndex];
         changed = true;
     }
 
-    if (light->enabled != light->light.enabled) {
+    if (pLight->m_Enabled != pLight->m_Light.m_Enabled)
+    {
         changed = true;
     }
 
-    if (changed) {
-        if (transform) {
-            light->light.position = transform->position;
+    if (changed)
+    {
+        if (pTransform)
+        {
+            pLight->m_Light.m_Position = pTransform->m_Position;
         }
-        light->light.enabled = light->enabled;
+        pLight->m_Light.m_Enabled = pLight->m_Enabled;
 
-        if (light->light.id != -1)
-            update_lighting(shader, light->light);
+        if (pLight->m_Light.m_Id != -1)
+        {
+            UpdateLighting(shader, pLight->m_Light);
+        }
     }
 }
 
-void ComponentUIHelper::draw_collision_component(Editor& editor, Entity& entity, CollisionComponent* collision) {
-    if (!collision) return;
+void CComponentUIHelper::DrawCollisionComponent(CEditor& editor, CEntity& entity, CCollisionComponent* pCollision)
+{
+    if (!pCollision)
+    {
+        return;
+    }
 
-    ImGui::Text(lang.word("collision_properties"));
+    ImGui::Text("%s", lang.Word("collision_properties"));
     ImGui::Spacing();
 
     bool changed = false;
 
-    const char* collider_types[] = {
-        lang.word("cube"),
-        lang.word("sphere"),
-        lang.word("capsule"),
-        lang.word("mesh")
+    const char* apColliderTypes[] = {
+        lang.Word("cube"),
+        lang.Word("sphere"),
+        lang.Word("capsule"),
+        lang.Word("mesh")
     };
 
-    int collider_type = static_cast<int>(collision->collider_type);
+    int colliderType = static_cast<int>(pCollision->m_ColliderType);
 
-    if (ImGui::Combo(lang.word("collider_type"), &collider_type, collider_types, IM_ARRAYSIZE(collider_types))) {
-        editor.save_state();
+    if (ImGui::Combo(lang.Word("collider_type"), &colliderType, apColliderTypes, IM_ARRAYSIZE(apColliderTypes)))
+    {
+        editor.SaveState();
 
-        collision->collider_type = static_cast<ColliderType>(collider_type);
-        collision->dirty = true;
+        pCollision->m_ColliderType = static_cast<EColliderType>(colliderType);
+        pCollision->m_Dirty = true;
         changed = true;
     }
 
-    if (ImGui::Checkbox(lang.word("visualize"), &collision->visualize)) {
-        editor.save_state();
+    if (ImGui::Checkbox(lang.Word("visualize"), &pCollision->m_Visualize))
+    {
+        editor.SaveState();
         changed = true;
     }
 
-    if (ImGui::DragFloat3(lang.word("center"), (float*)&collision->center, 0.1f)) {
-        editor.save_state();
+    if (ImGui::DragFloat3(lang.Word("center"), (float*)&pCollision->m_Center, 0.1f))
+    {
+        editor.SaveState();
 
-        collision->dirty = true;
+        pCollision->m_Dirty = true;
         changed = true;
     }
 
     ImGui::Spacing();
 
-    switch (collision->collider_type) {
-        case COLLIDER_BOX: {
-            if (ImGui::DragFloat3(lang.word("size"), (float*)&collision->size, 0.1f, 0.01f, 1000.0f)) {
-                editor.save_state();
+    switch (pCollision->m_ColliderType)
+    {
+        case COLLIDER_BOX:
+        {
+            if (ImGui::DragFloat3(lang.Word("size"), (float*)&pCollision->m_Size, 0.1f, 0.01f, 1000.0f))
+            {
+                editor.SaveState();
 
-                collision->dirty = true;
+                pCollision->m_Dirty = true;
                 changed = true;
             }
 
             break;
         }
 
-        case COLLIDER_SPHERE: {
-            if (ImGui::DragFloat(lang.word("radius"), (float*)&collision->radius, 0.1f, 0.01f, 1000.0f)) {
-                editor.save_state();
+        case COLLIDER_SPHERE:
+        {
+            if (ImGui::DragFloat(lang.Word("radius"), (float*)&pCollision->m_Radius, 0.1f, 0.01f, 1000.0f))
+            {
+                editor.SaveState();
 
-                collision->dirty = true;
+                pCollision->m_Dirty = true;
                 changed = true;
             }
 
             break;
         }
 
-        case COLLIDER_CAPSULE: {
-            if (ImGui::DragFloat(lang.word("radius"), (float*)&collision->radius, 0.1f, 0.01f, 1000.0f)) {
-                editor.save_state();
+        case COLLIDER_CAPSULE:
+        {
+            if (ImGui::DragFloat(lang.Word("radius"), (float*)&pCollision->m_Radius, 0.1f, 0.01f, 1000.0f))
+            {
+                editor.SaveState();
 
-                collision->dirty = true;
+                pCollision->m_Dirty = true;
                 changed = true;
             }
 
-            if (ImGui::DragFloat(lang.word("height"), (float*)&collision->height, 0.1f, 0.1f, 1000.0f)) {
-                editor.save_state();
+            if (ImGui::DragFloat(lang.Word("height"), (float*)&pCollision->m_Height, 0.1f, 0.1f, 1000.0f))
+            {
+                editor.SaveState();
 
-                collision->dirty = true;
+                pCollision->m_Dirty = true;
                 changed = true;
             }
 
@@ -811,76 +999,95 @@ void ComponentUIHelper::draw_collision_component(Editor& editor, Entity& entity,
 
     ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.8f, 0.2f, 0.2f, 1.0f));
     ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImVec4(1.0f, 0.3f, 0.3f, 1.0f));
-    if (ImGui::Button(lang.word("reset"), ImVec2(-1, 0))) {
-        collision->size = Vec3(1.0f, 1.0f, 1.0f);
-        collision->radius = 0.5f;
-        collision->height = 2.0f;
-        collision->center = Vec3(0.0f, 0.0f, 0.0f);
+    if (ImGui::Button(lang.Word("reset"), ImVec2(-1, 0)))
+    {
+        pCollision->m_Size = Vec3(1.0f, 1.0f, 1.0f);
+        pCollision->m_Radius = 0.5f;
+        pCollision->m_Height = 2.0f;
+        pCollision->m_Center = Vec3(0.0f, 0.0f, 0.0f);
     }
     ImGui::PopStyleColor(2);
 
-    if (changed) {
-        mark_entity_bounds_dirty(&entity);
+    if (changed)
+    {
+        CEntityTextureService::MarkEntityBoundsDirty(&entity);
     }
 }
 
-void ComponentUIHelper::draw_3d_text_component(Editor& editor, Entity& entity, Text3DComponent* text) {
-    if (!text) return;
-
-    char buf[256] = {};
-    std::snprintf(buf, sizeof(buf), "%s", text->text.c_str());
-
-    if (ImGui::InputText("Text", buf, sizeof(buf), ImGuiInputTextFlags_EnterReturnsTrue)) {
-        editor.save_state();
-        text->text = buf;
-        update_model(&entity);
-        mark_entity_bounds_dirty(&entity);
+void CComponentUIHelper::Draw3dTextComponent(CEditor& editor, CEntity& entity, CText3DComponent* pText)
+{
+    if (!pText)
+    {
+        return;
     }
 
-    auto drag = [&](const char* label, float& val, float spd, float mn, float mx) {
-        if (ImGui::DragFloat(label, &val, spd, mn, mx)) {
-            editor.save_state();
-            update_model(&entity);
-            mark_entity_bounds_dirty(&entity);
+    char aBuf[256] = {};
+    std::snprintf(aBuf, sizeof(aBuf), "%s", pText->m_Text.c_str());
+
+    if (ImGui::InputText("Text", aBuf, sizeof(aBuf), ImGuiInputTextFlags_EnterReturnsTrue))
+    {
+        editor.SaveState();
+        pText->m_Text = aBuf;
+        CModelService::UpdateModel(&entity, editor.m_Text);
+        CEntityTextureService::MarkEntityBoundsDirty(&entity);
+    }
+
+    auto drag = [&](const char* pLabel, float& val, float spd, float mn, float mx)
+    {
+        if (ImGui::DragFloat(pLabel, &val, spd, mn, mx))
+        {
+            editor.SaveState();
+            CModelService::UpdateModel(&entity, editor.m_Text);
+            CEntityTextureService::MarkEntityBoundsDirty(&entity);
         }
     };
 
-    drag("Size",           text->size,           0.01f, 0.05f, 10.f);
-    drag("Thickness",      text->thickness,      0.01f, 0.01f,  5.f);
-    drag("Letter Spacing", text->letter_spacing, 0.005f, 0.f, 100);
+    drag("Size",           pText->m_Size,           0.01f, 0.05f, 10.f);
+    drag("Thickness",      pText->m_Thickness,      0.01f, 0.01f,  5.f);
+    drag("Letter Spacing", pText->m_LetterSpacing, 0.005f, 0.f, 100);
 
     ImGui::Separator();
 
-    static std::vector<std::pair<std::string,std::string>> s_fonts;
-    static std::vector<const char*> s_font_names;
-    static int s_selected = -1;
-    static bool s_scanned = false;
+    SFontPickerState& fonts = editor.m_Ui.m_FontPicker;
 
-    if (!s_scanned) {
-        s_fonts = get_system_fonts();
-        s_font_names.clear();
-        for (auto& f : s_fonts) s_font_names.push_back(f.first.c_str());
-
-        for (int i = 0; i < (int)s_fonts.size(); i++) {
-            if (s_fonts[i].second == text->font_path) { s_selected = i; break; }
+    if (!fonts.Scanned)
+    {
+        fonts.vFonts = CFreetypeTextMesh::GetSystemFonts();
+        fonts.vFontNames.clear();
+        for (auto& f : fonts.vFonts)
+        {
+            fonts.vFontNames.push_back(f.first.c_str());
         }
-        s_scanned = true;
+
+        for (int i = 0; i < (int)fonts.vFonts.size(); i++)
+        {
+            if (fonts.vFonts[i].second == pText->m_FontPath)
+            {
+                fonts.SelectedIndex = i;
+                break;
+            }
+        }
+        fonts.Scanned = true;
     }
 
     ImGui::Text("Font");
-    if (!s_font_names.empty()) {
-        if (ImGui::Combo("##font", &s_selected, s_font_names.data(), (int)s_font_names.size())) {
-            editor.save_state();
-            text->font_path = s_fonts[s_selected].second;
-            update_model(&entity);
-            mark_entity_bounds_dirty(&entity);
+    if (!fonts.vFontNames.empty())
+    {
+        if (ImGui::Combo("##font", &fonts.SelectedIndex, fonts.vFontNames.data(), (int)fonts.vFontNames.size()))
+        {
+            editor.SaveState();
+            pText->m_FontPath = fonts.vFonts[fonts.SelectedIndex].second;
+            CModelService::UpdateModel(&entity, editor.m_Text);
+            CEntityTextureService::MarkEntityBoundsDirty(&entity);
         }
-    } 
-    
-    else {
+    }
+    else
+    {
         ImGui::TextDisabled("No fonts found");
     }
 
-    if (!text->font_path.empty() && ImGui::IsItemHovered())
-        ImGui::SetTooltip("%s", text->font_path.c_str());
+    if (!pText->m_FontPath.empty() && ImGui::IsItemHovered())
+    {
+        ImGui::SetTooltip("%s", pText->m_FontPath.c_str());
+    }
 }

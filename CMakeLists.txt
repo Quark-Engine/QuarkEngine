@@ -4,12 +4,14 @@ project(QuarkEngine)
 if(MSVC)
     set(CMAKE_CXX_FLAGS_RELEASE "/MD /Od /RTC1 /DNDEBUG" CACHE STRING "" FORCE)
     set(CMAKE_C_FLAGS_RELEASE   "/MD /Od /RTC1 /DNDEBUG" CACHE STRING "" FORCE)
+    string(APPEND CMAKE_EXE_LINKER_FLAGS_DEBUG " /IGNORE:4099")
 endif()
 
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
 option(BUILD_ENGINE "Build Quark Engine" ON)
+option(QUARK_BUILD_TESTS "Build Quark Engine unit tests" OFF)
 option(BUILD_PLUGIN "Build Plugin" OFF)
 
 set(QC_BUILD_EXAMPLES OFF CACHE BOOL "" FORCE)
@@ -150,7 +152,21 @@ if(BUILD_ENGINE)
     set(EDITOR_FILES
         src/editor/editor_assets.cpp
         src/editor/editor_components_ui.cpp
+        src/editor/editor_desktop.cpp
         src/editor/editor_entity.cpp
+        src/editor/editor_entity_clipboard.cpp
+        src/editor/editor_entity_commands.cpp
+        src/editor/editor_gizmo.cpp
+        src/editor/editor_grid.cpp
+        src/editor/editor_language_catalog.cpp
+        src/editor/editor_layout.cpp
+        src/editor/editor_mesh_edit.cpp
+        src/editor/editor_polygon_edit.cpp
+        src/editor/editor_scene_drop.cpp
+        src/editor/editor_scene_file.cpp
+        src/editor/editor_scene_picker.cpp
+        src/editor/editor_status_bar.cpp
+        src/editor/editor_theme.cpp
         src/editor/editor_ui.cpp
         src/editor/editor_utils.cpp
         src/editor/editor_viewers.cpp
@@ -162,10 +178,21 @@ if(BUILD_ENGINE)
 
     set(SOURCE_FILES
         src/application.cpp
+        src/application_plugin_bridge.cpp
+        src/application_scene_renderer.cpp
         src/camera.cpp
         src/component.cpp
         src/command_line.cpp
+        src/dynamic_library.cpp
         src/editable_mesh.cpp
+        src/assets/asset_library.cpp
+        src/assets/preview_cache.cpp
+        src/assets/texture_cache.cpp
+        src/engine/transform.cpp
+        src/engine/component_factory_registry.cpp
+        src/engine/scene_document.cpp
+        src/engine/scene_runtime.cpp
+        src/engine/material_texture_restore.cpp
         src/entity.cpp
         src/hub.cpp
         src/language_manager.cpp
@@ -334,13 +361,105 @@ if(BUILD_ENGINE)
     endif()
 endif()
 
+if(QUARK_BUILD_TESTS)
+    enable_testing()
+
+    add_executable(QuarkEngineTests
+        tests/test_main.cpp
+        tests/test_transform.cpp
+        tests/test_hierarchy.cpp
+        tests/test_light_registry.cpp
+        tests/test_scene_document.cpp
+        tests/test_direct_texture.cpp
+        src/component.cpp
+        src/editable_mesh.cpp
+        src/engine/scene_document.cpp
+        src/engine/material_texture_restore.cpp
+        src/engine/transform.cpp
+        src/engine/component_factory_registry.cpp
+        src/entity.cpp
+        src/editor/editor_hierarchy_utils.cpp
+        src/lighting.cpp
+    )
+
+    target_include_directories(QuarkEngineTests PRIVATE
+        ${CMAKE_SOURCE_DIR}/quark-libs/QuarkCore/include
+        ${CMAKE_SOURCE_DIR}/quark-libs/imgui/include
+        ${CMAKE_SOURCE_DIR}/imgui
+        ${CMAKE_SOURCE_DIR}/include
+    )
+
+    target_link_libraries(QuarkEngineTests PRIVATE QuarkCore-Combined)
+
+    if(WIN32)
+        target_compile_definitions(QuarkEngineTests PRIVATE
+            USE_LIBTYPE_SHARED
+            IMGUI_API=__declspec\(dllimport\)
+        )
+        target_link_libraries(QuarkEngineTests PRIVATE winmm gdi32 opengl32)
+    else()
+        target_compile_definitions(QuarkEngineTests PRIVATE
+            USE_LIBTYPE_SHARED
+            "IMGUI_API=__attribute__((visibility(\"default\")))"
+        )
+        if(UNIX AND NOT APPLE)
+            target_link_libraries(QuarkEngineTests PRIVATE GL m pthread dl rt X11)
+        elseif(APPLE)
+            target_link_libraries(QuarkEngineTests PRIVATE
+                "-framework Cocoa"
+                "-framework OpenGL"
+                "-framework IOKit"
+                "-framework CoreAudio"
+                "-framework CoreVideo"
+            )
+        endif()
+    endif()
+
+    target_compile_definitions(QuarkEngineTests PRIVATE QUARKENGINE_BUILD QUARKCORE_STATIC)
+
+    add_test(NAME QuarkEngineTests COMMAND QuarkEngineTests)
+
+    if(WIN32)
+        add_custom_command(TARGET QuarkEngineTests POST_BUILD
+            COMMAND ${CMAKE_COMMAND} -E copy_if_different
+                $<TARGET_FILE:QuarkCore-OpenGL>
+                $<TARGET_FILE:QuarkCore-Vulkan>
+                $<TARGET_FILE:QuarkCore-D3D11>
+                $<TARGET_FILE:SDL3::SDL3>
+                $<TARGET_FILE:assimp::assimp>
+                $<TARGET_FILE:freetype>
+                $<IF:$<CONFIG:Debug>,${CMAKE_SOURCE_DIR}/quark-libs/QuarkCore/external/OpenAL/lib/debug/OpenAL32.dll,${CMAKE_SOURCE_DIR}/quark-libs/QuarkCore/external/OpenAL/lib/release/OpenAL32.dll>
+                "${VULKAN_RUNTIME_DLL}"
+                $<TARGET_FILE_DIR:QuarkEngineTests>
+            COMMAND ${CMAKE_COMMAND} -E copy_if_different
+                $<IF:$<CONFIG:Debug>,${CMAKE_SOURCE_DIR}/quark-libs/QuarkCore/external/Vulkan/lib/SPIRV-Toolsd.dll,${CMAKE_SOURCE_DIR}/quark-libs/QuarkCore/external/Vulkan/lib/SPIRV-Tools.dll>
+                $<TARGET_FILE_DIR:QuarkEngineTests>/SPIRV-Tools.dll
+            COMMAND ${CMAKE_COMMAND} -E copy_if_different
+                $<IF:$<CONFIG:Debug>,${CMAKE_SOURCE_DIR}/quark-libs/QuarkCore/external/Vulkan/lib/SPIRV-Tools-optd.dll,${CMAKE_SOURCE_DIR}/quark-libs/QuarkCore/external/Vulkan/lib/SPIRV-Tools-opt.dll>
+                $<TARGET_FILE_DIR:QuarkEngineTests>/SPIRV-Tools-opt.dll
+        )
+    elseif(UNIX)
+        add_custom_command(TARGET QuarkEngineTests POST_BUILD
+            COMMAND ${CMAKE_COMMAND} -E copy_if_different
+                $<TARGET_FILE:QuarkCore>
+                $<TARGET_FILE:QuarkCore-OpenGL>
+                $<TARGET_FILE:QuarkCore-Vulkan>
+                $<TARGET_FILE:assimp::assimp>
+                $<TARGET_FILE:freetype>
+                $<TARGET_FILE:SDL3::SDL3>
+                $<TARGET_FILE:OpenAL::OpenAL>
+                $<TARGET_FILE_DIR:QuarkEngineTests>
+        )
+    endif()
+endif()
+
 if(BUILD_PLUGIN)
     add_library(MyPlugin SHARED
         plugins/MyPlugin/plugin.cpp
     )
 
     target_include_directories(MyPlugin PRIVATE
-        ${CMAKE_SOURCE_DIR}/src/plugins
+        ${CMAKE_SOURCE_DIR}/include
     )
 
     if(WIN32)

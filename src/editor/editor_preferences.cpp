@@ -6,160 +6,168 @@
 
 using json = nlohmann::json;
 
-EditorPreferences g_editor_preferences;
-
-static void read_preferences(const json& data) {
-    const json* preferences = &data;
+static void ReadPreferences(CPreferences& preferences, const json& data)
+{
+    const json* pPreferences = &data;
     if (data.contains("editor_preferences") && data["editor_preferences"].is_object())
-        preferences = &data["editor_preferences"];
+        pPreferences = &data["editor_preferences"];
 
-    if (preferences->contains("wireframe_enabled")) g_editor_preferences.wireframe_enabled = (*preferences)["wireframe_enabled"].get<bool>();
-    if (preferences->contains("show_grid")) g_editor_preferences.show_grid = (*preferences)["show_grid"].get<bool>();
-    if (preferences->contains("show_axes")) g_editor_preferences.show_axes = (*preferences)["show_axes"].get<bool>();
-    if (preferences->contains("show_colliders")) g_editor_preferences.show_colliders = (*preferences)["show_colliders"].get<bool>();
-    if (preferences->contains("limit_fps")) g_editor_preferences.limit_fps = (*preferences)["limit_fps"].get<bool>();
-    if (preferences->contains("target_fps")) g_editor_preferences.target_fps = (*preferences)["target_fps"].get<int>();
-    if (preferences->contains("camera_speed")) g_editor_preferences.camera_speed = (*preferences)["camera_speed"].get<float>();
-    if (preferences->contains("camera_sensitivity")) g_editor_preferences.camera_sensitivity = (*preferences)["camera_sensitivity"].get<float>();
-    if (preferences->contains("camera_zoom_sensitivity")) g_editor_preferences.camera_zoom_sensitivity = (*preferences)["camera_zoom_sensitivity"].get<float>();
-    if (preferences->contains("camera_fov")) g_editor_preferences.camera_fov = (*preferences)["camera_fov"].get<float>();
-    if (preferences->contains("background_red")) g_editor_preferences.background_red = (*preferences)["background_red"].get<int>();
-    if (preferences->contains("background_green")) g_editor_preferences.background_green = (*preferences)["background_green"].get<int>();
-    if (preferences->contains("background_blue")) g_editor_preferences.background_blue = (*preferences)["background_blue"].get<int>();
-    if (preferences->contains("autosave_enabled")) g_editor_preferences.autosave_enabled = (*preferences)["autosave_enabled"].get<bool>();
-    if (preferences->contains("autosave_backup_enabled")) g_editor_preferences.autosave_backup_enabled = (*preferences)["autosave_backup_enabled"].get<bool>();
-    if (preferences->contains("autosave_interval_minutes")) g_editor_preferences.autosave_interval_minutes = (*preferences)["autosave_interval_minutes"].get<int>();
-    if (preferences->contains("gizmo_snap_enabled")) g_editor_preferences.gizmo_snap_enabled = (*preferences)["gizmo_snap_enabled"].get<bool>();
-    if (preferences->contains("gizmo_translation_snap")) g_editor_preferences.gizmo_translation_snap = (*preferences)["gizmo_translation_snap"].get<float>();
-    if (preferences->contains("gizmo_rotation_snap")) g_editor_preferences.gizmo_rotation_snap = (*preferences)["gizmo_rotation_snap"].get<float>();
-    if (preferences->contains("gizmo_scale_snap")) g_editor_preferences.gizmo_scale_snap = (*preferences)["gizmo_scale_snap"].get<float>();
-    if (preferences->contains("show_bounding_boxes")) g_editor_preferences.show_bounding_boxes = (*preferences)["show_bounding_boxes"].get<bool>();
-    if (preferences->contains("show_selection_visualization")) g_editor_preferences.show_selection_visualization = (*preferences)["show_selection_visualization"].get<bool>();
-    if (preferences->contains("selection_red")) g_editor_preferences.selection_red = (*preferences)["selection_red"].get<int>();
-    if (preferences->contains("selection_green")) g_editor_preferences.selection_green = (*preferences)["selection_green"].get<int>();
-    if (preferences->contains("selection_blue")) g_editor_preferences.selection_blue = (*preferences)["selection_blue"].get<int>();
-    if (preferences->contains("wireframe_red")) g_editor_preferences.wireframe_red = (*preferences)["wireframe_red"].get<int>();
-    if (preferences->contains("wireframe_green")) g_editor_preferences.wireframe_green = (*preferences)["wireframe_green"].get<int>();
-    if (preferences->contains("wireframe_blue")) g_editor_preferences.wireframe_blue = (*preferences)["wireframe_blue"].get<int>();
-    if (preferences->contains("bounds_red")) g_editor_preferences.bounds_red = (*preferences)["bounds_red"].get<int>();
-    if (preferences->contains("bounds_green")) g_editor_preferences.bounds_green = (*preferences)["bounds_green"].get<int>();
-    if (preferences->contains("bounds_blue")) g_editor_preferences.bounds_blue = (*preferences)["bounds_blue"].get<int>();
-    if (preferences->contains("confirm_delete")) g_editor_preferences.confirm_delete = (*preferences)["confirm_delete"].get<bool>();
-    if (preferences->contains("focus_on_selection")) g_editor_preferences.focus_on_selection = (*preferences)["focus_on_selection"].get<bool>();
-    if (preferences->contains("shadows_enabled")) g_editor_preferences.shadows_enabled = (*preferences)["shadows_enabled"].get<bool>();
-    if (preferences->contains("shadow_map_size")) g_editor_preferences.shadow_map_size = (*preferences)["shadow_map_size"].get<int>();
-    if (preferences->contains("shadow_bias")) g_editor_preferences.shadow_bias = (*preferences)["shadow_bias"].get<float>();
-    if (preferences->contains("shadow_filter_quality")) g_editor_preferences.shadow_filter_quality = (*preferences)["shadow_filter_quality"].get<int>();
-    if (preferences->contains("undo_history_limit")) g_editor_preferences.undo_history_limit = (*preferences)["undo_history_limit"].get<int>();
-    if (preferences->contains("vsync_enabled")) g_editor_preferences.vsync_enabled = (*preferences)["vsync_enabled"].get<bool>();
-    if (preferences->contains("interface_scale")) g_editor_preferences.interface_scale = (*preferences)["interface_scale"].get<float>();
-    if (preferences->contains("light_theme")) g_editor_preferences.light_theme = (*preferences)["light_theme"].get<bool>();
-    if (preferences->contains("show_light_helpers")) g_editor_preferences.show_light_helpers = (*preferences)["show_light_helpers"].get<bool>();
-    if (preferences->contains("show_cameras")) g_editor_preferences.show_cameras = (*preferences)["show_cameras"].get<bool>();
-    if (preferences->contains("renderer_backend")) g_editor_preferences.renderer_backend = (*preferences)["renderer_backend"].get<int>();
-    if (preferences->contains("msaa_samples")) g_editor_preferences.msaa_samples = (*preferences)["msaa_samples"].get<int>();
-    if (preferences->contains("texture_filter")) g_editor_preferences.texture_filter = (*preferences)["texture_filter"].get<int>();
-    if (preferences->contains("confirm_exit")) g_editor_preferences.confirm_exit = (*preferences)["confirm_exit"].get<bool>();
-    if (preferences->contains("open_last_project")) g_editor_preferences.open_last_project = (*preferences)["open_last_project"].get<bool>();
-    if (preferences->contains("last_project_path")) g_editor_preferences.last_project_path = (*preferences)["last_project_path"].get<std::string>();
-    if (preferences->contains("show_hierarchy")) g_editor_preferences.show_hierarchy = (*preferences)["show_hierarchy"].get<bool>();
-    if (preferences->contains("show_inspector")) g_editor_preferences.show_inspector = (*preferences)["show_inspector"].get<bool>();
-    if (preferences->contains("show_assets")) g_editor_preferences.show_assets = (*preferences)["show_assets"].get<bool>();
-    if (preferences->contains("show_scene")) g_editor_preferences.show_scene = (*preferences)["show_scene"].get<bool>();
-    if (preferences->contains("asset_preview_size")) g_editor_preferences.asset_preview_size = (*preferences)["asset_preview_size"].get<int>();
-    if (preferences->contains("asset_filter")) g_editor_preferences.asset_filter = (*preferences)["asset_filter"].get<int>();
+    if (pPreferences->contains("wireframe_enabled")) preferences.m_WireframeEnabled = (*pPreferences)["wireframe_enabled"].get<bool>();
+    if (pPreferences->contains("show_grid")) preferences.m_ShowGrid = (*pPreferences)["show_grid"].get<bool>();
+    if (pPreferences->contains("show_axes")) preferences.m_ShowAxes = (*pPreferences)["show_axes"].get<bool>();
+    if (pPreferences->contains("show_colliders")) preferences.m_ShowColliders = (*pPreferences)["show_colliders"].get<bool>();
+    if (pPreferences->contains("limit_fps")) preferences.m_LimitFps = (*pPreferences)["limit_fps"].get<bool>();
+    if (pPreferences->contains("target_fps")) preferences.m_TargetFps = (*pPreferences)["target_fps"].get<int>();
+    if (pPreferences->contains("camera_speed")) preferences.m_CameraSpeed = (*pPreferences)["camera_speed"].get<float>();
+    if (pPreferences->contains("camera_sensitivity")) preferences.m_CameraSensitivity = (*pPreferences)["camera_sensitivity"].get<float>();
+    if (pPreferences->contains("camera_zoom_sensitivity")) preferences.m_CameraZoomSensitivity = (*pPreferences)["camera_zoom_sensitivity"].get<float>();
+    if (pPreferences->contains("camera_fov")) preferences.m_CameraFov = (*pPreferences)["camera_fov"].get<float>();
+    if (pPreferences->contains("background_red")) preferences.m_BackgroundRed = (*pPreferences)["background_red"].get<int>();
+    if (pPreferences->contains("background_green")) preferences.m_BackgroundGreen = (*pPreferences)["background_green"].get<int>();
+    if (pPreferences->contains("background_blue")) preferences.m_BackgroundBlue = (*pPreferences)["background_blue"].get<int>();
+    if (pPreferences->contains("autosave_enabled")) preferences.m_AutosaveEnabled = (*pPreferences)["autosave_enabled"].get<bool>();
+    if (pPreferences->contains("autosave_backup_enabled")) preferences.m_AutosaveBackupEnabled = (*pPreferences)["autosave_backup_enabled"].get<bool>();
+    if (pPreferences->contains("autosave_interval_minutes")) preferences.m_AutosaveIntervalMinutes = (*pPreferences)["autosave_interval_minutes"].get<int>();
+    if (pPreferences->contains("gizmo_snap_enabled")) preferences.m_GizmoSnapEnabled = (*pPreferences)["gizmo_snap_enabled"].get<bool>();
+    if (pPreferences->contains("gizmo_translation_snap")) preferences.m_GizmoTranslationSnap = (*pPreferences)["gizmo_translation_snap"].get<float>();
+    if (pPreferences->contains("gizmo_rotation_snap")) preferences.m_GizmoRotationSnap = (*pPreferences)["gizmo_rotation_snap"].get<float>();
+    if (pPreferences->contains("gizmo_scale_snap")) preferences.m_GizmoScaleSnap = (*pPreferences)["gizmo_scale_snap"].get<float>();
+    if (pPreferences->contains("show_bounding_boxes")) preferences.m_ShowBoundingBoxes = (*pPreferences)["show_bounding_boxes"].get<bool>();
+    if (pPreferences->contains("show_selection_visualization")) preferences.m_ShowSelectionVisualization = (*pPreferences)["show_selection_visualization"].get<bool>();
+    if (pPreferences->contains("selection_red")) preferences.m_SelectionRed = (*pPreferences)["selection_red"].get<int>();
+    if (pPreferences->contains("selection_green")) preferences.m_SelectionGreen = (*pPreferences)["selection_green"].get<int>();
+    if (pPreferences->contains("selection_blue")) preferences.m_SelectionBlue = (*pPreferences)["selection_blue"].get<int>();
+    if (pPreferences->contains("wireframe_red")) preferences.m_WireframeRed = (*pPreferences)["wireframe_red"].get<int>();
+    if (pPreferences->contains("wireframe_green")) preferences.m_WireframeGreen = (*pPreferences)["wireframe_green"].get<int>();
+    if (pPreferences->contains("wireframe_blue")) preferences.m_WireframeBlue = (*pPreferences)["wireframe_blue"].get<int>();
+    if (pPreferences->contains("bounds_red")) preferences.m_BoundsRed = (*pPreferences)["bounds_red"].get<int>();
+    if (pPreferences->contains("bounds_green")) preferences.m_BoundsGreen = (*pPreferences)["bounds_green"].get<int>();
+    if (pPreferences->contains("bounds_blue")) preferences.m_BoundsBlue = (*pPreferences)["bounds_blue"].get<int>();
+    if (pPreferences->contains("confirm_delete")) preferences.m_ConfirmDelete = (*pPreferences)["confirm_delete"].get<bool>();
+    if (pPreferences->contains("focus_on_selection")) preferences.m_FocusOnSelection = (*pPreferences)["focus_on_selection"].get<bool>();
+    if (pPreferences->contains("shadows_enabled")) preferences.m_ShadowsEnabled = (*pPreferences)["shadows_enabled"].get<bool>();
+    if (pPreferences->contains("shadow_map_size")) preferences.m_ShadowMapSize = (*pPreferences)["shadow_map_size"].get<int>();
+    if (pPreferences->contains("shadow_bias")) preferences.m_ShadowBias = (*pPreferences)["shadow_bias"].get<float>();
+    if (pPreferences->contains("shadow_filter_quality")) preferences.m_ShadowFilterQuality = (*pPreferences)["shadow_filter_quality"].get<int>();
+    if (pPreferences->contains("undo_history_limit")) preferences.m_UndoHistoryLimit = (*pPreferences)["undo_history_limit"].get<int>();
+    if (pPreferences->contains("vsync_enabled")) preferences.m_VsyncEnabled = (*pPreferences)["vsync_enabled"].get<bool>();
+    if (pPreferences->contains("interface_scale")) preferences.m_InterfaceScale = (*pPreferences)["interface_scale"].get<float>();
+    if (pPreferences->contains("light_theme")) preferences.m_LightTheme = (*pPreferences)["light_theme"].get<bool>();
+    if (pPreferences->contains("show_light_helpers")) preferences.m_ShowLightHelpers = (*pPreferences)["show_light_helpers"].get<bool>();
+    if (pPreferences->contains("show_cameras")) preferences.m_ShowCameras = (*pPreferences)["show_cameras"].get<bool>();
+    if (pPreferences->contains("renderer_backend")) preferences.m_RendererBackend = (*pPreferences)["renderer_backend"].get<int>();
+    if (pPreferences->contains("msaa_samples")) preferences.m_MsaaSamples = (*pPreferences)["msaa_samples"].get<int>();
+    if (pPreferences->contains("texture_filter")) preferences.m_TextureFilter = (*pPreferences)["texture_filter"].get<int>();
+    if (pPreferences->contains("confirm_exit")) preferences.m_ConfirmExit = (*pPreferences)["confirm_exit"].get<bool>();
+    if (pPreferences->contains("open_last_project")) preferences.m_OpenLastProject = (*pPreferences)["open_last_project"].get<bool>();
+    if (pPreferences->contains("last_project_path")) preferences.m_LastProjectPath = (*pPreferences)["last_project_path"].get<std::string>();
+    if (pPreferences->contains("show_hierarchy")) preferences.m_ShowHierarchy = (*pPreferences)["show_hierarchy"].get<bool>();
+    if (pPreferences->contains("show_inspector")) preferences.m_ShowInspector = (*pPreferences)["show_inspector"].get<bool>();
+    if (pPreferences->contains("show_assets")) preferences.m_ShowAssets = (*pPreferences)["show_assets"].get<bool>();
+    if (pPreferences->contains("show_scene")) preferences.m_ShowScene = (*pPreferences)["show_scene"].get<bool>();
+    if (pPreferences->contains("asset_preview_size")) preferences.m_AssetPreviewSize = (*pPreferences)["asset_preview_size"].get<int>();
+    if (pPreferences->contains("asset_filter")) preferences.m_AssetFilter = (*pPreferences)["asset_filter"].get<int>();
 
-    if (g_editor_preferences.target_fps > 0)
-        g_editor_preferences.target_fps = std::clamp(g_editor_preferences.target_fps, 30, 240);
-    g_editor_preferences.camera_speed = std::clamp(g_editor_preferences.camera_speed, 0.1f, 20.0f);
-    g_editor_preferences.camera_sensitivity = std::clamp(g_editor_preferences.camera_sensitivity, 0.0005f, 0.02f);
-    g_editor_preferences.camera_zoom_sensitivity = std::clamp(g_editor_preferences.camera_zoom_sensitivity, 0.1f, 5.0f);
-    g_editor_preferences.camera_fov = std::clamp(g_editor_preferences.camera_fov, 20.0f, 120.0f);
-    if (g_editor_preferences.renderer_backend < 0 || g_editor_preferences.renderer_backend > 3) g_editor_preferences.renderer_backend = 0;
-    if (g_editor_preferences.msaa_samples != 1 && g_editor_preferences.msaa_samples != 2 && g_editor_preferences.msaa_samples != 4 && g_editor_preferences.msaa_samples != 8) g_editor_preferences.msaa_samples = 1;
-    if (g_editor_preferences.texture_filter < 0 || g_editor_preferences.texture_filter > 1) g_editor_preferences.texture_filter = 1;
-    g_editor_preferences.interface_scale = std::clamp(g_editor_preferences.interface_scale, 0.75f, 2.0f);
-    g_editor_preferences.background_red = std::clamp(g_editor_preferences.background_red, 0, 255);
-    g_editor_preferences.background_green = std::clamp(g_editor_preferences.background_green, 0, 255);
-    g_editor_preferences.background_blue = std::clamp(g_editor_preferences.background_blue, 0, 255);
-    g_editor_preferences.shadow_bias = std::clamp(g_editor_preferences.shadow_bias, 0.0001f, 0.05f);
-    g_editor_preferences.shadow_filter_quality = std::clamp(g_editor_preferences.shadow_filter_quality, 0, 2);
-    g_editor_preferences.undo_history_limit = std::clamp(g_editor_preferences.undo_history_limit, 10, 500);
-    g_editor_preferences.asset_preview_size = std::clamp(g_editor_preferences.asset_preview_size, 32, 128);
-    g_editor_preferences.asset_filter = std::clamp(g_editor_preferences.asset_filter, 0, 3);
-    g_editor_preferences.autosave_interval_minutes = std::clamp(g_editor_preferences.autosave_interval_minutes, 1, 60);
-    g_editor_preferences.gizmo_translation_snap = std::clamp(g_editor_preferences.gizmo_translation_snap, 0.01f, 10.0f);
-    g_editor_preferences.gizmo_rotation_snap = std::clamp(g_editor_preferences.gizmo_rotation_snap, 1.0f, 90.0f);
-    g_editor_preferences.gizmo_scale_snap = std::clamp(g_editor_preferences.gizmo_scale_snap, 0.01f, 1.0f);
-    if (g_editor_preferences.shadow_map_size != 512 &&
-        g_editor_preferences.shadow_map_size != 1024 &&
-        g_editor_preferences.shadow_map_size != 2048)
-        g_editor_preferences.shadow_map_size = 1024;
+    if (preferences.m_TargetFps > 0)
+        preferences.m_TargetFps = std::clamp(preferences.m_TargetFps, 30, 240);
+    preferences.m_CameraSpeed = std::clamp(preferences.m_CameraSpeed, 0.1f, 20.0f);
+    preferences.m_CameraSensitivity = std::clamp(preferences.m_CameraSensitivity, 0.0005f, 0.02f);
+    preferences.m_CameraZoomSensitivity = std::clamp(preferences.m_CameraZoomSensitivity, 0.1f, 5.0f);
+    preferences.m_CameraFov = std::clamp(preferences.m_CameraFov, 20.0f, 120.0f);
+    if (preferences.m_RendererBackend < 0 || preferences.m_RendererBackend > 3) preferences.m_RendererBackend = 0;
+    if (preferences.m_MsaaSamples != 1 && preferences.m_MsaaSamples != 2 && preferences.m_MsaaSamples != 4 && preferences.m_MsaaSamples != 8) preferences.m_MsaaSamples = 1;
+    if (preferences.m_TextureFilter < 0 || preferences.m_TextureFilter > 1) preferences.m_TextureFilter = 1;
+    preferences.m_InterfaceScale = std::clamp(preferences.m_InterfaceScale, 0.75f, 2.0f);
+    preferences.m_BackgroundRed = std::clamp(preferences.m_BackgroundRed, 0, 255);
+    preferences.m_BackgroundGreen = std::clamp(preferences.m_BackgroundGreen, 0, 255);
+    preferences.m_BackgroundBlue = std::clamp(preferences.m_BackgroundBlue, 0, 255);
+    preferences.m_ShadowBias = std::clamp(preferences.m_ShadowBias, 0.0001f, 0.05f);
+    preferences.m_ShadowFilterQuality = std::clamp(preferences.m_ShadowFilterQuality, 0, 2);
+    preferences.m_UndoHistoryLimit = std::clamp(preferences.m_UndoHistoryLimit, 10, 500);
+    preferences.m_AssetPreviewSize = std::clamp(preferences.m_AssetPreviewSize, 32, 128);
+    preferences.m_AssetFilter = std::clamp(preferences.m_AssetFilter, 0, 3);
+    preferences.m_AutosaveIntervalMinutes = std::clamp(preferences.m_AutosaveIntervalMinutes, 1, 60);
+    preferences.m_GizmoTranslationSnap = std::clamp(preferences.m_GizmoTranslationSnap, 0.01f, 10.0f);
+    preferences.m_GizmoRotationSnap = std::clamp(preferences.m_GizmoRotationSnap, 1.0f, 90.0f);
+    preferences.m_GizmoScaleSnap = std::clamp(preferences.m_GizmoScaleSnap, 0.01f, 1.0f);
+    if (preferences.m_ShadowMapSize != 512 &&
+        preferences.m_ShadowMapSize != 1024 &&
+        preferences.m_ShadowMapSize != 2048)
+        preferences.m_ShadowMapSize = 1024;
 }
 
-void save_editor_preferences() {
+void CPreferences::Save() const
+{
     json preferences = {
-        {"wireframe_enabled", g_editor_preferences.wireframe_enabled},
-        {"show_grid", g_editor_preferences.show_grid},
-        {"show_axes", g_editor_preferences.show_axes},
-        {"show_colliders", g_editor_preferences.show_colliders},
-        {"limit_fps", g_editor_preferences.limit_fps},
-        {"target_fps", g_editor_preferences.target_fps},
-        {"camera_speed", g_editor_preferences.camera_speed},
-        {"camera_sensitivity", g_editor_preferences.camera_sensitivity},
-        {"camera_zoom_sensitivity", g_editor_preferences.camera_zoom_sensitivity},
-        {"camera_fov", g_editor_preferences.camera_fov},
-        {"background_red", g_editor_preferences.background_red},
-        {"background_green", g_editor_preferences.background_green},
-        {"background_blue", g_editor_preferences.background_blue},
-        {"autosave_enabled", g_editor_preferences.autosave_enabled},
-        {"autosave_backup_enabled", g_editor_preferences.autosave_backup_enabled},
-        {"autosave_interval_minutes", g_editor_preferences.autosave_interval_minutes},
-        {"gizmo_snap_enabled", g_editor_preferences.gizmo_snap_enabled},
-        {"gizmo_translation_snap", g_editor_preferences.gizmo_translation_snap},
-        {"gizmo_rotation_snap", g_editor_preferences.gizmo_rotation_snap},
-        {"gizmo_scale_snap", g_editor_preferences.gizmo_scale_snap},
-        {"show_bounding_boxes", g_editor_preferences.show_bounding_boxes},
-        {"show_selection_visualization", g_editor_preferences.show_selection_visualization},
-        {"selection_red", g_editor_preferences.selection_red},
-        {"selection_green", g_editor_preferences.selection_green},
-        {"selection_blue", g_editor_preferences.selection_blue},
-        {"wireframe_red", g_editor_preferences.wireframe_red},
-        {"wireframe_green", g_editor_preferences.wireframe_green},
-        {"wireframe_blue", g_editor_preferences.wireframe_blue},
-        {"bounds_red", g_editor_preferences.bounds_red},
-        {"bounds_green", g_editor_preferences.bounds_green},
-        {"bounds_blue", g_editor_preferences.bounds_blue},
-        {"confirm_delete", g_editor_preferences.confirm_delete},
-        {"focus_on_selection", g_editor_preferences.focus_on_selection},
-        {"shadows_enabled", g_editor_preferences.shadows_enabled},
-        {"shadow_map_size", g_editor_preferences.shadow_map_size},
-        {"shadow_bias", g_editor_preferences.shadow_bias},
-        {"shadow_filter_quality", g_editor_preferences.shadow_filter_quality},
-        {"undo_history_limit", g_editor_preferences.undo_history_limit},
-        {"vsync_enabled", g_editor_preferences.vsync_enabled},
-        {"interface_scale", g_editor_preferences.interface_scale},
-        {"light_theme", g_editor_preferences.light_theme},
-        {"show_light_helpers", g_editor_preferences.show_light_helpers},
-        {"show_cameras", g_editor_preferences.show_cameras},
-        {"renderer_backend", g_editor_preferences.renderer_backend},
-        {"msaa_samples", g_editor_preferences.msaa_samples},
-        {"texture_filter", g_editor_preferences.texture_filter},
-        {"confirm_exit", g_editor_preferences.confirm_exit},
-        {"open_last_project", g_editor_preferences.open_last_project},
-        {"last_project_path", g_editor_preferences.last_project_path},
-        {"show_hierarchy", g_editor_preferences.show_hierarchy},
-        {"show_inspector", g_editor_preferences.show_inspector},
-        {"show_assets", g_editor_preferences.show_assets},
-        {"show_scene", g_editor_preferences.show_scene},
-        {"asset_preview_size", g_editor_preferences.asset_preview_size},
-        {"asset_filter", g_editor_preferences.asset_filter}
+        {"wireframe_enabled", m_WireframeEnabled},
+        {"show_grid", m_ShowGrid},
+        {"show_axes", m_ShowAxes},
+        {"show_colliders", m_ShowColliders},
+        {"limit_fps", m_LimitFps},
+        {"target_fps", m_TargetFps},
+        {"camera_speed", m_CameraSpeed},
+        {"camera_sensitivity", m_CameraSensitivity},
+        {"camera_zoom_sensitivity", m_CameraZoomSensitivity},
+        {"camera_fov", m_CameraFov},
+        {"background_red", m_BackgroundRed},
+        {"background_green", m_BackgroundGreen},
+        {"background_blue", m_BackgroundBlue},
+        {"autosave_enabled", m_AutosaveEnabled},
+        {"autosave_backup_enabled", m_AutosaveBackupEnabled},
+        {"autosave_interval_minutes", m_AutosaveIntervalMinutes},
+        {"gizmo_snap_enabled", m_GizmoSnapEnabled},
+        {"gizmo_translation_snap", m_GizmoTranslationSnap},
+        {"gizmo_rotation_snap", m_GizmoRotationSnap},
+        {"gizmo_scale_snap", m_GizmoScaleSnap},
+        {"show_bounding_boxes", m_ShowBoundingBoxes},
+        {"show_selection_visualization", m_ShowSelectionVisualization},
+        {"selection_red", m_SelectionRed},
+        {"selection_green", m_SelectionGreen},
+        {"selection_blue", m_SelectionBlue},
+        {"wireframe_red", m_WireframeRed},
+        {"wireframe_green", m_WireframeGreen},
+        {"wireframe_blue", m_WireframeBlue},
+        {"bounds_red", m_BoundsRed},
+        {"bounds_green", m_BoundsGreen},
+        {"bounds_blue", m_BoundsBlue},
+        {"confirm_delete", m_ConfirmDelete},
+        {"focus_on_selection", m_FocusOnSelection},
+        {"shadows_enabled", m_ShadowsEnabled},
+        {"shadow_map_size", m_ShadowMapSize},
+        {"shadow_bias", m_ShadowBias},
+        {"shadow_filter_quality", m_ShadowFilterQuality},
+        {"undo_history_limit", m_UndoHistoryLimit},
+        {"vsync_enabled", m_VsyncEnabled},
+        {"interface_scale", m_InterfaceScale},
+        {"light_theme", m_LightTheme},
+        {"show_light_helpers", m_ShowLightHelpers},
+        {"show_cameras", m_ShowCameras},
+        {"renderer_backend", m_RendererBackend},
+        {"msaa_samples", m_MsaaSamples},
+        {"texture_filter", m_TextureFilter},
+        {"confirm_exit", m_ConfirmExit},
+        {"open_last_project", m_OpenLastProject},
+        {"last_project_path", m_LastProjectPath},
+        {"show_hierarchy", m_ShowHierarchy},
+        {"show_inspector", m_ShowInspector},
+        {"show_assets", m_ShowAssets},
+        {"show_scene", m_ShowScene},
+        {"asset_preview_size", m_AssetPreviewSize},
+        {"asset_filter", m_AssetFilter}
     };
 
     json config;
     std::ifstream in("config.json");
-    if (in.is_open()) {
-        try { in >> config; } catch (...) { config = json::object(); }
+    if (in.is_open())
+    {
+        try
+        {
+            in >> config;
+        }
+        catch (...)
+        {
+            config = json::object();
+        }
     }
     config["editor_preferences"] = preferences;
 
@@ -167,33 +175,43 @@ void save_editor_preferences() {
     if (out.is_open()) out << config.dump(4);
 }
 
-void load_editor_preferences() {
-    std::ifstream config_file("config.json");
-    if (config_file.is_open()) {
-        try {
+void CPreferences::Load()
+{
+    std::ifstream configFile("config.json");
+    if (configFile.is_open())
+    {
+        try
+        {
             json config;
-            config_file >> config;
-            if (config.contains("editor_preferences")) {
-                read_preferences(config);
+            configFile >> config;
+            if (config.contains("editor_preferences"))
+            {
+                ReadPreferences(*this, config);
                 std::filesystem::remove("editor_preferences.json");
                 return;
             }
-        } catch (...) {
+        }
+        catch (...)
+        {
         }
     }
 
-    std::ifstream legacy_file("editor_preferences.json");
-    if (legacy_file.is_open()) {
-        try {
-            json legacy_preferences;
-            legacy_file >> legacy_preferences;
-            read_preferences(legacy_preferences);
-            save_editor_preferences();
+    std::ifstream legacyFile("editor_preferences.json");
+    if (legacyFile.is_open())
+    {
+        try
+        {
+            json legacyPreferences;
+            legacyFile >> legacyPreferences;
+            ReadPreferences(*this, legacyPreferences);
+            Save();
             std::filesystem::remove("editor_preferences.json");
             return;
-        } catch (...) {
+        }
+        catch (...)
+        {
         }
     }
 
-    save_editor_preferences();
+    Save();
 }

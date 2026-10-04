@@ -3,91 +3,79 @@
 #include <algorithm>
 #include <unordered_set>
 
-Entity* Scene::get_selected() {
-    if (selected < 0 || selected >= static_cast<int>(entities.size())) return nullptr;
-    return &entities[selected];
+using namespace qc;
+
+CEntity* CScene::GetSelected()
+{
+    if (m_Selected < 0 || m_Selected >= static_cast<int>(m_vEntities.size())) return nullptr;
+    return &m_vEntities[m_Selected];
 }
 
-bool Scene::is_selected(int entity_index) const {
-    return std::find(selected_entities.begin(), selected_entities.end(), entity_index) != selected_entities.end();
+bool CScene::IsSelected(int entityIndex) const
+{
+    return std::find(m_vSelectedEntities.begin(), m_vSelectedEntities.end(), entityIndex) != m_vSelectedEntities.end();
 }
 
-void Scene::select_entity(int entity_index, bool additive) {
-    if (entity_index < 0 || entity_index >= static_cast<int>(entities.size())) return;
-    if (!additive) selected_entities.clear();
+void CScene::SelectEntity(int entityIndex, bool additive)
+{
+    if (entityIndex < 0 || entityIndex >= static_cast<int>(m_vEntities.size())) return;
+    if (!additive) m_vSelectedEntities.clear();
 
-    auto it = std::find(selected_entities.begin(), selected_entities.end(), entity_index);
-    if (additive && it != selected_entities.end()) {
-        selected_entities.erase(it);
-        selected = selected_entities.empty() ? -1 : selected_entities.back();
+    auto it = std::find(m_vSelectedEntities.begin(), m_vSelectedEntities.end(), entityIndex);
+    if (additive && it != m_vSelectedEntities.end())
+    {
+        m_vSelectedEntities.erase(it);
+        m_Selected = m_vSelectedEntities.empty() ? -1 : m_vSelectedEntities.back();
         return;
     }
 
-    if (it == selected_entities.end()) selected_entities.push_back(entity_index);
-    selected = entity_index;
+    if (it == m_vSelectedEntities.end()) m_vSelectedEntities.push_back(entityIndex);
+    m_Selected = entityIndex;
 }
 
-std::string Scene::make_unique_name(const std::string& base_name) const {
-    auto is_name_taken = [this](const std::string& candidate) {
-        for (const auto& entity : entities) {
-            if (entity.name == candidate) return true;
+std::string CScene::MakeUniqueName(const std::string& baseName) const
+{
+    auto isNameTaken = [this](const std::string& candidate)
+    {
+        for (const auto& entity : m_vEntities)
+        {
+            if (entity.m_Name == candidate) return true;
         }
         return false;
     };
 
-    if (!is_name_taken(base_name)) return base_name;
+    if (!isNameTaken(baseName)) return baseName;
 
-    for (int suffix = 1;; ++suffix) {
-        const std::string candidate = base_name + " (" + std::to_string(suffix) + ")";
-        if (!is_name_taken(candidate)) return candidate;
+    for (int suffix = 1;; ++suffix)
+    {
+        const std::string candidate = baseName + " (" + std::to_string(suffix) + ")";
+        if (!isNameTaken(candidate)) return candidate;
     }
 }
 
-std::string Scene::make_default_name_for(const Entity& entity) const {
-    const LightComponent* light = entity.get_light_component();
-    const MeshComponent* mesh = entity.get_mesh_component();
-    const std::string base_name = (light && light->enabled)
+std::string CScene::MakeDefaultNameFor(const CEntity& entity) const
+{
+    const CLightComponent* pLight = entity.GetLightComponent();
+    const CMeshComponent* pMesh = entity.GetMeshComponent();
+    const std::string baseName = (pLight && pLight->m_Enabled)
         ? "Light"
-        : object_type_name(mesh ? mesh->type : CUBE);
-    return make_unique_name(base_name);
+        : ObjectTypeName(pMesh ? pMesh->m_Type : OBJECT_CUBE);
+    return MakeUniqueName(baseName);
 }
 
-void Scene::release_resources() {
-    std::unordered_set<void*> released_meshes;
+void CScene::ReleaseResources()
+{
+    for (auto& entity : m_vEntities)
+    {
+        CMeshComponent* pMesh = entity.GetMeshComponent();
+        CMaterialComponent* pMaterial = entity.GetMaterialComponent();
+        if (!pMesh) continue;
 
-    for (auto& entity : entities) {
-        MeshComponent* mesh = entity.get_mesh_component();
-        MaterialComponent* mat = entity.get_material_component();
-        if (!mesh) continue;
-
-        const bool owns_model = entity_owns_model(entity);
-        if (mesh->owns_materials) {
-            if (mesh->model.materials) {
-                free(mesh->model.materials);
-                mesh->model.materials = nullptr;
-            }
-
-            if (mesh->model.meshMaterial) {
-                free(mesh->model.meshMaterial);
-                mesh->model.meshMaterial = nullptr;
-            }
-
-            mesh->model.materialCount = 0;
-            mesh->owns_materials = false;
-        }
-
-        if (owns_model && mesh->model.meshCount > 0 && mesh->model.meshes) {
-            void* mesh_ptr = static_cast<void*>(mesh->model.meshes);
-            if (released_meshes.insert(mesh_ptr).second) {
-                UnloadModel(mesh->model);
-            }
-        }
-        mesh->model = {};
-        mesh->owns_model_instance = false;
-        if (mat) mat->texture = {0};
+        pMesh->ReleaseOwnedResources();
+        if (pMaterial) pMaterial->m_Texture = {0};
     }
 
-    entities.clear();
-    selected = -1;
-    selected_entities.clear();
+    m_vEntities.clear();
+    m_Selected = -1;
+    m_vSelectedEntities.clear();
 }

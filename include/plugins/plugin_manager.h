@@ -1,55 +1,44 @@
 #ifndef __PLUGIN_MANAGER_H__
 #define __PLUGIN_MANAGER_H__
 #include "plugin.h"
+#include "dynamic_library.h"
 #include <vector>
 #include <algorithm>
 #include <string>
 
-#ifdef _WIN32
-   #define NOMINMAX
-    #define WIN32_LEAN_AND_MEAN
-    #define NOGDI
-    #define NOUSER
-
-    #include <windows.h>
-    #include <shellapi.h>
-
-    #undef CloseWindow
-    #undef ShowCursor
-    #undef Rectangle
-    typedef HMODULE LibHandle;
-#else
-    #include <dlfcn.h>
-    typedef void* LibHandle;
-#endif
-
-struct LoadedPlugin {
-    LibHandle handle;
-    Plugin* plugin;
-    std::string filepath;
+struct SLoadedPlugin
+{
+    CDynamicLibrary Library;
+    SPlugin* pPlugin;
+    std::string FilePath;
 };
 
-struct RegisteredUICallback {
-    UIRegion region;
-    PluginUICallback callback;
+struct SRegisteredUICallback
+{
+    EUIRegion region;
+    FPluginUICallback callback;
 };
 
-class PluginManager {
+class CPluginManager
+{
 public:
-    void load_all(const std::string& plugin_dir, PluginContext* ctx);
-    void load(const std::string& filepath);
-    void unload_all();
-    void update_all(PluginContext& ctx);
-    void draw_ui_all(PluginContext& ctx);
+    void LoadAll(const std::string& pluginDir, SPluginContext* pCtx);
+    void LoadOne(const std::string& filepath);
+    void UnloadAll();
+    void UpdateAll(SPluginContext& ctx);
+    void DrawUiAll(SPluginContext& ctx);
 
-    void register_ui_callback(UIRegion region, PluginUICallback callback);
-    void draw_ui_region(UIRegion region, PluginContext& ctx);
-    
-    const std::vector<LoadedPlugin>& get_plugins() const { return plugins; }
+    void RegisterUiCallback(EUIRegion region, FPluginUICallback callback);
+    void DrawUiRegion(EUIRegion region, SPluginContext& ctx);
+
+    const std::vector<SLoadedPlugin>& GetPlugins() const
+    {
+        return m_vPlugins;
+    }
 
 private:
-    std::vector<LoadedPlugin> plugins;
-    std::vector<RegisteredUICallback> ui_callbacks;
+    std::vector<SLoadedPlugin> m_vPlugins;
+    std::vector<SRegisteredUICallback> m_vUiCallbacks;
 };
 
 #endif // __PLUGIN_MANAGER_H__

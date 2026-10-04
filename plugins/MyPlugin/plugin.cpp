@@ -1,42 +1,65 @@
-#include "plugin.h"
+#include "plugins/plugin.h"
 #include <cstdio>
 
-void on_load(PluginContext* ctx) {}
-void on_unload() {}
-void on_update(PluginContext* ctx) {}
-
-void on_draw_ui(PluginContext* ctx) {
-    if (ctx->ui_begin("My Plugin")) {
-        int sel = *ctx->selected;
-        if (sel >= 0) {
-            ctx->ui_text(ctx->entity_get_name(sel));
-            ctx->ui_separator();
-
-            float x, y, z;
-            ctx->entity_get_position(sel, &x, &y, &z);
-            if (ctx->ui_slider_float("Y Position", &y, -50.0f, 50.0f))
-                ctx->entity_set_position(sel, x, y, z);
-
-            float color[3] = {1, 0, 0};
-            if (ctx->ui_color_edit3("Color", color))
-                ctx->entity_set_color(sel,
-                    (unsigned char)(color[0]*255),
-                    (unsigned char)(color[1]*255),
-                    (unsigned char)(color[2]*255), 255);
-        }
-
-        if (ctx->ui_button("Spawn Cube"))
-            ctx->scene_spawn("Cube");
-
-        if (ctx->ui_button("Save Scene"))
-            ctx->scene_save();
-    }
-    ctx->ui_end();
+void OnLoad(SPluginContext* pCtx)
+{
 }
 
-static Plugin info {
+void OnUnload()
+{
+}
+
+void OnUpdate(SPluginContext* pCtx)
+{
+}
+
+void OnDrawUI(SPluginContext* pCtx)
+{
+    if (pCtx->pfnUiBegin("My Plugin"))
+    {
+        int sel = *pCtx->pSelected;
+        if (sel >= 0)
+        {
+            pCtx->pfnUiText(pCtx->pfnEntityGetName(pCtx->pScene, sel));
+            pCtx->pfnUiSeparator();
+
+            float x, y, z;
+            pCtx->pfnEntityGetPosition(pCtx->pScene, sel, &x, &y, &z);
+            if (pCtx->pfnUiSliderFloat("Y Position", &y, -50.0f, 50.0f))
+            {
+                pCtx->pfnEntitySetPosition(pCtx->pScene, sel, x, y, z);
+            }
+
+            float aColor[3] = {1, 0, 0};
+            if (pCtx->pfnUiColorEdit3("Color", aColor))
+            {
+                pCtx->pfnEntitySetColor(pCtx->pScene, sel,
+                    (unsigned char)(aColor[0]*255),
+                    (unsigned char)(aColor[1]*255),
+                    (unsigned char)(aColor[2]*255), 255);
+            }
+        }
+
+        if (pCtx->pfnUiButton("Spawn Cube"))
+        {
+            pCtx->pfnSceneSpawn(pCtx->pAssets, pCtx->pScene, "Cube");
+        }
+
+        if (pCtx->pfnUiButton("Save Scene"))
+        {
+            pCtx->pfnSceneSave(pCtx->pProjectPath, pCtx->pScene);
+        }
+    }
+    pCtx->pfnUiEnd();
+}
+
+static SPlugin s_Info
+{
     "MyPlugin", "0.1",
-    on_load, on_unload, on_update, on_draw_ui
+    OnLoad, OnUnload, OnUpdate, OnDrawUI
 };
 
-PLUGIN_EXPORT Plugin* get_plugin() { return &info; }
+PLUGIN_EXPORT SPlugin* GetPlugin()
+{
+    return &s_Info;
+}
