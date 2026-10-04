@@ -77,6 +77,29 @@ void CViewportState::Unload()
 
 void CEditor::DrawUi(qc::Shader shader, CFlyCamera& camera, SPluginContext* pPluginCtx)
 {
+    const auto drawHistoryRestoreOverlay = [this]()
+    {
+        ImGuiViewport* pViewport = ImGui::GetMainViewport();
+        if (!pViewport)
+        {
+            return;
+        }
+        ImGui::SetNextWindowPos(
+            ImVec2(pViewport->GetCenter().x, pViewport->GetCenter().y),
+            ImGuiCond_Always,
+            ImVec2(0.5f, 0.5f));
+        ImGui::SetNextWindowBgAlpha(0.9f);
+        if (ImGui::Begin("Restoring scene", nullptr,
+            ImGuiWindowFlags_AlwaysAutoResize |
+            ImGuiWindowFlags_NoCollapse |
+            ImGuiWindowFlags_NoSavedSettings |
+            ImGuiWindowFlags_NoInputs))
+        {
+            ImGui::TextUnformatted(m_StatusMessage.c_str());
+        }
+        ImGui::End();
+    };
+
     ImVec4& selectionStyle = ImGui::GetStyle().Colors[ImGuiCol_HeaderActive];
     selectionStyle = ImVec4(
         m_Preferences.m_SelectionRed / 255.0f,
@@ -93,7 +116,11 @@ void CEditor::DrawUi(qc::Shader shader, CFlyCamera& camera, SPluginContext* pPlu
 
     CEditorLayout::EnsureInitialized(*this, dockspaceId);
 
+    ImGui::BeginDisabled(IsHistoryRestorePending());
     DrawMainMenuBar(pPluginCtx, dockspaceId);
+    ImGui::EndDisabled();
+
+    ImGui::BeginDisabled(IsHistoryRestorePending());
     CStatusBar::Draw(*this);
 
     if (m_Preferences.m_ShowHierarchy)
@@ -121,6 +148,12 @@ void CEditor::DrawUi(qc::Shader shader, CFlyCamera& camera, SPluginContext* pPlu
     DrawAboutModal();
     DrawPreferencesUi(camera, pPluginCtx);
     DrawConfirmationModals();
+    ImGui::EndDisabled();
+
+    if (IsHistoryRestorePending())
+    {
+        drawHistoryRestoreOverlay();
+    }
 }
 
 void CEditor::DrawMainMenuBar(SPluginContext* pPluginCtx, ImGuiID dockspaceId)

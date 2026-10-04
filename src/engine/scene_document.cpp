@@ -31,14 +31,24 @@ std::string CSceneDocument::Serialize(const CScene& scene, int indent)
     return j.dump(indent);
 }
 
-bool CSceneDocument::Deserialize(const std::string& document, CScene& scene, const CComponentFactoryRegistry& factories)
+SParsedSceneDocument CSceneDocument::Parse(const std::string& document)
 {
-    nlohmann::json j = nlohmann::json::parse(document, nullptr, false);
-    if (j.is_discarded() || !j.is_object() || !j.contains("entities") || !j["entities"].is_array())
+    SParsedSceneDocument parsed;
+    parsed.Document = nlohmann::json::parse(document, nullptr, false);
+    parsed.IsValid = !parsed.Document.is_discarded() && parsed.Document.is_object() &&
+        parsed.Document.contains("entities") && parsed.Document["entities"].is_array();
+    return parsed;
+}
+
+bool CSceneDocument::Deserialize(const SParsedSceneDocument& parsed, CScene& scene,
+    const CComponentFactoryRegistry& factories)
+{
+    if (!parsed.IsValid)
     {
         return false;
     }
 
+    const nlohmann::json& j = parsed.Document;
     std::vector<CEntity> vEntities;
     vEntities.reserve(j["entities"].size());
 
@@ -72,6 +82,12 @@ bool CSceneDocument::Deserialize(const std::string& document, CScene& scene, con
 
     scene.m_vEntities = std::move(vEntities);
     return true;
+}
+
+bool CSceneDocument::Deserialize(const std::string& document, CScene& scene,
+    const CComponentFactoryRegistry& factories)
+{
+    return Deserialize(Parse(document), scene, factories);
 }
 
 SSceneSnapshot CSceneDocument::CaptureSnapshot(const CScene& scene)

@@ -61,6 +61,27 @@ TEST(CSceneDocumentDeserialize, rejects_malformed_documents_without_touching_the
     CHECK(sceneUnderTest.m_vEntities[0].m_Name == "keep");
 }
 
+TEST(CSceneDocumentParse, parses_snapshots_for_worker_thread_deserialization)
+{
+    CScene source;
+    AddEntity(source, "worker-parsed", -1);
+    const std::string document = quark::CSceneDocument::Serialize(source, 0);
+    const quark::SParsedSceneDocument parsed = quark::CSceneDocument::Parse(document);
+
+    CHECK(parsed.IsValid);
+    CComponentFactoryRegistry registry;
+    CScene restored;
+    CHECK(quark::CSceneDocument::Deserialize(parsed, restored, registry));
+    CHECK(restored.m_vEntities.size() == 1);
+    CHECK(restored.m_vEntities[0].m_Name == "worker-parsed");
+}
+
+TEST(CSceneDocumentParse, rejects_invalid_documents)
+{
+    CHECK(!quark::CSceneDocument::Parse("not json").IsValid);
+    CHECK(!quark::CSceneDocument::Parse("{\"version\":\"1\"}").IsValid);
+}
+
 TEST(SceneSnapshot, round_trips_entity_identity_and_hierarchy)
 {
     CComponentFactoryRegistry registry;

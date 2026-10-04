@@ -13,7 +13,8 @@ class CSceneRuntime
 public:
     static void RestoreEntityMaterial(CEntity& entity, const CAssetLibrary& assets);
 
-    static void RestoreSceneEntityModels(CScene& scene, CAssetLibrary& assets);
+    static void RestoreSceneEntityModels(CScene& scene, CAssetLibrary& assets,
+        CScene* pPreviousScene = nullptr);
 
     static void ResetSceneLightRuntime(CScene& scene, CLightRegistry& lights);
 };

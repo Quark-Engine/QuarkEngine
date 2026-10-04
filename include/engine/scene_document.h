@@ -3,6 +3,7 @@
 #include "../entity.h"
 #include "../scene.h"
 #include "component_factory_registry.h"
+#include "nlohmann/json.hpp"
 #include <string>
 #include <vector>
 
@@ -16,10 +17,21 @@ struct SSceneSnapshot
     std::vector<int> vSelectedEntities;
 };
 
+struct SParsedSceneDocument
+{
+    nlohmann::json Document;
+    bool IsValid = false;
+};
+
 class CSceneDocument
 {
 public:
     static std::string Serialize(const CScene& scene, int indent = 4);
+
+    static SParsedSceneDocument Parse(const std::string& document);
+
+    static bool Deserialize(const SParsedSceneDocument& document, CScene& scene,
+        const CComponentFactoryRegistry& factories);
 
     static bool Deserialize(const std::string& document, CScene& scene, const CComponentFactoryRegistry& factories);
 

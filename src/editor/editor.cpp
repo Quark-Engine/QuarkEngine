@@ -13,6 +13,9 @@
 #include "engine/scene_document.h"
 #include "engine/scene_runtime.h"
 
+#include <chrono>
+#include <exception>
+
 using namespace qc;
 
 namespace fs = std::filesystem;
@@ -30,20 +33,24 @@ void PushHistory(std::stack<quark::SSceneSnapshot>& stack, const quark::SSceneSn
     }
 }
 
-void RestoreSnapshot(CScene& scene, const quark::SSceneSnapshot& snapshot,
+bool RestoreSnapshot(CScene& scene, const quark::SParsedSceneDocument& document,
+                     const quark::SSceneSnapshot& snapshot,
                      CAssetLibrary& assets, CLightRegistry& lights,
                      const CComponentFactoryRegistry& factories)
 {
-    scene.ReleaseResources();
-    if (!quark::CSceneDocument::Deserialize(snapshot.Document, scene, factories))
+    CScene previousScene;
+    previousScene.m_vEntities = std::move(scene.m_vEntities);
+    if (!quark::CSceneDocument::Deserialize(document, scene, factories))
     {
-        return;
+        scene.m_vEntities = std::move(previousScene.m_vEntities);
+        return false;
     }
 
     scene.m_Selected = snapshot.Selected;
     scene.m_vSelectedEntities = snapshot.vSelectedEntities;
-    quark::CSceneRuntime::RestoreSceneEntityModels(scene, assets);
+    quark::CSceneRuntime::RestoreSceneEntityModels(scene, assets, &previousScene);
     quark::CSceneRuntime::ResetSceneLightRuntime(scene, lights);
+    return true;
 }
 
 } // anonymous
@@ -57,6 +64,13 @@ CEditor::~CEditor() = default;
 
 void CEditor::Unload()
 {
+    if (m_HistoryRestoreFuture.valid())
+    {
+        m_HistoryRestoreFuture.wait();
+        m_HistoryRestoreFuture = {};
+    }
+    m_PendingHistorySnapshot.reset();
+    m_PendingCurrentSnapshot.reset();
     m_PluginCommandActive = false;
     m_Scene.ReleaseResources();
     m_Ui.Unload();
@@ -78,6 +92,10 @@ void CEditor::Unload()
 
 void CEditor::SaveState()
 {
+    if (IsHistoryRestorePending())
+    {
+        return;
+    }
     m_SceneDirty = true;
     PushHistory(m_UndoStack, quark::CSceneDocument::CaptureSnapshot(m_Scene), m_Preferences.m_UndoHistoryLimit);
     while (!m_RedoStack.empty())
@@ -112,36 +130,122 @@ void CEditor::RequestSceneRedraw()
     m_SceneRedrawRequested = true;
 }
 
-void CEditor::Undo()
+bool CEditor::IsHistoryRestorePending() const
 {
-    if (m_UndoStack.empty())
+    return m_PendingHistorySnapshot.has_value();
+}
+
+void CEditor::StartHistoryRestore(bool undo)
+{
+    if (IsHistoryRestorePending())
     {
         return;
     }
 
-    const quark::SSceneSnapshot previous = m_UndoStack.top();
-    m_UndoStack.pop();
+    std::stack<quark::SSceneSnapshot>& source = undo ? m_UndoStack : m_RedoStack;
+    if (source.empty())
+    {
+        return;
+    }
 
-    PushHistory(m_RedoStack, quark::CSceneDocument::CaptureSnapshot(m_Scene), m_Preferences.m_UndoHistoryLimit);
-    RestoreSnapshot(m_Scene, previous, m_Assets, m_Lights, m_ComponentFactories);
+    m_PendingHistorySnapshot = source.top();
+    m_PendingCurrentSnapshot = quark::CSceneDocument::CaptureSnapshot(m_Scene);
+    m_PendingHistoryIsUndo = undo;
+    const std::string document = m_PendingHistorySnapshot->Document;
+    m_StatusMessage = undo ? "Undo in progress..." : "Redo in progress...";
+    try
+    {
+        m_HistoryRestoreFuture = std::async(std::launch::async, [document]()
+        {
+            return quark::CSceneDocument::Parse(document);
+        });
+    }
+    catch (const std::exception& exception)
+    {
+        m_StatusMessage = "Undo/Redo failed to start background parsing";
+        TraceLog(LogLevel::Error, "EDITOR", TextFormat("%s: %s",
+            m_StatusMessage.c_str(), exception.what()));
+        m_PendingHistorySnapshot.reset();
+        m_PendingCurrentSnapshot.reset();
+    }
+}
+
+void CEditor::PollHistoryRestore()
+{
+    if (!IsHistoryRestorePending() || !m_HistoryRestoreFuture.valid() ||
+        m_HistoryRestoreFuture.wait_for(std::chrono::seconds(0)) != std::future_status::ready)
+    {
+        return;
+    }
+
+    quark::SParsedSceneDocument document;
+    try
+    {
+        document = m_HistoryRestoreFuture.get();
+    }
+    catch (const std::exception& exception)
+    {
+        m_StatusMessage = "Undo/Redo failed while parsing the scene snapshot";
+        TraceLog(LogLevel::Error, "EDITOR", TextFormat("%s: %s",
+            m_StatusMessage.c_str(), exception.what()));
+        m_PendingHistorySnapshot.reset();
+        m_PendingCurrentSnapshot.reset();
+        return;
+    }
+
+    if (!document.IsValid)
+    {
+        m_StatusMessage = "Undo/Redo failed: the scene snapshot is invalid";
+        TraceLog(LogLevel::Error, "EDITOR", m_StatusMessage.c_str());
+        m_PendingHistorySnapshot.reset();
+        m_PendingCurrentSnapshot.reset();
+        return;
+    }
+
+    std::stack<quark::SSceneSnapshot>& source = m_PendingHistoryIsUndo ? m_UndoStack : m_RedoStack;
+    std::stack<quark::SSceneSnapshot>& destination = m_PendingHistoryIsUndo ? m_RedoStack : m_UndoStack;
+    if (source.empty())
+    {
+        m_StatusMessage = "Undo/Redo cancelled: history changed while restoring";
+        m_PendingHistorySnapshot.reset();
+        m_PendingCurrentSnapshot.reset();
+        return;
+    }
+
+    if (!RestoreSnapshot(m_Scene, document, *m_PendingHistorySnapshot, m_Assets, m_Lights, m_ComponentFactories))
+    {
+        m_StatusMessage = "Undo/Redo failed: could not restore the scene snapshot";
+        TraceLog(LogLevel::Error, "EDITOR", m_StatusMessage.c_str());
+        m_PendingHistorySnapshot.reset();
+        m_PendingCurrentSnapshot.reset();
+        return;
+    }
+
+    source.pop();
+    PushHistory(destination, *m_PendingCurrentSnapshot, m_Preferences.m_UndoHistoryLimit);
+    m_SceneDirty = true;
+    m_StatusMessage.clear();
+    m_PendingHistorySnapshot.reset();
+    m_PendingCurrentSnapshot.reset();
+}
+
+void CEditor::Undo()
+{
+    StartHistoryRestore(true);
 }
 
 void CEditor::Redo()
 {
-    if (m_RedoStack.empty())
-    {
-        return;
-    }
-
-    const quark::SSceneSnapshot next = m_RedoStack.top();
-    m_RedoStack.pop();
-
-    PushHistory(m_UndoStack, quark::CSceneDocument::CaptureSnapshot(m_Scene), m_Preferences.m_UndoHistoryLimit);
-    RestoreSnapshot(m_Scene, next, m_Assets, m_Lights, m_ComponentFactories);
+    StartHistoryRestore(false);
 }
 
 void CEditor::HandleInput()
 {
+    if (IsHistoryRestorePending())
+    {
+        return;
+    }
+
     ImGuiIO& io = ImGui::GetIO();
     const bool keyboardAvailable = !io.WantTextInput;
 

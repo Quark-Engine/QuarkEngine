@@ -286,6 +286,12 @@ void CApplication::Initialize()
 
 void CApplication::UpdateFrame()
 {
+    m_Editor.PollHistoryRestore();
+    if (m_Editor.IsHistoryRestorePending())
+    {
+        return;
+    }
+
     if (m_ActiveFontLanguage != CLanguageManager::Get().m_Current)
     {
         m_ActiveFontLanguage = CLanguageManager::Get().m_Current;
@@ -556,7 +562,10 @@ void CApplication::RenderFrame()
 
         m_Editor.DrawUi(m_SceneRenderer.GetLightingShader(), m_Camera, m_PluginBridge.GetContext());
 
-        m_PluginBridge.Update(m_Editor, m_PluginManager);
+        if (!m_Editor.IsHistoryRestorePending())
+        {
+            m_PluginBridge.Update(m_Editor, m_PluginManager);
+        }
 
         QcImGuiEnd();
     EndDrawing();

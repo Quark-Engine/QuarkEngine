@@ -68,7 +68,8 @@ void CSceneRuntime::RestoreEntityMaterial(CEntity& entity, const CAssetLibrary& 
     applyTexture();
 }
 
-void CSceneRuntime::RestoreSceneEntityModels(CScene& scene, CAssetLibrary& assets)
+void CSceneRuntime::RestoreSceneEntityModels(CScene& scene, CAssetLibrary& assets,
+    CScene* pPreviousScene)
 {
     for (auto& entity : scene.m_vEntities)
     {
@@ -79,10 +80,53 @@ void CSceneRuntime::RestoreSceneEntityModels(CScene& scene, CAssetLibrary& asset
         }
 
         CEntityTextureService::RestoreModelTextures(&entity);
-        pMesh->ReleaseOwnedResources();
         pMesh->m_BoundsDirty = true;
 
         pMesh->m_pAsset = pMesh->m_AssetName.empty() ? nullptr : assets.FindModelByName(pMesh->m_AssetName);
+        bool reusedModel = false;
+        if (pPreviousScene && pMesh->m_pAsset && !pMesh->m_pAsset->m_IsProcedural &&
+            !pMesh->m_IsEditableMesh && !pMesh->m_VertexGizmo)
+        {
+            for (auto& previousEntity : pPreviousScene->m_vEntities)
+            {
+                if (previousEntity.m_Name != entity.m_Name)
+                {
+                    continue;
+                }
+
+                CMeshComponent* pPreviousMesh = previousEntity.GetMeshComponent();
+                if (!pPreviousMesh || pPreviousMesh->m_AssetName != pMesh->m_AssetName ||
+                    pPreviousMesh->m_IsEditableMesh || pPreviousMesh->m_VertexGizmo ||
+                    !pPreviousMesh->m_OwnsModelInstance || !pPreviousMesh->m_Model.meshes)
+                {
+                    continue;
+                }
+
+                CEntityTextureService::RestoreModelTextures(&previousEntity);
+                pMesh->m_Model = pPreviousMesh->m_Model;
+                pMesh->m_OwnsModelInstance = pPreviousMesh->m_OwnsModelInstance;
+                pMesh->m_OwnsMaterials = pPreviousMesh->m_OwnsMaterials;
+                pPreviousMesh->m_Model = {};
+                pPreviousMesh->m_OwnsModelInstance = false;
+                pPreviousMesh->m_OwnsMaterials = false;
+                reusedModel = true;
+                break;
+            }
+        }
+
+        if (reusedModel)
+        {
+            pMesh->m_OwnsModelInstance = true;
+            CEntityTextureService::StoreUV(&entity);
+            CEntityTextureService::StoreMaterialTextures(&entity);
+            CMeshOverrideService::Apply(entity);
+            RestoreEntityMaterial(entity, assets);
+            pMesh->m_ShaderAssigned = false;
+            continue;
+        }
+
+        pMesh->ReleaseOwnedResources();
+
         if ((pMesh->m_IsEditableMesh || pMesh->m_VertexGizmo) && !pMesh->m_EditableMesh.m_vVertices.empty())
         {
             pMesh->m_Model = {};
@@ -125,6 +169,11 @@ void CSceneRuntime::RestoreSceneEntityModels(CScene& scene, CAssetLibrary& asset
         }
 
         pMesh->m_ShaderAssigned = false;
+    }
+
+    if (pPreviousScene)
+    {
+        pPreviousScene->ReleaseResources();
     }
 }
 

@@ -15,6 +15,8 @@
 #include "text_mesh.h"
 
 #include <filesystem>
+#include <future>
+#include <optional>
 #include <stack>
 #include <string>
 
@@ -40,6 +42,8 @@ public:
     void EndPluginCommand();
     void SetStatusMessage(const char* pMessage);
     void RequestSceneRedraw();
+    void PollHistoryRestore();
+    bool IsHistoryRestorePending() const;
     void Undo();
     void Redo();
 
@@ -76,7 +80,13 @@ public:
 
     std::filesystem::path m_CurrentAssetPath;
 
+    std::future<quark::SParsedSceneDocument> m_HistoryRestoreFuture;
+    std::optional<quark::SSceneSnapshot> m_PendingHistorySnapshot;
+    std::optional<quark::SSceneSnapshot> m_PendingCurrentSnapshot;
+    bool m_PendingHistoryIsUndo = false;
+
 private:
+    void StartHistoryRestore(bool undo);
     void DrawMainMenuBar(SPluginContext* pCtx, ImGuiID dockspaceId);
     void DrawHierarchyPanel(SPluginContext* pCtx);
     void DrawInspectorPanel(qc::Shader shader, SPluginContext* pCtx);
