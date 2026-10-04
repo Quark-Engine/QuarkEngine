@@ -206,7 +206,7 @@ void CComponentUIHelper::DrawEntityInspector(CEditor& editor, CEntity& entity, S
             ImGui::EndPopup();
         }
 
-if (editor.m_Ui.m_Inspector.ComponentToRemove != -1)
+    if (editor.m_Ui.m_Inspector.ComponentToRemove != -1)
     {
         const int componentToRemove = editor.m_Ui.m_Inspector.ComponentToRemove;
         const int entityIndex = static_cast<int>(&entity - editor.m_Scene.m_vEntities.data());
@@ -227,7 +227,7 @@ if (editor.m_Ui.m_Inspector.ComponentToRemove != -1)
                 }
             }
 
-pComponentsManager->RemoveComponent(componentToRemove);
+        pComponentsManager->RemoveComponent(componentToRemove);
         editor.m_Ui.m_Inspector.ComponentToRemove = -1;
         }
     }
@@ -254,6 +254,7 @@ void CComponentUIHelper::DrawTransformComponent(CEditor& editor, CEntity& entity
 
     if (ImGui::DragFloat3(lang.Word("position"), aPosition, 0.1f))
     {
+        pTransform->ClearLocalMatrixOverride();
         pTransform->m_Position = qc::Vec3(aPosition[0], aPosition[1], aPosition[2]);
         DispatchPluginEvent(PLUGIN_EVENT_TRANSFORM_CHANGED,
             static_cast<int>(&entity - editor.m_Scene.m_vEntities.data()));
@@ -263,6 +264,7 @@ void CComponentUIHelper::DrawTransformComponent(CEditor& editor, CEntity& entity
 
     if (ImGui::DragFloat3(lang.Word("rotation"), aRotation, 1.0f))
     {
+        pTransform->ClearLocalMatrixOverride();
         pTransform->m_Rotation = qc::Vec3(aRotation[0], aRotation[1], aRotation[2]);
         DispatchPluginEvent(PLUGIN_EVENT_TRANSFORM_CHANGED,
             static_cast<int>(&entity - editor.m_Scene.m_vEntities.data()));
@@ -280,6 +282,7 @@ void CComponentUIHelper::DrawTransformComponent(CEditor& editor, CEntity& entity
         bool wasFlipped = countNeg(pTransform->m_Scale.x, pTransform->m_Scale.y, pTransform->m_Scale.z) % 2 != 0;
         bool willFlip = countNeg(aScale[0], aScale[1], aScale[2]) % 2 != 0;
 
+        pTransform->ClearLocalMatrixOverride();
         pTransform->m_Scale = qc::Vec3(aScale[0], aScale[1], aScale[2]);
         DispatchPluginEvent(PLUGIN_EVENT_TRANSFORM_CHANGED,
             static_cast<int>(&entity - editor.m_Scene.m_vEntities.data()));
@@ -831,6 +834,7 @@ void CComponentUIHelper::DrawLightComponent(CEditor& editor, CEntity& entity, CL
     {
         if (pTransform)
         {
+            pTransform->ClearLocalMatrixOverride();
             pTransform->m_Position = qc::Vec3(aLightPosition[0], aLightPosition[1], aLightPosition[2]);
             CEntityTextureService::MarkEntityBoundsDirty(&entity);
         }

@@ -92,6 +92,8 @@ public:
     qc::Vec3 m_Position = {0, 0, 0};
     qc::Vec3 m_Rotation = {0, 0, 0};
     qc::Vec3 m_Scale = {1, 1, 1};
+    qc::Mat4 m_LocalMatrixOverride = qc::Mat4::identity();
+    bool m_HasLocalMatrixOverride = false;
 
     CTransformComponent()
     {
@@ -108,11 +110,26 @@ public:
         return "Transform";
     }
 
+    void SetLocalMatrixOverride(const qc::Mat4& matrix)
+    {
+        m_LocalMatrixOverride = matrix;
+        m_HasLocalMatrixOverride = true;
+    }
+
+    void ClearLocalMatrixOverride()
+    {
+        m_HasLocalMatrixOverride = false;
+    }
+
     void Serialize(nlohmann::json& json) const override
     {
         json["position"] = {m_Position.x, m_Position.y, m_Position.z};
         json["rotation"] = {m_Rotation.x, m_Rotation.y, m_Rotation.z};
         json["scale"] = {m_Scale.x, m_Scale.y, m_Scale.z};
+        if (m_HasLocalMatrixOverride)
+        {
+            json["local_matrix_override"] = m_LocalMatrixOverride.m;
+        }
     }
 
     void Deserialize(const nlohmann::json& json) override
@@ -131,6 +148,19 @@ public:
         {
             auto& s = json["scale"];
             m_Scale = {s[0], s[1], s[2]};
+        }
+        if (json.contains("local_matrix_override") && json["local_matrix_override"].is_array() &&
+            json["local_matrix_override"].size() == 16)
+        {
+            for (size_t index = 0; index < 16; ++index)
+            {
+                m_LocalMatrixOverride.m[index] = json["local_matrix_override"][index].get<float>();
+            }
+            m_HasLocalMatrixOverride = true;
+        }
+        else
+        {
+            ClearLocalMatrixOverride();
         }
     }
 };

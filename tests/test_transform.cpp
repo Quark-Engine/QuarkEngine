@@ -2,6 +2,8 @@
 
 #include "engine/transform.h"
 
+#include "nlohmann/json.hpp"
+
 #include "QuarkCore/QuarkCore.hpp"
 
 #include <vector>
@@ -96,6 +98,24 @@ TEST(ComposeLocal, entity_overload_reads_the_transform_component)
 
     const CTransformComponent* pTransform = target.GetTransformComponent();
     ExpectMatNear(quark::ComposeLocal(target), quark::ComposeLocal(*pTransform), 1e-6);
+}
+
+TEST(ComposeLocal, local_matrix_override_survives_serialization)
+{
+    CTransformComponent transform;
+    Mat4 local = Mat4::translation(3.0f, -2.0f, 7.0f) *
+        Mat4::rotationY(35.0f * DEG2RAD) *
+        Mat4::scale(2.0f, 0.5f, 3.0f);
+    local.m[1] += 0.25f;
+    transform.SetLocalMatrixOverride(local);
+
+    nlohmann::json document;
+    transform.Serialize(document);
+    CTransformComponent restored;
+    restored.Deserialize(document);
+
+    CHECK(restored.m_HasLocalMatrixOverride);
+    ExpectMatNear(quark::ComposeLocal(restored), local, 1e-6);
 }
 
 TEST(ComposeWorld, root_entity_world_equals_its_local_transform)

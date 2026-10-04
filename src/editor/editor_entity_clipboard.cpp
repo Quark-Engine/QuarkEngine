@@ -32,6 +32,10 @@ void CEntityClipboard::Paste(CEditor& editor)
             pPastedTransform->m_Position = pClipboardTransform->m_Position;
             pPastedTransform->m_Rotation = pClipboardTransform->m_Rotation;
             pPastedTransform->m_Scale = pClipboardTransform->m_Scale;
+            if (pClipboardTransform->m_HasLocalMatrixOverride)
+            {
+                pPastedTransform->SetLocalMatrixOverride(pClipboardTransform->m_LocalMatrixOverride);
+            }
         }
 
         auto pPastedMesh = pasted.GetMeshComponent();

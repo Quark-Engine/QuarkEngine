@@ -197,6 +197,11 @@ void CGizmoController::Draw(CEditor& editor, CFlyCamera& camera)
             quark::ParentWorld(editor.m_Scene, *pEntity),
             worldTransform,
             *pTransform);
+        qc::Mat4 inverseParent;
+        if (quark::TryInvertAffine(quark::ParentWorld(editor.m_Scene, *pEntity), inverseParent))
+        {
+            pTransform->SetLocalMatrixOverride(inverseParent * worldTransform);
+        }
 
         const qc::Vec3 positionDelta = pTransform->m_Position - qc::Vec3{aTranslation[0], aTranslation[1], aTranslation[2]};
         if (editor.m_Scene.m_vSelectedEntities.size() > 1)
@@ -215,6 +220,12 @@ void CGizmoController::Draw(CEditor& editor, CFlyCamera& camera)
                     continue;
                 }
                 pSelectedTransform->m_Position = pSelectedTransform->m_Position + positionDelta;
+                if (pSelectedTransform->m_HasLocalMatrixOverride)
+                {
+                    pSelectedTransform->m_LocalMatrixOverride.m[12] += positionDelta.x;
+                    pSelectedTransform->m_LocalMatrixOverride.m[13] += positionDelta.y;
+                    pSelectedTransform->m_LocalMatrixOverride.m[14] += positionDelta.z;
+                }
                 DispatchPluginEvent(PLUGIN_EVENT_TRANSFORM_CHANGED, selected_index);
 CEntityTextureService::MarkEntityBoundsDirty(&selectedEntity);
                 if (CMaterialComponent* pSelectedMaterial = selectedEntity.GetMaterialComponent();

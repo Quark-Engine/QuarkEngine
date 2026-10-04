@@ -19,6 +19,8 @@ qc::Mat4 ComposeMeshWorld(const CScene& scene, const CEntity& entity);
 
 qc::Mat4 ParentWorld(const CScene& scene, const CEntity& entity);
 
+bool TryInvertAffine(const qc::Mat4& matrix, qc::Mat4& inverse);
+
 void DecomposeLocal(const qc::Mat4& parentWorld, const qc::Mat4& world, CTransformComponent& out);
 void DecomposeWorld(const qc::Mat4& world, CTransformComponent& out);
 

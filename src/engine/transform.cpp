@@ -8,6 +8,11 @@ namespace quark
 
 qc::Mat4 ComposeLocal(const CTransformComponent& transform)
 {
+    if (transform.m_HasLocalMatrixOverride)
+    {
+        return transform.m_LocalMatrixOverride;
+    }
+
     return qc::Mat4::translation(transform.m_Position.x, transform.m_Position.y, transform.m_Position.z) *
         qc::Mat4::rotationX(transform.m_Rotation.x * DEG2RAD) *
         qc::Mat4::rotationY(transform.m_Rotation.y * DEG2RAD) *
@@ -105,9 +110,54 @@ qc::Mat4 ParentWorld(const CScene& scene, const CEntity& entity)
     return ComposeWorld(scene, entity.m_ParentId);
 }
 
+bool TryInvertAffine(const qc::Mat4& matrix, qc::Mat4& inverse)
+{
+    const float a00 = matrix.m[0];
+    const float a01 = matrix.m[4];
+    const float a02 = matrix.m[8];
+    const float a10 = matrix.m[1];
+    const float a11 = matrix.m[5];
+    const float a12 = matrix.m[9];
+    const float a20 = matrix.m[2];
+    const float a21 = matrix.m[6];
+    const float a22 = matrix.m[10];
+
+    const float determinant =
+        a00 * (a11 * a22 - a12 * a21) -
+        a01 * (a10 * a22 - a12 * a20) +
+        a02 * (a10 * a21 - a11 * a20);
+    if (!std::isfinite(determinant) || std::fabs(determinant) <= 1e-8f)
+    {
+        return false;
+    }
+
+    const float inverseDeterminant = 1.0f / determinant;
+    inverse = qc::Mat4::identity();
+    inverse.m[0] = (a11 * a22 - a12 * a21) * inverseDeterminant;
+    inverse.m[4] = (a02 * a21 - a01 * a22) * inverseDeterminant;
+    inverse.m[8] = (a01 * a12 - a02 * a11) * inverseDeterminant;
+    inverse.m[1] = (a12 * a20 - a10 * a22) * inverseDeterminant;
+    inverse.m[5] = (a00 * a22 - a02 * a20) * inverseDeterminant;
+    inverse.m[9] = (a02 * a10 - a00 * a12) * inverseDeterminant;
+    inverse.m[2] = (a10 * a21 - a11 * a20) * inverseDeterminant;
+    inverse.m[6] = (a01 * a20 - a00 * a21) * inverseDeterminant;
+    inverse.m[10] = (a00 * a11 - a01 * a10) * inverseDeterminant;
+
+    const float tx = matrix.m[12];
+    const float ty = matrix.m[13];
+    const float tz = matrix.m[14];
+    inverse.m[12] = -(inverse.m[0] * tx + inverse.m[4] * ty + inverse.m[8] * tz);
+    inverse.m[13] = -(inverse.m[1] * tx + inverse.m[5] * ty + inverse.m[9] * tz);
+    inverse.m[14] = -(inverse.m[2] * tx + inverse.m[6] * ty + inverse.m[10] * tz);
+    return true;
+}
+
 void DecomposeLocal(const qc::Mat4& parentWorld, const qc::Mat4& world, CTransformComponent& out)
 {
-    const qc::Mat4 local = parentWorld.inverted() * world;
+    qc::Mat4 inverseParent;
+    const qc::Mat4 local = TryInvertAffine(parentWorld, inverseParent)
+        ? inverseParent * world
+        : world;
     out.m_Position = qc::Vec3(local.m[12], local.m[13], local.m[14]);
 
     qc::Mat4 parent3x3{};

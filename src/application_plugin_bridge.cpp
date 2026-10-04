@@ -150,6 +150,7 @@ void EntitySetPosition(CScene* pScene, int index, float x, float y, float z)
 {
     if (auto* pTransform = pScene->m_vEntities[index].GetTransformComponent())
     {
+        pTransform->ClearLocalMatrixOverride();
         pTransform->m_Position = Vec3(x, y, z);
         DispatchPluginEvent(PLUGIN_EVENT_TRANSFORM_CHANGED, index);
     }
@@ -159,6 +160,7 @@ void EntitySetRotation(CScene* pScene, int index, float x, float y, float z)
 {
     if (auto* pTransform = pScene->m_vEntities[index].GetTransformComponent())
     {
+        pTransform->ClearLocalMatrixOverride();
         pTransform->m_Rotation = Vec3(x, y, z);
         DispatchPluginEvent(PLUGIN_EVENT_TRANSFORM_CHANGED, index);
     }
@@ -168,6 +170,7 @@ void EntitySetScale(CScene* pScene, int index, float x, float y, float z)
 {
     if (auto* pTransform = pScene->m_vEntities[index].GetTransformComponent())
     {
+        pTransform->ClearLocalMatrixOverride();
         pTransform->m_Scale = Vec3(x, y, z);
         DispatchPluginEvent(PLUGIN_EVENT_TRANSFORM_CHANGED, index);
     }
@@ -502,6 +505,7 @@ int SceneSpawnEx(CAssetLibrary* pAssets, CScene* pScene, const char* pAssetName,
 
     if (CTransformComponent* pTransform = pScene->m_vEntities[entityIndex].GetTransformComponent())
     {
+        pTransform->ClearLocalMatrixOverride();
         pTransform->m_Position = Vec3(x, y, z);
         DispatchPluginEvent(PLUGIN_EVENT_TRANSFORM_CHANGED, entityIndex);
     }

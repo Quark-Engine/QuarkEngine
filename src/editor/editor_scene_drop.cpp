@@ -96,6 +96,7 @@ void CSceneAssetDrop::Handle(CEditor& editor, const qc::Camera3D& camera)
         }
 
         editor.SaveState();
+        pTransform->ClearLocalMatrixOverride();
         pTransform->m_Position = GetSceneDropPosition(camera);
 
         editor.m_Scene.m_vEntities.push_back(std::move(e));
@@ -122,6 +123,7 @@ void CSceneAssetDrop::Handle(CEditor& editor, const qc::Camera3D& camera)
     }
 
     editor.SaveState();
+    pTransform->ClearLocalMatrixOverride();
     pTransform->m_Position = GetSceneDropPosition(camera);
 
     editor.m_Scene.m_vEntities.push_back(std::move(entity));

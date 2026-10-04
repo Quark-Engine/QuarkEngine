@@ -5,6 +5,7 @@
 #include "QuarkCore/QuarkCore.hpp"
 #include "imgui.h"
 #include "imgui_internal.h"
+#include "version.h"
 
 using namespace qc;
 
@@ -30,7 +31,7 @@ void CStatusBar::Draw(const CEditor& editor)
     ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(10.0f, 5.0f));
     if (ImGui::BeginViewportSideBar("##main_status_bar", pViewport, ImGuiDir_Down, statusBarHeight, flags))
     {
-        ImGui::TextDisabled("Quark Engine Editor v%s", "1.0.0");
+        ImGui::TextDisabled("Quark Engine Editor %s", QUARK_ENGINE_VERSION);
 
         if (!editor.m_StatusMessage.empty())
         {

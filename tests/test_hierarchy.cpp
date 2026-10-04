@@ -1,6 +1,7 @@
 #include "test_harness.h"
 
 #include "editor/editor_hierarchy_utils.h"
+#include "engine/transform.h"
 
 #include <algorithm>
 #include <string>
@@ -152,6 +153,34 @@ TEST(MoveEntityToParent, keeps_the_world_position_when_reparenting)
     CHECK_NEAR(sceneUnderTest.m_vEntities[1].GetTransformComponent()->m_Position.z, 5.0f, 1e-3);
 }
 
+TEST(MoveEntityToParent, preserves_the_world_transform_with_a_rotated_non_uniform_parent)
+{
+    CScene sceneUnderTest;
+    Add(sceneUnderTest, "parent", -1);
+    Add(sceneUnderTest, "child", -1);
+
+    CTransformComponent* pParentTransform = sceneUnderTest.m_vEntities[0].GetTransformComponent();
+    pParentTransform->m_Position = { 5.0f, -3.0f, 2.0f };
+    pParentTransform->m_Rotation = { 20.0f, 35.0f, -15.0f };
+    pParentTransform->m_Scale = { 2.0f, 0.5f, 3.0f };
+
+    CTransformComponent* pChildTransform = sceneUnderTest.m_vEntities[1].GetTransformComponent();
+    pChildTransform->m_Position = { -4.0f, 6.0f, 1.0f };
+    pChildTransform->m_Rotation = { -25.0f, 40.0f, 10.0f };
+    pChildTransform->m_Scale = { 0.75f, 1.5f, 2.0f };
+
+    const Mat4 worldBefore = quark::ComposeWorld(sceneUnderTest, 1);
+    MoveEntityToParent(sceneUnderTest, 1, 0);
+    const Mat4 worldAfter = quark::ComposeWorld(sceneUnderTest, 1);
+
+    CHECK(sceneUnderTest.m_vEntities[1].m_ParentId == 0);
+    for (int index = 0; index < 16; ++index)
+    {
+        CHECK_NEAR(worldAfter.m[index], worldBefore.m[index], 1e-4);
+    }
+    CHECK(pChildTransform->m_HasLocalMatrixOverride);
+}
+
 TEST(DeleteGroup, reparents_children_to_the_grandparent_by_default)
 {
     CScene sceneUnderTest;
@@ -165,6 +194,36 @@ TEST(DeleteGroup, reparents_children_to_the_grandparent_by_default)
     CHECK(sceneUnderTest.m_vEntities[1].m_Name == "child");
     CHECK_MSG(sceneUnderTest.m_vEntities[1].m_ParentId == 0,
         "child must point at the erased group's parent");
+}
+
+TEST(DeleteGroup, preserves_child_world_transform_under_a_non_uniform_parent)
+{
+    CScene sceneUnderTest;
+    Add(sceneUnderTest, "root", -1);
+    Add(sceneUnderTest, "group", 0, true);
+    Add(sceneUnderTest, "child", 1);
+    Add(sceneUnderTest, "later-parent", -1);
+    Add(sceneUnderTest, "later-child", 3);
+
+    sceneUnderTest.m_vEntities[0].GetTransformComponent()->m_Rotation = { 15.0f, 25.0f, 5.0f };
+    sceneUnderTest.m_vEntities[0].GetTransformComponent()->m_Scale = { 2.0f, 0.5f, 3.0f };
+    sceneUnderTest.m_vEntities[2].GetTransformComponent()->m_Position = { 3.0f, -1.0f, 4.0f };
+    sceneUnderTest.m_vEntities[2].GetTransformComponent()->m_Rotation = { 20.0f, 30.0f, -10.0f };
+    sceneUnderTest.m_vEntities[3].GetTransformComponent()->m_Position = { -4.0f, 2.0f, 1.0f };
+
+    const Mat4 worldBefore = quark::ComposeWorld(sceneUnderTest, 2);
+    DeleteGroup(sceneUnderTest, 1);
+
+    CHECK(sceneUnderTest.m_vEntities[1].m_ParentId == 0);
+    CHECK(sceneUnderTest.m_vEntities[2].m_Id == 2);
+    CHECK(sceneUnderTest.m_vEntities[2].m_ParentId == -1);
+    CHECK(sceneUnderTest.m_vEntities[3].m_Id == 3);
+    CHECK(sceneUnderTest.m_vEntities[3].m_ParentId == 2);
+    const Mat4 worldAfter = quark::ComposeWorld(sceneUnderTest, 1);
+    for (int index = 0; index < 16; ++index)
+    {
+        CHECK_NEAR(worldAfter.m[index], worldBefore.m[index], 1e-4);
+    }
 }
 
 TEST(DeleteGroup, refuses_to_delete_a_plain_entity)

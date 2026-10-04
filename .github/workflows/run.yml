@@ -81,10 +81,25 @@ jobs:
         shell: pwsh
         run: |
           Write-Host "Running $env:EXE_PATH"
-          & $env:EXE_PATH --headless --test
-          if ($LASTEXITCODE -ne 0) {
-            Write-Error "Executable exited with code $LASTEXITCODE"
-            exit $LASTEXITCODE
+          $stdout = Join-Path $env:RUNNER_TEMP "QuarkEngine.stdout.log"
+          $stderr = Join-Path $env:RUNNER_TEMP "QuarkEngine.stderr.log"
+          $process = Start-Process `
+            -FilePath (Resolve-Path $env:EXE_PATH).Path `
+            -ArgumentList @("--headless", "--test") `
+            -Wait `
+            -PassThru `
+            -RedirectStandardOutput $stdout `
+            -RedirectStandardError $stderr
+
+          if (Test-Path $stdout) {
+            Get-Content $stdout
+          }
+          if (Test-Path $stderr) {
+            Get-Content $stderr
+          }
+          Write-Host "Executable exited with code $($process.ExitCode)"
+          if ($process.ExitCode -ne 0) {
+            exit $process.ExitCode
           }
 
       - name: Run executable (Linux)
