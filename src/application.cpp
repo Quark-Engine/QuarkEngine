@@ -584,6 +584,7 @@ void CApplication::Run()
         return;
     }
 
+    constexpr auto USAGE_SAMPLE_INTERVAL = std::chrono::milliseconds(100);
     auto lastUsageSample = std::chrono::steady_clock::now();
     while (!WindowShouldClose())
     {
@@ -596,9 +597,13 @@ void CApplication::Run()
         RenderFrame();
 
         const auto sampleTime = std::chrono::steady_clock::now();
-        m_Editor.m_CpuTaskPool.SampleUsage(
-            std::chrono::duration_cast<std::chrono::nanoseconds>(sampleTime - lastUsageSample));
-        lastUsageSample = sampleTime;
+        const auto sampleElapsed = sampleTime - lastUsageSample;
+        if (sampleElapsed >= USAGE_SAMPLE_INTERVAL)
+        {
+            m_Editor.m_CpuTaskPool.SampleUsage(
+                std::chrono::duration_cast<std::chrono::nanoseconds>(sampleElapsed));
+            lastUsageSample = sampleTime;
+        }
     }
 }
 

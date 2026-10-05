@@ -76,6 +76,7 @@ private:
         std::string name;
         std::string currentTask;
         std::chrono::nanoseconds accumulatedBusy{0};
+        float smoothedUtilizationPercent = 0.0f;
         bool isBusy = false;
         std::deque<float> history;
     };

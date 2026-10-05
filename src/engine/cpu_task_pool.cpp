@@ -1,6 +1,7 @@
 #include "engine/cpu_task_pool.h"
 
 #include <algorithm>
+#include <cmath>
 #include <cstdint>
 #include <stdexcept>
 
@@ -136,11 +137,17 @@ void CTaskPool::SampleUsage(std::chrono::nanoseconds interval)
     }
 
     std::lock_guard<std::mutex> lock(m_UsageMutex);
+    constexpr float SMOOTHING_TIME_SECONDS = 0.75f;
+    const float elapsedSeconds = std::chrono::duration<float>(interval).count();
+    const float alpha = 1.0f - std::exp(-elapsedSeconds / SMOOTHING_TIME_SECONDS);
     for (SThreadUsage& thread : m_vThreadUsage)
     {
         const double ratio = static_cast<double>(thread.accumulatedBusy.count()) /
             static_cast<double>(interval.count());
-        thread.history.push_back(static_cast<float>(std::clamp(ratio * 100.0, 0.0, 100.0)));
+        const float measuredPercent = static_cast<float>(std::clamp(ratio * 100.0, 0.0, 100.0));
+        thread.smoothedUtilizationPercent +=
+            alpha * (measuredPercent - thread.smoothedUtilizationPercent);
+        thread.history.push_back(thread.smoothedUtilizationPercent);
         if (thread.history.size() > 120)
         {
             thread.history.pop_front();
@@ -159,7 +166,7 @@ std::vector<SThreadUsageSnapshot> CTaskPool::GetThreadUsageSnapshot() const
         SThreadUsageSnapshot snapshot;
         snapshot.name = thread.name;
         snapshot.currentTask = thread.currentTask;
-        snapshot.utilizationPercent = thread.history.empty() ? 0.0f : thread.history.back();
+        snapshot.utilizationPercent = thread.smoothedUtilizationPercent;
         snapshot.vHistory.assign(thread.history.begin(), thread.history.end());
         vSnapshot.push_back(std::move(snapshot));
     }

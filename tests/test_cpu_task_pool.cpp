@@ -100,11 +100,18 @@ TEST(CpuTaskPool, CapturesNamedThreadUsageHistory)
     CHECK(vUsage.size() == 2);
     CHECK(vUsage[0].name.find("GPU resource uploads") != std::string::npos);
     CHECK(vUsage[0].vHistory.size() == 1);
-    CHECK_NEAR(vUsage[0].utilizationPercent, 10.0f, 0.1f);
+    CHECK_NEAR(vUsage[0].utilizationPercent, 0.645f, 0.02f);
     CHECK(vUsage[1].name == "CPU task worker 1");
     CHECK(vUsage[1].vHistory.size() == 1);
     CHECK(vUsage[1].utilizationPercent > 0.0f);
     CHECK(vUsage[1].currentTask.empty());
+
+    taskPool.SampleUsage(std::chrono::milliseconds(50));
+    const std::vector<SThreadUsageSnapshot> vSmoothedUsage =
+        taskPool.GetThreadUsageSnapshot();
+    CHECK(vSmoothedUsage[0].vHistory.size() == 2);
+    CHECK(vSmoothedUsage[0].vHistory[1] < vSmoothedUsage[0].vHistory[0]);
+    CHECK(vSmoothedUsage[0].vHistory[1] > 0.0f);
 }
 
 TEST(CpuTaskPool, RejectsInvalidEditableGeometry)
