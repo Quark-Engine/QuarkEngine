@@ -112,8 +112,8 @@ private:
     void LoadTexturesFromDisk(const std::string& projectPath);
     void UnloadTextures();
     void RefreshTextures(const std::string& projectPath, CScene* pScene);
-    void RefreshModels(const std::string& projectPath, CScene& scene);
-    void RefreshModels(const std::string& projectPath, CScene& scene,
+    bool RefreshModels(const std::string& projectPath, CScene& scene);
+    bool RefreshModels(const std::string& projectPath, CScene& scene,
         const std::vector<std::filesystem::path>& vModelPaths);
     void StartResourceScan(const std::string& projectPath);
     bool ApplyResourceScan(SResourceScanResult& scan, const std::string& projectPath,
@@ -122,6 +122,7 @@ private:
     std::vector<CModelAsset> m_vModels;
     std::vector<STextureOption> m_vTextures;
     std::unordered_map<std::string, std::string> m_TextureFingerprints;
+    std::unordered_map<std::string, std::string> m_ModelFingerprints;
 
     CFreetypeTextMesh* m_pTextMesh = nullptr;
     CTaskPool* m_pTaskPool = nullptr;

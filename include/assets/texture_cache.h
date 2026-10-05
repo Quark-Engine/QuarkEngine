@@ -24,6 +24,7 @@ public:
 
 private:
     std::unordered_map<std::string, qc::Texture2D> m_Textures;
+    std::unordered_map<std::string, std::string> m_Fingerprints;
 };
 
 #endif // __ASSETS_TEXTURE_CACHE_H__

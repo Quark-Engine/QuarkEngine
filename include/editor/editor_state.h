@@ -182,6 +182,10 @@ struct SAssetBrowserState
     SAssetBrowserMarquee Marquee;
     SAssetBrowserDrag Drag;
 
+    char aSearchBuffer[128] = "";
+    std::string dependencyCachePath;
+    std::vector<std::string> vCachedFileDependencies;
+    bool dependencyCacheReady = false;
     int RenameTarget = -1;
     std::string LastAppliedRename;
 
@@ -241,6 +245,7 @@ public:
 
     bool m_Visible = false;
     qc::Model m_PreviewModel;
+    std::string m_AssetName;
     qc::RenderTexture2D m_RenderTexture = { 0 };
     qc::Vec3 m_ModelCenter = { 0.0f, 0.0f, 0.0f };
     SPreviewOrbit m_Orbit;

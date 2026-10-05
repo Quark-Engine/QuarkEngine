@@ -5,10 +5,14 @@
 #include "tex.h"
 #include "text_mesh.h"
 #include "engine/cpu_task_pool.h"
+#include "engine/scene_runtime.h"
 
 #include <algorithm>
+#include <cctype>
 #include <chrono>
 #include <exception>
+#include <fstream>
+#include <sstream>
 #include <unordered_map>
 #include <unordered_set>
 #include <stdexcept>
@@ -122,6 +126,64 @@ std::string BuildFileFingerprint(const fs::path& path)
     };
     appendFileState(path);
     appendFileState(fs::path(path.string() + ".meta"));
+    return fingerprint;
+}
+
+std::string BuildModelFingerprint(const fs::path& modelPath)
+{
+    std::string fingerprint = BuildFileFingerprint(modelPath);
+    std::string extension = modelPath.extension().string();
+    std::transform(extension.begin(), extension.end(), extension.begin(), [](unsigned char character)
+    {
+        return static_cast<char>(std::tolower(character));
+    });
+    if (extension != ".obj")
+    {
+        return fingerprint;
+    }
+
+    std::ifstream modelFile(modelPath);
+    std::string line;
+    size_t scannedLines = 0;
+    while (scannedLines < 4096 && std::getline(modelFile, line))
+    {
+        ++scannedLines;
+        std::istringstream modelLine(line);
+        std::string directive;
+        modelLine >> directive;
+        if (directive != "mtllib")
+        {
+            continue;
+        }
+
+        std::string materialName;
+        while (modelLine >> materialName)
+        {
+            const fs::path materialPath = modelPath.parent_path() / materialName;
+            fingerprint += "|" + BuildFileFingerprint(materialPath);
+
+            std::ifstream materialFile(materialPath);
+            std::string materialLine;
+            while (std::getline(materialFile, materialLine))
+            {
+                std::istringstream materialStream(materialLine);
+                std::string materialDirective;
+                materialStream >> materialDirective;
+                if (materialDirective != "map_Kd")
+                {
+                    continue;
+                }
+
+                std::string textureName;
+                std::getline(materialStream >> std::ws, textureName);
+                if (!textureName.empty())
+                {
+                    fingerprint += "|" + BuildFileFingerprint(materialPath.parent_path() / textureName);
+                }
+            }
+        }
+    }
+
     return fingerprint;
 }
 
@@ -536,15 +598,16 @@ void CAssetLibrary::RefreshTextures(const std::string& projectPath, CScene* pSce
     m_TextureFingerprints = std::move(nextFingerprints);
 }
 
-void CAssetLibrary::RefreshModels(const std::string& projectPath, CScene& scene)
+bool CAssetLibrary::RefreshModels(const std::string& projectPath, CScene& scene)
 {
-    RefreshModels(projectPath, scene, CollectModelPaths(fs::path(projectPath) / "resources"));
+    return RefreshModels(projectPath, scene, CollectModelPaths(fs::path(projectPath) / "resources"));
 }
 
-void CAssetLibrary::RefreshModels(const std::string& projectPath, CScene& scene,
+bool CAssetLibrary::RefreshModels(const std::string& projectPath, CScene& scene,
     const std::vector<fs::path>& vModelPaths)
 {
-    std::unordered_map<std::string, qc::Model> old;
+    std::unordered_map<std::string, qc::Model> oldModels;
+    const std::unordered_map<std::string, std::string> oldFingerprints = m_ModelFingerprints;
 
     for (auto& asset : m_vModels)
     {
@@ -553,7 +616,7 @@ void CAssetLibrary::RefreshModels(const std::string& projectPath, CScene& scene,
             qc::Model model = asset.TakeLoadedModel();
             if (model.meshCount > 0 && model.meshes)
             {
-                old[asset.m_Name] = model;
+                oldModels[asset.m_Name] = model;
             }
             else
             {
@@ -564,6 +627,8 @@ void CAssetLibrary::RefreshModels(const std::string& projectPath, CScene& scene,
 
     std::vector<CModelAsset> vNext;
     vNext.reserve(m_vModels.size());
+    std::unordered_map<std::string, std::string> nextFingerprints;
+    bool modelsChanged = false;
 
     for (auto& asset : m_vModels)
     {
@@ -589,12 +654,31 @@ void CAssetLibrary::RefreshModels(const std::string& projectPath, CScene& scene,
         asset.m_IsProcedural = false;
         asset.m_FilePath = path.string();
 
-        if (old.count(name))
+        const std::string fingerprint = BuildModelFingerprint(path);
+        nextFingerprints[name] = fingerprint;
+        auto oldModel = oldModels.find(name);
+        const auto oldFingerprint = oldFingerprints.find(name);
+        if (oldModel != oldModels.end() && oldFingerprint != oldFingerprints.end() &&
+            oldFingerprint->second == fingerprint)
         {
-            asset.m_LoadedModel = old[name];
-            old.erase(name);
+            asset.m_LoadedModel = oldModel->second;
+            oldModels.erase(oldModel);
         }
         else
+        {
+            if (oldModel != oldModels.end())
+            {
+                UnloadModel(oldModel->second);
+                oldModels.erase(oldModel);
+            }
+            modelsChanged = true;
+            if (!CModelService::EnsureAssetLoaded(asset))
+            {
+                continue;
+            }
+        }
+
+        if (!asset.m_LoadedModel.meshes)
         {
             if (!CModelService::EnsureAssetLoaded(asset))
             {
@@ -605,12 +689,23 @@ void CAssetLibrary::RefreshModels(const std::string& projectPath, CScene& scene,
         vNext.push_back(std::move(asset));
     }
 
-    for (auto& [_, loadedModel] : old)
+    for (auto& [_, loadedModel] : oldModels)
     {
         UnloadModel(loadedModel);
+        modelsChanged = true;
+    }
+
+    for (const auto& [name, _] : oldFingerprints)
+    {
+        if (nextFingerprints.find(name) == nextFingerprints.end())
+        {
+            modelsChanged = true;
+            break;
+        }
     }
 
     m_vModels = std::move(vNext);
+    m_ModelFingerprints = std::move(nextFingerprints);
 
     for (auto& entity : scene.m_vEntities)
     {
@@ -629,6 +724,8 @@ void CAssetLibrary::RefreshModels(const std::string& projectPath, CScene& scene,
             }
         }
     }
+
+    return modelsChanged;
 }
 
 void CAssetLibrary::Refresh(const std::string& projectPath, CScene* pScene)
@@ -690,6 +787,7 @@ bool CAssetLibrary::ApplyResourceScan(SResourceScanResult& scan,
 
     std::vector<STextureOption> vNextTextures;
     std::unordered_map<std::string, std::string> nextFingerprints;
+    std::unordered_map<unsigned int, qc::Texture2D> textureReplacements;
     vNextTextures.push_back({ "None", {0} });
 
     for (SScannedTexture& scannedTexture : scan.vTextures)
@@ -756,23 +854,48 @@ bool CAssetLibrary::ApplyResourceScan(SResourceScanResult& scan,
         CTextureMetadataStore::ApplyToTexture(texture, scannedTexture.meta);
         vNextTextures.push_back({ scannedTexture.name, texture });
         nextFingerprints[scannedTexture.name] = scannedTexture.fingerprint;
-    }
-    for (const auto& [oldName, removedTexture] : oldByName)
-    {
-        auto replacement = std::find_if(vNextTextures.begin(), vNextTextures.end(),
-            [&oldName](const STextureOption& option)
-            {
-                return option.Name == oldName;
-            });
-        for (CEntity& entity : scene.m_vEntities)
+        if (oldIt != oldByName.end())
         {
-            CMeshComponent* pMesh = entity.GetMeshComponent();
-            CMaterialComponent* pMaterial = entity.GetMaterialComponent();
-            if (pMesh && pMaterial && pMaterial->m_Texture.id == removedTexture.id)
+            textureReplacements[oldIt->second.id] = texture;
+            oldByName.erase(oldIt);
+        }
+    }
+    for (const auto& [_, removedTexture] : oldByName)
+    {
+        textureReplacements[removedTexture.id] = {0};
+    }
+
+    for (CEntity& entity : scene.m_vEntities)
+    {
+        CMaterialComponent* pMaterial = entity.GetMaterialComponent();
+        if (pMaterial)
+        {
+            const auto replacement = textureReplacements.find(pMaterial->m_Texture.id);
+            if (replacement != textureReplacements.end())
             {
-                pMaterial->m_Texture = replacement != vNextTextures.end()
-                    ? replacement->Texture
-                    : qc::Texture2D{0};
+                pMaterial->m_Texture = replacement->second;
+            }
+        }
+
+        CMeshComponent* pMesh = entity.GetMeshComponent();
+        if (!pMesh || !pMesh->m_Model.materials)
+        {
+            continue;
+        }
+
+        for (int materialIndex = 0; materialIndex < pMesh->m_Model.materialCount; ++materialIndex)
+        {
+            qc::Material& material = pMesh->m_Model.materials[materialIndex];
+            if (!material.maps)
+            {
+                continue;
+            }
+
+            qc::Texture2D& texture = material.maps[MATERIAL_MAP_ALBEDO].texture;
+            const auto replacement = textureReplacements.find(texture.id);
+            if (replacement != textureReplacements.end())
+            {
+                texture = replacement->second;
             }
         }
     }
@@ -788,7 +911,14 @@ bool CAssetLibrary::ApplyResourceScan(SResourceScanResult& scan,
 
     m_vTextures = std::move(vNextTextures);
     m_TextureFingerprints = std::move(nextFingerprints);
-    RefreshModels(projectPath, scene, scan.vModelPaths);
+    if (RefreshModels(projectPath, scene, scan.vModelPaths))
+    {
+        quark::CSceneRuntime::RestoreSceneEntityModels(scene, *this);
+    }
+    else
+    {
+        quark::CSceneRuntime::RestoreSceneEntityMaterials(scene, *this);
+    }
     m_LastResourceSignature = scan.signature;
     return true;
 }
@@ -874,6 +1004,7 @@ void CAssetLibrary::Unload()
     m_RequestedRefreshPath.clear();
     m_ForceResourceScan = false;
     m_vModels.clear();
+    m_ModelFingerprints.clear();
     UnloadTextures();
     m_TextureFingerprints.clear();
 }

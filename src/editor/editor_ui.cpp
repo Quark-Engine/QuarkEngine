@@ -1297,9 +1297,9 @@ bool CEditor::DrawPreferencesInterfaceTab()
     changed |= ImGui::Checkbox("Show selection visualization", &m_Preferences.m_ShowSelectionVisualization);
     changed |= ImGui::SliderInt("Asset preview size", &m_Preferences.m_AssetPreviewSize, 32, 128);
 
-    const char* apAssetFilterNames[] = { "All", "Images", "Models", "Materials" };
+    const char* apAssetFilterNames[] = { "All", "Images + Models", "Materials", "Texture Metadata", "Prefabs" };
     ImGui::Text("Asset type filter");
-    changed |= ImGui::Combo("##asset_type_filter", &m_Preferences.m_AssetFilter, apAssetFilterNames, 4);
+    changed |= ImGui::Combo("##asset_type_filter", &m_Preferences.m_AssetFilter, apAssetFilterNames, IM_ARRAYSIZE(apAssetFilterNames));
 
     float aSelectionColor[3] = {
         m_Preferences.m_SelectionRed / 255.0f,

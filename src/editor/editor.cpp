@@ -461,5 +461,32 @@ void CEditor::HandleInput()
         CSceneEntityCommands::Delete(*this, pEntity);
     }
 
-    m_Assets.PollResources(m_ProjectPath, m_Scene, GetTime());
+    if (m_Assets.PollResources(m_ProjectPath, m_Scene, GetTime()))
+    {
+        m_Previews.InvalidateModelPreviews();
+        m_Previews.InvalidateMaterialPreviews();
+        m_Ui.m_AssetBrowser.dependencyCachePath.clear();
+        m_Ui.m_AssetBrowser.vCachedFileDependencies.clear();
+        m_Ui.m_AssetBrowser.dependencyCacheReady = false;
+
+        if (m_Ui.m_ModelViewer.m_Visible && !m_Ui.m_ModelViewer.m_AssetName.empty())
+        {
+            const CModelAsset* pAsset = m_Assets.FindModelByName(m_Ui.m_ModelViewer.m_AssetName);
+            if (!pAsset || !OpenModelViewerForAsset(m_Ui.m_ModelViewer, *pAsset))
+            {
+                m_Ui.m_ModelViewer.ReleasePreviewModel();
+                m_Ui.m_ModelViewer.m_Visible = false;
+                m_Ui.m_ModelViewer.m_AssetName.clear();
+            }
+        }
+
+        if (m_Ui.m_MaterialViewer.m_Visible)
+        {
+            if (!OpenMaterialViewerForPath(*this, m_Ui.m_MaterialViewer, m_Ui.m_MaterialViewer.m_CurrentPath))
+            {
+                m_Ui.m_MaterialViewer.ReleasePreviewModel();
+                m_Ui.m_MaterialViewer.m_Visible = false;
+            }
+        }
+    }
 }

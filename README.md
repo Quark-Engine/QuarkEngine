@@ -8,7 +8,7 @@ A light-weight engine in C++ and QuarkCore.
 *   **Quark Hub:** A dedicated project manager to create, rename, delete, and switch between multiple projects.
 *   **Scene Hierarchy:** Manage entities in your scene with ease. Supporting renaming, duplication, and deletion.
 *   **Inspector:** Detailed control over entity transforms (Position, Rotation, Scale), materials, and lighting properties.
-*   **Asset Browser:** Real-time filesystem tracking for textures and models with drag-and-drop support to spawn entities directly into the 3D world.
+*   **Asset Browser:** Search and filter project resources, preview models and materials, inspect scene/material dependencies, and automatically reload changed assets.
 *   **Undo/Redo System:** A reliable state-based system to revert or re-apply changes.
 *   **Transform Gizmos:** Integrated **ImGuizmo** for intuitive 3D manipulation (Translate, Rotate, Scale).
 

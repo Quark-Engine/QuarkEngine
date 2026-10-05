@@ -1,29 +1,76 @@
 #include "assets/texture_cache.h"
 
+#include <cstdint>
 #include <filesystem>
 
 CTextureCache::~CTextureCache() = default;
 
 const qc::Texture2D* CTextureCache::Load(const std::string& imagePath)
 {
-    const auto it = m_Textures.find(imagePath);
-    if (it != m_Textures.end())
+    namespace fs = std::filesystem;
+
+    std::error_code ec;
+    if (!fs::is_regular_file(imagePath, ec) || ec)
     {
-        return &it->second;
+        const auto existing = m_Textures.find(imagePath);
+        if (existing != m_Textures.end())
+        {
+            if (existing->second.id != 0)
+            {
+                qc::UnloadTexture(existing->second);
+            }
+            m_Textures.erase(existing);
+            m_Fingerprints.erase(imagePath);
+        }
+        return nullptr;
     }
 
-    if (!std::filesystem::exists(imagePath))
+    const uintmax_t fileSize = fs::file_size(imagePath, ec);
+    if (ec)
     {
         return nullptr;
+    }
+    ec.clear();
+    const auto writeTime = fs::last_write_time(imagePath, ec);
+    if (ec)
+    {
+        return nullptr;
+    }
+
+    const std::string fingerprint = std::to_string(fileSize) + "|" +
+        std::to_string(static_cast<long long>(writeTime.time_since_epoch().count()));
+    auto existing = m_Textures.find(imagePath);
+    if (existing != m_Textures.end())
+    {
+        const auto fingerprintIt = m_Fingerprints.find(imagePath);
+        if (fingerprintIt != m_Fingerprints.end() && fingerprintIt->second == fingerprint)
+        {
+            return &existing->second;
+        }
     }
 
     const qc::Texture2D texture = qc::LoadTexture(imagePath.c_str());
     if (texture.id == 0)
     {
-        return nullptr;
+        qc::TraceLog(qc::LogLevel::Error, "ASSETS",
+            qc::TextFormat("Failed to load texture file: %s", imagePath.c_str()));
+        return existing != m_Textures.end() ? &existing->second : nullptr;
     }
 
-    return &m_Textures.emplace(imagePath, texture).first->second;
+    if (existing != m_Textures.end())
+    {
+        if (existing->second.id != 0)
+        {
+            qc::UnloadTexture(existing->second);
+        }
+        existing->second = texture;
+        m_Fingerprints[imagePath] = fingerprint;
+        return &existing->second;
+    }
+
+    auto inserted = m_Textures.emplace(imagePath, texture);
+    m_Fingerprints.emplace(imagePath, fingerprint);
+    return &inserted.first->second;
 }
 
 const qc::Texture2D* CTextureCache::Find(const std::string& imagePath) const
@@ -47,4 +94,5 @@ void CTextureCache::Unload()
         }
     }
     m_Textures.clear();
+    m_Fingerprints.clear();
 }

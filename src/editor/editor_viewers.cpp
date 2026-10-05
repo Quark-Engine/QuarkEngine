@@ -43,6 +43,7 @@ void CModelViewerState::ReleasePreviewModel()
 void CModelViewerState::Unload()
 {
     ReleasePreviewModel();
+    m_AssetName.clear();
 
     if (m_RenderTexture.id != 0)
     {
@@ -90,6 +91,7 @@ bool OpenModelViewerForAsset(CModelViewerState& state, const CModelAsset& asset)
         return false;
     }
 
+    state.m_AssetName = asset.m_Name;
     state.m_Visible = true;
     state.m_Orbit.Radius = 5.0f;
     state.m_Orbit.Phi = 20.0f;
@@ -884,4 +886,3 @@ void DrawMaterialViewerWindow(CEditor& editor, CMaterialViewerState& state, CEnt
         }
     }
 }
-

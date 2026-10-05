@@ -90,7 +90,7 @@ static void ReadPreferences(CPreferences& preferences, const json& data)
     preferences.m_ShadowFilterQuality = std::clamp(preferences.m_ShadowFilterQuality, 0, 2);
     preferences.m_UndoHistoryLimit = std::clamp(preferences.m_UndoHistoryLimit, 10, 500);
     preferences.m_AssetPreviewSize = std::clamp(preferences.m_AssetPreviewSize, 32, 128);
-    preferences.m_AssetFilter = std::clamp(preferences.m_AssetFilter, 0, 3);
+    preferences.m_AssetFilter = std::clamp(preferences.m_AssetFilter, 0, 4);
     preferences.m_AutosaveIntervalMinutes = std::clamp(preferences.m_AutosaveIntervalMinutes, 1, 60);
     preferences.m_GizmoTranslationSnap = std::clamp(preferences.m_GizmoTranslationSnap, 0.01f, 10.0f);
     preferences.m_GizmoRotationSnap = std::clamp(preferences.m_GizmoRotationSnap, 1.0f, 90.0f);

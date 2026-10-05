@@ -17,6 +17,7 @@
 #include <cctype>
 #include <sstream>
 #include <string>
+#include <utility>
 
 #ifdef _WIN32
     #define NOMINMAX
@@ -42,6 +43,54 @@ namespace
 {
 
 constexpr float kIconSize = 64.0f;
+
+std::string Lowercase(std::string value)
+{
+    std::transform(value.begin(), value.end(), value.begin(), [](unsigned char character)
+    {
+        return static_cast<char>(std::tolower(character));
+    });
+    return value;
+}
+
+bool MatchesAssetFilter(const SLocalEntry& entry, int filter, const std::string& search)
+{
+    if (entry.IsDirectory)
+    {
+        return filter == 0 &&
+            (search.empty() || Lowercase(entry.FileName).find(search) != std::string::npos);
+    }
+
+    bool matchesType = false;
+    switch (filter)
+    {
+    case 0:
+        matchesType = !entry.IsTextureMeta;
+        break;
+    case 1:
+        matchesType = entry.IsImage || entry.IsModel;
+        break;
+    case 2:
+        matchesType = entry.IsMaterial;
+        break;
+    case 3:
+        matchesType = entry.IsTextureMeta;
+        break;
+    case 4:
+        matchesType = entry.isPrefab;
+        break;
+    default:
+        matchesType = true;
+        break;
+    }
+
+    if (!matchesType)
+    {
+        return false;
+    }
+
+    return search.empty() || Lowercase(entry.FileName).find(search) != std::string::npos;
+}
 
 void OpenInSystemFileExplorer(const fs::path& path, bool bIsDirectory)
 {
@@ -233,7 +282,7 @@ bool ImportPathToResources(const fs::path& src, const fs::path& resourceDir)
     return false;
 }
 
-static qc::RenderTexture2D CreateMaterialPreview(const std::string& mtlPath)
+static qc::RenderTexture2D CreateMaterialPreview(CEditor& editor, const std::string& mtlPath)
 {
     std::ifstream file(mtlPath);
     if (!file.is_open())
@@ -241,11 +290,10 @@ static qc::RenderTexture2D CreateMaterialPreview(const std::string& mtlPath)
         return {0};
     }
 
-    Model sphere = LoadModelFromMesh(GenMeshSphere(1.0f, 64, 64));
+    qc::Model sphere = LoadModelFromMesh(GenMeshSphere(1.0f, 64, 64));
 
-    Color albedo = WHITE;
-    float brightness = 1.0f;
-    Texture2D tex = {0};
+    qc::Color albedo = WHITE;
+    qc::Texture2D tex = {0};
     std::string texPath;
 
     std::string line;
@@ -273,49 +321,52 @@ static qc::RenderTexture2D CreateMaterialPreview(const std::string& mtlPath)
         }
         else if (type == "map_Kd")
         {
-            ss >> texPath;
+            std::getline(ss >> std::ws, texPath);
         }
     }
 
-    Material& mat = sphere.materials[0];
+    qc::Material& mat = sphere.materials[0];
 
-    Color finalColor = {
-        (unsigned char)(albedo.r * brightness),
-        (unsigned char)(albedo.g * brightness),
-        (unsigned char)(albedo.b * brightness),
-        255
-    };
-
-    mat.maps[MATERIAL_MAP_DIFFUSE].color = finalColor;
+    mat.maps[MATERIAL_MAP_DIFFUSE].color = albedo;
 
     if (!texPath.empty())
     {
-        std::filesystem::path full = std::filesystem::path(mtlPath).parent_path() / texPath;
-        if (std::filesystem::exists(full))
+        const fs::path full = fs::path(mtlPath).parent_path() / fs::path(texPath);
+        const qc::Texture2D* pTexture = editor.m_Textures.Load(full.string());
+        if (pTexture)
         {
-            tex = LoadTexture(full.string().c_str());
+            tex = *pTexture;
             mat.maps[MATERIAL_MAP_DIFFUSE].texture = tex;
         }
     }
 
-    RenderTexture2D rt = LoadRenderTexture(128, 128);
-    Camera3D cam;
-    cam.fovy = 45;
+    qc::RenderTexture2D rt = LoadRenderTexture(128, 128);
+    if (rt.id == 0)
+    {
+        mat.maps[MATERIAL_MAP_DIFFUSE].texture = {0};
+        UnloadModel(sphere);
+        return rt;
+    }
+
+    qc::Camera3D cam = {};
+    cam.fovy = 45.0f;
     cam.projection = CAMERA_PERSPECTIVE;
-    cam.target = {0,0,0};
-    cam.up = {0,1,0};
-    cam.position = {2,2,2};
+    cam.target = {0, 0, 0};
+    cam.up = {0, 1, 0};
+    cam.position = {2, 2, 2};
 
     BeginTextureMode(rt);
-    ClearBackground({40,40,45,255});
+    ClearBackground({40, 40, 45, 255});
     BeginMode3D(cam);
 
-    DrawModel(sphere, {0,0,0}, 1.0f, WHITE);
-    DrawModelWires(sphere, {0,0,0}, 1.0f, DARKGRAY);
+    DrawModel(sphere, {0, 0, 0}, 1.0f, WHITE);
+    DrawModelWires(sphere, {0, 0, 0}, 1.0f, DARKGRAY);
 
     EndMode3D();
     EndTextureMode();
 
+    sphere.materials[0].maps[MATERIAL_MAP_DIFFUSE].texture = {0};
+    UnloadModel(sphere);
     return rt;
 }
 
@@ -343,7 +394,7 @@ static qc::Texture GetMaterialPreview(CEditor& editor, const std::string& mtlPat
         return editor.m_Previews.MaterialPreview(mtlPath);
     }
 
-    const qc::RenderTexture2D renderTexture = CreateMaterialPreview(mtlPath);
+    const qc::RenderTexture2D renderTexture = CreateMaterialPreview(editor, mtlPath);
     if (renderTexture.id == 0)
     {
         return { 0 };
@@ -446,6 +497,7 @@ void DrawAssetsUi(CEditor& editor)
         {
             editor.m_CurrentAssetPath = rebuilt;
             editor.m_SelectedAssetIndex = -1;
+            editor.m_SelectedAssetName.clear();
 
             editor.m_Previews.InvalidateModelPreviews();
         }
@@ -455,8 +507,23 @@ void DrawAssetsUi(CEditor& editor)
     ImGui::NewLine();
     ImGui::Separator();
 
+    const char* apAssetFilterNames[] = {
+        "All", "Images + Models", "Materials", "Texture Metadata", "Prefabs"
+    };
+    ImGui::SetNextItemWidth(150.0f);
+    if (ImGui::Combo("##asset_type_filter_browser", &editor.m_Preferences.m_AssetFilter,
+        apAssetFilterNames, IM_ARRAYSIZE(apAssetFilterNames)))
+    {
+        editor.m_Preferences.Save();
+    }
+    ImGui::SameLine();
+    ImGui::SetNextItemWidth(-1.0f);
+    ImGui::InputTextWithHint("##asset_search", "Search assets...", browser.aSearchBuffer,
+        IM_ARRAYSIZE(browser.aSearchBuffer));
+
     std::vector<SLocalEntry> vDirectories;
     std::vector<SLocalEntry> vFiles;
+    const std::string search = Lowercase(browser.aSearchBuffer);
     std::error_code dirError;
     for (const auto& path : fs::directory_iterator(editor.m_CurrentAssetPath, dirError))
     {
@@ -471,15 +538,20 @@ void DrawAssetsUi(CEditor& editor)
         {
             ext.erase(ext.begin());
         }
-        std::transform(ext.begin(), ext.end(), ext.begin(), ::tolower);
+        ext = Lowercase(std::move(ext));
         entry.Extension = ext;
         entry.IsMaterial = entry.Extension == "mtl";
-        if (!entry.IsMaterial && entry.Extension == "meta")
+        entry.IsTextureMeta = entry.Extension == "meta" && CTextureMetadataStore::IsImageFile(path.path().stem());
+        if (entry.IsTextureMeta && !fs::exists(path.path().parent_path() / path.path().stem()))
         {
             continue;
         }
-        entry.IsTextureMeta = entry.Extension == "meta" && CTextureMetadataStore::IsImageFile(path.path().stem());
-        if (entry.IsTextureMeta && !fs::exists(path.path().parent_path() / path.path().stem()))
+        entry.isPrefab = entry.Extension == "prefab";
+        if (entry.Extension == "meta" && !entry.IsTextureMeta)
+        {
+            continue;
+        }
+        if (!MatchesAssetFilter(entry, editor.m_Preferences.m_AssetFilter, search))
         {
             continue;
         }
@@ -490,14 +562,6 @@ void DrawAssetsUi(CEditor& editor)
         }
         else
         {
-            const bool matchesFilter = editor.m_Preferences.m_AssetFilter == 0 ||
-                (editor.m_Preferences.m_AssetFilter == 1 && (entry.IsImage || entry.IsModel)) ||
-                (editor.m_Preferences.m_AssetFilter == 2 && entry.IsMaterial) ||
-                (editor.m_Preferences.m_AssetFilter == 3 && entry.IsTextureMeta);
-            if (!matchesFilter)
-            {
-                continue;
-            }
             vFiles.push_back(entry);
         }
     }
@@ -505,6 +569,25 @@ void DrawAssetsUi(CEditor& editor)
     std::vector<SLocalEntry> vEntries;
     vEntries.insert(vEntries.end(), vDirectories.begin(), vDirectories.end());
     vEntries.insert(vEntries.end(), vFiles.begin(), vFiles.end());
+
+    if (!editor.m_SelectedAssetName.empty())
+    {
+        const auto selectedEntry = std::find_if(vEntries.begin(), vEntries.end(),
+            [&editor](const SLocalEntry& entry)
+            {
+                return entry.FileName == editor.m_SelectedAssetName;
+            });
+        editor.m_SelectedAssetIndex = selectedEntry == vEntries.end()
+            ? -1
+            : static_cast<int>(std::distance(vEntries.begin(), selectedEntry));
+        std::error_code selectedError;
+        if (!fs::exists(editor.m_CurrentAssetPath / editor.m_SelectedAssetName, selectedError) ||
+            selectedError)
+        {
+            editor.m_SelectedAssetName.clear();
+            editor.m_SelectedAssetIndex = -1;
+        }
+    }
 
     if (vEntries.empty())
     {
@@ -534,7 +617,7 @@ void DrawAssetsUi(CEditor& editor)
             ImGui::EndDragDropTarget();
         }
 
-        const char* pText = lang.Word("empty_folder");
+        const char* pText = search.empty() ? lang.Word("empty_folder") : "No matching assets.";
         const ImVec2 ts   = ImGui::CalcTextSize(pText);
         const ImVec2 wp   = ImGui::GetWindowPos();
         const ImVec2 ws   = ImGui::GetWindowSize();
@@ -1210,6 +1293,182 @@ void DrawAssetsUi(CEditor& editor)
     ImGui::End();
 }
 
+static bool PathsReferToSameFile(const fs::path& lhs, const fs::path& rhs)
+{
+    std::error_code lhsError;
+    std::error_code rhsError;
+    const fs::path normalizedLhs = fs::weakly_canonical(lhs, lhsError);
+    const fs::path normalizedRhs = fs::weakly_canonical(rhs, rhsError);
+    if (!lhsError && !rhsError)
+    {
+        return normalizedLhs == normalizedRhs;
+    }
+    return lhs.lexically_normal() == rhs.lexically_normal();
+}
+
+static void DrawAssetDependencies(CEditor& editor, const fs::path& selected)
+{
+    const fs::path resourceDir = fs::path(editor.m_ProjectPath) / "resources";
+    std::error_code relativeError;
+    const std::string selectedRelative = fs::relative(selected, resourceDir, relativeError).generic_string();
+    std::vector<std::pair<int, std::string>> vEntityReferences;
+    SAssetBrowserState& browser = editor.m_Ui.m_AssetBrowser;
+    if (browser.dependencyCachePath != selected.string())
+    {
+        browser.dependencyCachePath = selected.string();
+        browser.vCachedFileDependencies.clear();
+        browser.dependencyCacheReady = false;
+    }
+
+    const bool isMaterial = Lowercase(selected.extension().string()) == ".mtl";
+    const bool isObjModel = Lowercase(selected.extension().string()) == ".obj";
+    const bool isTexture = CTextureMetadataStore::IsImageFile(selected);
+    unsigned int textureId = 0;
+    if (isTexture && !relativeError)
+    {
+        for (const STextureOption& option : editor.m_Assets.Textures())
+        {
+            if (option.Name == selectedRelative)
+            {
+                textureId = option.Texture.id;
+                break;
+            }
+        }
+    }
+
+    for (int entityIndex = 0; entityIndex < static_cast<int>(editor.m_Scene.m_vEntities.size()); ++entityIndex)
+    {
+        const CEntity& entity = editor.m_Scene.m_vEntities[entityIndex];
+        const CMeshComponent* pMesh = entity.GetMeshComponent();
+        const CMaterialComponent* pMaterial = entity.GetMaterialComponent();
+
+        if (pMesh && !selectedRelative.empty() &&
+            fs::path(pMesh->m_AssetName).lexically_normal().generic_string() ==
+                fs::path(selectedRelative).lexically_normal().generic_string())
+        {
+            vEntityReferences.emplace_back(entityIndex, "Model used by: " + entity.m_Name);
+        }
+
+        if (!pMaterial)
+        {
+            continue;
+        }
+
+        if (isMaterial && !pMaterial->m_TextureName.empty() &&
+            PathsReferToSameFile(pMaterial->m_TextureName, selected))
+        {
+            vEntityReferences.emplace_back(entityIndex, "Material used by: " + entity.m_Name);
+        }
+
+        if (isTexture && textureId != 0 && pMaterial->m_Texture.id == textureId)
+        {
+            vEntityReferences.emplace_back(entityIndex, "Texture used by: " + entity.m_Name);
+        }
+    }
+
+    if (!browser.dependencyCacheReady && isObjModel)
+    {
+        std::ifstream modelFile(selected);
+        std::string line;
+        while (std::getline(modelFile, line))
+        {
+            std::istringstream stream(line);
+            std::string type;
+            stream >> type;
+            if (type != "mtllib")
+            {
+                continue;
+            }
+
+            std::string materialName;
+            while (stream >> materialName)
+            {
+                browser.vCachedFileDependencies.push_back("Uses material: " +
+                    (selected.parent_path() / materialName).lexically_normal().string());
+            }
+        }
+    }
+    else if (!browser.dependencyCacheReady && isMaterial)
+    {
+        std::ifstream materialFile(selected);
+        std::string line;
+        while (std::getline(materialFile, line))
+        {
+            std::istringstream stream(line);
+            std::string type;
+            stream >> type;
+            if (type != "map_Kd")
+            {
+                continue;
+            }
+
+            std::string textureName;
+            std::getline(stream >> std::ws, textureName);
+            if (!textureName.empty())
+            {
+                browser.vCachedFileDependencies.push_back("Uses texture: " +
+                    (selected.parent_path() / fs::path(textureName)).lexically_normal().string());
+            }
+        }
+    }
+    else if (!browser.dependencyCacheReady && isTexture)
+    {
+        std::error_code scanError;
+        for (const fs::directory_entry& entry : fs::recursive_directory_iterator(
+            resourceDir, fs::directory_options::skip_permission_denied, scanError))
+        {
+            std::error_code entryError;
+            if (!entry.is_regular_file(entryError) || entryError ||
+                Lowercase(entry.path().extension().string()) != ".mtl")
+            {
+                continue;
+            }
+
+            std::ifstream materialFile(entry.path());
+            std::string line;
+            while (std::getline(materialFile, line))
+            {
+                std::istringstream stream(line);
+                std::string type;
+                stream >> type;
+                if (type != "map_Kd")
+                {
+                    continue;
+                }
+
+                std::string textureName;
+                std::getline(stream >> std::ws, textureName);
+                if (!textureName.empty() &&
+                    PathsReferToSameFile(entry.path().parent_path() / fs::path(textureName), selected))
+                {
+                    browser.vCachedFileDependencies.push_back("Used by material: " + entry.path().string());
+                }
+            }
+        }
+    }
+    browser.dependencyCacheReady = true;
+
+    ImGui::Separator();
+    ImGui::Text("Dependencies");
+    for (const std::string& reference : browser.vCachedFileDependencies)
+    {
+        ImGui::TextWrapped("%s", reference.c_str());
+    }
+    for (const auto& [entityIndex, reference] : vEntityReferences)
+    {
+        ImGui::PushID(entityIndex);
+        if (ImGui::Selectable(reference.c_str()))
+        {
+            editor.m_Scene.SelectEntity(entityIndex, false);
+        }
+        ImGui::PopID();
+    }
+    if (browser.vCachedFileDependencies.empty() && vEntityReferences.empty())
+    {
+        ImGui::TextDisabled("No references found.");
+    }
+}
+
 void DrawSelectedTextureInspector(CEditor& editor)
 {
     if (editor.m_SelectedAssetName.empty())
@@ -1218,6 +1477,15 @@ void DrawSelectedTextureInspector(CEditor& editor)
     }
 
     const fs::path selected = editor.m_CurrentAssetPath / editor.m_SelectedAssetName;
+    std::error_code selectedError;
+    if (fs::is_regular_file(selected, selectedError) && !selectedError)
+    {
+        const fs::path dependencyPath = selected.extension() == ".meta"
+            ? CTextureMetadataStore::PathFromMeta(selected)
+            : selected;
+        DrawAssetDependencies(editor, dependencyPath);
+    }
+
     const fs::path texturePath = CTextureMetadataStore::PathFromMeta(selected);
     if (!CTextureMetadataStore::IsImageFile(texturePath) || !fs::exists(texturePath))
     {

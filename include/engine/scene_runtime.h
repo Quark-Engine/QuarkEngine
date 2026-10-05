@@ -19,6 +19,7 @@ public:
     static void RestoreSceneEntityModels(CScene& scene, CAssetLibrary& assets,
         CScene* pPreviousScene = nullptr,
         const std::vector<std::optional<SEditableMeshBuildData>>* pvEditableMeshBuildData = nullptr);
+    static void RestoreSceneEntityMaterials(CScene& scene, const CAssetLibrary& assets);
 
     static void ResetSceneLightRuntime(CScene& scene, CLightRegistry& lights);
 };

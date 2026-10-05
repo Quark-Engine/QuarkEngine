@@ -187,6 +187,14 @@ void CSceneRuntime::RestoreSceneEntityModels(CScene& scene, CAssetLibrary& asset
     }
 }
 
+void CSceneRuntime::RestoreSceneEntityMaterials(CScene& scene, const CAssetLibrary& assets)
+{
+    for (CEntity& entity : scene.m_vEntities)
+    {
+        RestoreEntityMaterial(entity, assets);
+    }
+}
+
 void CSceneRuntime::ResetSceneLightRuntime(CScene& scene, CLightRegistry& lights)
 {
     for (auto& entity : scene.m_vEntities)
