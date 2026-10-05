@@ -586,8 +586,17 @@ if(BUILD_ENGINE)
         plugins/ThreadMonitor/plugin.cpp
     )
 
+    add_library(DeveloperTools SHARED
+        plugins/DeveloperTools/plugin.cpp
+    )
+
     target_include_directories(ThreadMonitor PRIVATE
         ${CMAKE_SOURCE_DIR}/include
+    )
+
+    target_include_directories(DeveloperTools PRIVATE
+        ${CMAKE_SOURCE_DIR}/include
+        ${CMAKE_SOURCE_DIR}/quark-libs/QuarkCore/external/SDL3/include
     )
 
     set_target_properties(ThreadMonitor PROPERTIES
@@ -597,8 +606,20 @@ if(BUILD_ENGINE)
         ARCHIVE_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/bin/$<CONFIG>/plugins
     )
 
+    set_target_properties(DeveloperTools PROPERTIES
+        PREFIX ""
+        RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/bin/$<CONFIG>/plugins
+        LIBRARY_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/bin/$<CONFIG>/plugins
+        ARCHIVE_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/bin/$<CONFIG>/plugins
+    )
+
     if(UNIX)
         set_target_properties(ThreadMonitor PROPERTIES
+            BUILD_RPATH "$ORIGIN/.."
+            INSTALL_RPATH "$ORIGIN/.."
+        )
+
+        set_target_properties(DeveloperTools PROPERTIES
             BUILD_RPATH "$ORIGIN/.."
             INSTALL_RPATH "$ORIGIN/.."
         )
