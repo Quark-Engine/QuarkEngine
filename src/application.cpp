@@ -318,6 +318,12 @@ void CApplication::UpdateFrame()
     }
     m_LastSelectedEntity = m_Editor.m_Scene.m_Selected;
 
+    if (!ImGuizmo::IsOver() && !ImGuizmo::IsUsing() &&
+        (IsCursorHidden() || m_Editor.m_Ui.m_Viewport.m_Hovered))
+    {
+        m_Camera.Update(m_Editor.m_Scene, m_Editor.m_Preferences);
+    }
+
     if (!m_Options.NoAutosave && m_Editor.m_Preferences.m_AutosaveEnabled &&
         GetTime() - m_LastAutosaveTime >= m_Editor.m_Preferences.m_AutosaveIntervalMinutes * 60.0)
         {
@@ -558,7 +564,6 @@ void CApplication::RenderFrame()
                     SDL_SetWindowMouseRect(pWindow, nullptr);
                 }
             }
-            m_Camera.Update(m_Editor.m_Scene, m_Editor.m_Preferences);
         }
 
         m_Editor.HandleInput();
