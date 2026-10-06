@@ -92,6 +92,20 @@ void OnUpdate(SPluginContext* pCtx)
     s_State.frameSampleCount = std::min(s_State.frameSampleCount + 1, FRAME_SAMPLE_COUNT);
 }
 
+template <typename T>
+std::shared_ptr<T> GetComponentOfType(const CComponentManager& components, EComponentType type)
+{
+    for (const auto& component : components.GetAllComponents())
+    {
+        if (component && component->GetType() == type)
+        {
+            return std::static_pointer_cast<T>(component);
+        }
+    }
+
+    return nullptr;
+}
+
 SEntityDebugData ReadEntityDebugData(const CEntity& entity)
 {
     SEntityDebugData data;
@@ -101,7 +115,7 @@ SEntityDebugData ReadEntityDebugData(const CEntity& entity)
     }
 
     const std::shared_ptr<CTransformComponent> pTransform =
-        entity.m_pComponents->GetComponentOfType<CTransformComponent>();
+        GetComponentOfType<CTransformComponent>(*entity.m_pComponents, COMPONENT_TRANSFORM);
     if (pTransform)
     {
         data.x = pTransform->m_Position.x;
@@ -112,7 +126,7 @@ SEntityDebugData ReadEntityDebugData(const CEntity& entity)
     }
 
     const std::shared_ptr<CCollisionComponent> pCollider =
-        entity.m_pComponents->GetComponentOfType<CCollisionComponent>();
+        GetComponentOfType<CCollisionComponent>(*entity.m_pComponents, COMPONENT_COLLISION);
     if (pCollider && pCollider->m_Enabled)
     {
         const float colliderCenterX = pCollider->m_Center.x * data.scaleX;
@@ -136,7 +150,7 @@ SEntityDebugData ReadEntityDebugData(const CEntity& entity)
     }
 
     const std::shared_ptr<CLightComponent> pLight =
-        entity.m_pComponents->GetComponentOfType<CLightComponent>();
+        GetComponentOfType<CLightComponent>(*entity.m_pComponents, COMPONENT_LIGHT);
     if (pLight && pLight->m_Enabled && pLight->m_Light.m_Enabled)
     {
         data.hasLight = true;
@@ -144,7 +158,7 @@ SEntityDebugData ReadEntityDebugData(const CEntity& entity)
     }
 
     const std::shared_ptr<CMeshComponent> pMesh =
-        entity.m_pComponents->GetComponentOfType<CMeshComponent>();
+        GetComponentOfType<CMeshComponent>(*entity.m_pComponents, COMPONENT_MESH);
     data.hasMesh = pMesh && pMesh->m_Enabled && pMesh->m_Model.meshes &&
         pMesh->m_Model.meshCount > 0;
     if (data.hasMesh)
