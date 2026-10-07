@@ -17,7 +17,7 @@ struct SLocalEntry
     bool IsMaterial;
     bool IsTextureMeta;
     bool isPrefab;
-    Texture Texture;
+    struct Texture Texture;
     std::string Extension;
 };
 
