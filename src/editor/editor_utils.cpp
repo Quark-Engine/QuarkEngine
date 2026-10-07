@@ -5,9 +5,6 @@
 #include <algorithm>
 #include <cmath>
 #include <filesystem>
-
-using namespace qc;
-
 namespace fs = std::filesystem;
 
 bool HasValidModelData(const Model& model)

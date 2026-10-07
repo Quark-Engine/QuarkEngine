@@ -14,16 +14,16 @@ public:
     CTextureCache(const CTextureCache&) = delete;
     CTextureCache& operator=(const CTextureCache&) = delete;
 
-    const qc::Texture2D* Load(const std::string& imagePath);
+    const Texture2D* Load(const std::string& imagePath);
 
-    const qc::Texture2D* Find(const std::string& imagePath) const;
+    const Texture2D* Find(const std::string& imagePath) const;
 
     bool Contains(const std::string& imagePath) const;
 
     void Unload();
 
 private:
-    std::unordered_map<std::string, qc::Texture2D> m_Textures;
+    std::unordered_map<std::string, Texture2D> m_Textures;
     std::unordered_map<std::string, std::string> m_Fingerprints;
 };
 

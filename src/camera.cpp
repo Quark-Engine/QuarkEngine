@@ -4,9 +4,6 @@
 #include "ImGuizmo.h"
 #include "editor/editor_preferences.h"
 #include "SDL3/SDL_mouse.h"
-
-using namespace qc;
-
 namespace
 {
 
@@ -60,14 +57,14 @@ void CFlyCamera::Update(CScene& scene, CPreferences& preferences)
         preferences.m_CameraFov = m_Cam.fovy;
     }
 
-    if (IsMouseButtonPressed(MouseButton::Left) &&
+    if (IsMouseButtonPressed(MOUSE_BUTTON_LEFT) &&
         !ImGuizmo::IsOver() && !ImGui::IsAnyItemActive())
     {
         SetCameraCapture(true);
         m_Active = true;
     }
 
-    if (IsKeyPressed(KeyboardKey::Escape) || !IsWindowFocused())
+    if (IsKeyPressed(KEY_ESCAPE) || !IsWindowFocused())
     {
         SetCameraCapture(false);
         m_Active = false;
@@ -96,10 +93,10 @@ void CFlyCamera::Update(CScene& scene, CPreferences& preferences)
 
     forward.normalized();
     Vec3 right = { sinf(m_Yaw - PI/2), 0, cosf(m_Yaw - PI/2) };
-    if (IsKeyDown(KeyboardKey::W)) m_Cam.position = m_Cam.position + (forward * (m_Speed * dt));
-    if (IsKeyDown(KeyboardKey::S)) m_Cam.position = m_Cam.position - (forward * (m_Speed * dt));
-    if (IsKeyDown(KeyboardKey::A)) m_Cam.position = m_Cam.position - (right * (m_Speed * dt));
-    if (IsKeyDown(KeyboardKey::D)) m_Cam.position = m_Cam.position + (right * (m_Speed * dt));
+    if (IsKeyDown(KEY_W)) m_Cam.position = m_Cam.position + (forward * (m_Speed * dt));
+    if (IsKeyDown(KEY_S)) m_Cam.position = m_Cam.position - (forward * (m_Speed * dt));
+    if (IsKeyDown(KEY_A)) m_Cam.position = m_Cam.position - (right * (m_Speed * dt));
+    if (IsKeyDown(KEY_D)) m_Cam.position = m_Cam.position + (right * (m_Speed * dt));
 
     m_Cam.target = m_Cam.position + forward;
 }

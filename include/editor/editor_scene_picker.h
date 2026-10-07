@@ -8,17 +8,17 @@
 class CScenePicker
 {
 public:
-    static qc::Vec3 RayPlaneHit(qc::Ray ray);
+    static Vec3 RayPlaneHit(Ray ray);
 
-    static qc::Vec2 WorldToScreen(const CViewportState& viewport, const qc::Vec3& world,
-        const qc::Camera3D& camera);
-    static qc::Ray ScreenToWorldRay(const CViewportState& viewport, const qc::Vec2& mouse,
-        const qc::Camera3D& camera);
+    static Vec2 WorldToScreen(const CViewportState& viewport, const Vec3& world,
+        const Camera3D& camera);
+    static Ray ScreenToWorldRay(const CViewportState& viewport, const Vec2& mouse,
+        const Camera3D& camera);
 
-    static bool RaycastEntity(const CScene& scene, const CEntity& entity, qc::Ray ray,
+    static bool RaycastEntity(const CScene& scene, const CEntity& entity, Ray ray,
         float& outDistance);
     static bool PickMeshTriangle(const CScene& scene, const CEntity& entity, int meshIndex,
-        qc::Ray ray, int& outTriangleIndex, int& outVertexCorner);
+        Ray ray, int& outTriangleIndex, int& outVertexCorner);
 };
 
 #endif // __EDITOR_EDITOR_SCENE_PICKER_H__

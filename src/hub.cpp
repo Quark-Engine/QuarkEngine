@@ -1,19 +1,5 @@
 #define NOMINMAX
 
-#include "hub.h"
-
-#include "version.h"
-#include "language_manager.h"
-#include "editor/editor_preferences.h"
-#include "project.h"
-#include "nlohmann/json.hpp"
-
-#include <algorithm>
-#include <cctype>
-#include <cstdio>
-#include <cstring>
-#include <fstream>
-
 #ifdef _WIN32
     #define WIN32_LEAN_AND_MEAN
 
@@ -29,7 +15,23 @@
     #undef CloseWindow
     #undef ShowCursor
     #undef Rectangle
+    #undef near
+    #undef far
 #endif
+
+#include "hub.h"
+
+#include "version.h"
+#include "language_manager.h"
+#include "editor/editor_preferences.h"
+#include "project.h"
+#include "nlohmann/json.hpp"
+
+#include <algorithm>
+#include <cctype>
+#include <cstdio>
+#include <cstring>
+#include <fstream>
 
 namespace fs = std::filesystem;
 
@@ -83,7 +85,7 @@ CHubApp::~CHubApp()
     {
         if (plugin.Icon.id != 0)
         {
-            qc::UnloadTexture(plugin.Icon);
+            UnloadTexture(plugin.Icon);
         }
     }
 }
@@ -341,7 +343,7 @@ void CHubApp::RefreshPlugins()
     {
         if (plugin.Icon.id != 0)
         {
-            qc::UnloadTexture(plugin.Icon);
+            UnloadTexture(plugin.Icon);
         }
     }
 
@@ -379,7 +381,7 @@ void CHubApp::RefreshPlugins()
 
             const fs::path iconPath = entry.path() / "icon.png";
             const fs::path metaPath = entry.path() / "meta.txt";
-            plugin.Icon = fs::exists(iconPath) ? qc::LoadTexture(iconPath.string().c_str()) : qc::Texture2D{ 0 };
+            plugin.Icon = fs::exists(iconPath) ? LoadTexture(iconPath.string().c_str()) : Texture2D{ 0 };
             plugin.Description = ReadMetaLine(metaPath, "description");
         }
         else if (entry.is_regular_file())
@@ -394,7 +396,7 @@ void CHubApp::RefreshPlugins()
 
             const fs::path iconPath = entry.path().parent_path() / (plugin.Name + ".png");
             const fs::path metaPath = entry.path().parent_path() / (plugin.Name + ".meta");
-            plugin.Icon = fs::exists(iconPath) ? qc::LoadTexture(iconPath.string().c_str()) : qc::Texture2D{ 0 };
+            plugin.Icon = fs::exists(iconPath) ? LoadTexture(iconPath.string().c_str()) : Texture2D{ 0 };
             plugin.Description = ReadMetaLine(metaPath, "description");
         }
         else
@@ -579,7 +581,7 @@ void CHubApp::DrawProjectCard(int index)
 
 void CHubApp::DrawProjectList()
 {
-    ImGui::BeginChild("##list", ImVec2(0, static_cast<float>(qc::GetScreenHeight()) - 90), false);
+    ImGui::BeginChild("##list", ImVec2(0, static_cast<float>(GetScreenHeight()) - 90), false);
 
     if (m_State.vProjects.empty())
     {
@@ -661,7 +663,7 @@ void CHubApp::DrawCreatePopup()
 
     ImGui::SetNextWindowSize(ImVec2(460, 182), ImGuiCond_Always);
     ImGui::SetNextWindowPos(
-        ImVec2(qc::GetScreenWidth() * 0.5f, qc::GetScreenHeight() * 0.5f),
+        ImVec2(GetScreenWidth() * 0.5f, GetScreenHeight() * 0.5f),
         ImGuiCond_Always, ImVec2(0.5f, 0.5f));
 
     if (!ImGui::BeginPopupModal(lang.Word("create_project"), nullptr, ImGuiWindowFlags_NoResize))
@@ -730,7 +732,7 @@ void CHubApp::DrawRenamePopup()
 
     ImGui::SetNextWindowSize(ImVec2(380, 130), ImGuiCond_Always);
     ImGui::SetNextWindowPos(
-        ImVec2(qc::GetScreenWidth() * 0.5f, qc::GetScreenHeight() * 0.5f),
+        ImVec2(GetScreenWidth() * 0.5f, GetScreenHeight() * 0.5f),
         ImGuiCond_Always, ImVec2(0.5f, 0.5f));
 
     if (!ImGui::BeginPopupModal(lang.Word("rename_project"), nullptr, ImGuiWindowFlags_NoResize))
@@ -778,7 +780,7 @@ void CHubApp::DrawDeletePopup()
 
     ImGui::SetNextWindowSize(ImVec2(380, 105), ImGuiCond_Always);
     ImGui::SetNextWindowPos(
-        ImVec2(qc::GetScreenWidth() * 0.5f, qc::GetScreenHeight() * 0.5f),
+        ImVec2(GetScreenWidth() * 0.5f, GetScreenHeight() * 0.5f),
         ImGuiCond_Always, ImVec2(0.5f, 0.5f));
 
     if (!ImGui::BeginPopupModal(lang.Word("delete_project"), nullptr, ImGuiWindowFlags_NoResize))
@@ -828,7 +830,7 @@ void CHubApp::DrawVersionWarningPopup()
 
     ImGui::SetNextWindowSize(ImVec2(480, 155), ImGuiCond_Always);
     ImGui::SetNextWindowPos(
-        ImVec2(qc::GetScreenWidth() * 0.5f, qc::GetScreenHeight() * 0.5f),
+        ImVec2(GetScreenWidth() * 0.5f, GetScreenHeight() * 0.5f),
         ImGuiCond_Always, ImVec2(0.5f, 0.5f));
 
     if (!ImGui::BeginPopupModal(lang.Word("version_mismatch"), nullptr, ImGuiWindowFlags_NoResize))
@@ -933,7 +935,7 @@ void CHubApp::DrawPluginManager()
 
                 if (plugin.Icon.id != 0)
                 {
-                    qc::QcImGuiAddImage(ImGui::GetWindowDrawList(), &plugin.Icon, badgeMin, badgeMax);
+                    QcImGuiAddImage(ImGui::GetWindowDrawList(), &plugin.Icon, badgeMin, badgeMax);
                 }
                 else
                 {
@@ -1005,7 +1007,7 @@ void CHubApp::DrawPluginManager()
 
                 if (plugin.Icon.id != 0)
                 {
-                    qc::QcImGuiAddImage(pDrawList, &plugin.Icon, iconPos, iconMax);
+                    QcImGuiAddImage(pDrawList, &plugin.Icon, iconPos, iconMax);
                 }
                 else
                 {
@@ -1096,7 +1098,7 @@ void CHubApp::DrawPluginManager()
                     {
                         if (plugin.Icon.id != 0)
                         {
-                            qc::UnloadTexture(plugin.Icon);
+                            UnloadTexture(plugin.Icon);
                         }
 
                         const fs::path binary(plugin.Path);
@@ -1191,18 +1193,18 @@ std::string CHubApp::Run(CPreferences& preferences)
     m_PendingResult.clear();
     m_ShouldExit = false;
 
-    while (!qc::WindowShouldClose() && !m_ShouldExit)
+    while (!WindowShouldClose() && !m_ShouldExit)
     {
-        qc::BeginDrawing();
-        qc::ClearBackground(UsesLightTheme()
-            ? qc::Color{ 238, 241, 246, 255 }
-            : qc::Color{ 33, 35, 38, 255 });
-        qc::QcImGuiBegin();
+        BeginDrawing();
+        ClearBackground(UsesLightTheme()
+            ? Color{ 238, 241, 246, 255 }
+            : Color{ 33, 35, 38, 255 });
+        QcImGuiBegin();
 
         ImGui::SetNextWindowPos(ImVec2(0, 0));
         ImGui::SetNextWindowSize(ImVec2(
-            static_cast<float>(qc::GetScreenWidth()),
-            static_cast<float>(qc::GetScreenHeight())));
+            static_cast<float>(GetScreenWidth()),
+            static_cast<float>(GetScreenHeight())));
         ImGui::Begin(
             "##hub", nullptr,
             ImGuiWindowFlags_NoResize   | ImGuiWindowFlags_NoMove       |
@@ -1219,8 +1221,8 @@ std::string CHubApp::Run(CPreferences& preferences)
         DrawVersionWarningPopup();
         DrawPluginManager();
 
-        qc::QcImGuiEnd();
-        qc::EndDrawing();
+        QcImGuiEnd();
+        EndDrawing();
     }
 
     m_pPreferences = nullptr;

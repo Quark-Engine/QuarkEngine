@@ -3,9 +3,6 @@
 #include <filesystem>
 #include <iostream>
 #include <imgui.h>
-
-using namespace qc;
-
 namespace fs = std::filesystem;
 
 namespace

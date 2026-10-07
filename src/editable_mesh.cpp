@@ -2,9 +2,6 @@
 
 #include <algorithm>
 #include <limits>
-
-using namespace qc;
-
 SEditableMeshBuildData BuildEditableMeshData(const CEditableMesh& editableMesh)
 {
     SEditableMeshBuildData buildData;

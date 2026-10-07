@@ -7,7 +7,7 @@
 class CFlyCamera
 {
 public:
-    qc::Camera3D m_Cam;
+    Camera3D m_Cam;
     float m_Pitch = 0.0f;
     float m_Yaw = 0.0f;
     float m_Speed = 2;
@@ -17,8 +17,8 @@ public:
     
     CFlyCamera();
     void Update(CScene& scene, CPreferences& preferences);
-    void FocusOn(const qc::Vec3& point);
-    qc::Camera3D& GetCamera();
+    void FocusOn(const Vec3& point);
+    Camera3D& GetCamera();
 };
 
 #endif // __CAMERA_H__

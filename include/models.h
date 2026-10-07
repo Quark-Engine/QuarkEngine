@@ -9,9 +9,9 @@ class CModelService
 {
 public:
     static void UpdateModel(CEntity* pEntity, const CFreetypeTextMesh& textMesh);
-    static void RebuildMeshNormals(qc::Mesh& mesh);
+    static void RebuildMeshNormals(Mesh& mesh);
     static bool EnsureAssetLoaded(CModelAsset& asset);
-    static bool LoadInstance(const CModelAsset& asset, qc::Model& model);
+    static bool LoadInstance(const CModelAsset& asset, Model& model);
     static bool IsModelFile(const std::filesystem::path& path);
 
 private:
@@ -29,7 +29,7 @@ public:
     static bool Has(const CEntity& entity);
     static void CaptureFromModel(CEntity& entity);
     static bool Apply(CEntity& entity);
-    static bool GetTriangleVertexIndices(const qc::Mesh& mesh, int triangleIndex, int aOutIndices[3]);
+    static bool GetTriangleVertexIndices(const Mesh& mesh, int triangleIndex, int aOutIndices[3]);
     static bool DetachTriangles(CEntity& entity);
 };
 

@@ -6,7 +6,7 @@
 
 struct SEditableVertex
 {
-    qc::Vec3 Position;
+    Vec3 Position;
     float U = 0.0f;
     float V = 0.0f;
 };
@@ -35,7 +35,7 @@ struct SEditableMeshBuildData
 };
 
 SEditableMeshBuildData BuildEditableMeshData(const CEditableMesh& editableMesh);
-void UploadEditableMeshData(qc::Model& model, const SEditableMeshBuildData& buildData);
-void RebuildMeshFromEditable(qc::Model& model, CEditableMesh& editableMesh);
+void UploadEditableMeshData(Model& model, const SEditableMeshBuildData& buildData);
+void RebuildMeshFromEditable(Model& model, CEditableMesh& editableMesh);
 
 #endif // __EDITABLE_MESH_H__

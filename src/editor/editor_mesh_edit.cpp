@@ -13,9 +13,6 @@
 
 #include <cmath>
 #include <vector>
-
-using namespace qc;
-
 void CMeshEditor::SyncState(CEditor& editor)
 {
     SVertexEditState& edit = editor.m_Ui.m_VertexEdit;
@@ -44,7 +41,7 @@ bool CMeshEditor::GetSelectedTriangleVertices(const CEntity& entity, int meshInd
         return false;
     }
 
-    const qc::Mesh& mesh = pMeshComponent->m_Model.meshes[meshIndex];
+    const Mesh& mesh = pMeshComponent->m_Model.meshes[meshIndex];
     if (triangleIndex < 0 || triangleIndex >= mesh.triangleCount)
     {
         return false;
@@ -68,10 +65,10 @@ bool CMeshEditor::GetSelectedVertexIndex(const CEntity& entity, int meshIndex, i
     return true;
 }
 
-qc::Vec3 CMeshEditor::GetVertexLocalPosition(const CEntity& entity, int meshIndex, int vertexIndex)
+Vec3 CMeshEditor::GetVertexLocalPosition(const CEntity& entity, int meshIndex, int vertexIndex)
 {
     const CMeshComponent* pMeshComponent = entity.GetMeshComponent();
-    const qc::Mesh& mesh = pMeshComponent->m_Model.meshes[meshIndex];
+    const Mesh& mesh = pMeshComponent->m_Model.meshes[meshIndex];
     return {
         mesh.vertices[vertexIndex * 3 + 0],
         mesh.vertices[vertexIndex * 3 + 1],
@@ -79,11 +76,11 @@ qc::Vec3 CMeshEditor::GetVertexLocalPosition(const CEntity& entity, int meshInde
     };
 }
 
-qc::Vec3 CMeshEditor::GetVertexWorldPosition(const CScene& scene, const CEntity& entity,
+Vec3 CMeshEditor::GetVertexWorldPosition(const CScene& scene, const CEntity& entity,
     int meshIndex, int vertexIndex)
 {
-    const qc::Mat4 transform = quark::ComposeMeshWorld(scene, entity);
-    return qc::Vec3Transform(GetVertexLocalPosition(entity, meshIndex, vertexIndex), transform);
+    const Mat4 transform = quark::ComposeMeshWorld(scene, entity);
+    return Vec3Transform(GetVertexLocalPosition(entity, meshIndex, vertexIndex), transform);
 }
 
 bool CMeshEditor::EnsureReady(CEntity& entity)
@@ -102,7 +99,7 @@ bool CMeshEditor::EnsureReady(CEntity& entity)
 }
 
 bool CMeshEditor::SetVertexLocalPosition(CEntity& entity, int meshIndex, int vertexIndex,
-    const qc::Vec3& localPosition)
+    const Vec3& localPosition)
 {
     CMeshComponent* pMeshComponent = entity.GetMeshComponent();
     if (!pMeshComponent || !HasValidModelData(pMeshComponent->m_Model))
@@ -114,7 +111,7 @@ bool CMeshEditor::SetVertexLocalPosition(CEntity& entity, int meshIndex, int ver
         return false;
     }
 
-    qc::Mesh& mesh = pMeshComponent->m_Model.meshes[meshIndex];
+    Mesh& mesh = pMeshComponent->m_Model.meshes[meshIndex];
     if (!mesh.vertices || vertexIndex < 0 || vertexIndex >= mesh.vertexCount)
     {
         return false;
@@ -147,10 +144,10 @@ bool CMeshEditor::SetVertexLocalPosition(CEntity& entity, int meshIndex, int ver
 }
 
 bool CMeshEditor::SetVertexWorldPosition(const CScene& scene, CEntity& entity, int meshIndex,
-    int vertexIndex, const qc::Vec3& worldPosition)
+    int vertexIndex, const Vec3& worldPosition)
 {
-    const qc::Mat4 inverseTransform = quark::ComposeMeshWorld(scene, entity).inverted();
-    const qc::Vec3 localPosition = qc::Vec3Transform(worldPosition, inverseTransform);
+    const Mat4 inverseTransform = quark::ComposeMeshWorld(scene, entity).inverted();
+    const Vec3 localPosition = Vec3Transform(worldPosition, inverseTransform);
     return SetVertexLocalPosition(entity, meshIndex, vertexIndex, localPosition);
 }
 
@@ -192,7 +189,7 @@ void CMeshEditor::ResetModel(CEntity& entity, const CFreetypeTextMesh& textMesh)
     }
 }
 
-void CMeshEditor::DrawOverlay(CEditor& editor, const qc::Camera3D& camera)
+void CMeshEditor::DrawOverlay(CEditor& editor, const Camera3D& camera)
 {
     CViewportState& viewport = editor.m_Ui.m_Viewport;
     SVertexEditState& edit = editor.m_Ui.m_VertexEdit;
@@ -221,11 +218,11 @@ void CMeshEditor::DrawOverlay(CEditor& editor, const qc::Camera3D& camera)
     }
 
     ImDrawList* pDrawList = ImGui::GetForegroundDrawList();
-    qc::Vec2 aScreenPoints[3] = {};
+    Vec2 aScreenPoints[3] = {};
 
     for (int i = 0; i < 3; i++)
     {
-        const qc::Vec3 wp = GetVertexWorldPosition(editor.m_Scene, *pEntity, edit.MeshIndex, aTriangleVertices[i]);
+        const Vec3 wp = GetVertexWorldPosition(editor.m_Scene, *pEntity, edit.MeshIndex, aTriangleVertices[i]);
         aScreenPoints[i] = CScenePicker::WorldToScreen(viewport, wp, camera);
     }
 
@@ -261,7 +258,7 @@ void CMeshEditor::DrawOverlay(CEditor& editor, const qc::Camera3D& camera)
         return;
     }
 
-    const qc::Vec2 mouse = GetMousePosition();
+    const Vec2 mouse = GetMousePosition();
     float bestDistance = 18.0f;
     int bestCorner = -1;
 

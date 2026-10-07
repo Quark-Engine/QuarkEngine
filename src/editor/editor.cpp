@@ -1,4 +1,4 @@
-#include "editor/editor.h"
+﻿#include "editor/editor.h"
 
 #include "editor/editor_assets.h"
 #include "editor/editor_entity_clipboard.h"
@@ -15,9 +15,6 @@
 
 #include <chrono>
 #include <exception>
-
-using namespace qc;
-
 namespace fs = std::filesystem;
 
 namespace
@@ -332,15 +329,15 @@ void CEditor::HandleInput()
     ImGuiIO& io = ImGui::GetIO();
     const bool keyboardAvailable = !io.WantTextInput;
 
-    if (keyboardAvailable && IsKeyPressed(KeyboardKey::P))
+    if (keyboardAvailable && IsKeyPressed(KEY_P))
     {
         m_Ui.m_MeshEdit.GizmoMode = ImGuizmo::TRANSLATE;
     }
-    if (keyboardAvailable && IsKeyPressed(KeyboardKey::R))
+    if (keyboardAvailable && IsKeyPressed(KEY_R))
     {
         m_Ui.m_MeshEdit.GizmoMode = ImGuizmo::ROTATE;
     }
-    if (keyboardAvailable && IsKeyPressed(KeyboardKey::S))
+    if (keyboardAvailable && IsKeyPressed(KEY_S))
     {
         m_Ui.m_MeshEdit.GizmoMode = ImGuizmo::SCALE;
     }
@@ -379,14 +376,14 @@ void CEditor::HandleInput()
         }
     }
 
-    const bool ctrl = (IsKeyDown(KeyboardKey::LeftControl) || IsKeyDown(KeyboardKey::RightControl)) && keyboardAvailable;
-    const bool shiftDown = IsKeyDown(KeyboardKey::LeftShift) || IsKeyDown(KeyboardKey::RightShift);
+    const bool ctrl = (IsKeyDown(KEY_LEFT_CONTROL) || IsKeyDown(KEY_RIGHT_CONTROL)) && keyboardAvailable;
+    const bool shiftDown = IsKeyDown(KEY_LEFT_SHIFT) || IsKeyDown(KEY_RIGHT_SHIFT);
 
-    if (ctrl && shiftDown && IsKeyPressed(KeyboardKey::S))
+    if (ctrl && shiftDown && IsKeyPressed(KEY_S))
     {
         CSceneFileService::SaveAs(*this);
     }
-    else if (ctrl && IsKeyPressed(KeyboardKey::S))
+    else if (ctrl && IsKeyPressed(KEY_S))
     {
         CProjectService::Save(m_ProjectPath, m_Scene);
         m_SceneDirty = false;
@@ -394,7 +391,7 @@ void CEditor::HandleInput()
 
     const float now = static_cast<float>(GetTime());
 
-    if (ctrl && IsKeyDown(KeyboardKey::Z))
+    if (ctrl && IsKeyDown(KEY_Z))
     {
         if (m_Ui.m_MeshEdit.Undo.ShouldFire(now))
         {
@@ -406,7 +403,7 @@ void CEditor::HandleInput()
         m_Ui.m_MeshEdit.Undo.Release();
     }
 
-    if (ctrl && IsKeyDown(KeyboardKey::Y))
+    if (ctrl && IsKeyDown(KEY_Y))
     {
         if (m_Ui.m_MeshEdit.Redo.ShouldFire(now))
         {
@@ -420,7 +417,7 @@ void CEditor::HandleInput()
 
     CEntity* pEntity = m_Scene.GetSelected();
 
-    if (ctrl && IsKeyDown(KeyboardKey::C))
+    if (ctrl && IsKeyDown(KEY_C))
     {
         if (m_Ui.m_MeshEdit.Copy.ShouldFire(now))
         {
@@ -432,7 +429,7 @@ void CEditor::HandleInput()
         m_Ui.m_MeshEdit.Copy.Release();
     }
 
-    if (ctrl && IsKeyDown(KeyboardKey::V))
+    if (ctrl && IsKeyDown(KEY_V))
     {
         if (m_Ui.m_MeshEdit.Paste.ShouldFire(now))
         {
@@ -444,7 +441,7 @@ void CEditor::HandleInput()
         m_Ui.m_MeshEdit.Paste.Release();
     }
 
-    if (ctrl && IsKeyDown(KeyboardKey::D))
+    if (ctrl && IsKeyDown(KEY_D))
     {
         if (m_Ui.m_MeshEdit.Duplicate.ShouldFire(now))
         {
@@ -456,7 +453,7 @@ void CEditor::HandleInput()
         m_Ui.m_MeshEdit.Duplicate.Release();
     }
 
-    if (keyboardAvailable && IsKeyPressed(KeyboardKey::Delete))
+    if (keyboardAvailable && IsKeyPressed(KEY_DELETE))
     {
         CSceneEntityCommands::Delete(*this, pEntity);
     }

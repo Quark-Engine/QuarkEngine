@@ -10,7 +10,7 @@
 struct STextureOption
 {
     std::string Name;
-    qc::Texture2D Texture;
+    Texture2D Texture;
 };
 
 struct STextureMeta
@@ -38,7 +38,7 @@ public:
     static bool Load(const std::filesystem::path& texturePath, STextureMeta& meta);
     static bool Save(const std::filesystem::path& texturePath, const STextureMeta& meta);
     static std::filesystem::path PathFromMeta(const std::filesystem::path& path);
-    static void ApplyToTexture(qc::Texture2D& texture, const STextureMeta& meta);
+    static void ApplyToTexture(Texture2D& texture, const STextureMeta& meta);
 };
 
 class CEntityTextureService
@@ -52,7 +52,7 @@ public:
     static void StoreMaterialTextures(CEntity* pEntity);
     static void RestoreModelTextures(CEntity* pEntity);
     static void ClearMaterialTextures(CEntity* pEntity);
-    static void DrawEntityWithTexture(CEntity& entity, const qc::Mat4& worldTransform, const CPreferences& preferences);
+    static void DrawEntityWithTexture(CEntity& entity, const Mat4& worldTransform, const CPreferences& preferences);
     static void CloneModelMaterials(CEntity* pEntity);
 };
 

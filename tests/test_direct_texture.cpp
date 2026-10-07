@@ -13,9 +13,9 @@
 namespace
 {
 
-qc::Texture2D FakeTexture(unsigned int id)
+Texture2D FakeTexture(unsigned int id)
 {
-    qc::Texture2D texture = {};
+    Texture2D texture = {};
     texture.id = id;
     texture.width = 4;
     texture.height = 4;
@@ -337,19 +337,19 @@ TEST(DirectTexture, plan_falls_back_to_the_material_file_without_a_direct_textur
 TEST(DirectTexture, restores_asset_owned_texture_before_unloading_the_model)
 {
     CMeshComponent mesh;
-    qc::Material modelMaterial = {};
-    qc::MaterialMap aMaps[qc::MATERIAL_MAP_BRDF + 1] = {};
+    Material modelMaterial = {};
+    MaterialMap aMaps[MATERIAL_MAP_BRDF + 1] = {};
     modelMaterial.maps = aMaps;
     mesh.m_Model.materials = &modelMaterial;
     mesh.m_Model.materialCount = 1;
 
     CMaterialComponent material;
     material.m_vOriginalMaterialTextures.push_back(FakeTexture(22));
-    aMaps[qc::MATERIAL_MAP_ALBEDO].texture = FakeTexture(11);
+    aMaps[MATERIAL_MAP_ALBEDO].texture = FakeTexture(11);
 
     quark::RestoreOriginalMaterialTextures(mesh, material);
 
-    CHECK(aMaps[qc::MATERIAL_MAP_ALBEDO].texture.id == 22);
+    CHECK(aMaps[MATERIAL_MAP_ALBEDO].texture.id == 22);
 }
 
 TEST(DirectTexture, plan_restores_the_model_textures_for_a_model_sourced_material)

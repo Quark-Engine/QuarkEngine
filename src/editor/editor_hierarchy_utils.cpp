@@ -1,7 +1,6 @@
 #include "editor/editor_hierarchy_utils.h"
 #include "application_plugin_bridge.h"
 #include "engine/transform.h"
-using namespace qc;
 #include "imgui.h"
 #include <algorithm>
 

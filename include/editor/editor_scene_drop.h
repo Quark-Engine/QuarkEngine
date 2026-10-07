@@ -8,7 +8,7 @@ class CEditor;
 class CSceneAssetDrop
 {
 public:
-    static void Handle(CEditor& editor, const qc::Camera3D& camera);
+    static void Handle(CEditor& editor, const Camera3D& camera);
 };
 
 #endif // __EDITOR_EDITOR_SCENE_DROP_H__

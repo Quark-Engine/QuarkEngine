@@ -9,10 +9,6 @@
 #include <string>
 #include <vector>
 
-using namespace qc;
-
-using qc::Vec3;
-
 namespace
 {
 

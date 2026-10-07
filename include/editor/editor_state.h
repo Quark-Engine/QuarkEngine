@@ -88,7 +88,7 @@ public:
     CViewportState& operator=(const CViewportState&) = delete;
     ~CViewportState() = default;
 
-    qc::RenderTexture2D m_RenderTexture = { 0 };
+    RenderTexture2D m_RenderTexture = { 0 };
     ImVec2 m_WindowPos = { 0, 0 };
     ImVec2 m_WindowSize = { 0, 0 };
     bool m_Hovered = false;
@@ -228,8 +228,8 @@ struct SInterfaceStyleState
 
 struct SPreviewOrbit
 {
-    qc::Vec3 Target = { 0.0f, 0.0f, 0.0f };
-    qc::Vec3 ModelRotation = { 0.0f, 0.0f, 0.0f };
+    Vec3 Target = { 0.0f, 0.0f, 0.0f };
+    Vec3 ModelRotation = { 0.0f, 0.0f, 0.0f };
     float Phi = 20.0f;
     float Theta = 45.0f;
     float Radius = 5.0f;
@@ -244,10 +244,10 @@ public:
     ~CModelViewerState() = default;
 
     bool m_Visible = false;
-    qc::Model m_PreviewModel;
+    Model m_PreviewModel;
     std::string m_AssetName;
-    qc::RenderTexture2D m_RenderTexture = { 0 };
-    qc::Vec3 m_ModelCenter = { 0.0f, 0.0f, 0.0f };
+    RenderTexture2D m_RenderTexture = { 0 };
+    Vec3 m_ModelCenter = { 0.0f, 0.0f, 0.0f };
     SPreviewOrbit m_Orbit;
 
     void ReleasePreviewModel();
@@ -265,16 +265,16 @@ public:
     bool m_Visible = false;
 
     int m_PreviewPrimitive = 0;
-    qc::Color m_Albedo = qc::WHITE;
+    Color m_Albedo = WHITE;
     float m_aAlbedo[4] = { 1.0f, 1.0f, 1.0f, 1.0f };
     float m_Brightness = 1.0f;
 
-    qc::Texture2D m_DiffuseTexture = { 0 };
+    Texture2D m_DiffuseTexture = { 0 };
     std::string m_DiffuseTextureName;
     std::filesystem::path m_CurrentPath;
 
-    qc::Model m_PreviewSphere;
-    qc::RenderTexture2D m_RenderTexture = { 0 };
+    Model m_PreviewSphere;
+    RenderTexture2D m_RenderTexture = { 0 };
 
     bool m_TexturePickerVisible = false;
     std::vector<std::string> m_vTextureFilesInDir;
@@ -285,7 +285,7 @@ public:
     float m_TextureRepeatV = 1.0f;
     float m_UvScaleX = 1.0f;
     float m_UvScaleY = 1.0f;
-    qc::Color m_OutlineColor = qc::LIGHTGRAY;
+    Color m_OutlineColor = LIGHTGRAY;
     float m_aOutlineColor[4] = { 0.827f, 0.827f, 0.827f, 1.0f };
 
     SPreviewOrbit m_Orbit;

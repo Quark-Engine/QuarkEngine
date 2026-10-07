@@ -17,41 +17,41 @@ public:
     void Unload();
 
     bool HasModelPreview(const std::string& cacheKey) const;
-    qc::Texture ModelPreview(const std::string& cacheKey) const;
-    void StoreModelPreview(const std::string& cacheKey, qc::RenderTexture2D renderTexture);
+    Texture ModelPreview(const std::string& cacheKey) const;
+    void StoreModelPreview(const std::string& cacheKey, RenderTexture2D renderTexture);
 
     void InvalidateModelPreviews();
 
     bool HasMaterialPreview(const std::string& materialPath) const;
-    qc::Texture MaterialPreview(const std::string& materialPath) const;
-    void StoreMaterialPreview(const std::string& materialPath, qc::RenderTexture2D renderTexture);
+    Texture MaterialPreview(const std::string& materialPath) const;
+    void StoreMaterialPreview(const std::string& materialPath, RenderTexture2D renderTexture);
 
     void InvalidateMaterialPreviews();
 
     void EnsureIcons();
 
-    const qc::Texture& IconFile() const
+    const Texture& IconFile() const
     {
         return m_IconFile;
     }
-    const qc::Texture& IconFolder() const
+    const Texture& IconFolder() const
     {
         return m_IconFolder;
     }
-    const qc::Texture& IconFullFolder() const
+    const Texture& IconFullFolder() const
     {
         return m_IconFullFolder;
     }
 
 private:
-    static void UnloadAll(std::unordered_map<std::string, qc::RenderTexture2D>& previews);
+    static void UnloadAll(std::unordered_map<std::string, RenderTexture2D>& previews);
 
-    std::unordered_map<std::string, qc::RenderTexture2D> m_ModelPreviews;
-    std::unordered_map<std::string, qc::RenderTexture2D> m_MaterialPreviews;
+    std::unordered_map<std::string, RenderTexture2D> m_ModelPreviews;
+    std::unordered_map<std::string, RenderTexture2D> m_MaterialPreviews;
 
-    qc::Texture m_IconFile = { 0 };
-    qc::Texture m_IconFolder = { 0 };
-    qc::Texture m_IconFullFolder = { 0 };
+    Texture m_IconFile = { 0 };
+    Texture m_IconFolder = { 0 };
+    Texture m_IconFullFolder = { 0 };
 };
 
 #endif // __ASSETS_PREVIEW_CACHE_H__

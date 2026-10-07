@@ -4,9 +4,6 @@
 #include "application_plugin_bridge.h"
 #include <algorithm>
 #include <unordered_set>
-
-using namespace qc;
-
 CEntity* CScene::GetSelected()
 {
     if (m_Selected < 0 || m_Selected >= static_cast<int>(m_vEntities.size())) return nullptr;

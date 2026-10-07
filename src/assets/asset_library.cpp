@@ -16,9 +16,6 @@
 #include <unordered_map>
 #include <unordered_set>
 #include <stdexcept>
-
-using namespace qc;
-
 namespace fs = std::filesystem;
 
 namespace
@@ -491,7 +488,7 @@ void CAssetLibrary::LoadTexturesFromDisk(const std::string& projectPath)
         }
 
         CTextureMetadataStore::Ensure(path);
-        qc::Texture2D tex = LoadTexture(path.string().c_str());
+        Texture2D tex = LoadTexture(path.string().c_str());
         STextureMeta meta;
         if (CTextureMetadataStore::Load(path, meta))
         {
@@ -528,7 +525,7 @@ void CAssetLibrary::RefreshTextures(const std::string& projectPath, CScene* pSce
         fs::create_directories(resourceDir);
     }
 
-    std::unordered_map<std::string, qc::Texture2D> oldByName;
+    std::unordered_map<std::string, Texture2D> oldByName;
     for (auto& option : m_vTextures)
     {
         if (option.Texture.id != 0)
@@ -560,7 +557,7 @@ void CAssetLibrary::RefreshTextures(const std::string& projectPath, CScene* pSce
             continue;
         }
 
-        qc::Texture2D tex = LoadTexture(path.string().c_str());
+        Texture2D tex = LoadTexture(path.string().c_str());
         vNextOptions.push_back({ textureName, tex });
         nextFingerprints[textureName] = fingerprint;
     }
@@ -606,14 +603,14 @@ bool CAssetLibrary::RefreshModels(const std::string& projectPath, CScene& scene)
 bool CAssetLibrary::RefreshModels(const std::string& projectPath, CScene& scene,
     const std::vector<fs::path>& vModelPaths)
 {
-    std::unordered_map<std::string, qc::Model> oldModels;
+    std::unordered_map<std::string, Model> oldModels;
     const std::unordered_map<std::string, std::string> oldFingerprints = m_ModelFingerprints;
 
     for (auto& asset : m_vModels)
     {
         if (!asset.m_IsProcedural)
         {
-            qc::Model model = asset.TakeLoadedModel();
+            Model model = asset.TakeLoadedModel();
             if (model.meshCount > 0 && model.meshes)
             {
                 oldModels[asset.m_Name] = model;
@@ -776,7 +773,7 @@ bool CAssetLibrary::ApplyResourceScan(SResourceScanResult& scan,
         return false;
     }
 
-    std::unordered_map<std::string, qc::Texture2D> oldByName;
+    std::unordered_map<std::string, Texture2D> oldByName;
     for (const STextureOption& option : m_vTextures)
     {
         if (option.Texture.id != 0)
@@ -787,7 +784,7 @@ bool CAssetLibrary::ApplyResourceScan(SResourceScanResult& scan,
 
     std::vector<STextureOption> vNextTextures;
     std::unordered_map<std::string, std::string> nextFingerprints;
-    std::unordered_map<unsigned int, qc::Texture2D> textureReplacements;
+    std::unordered_map<unsigned int, Texture2D> textureReplacements;
     vNextTextures.push_back({ "None", {0} });
 
     for (SScannedTexture& scannedTexture : scan.vTextures)
@@ -834,7 +831,7 @@ bool CAssetLibrary::ApplyResourceScan(SResourceScanResult& scan,
             continue;
         }
 
-        qc::Texture2D texture = LoadTextureFromImage(scannedTexture.imageData);
+        Texture2D texture = LoadTextureFromImage(scannedTexture.imageData);
         if (texture.id == 0)
         {
             TraceLog(LogLevel::Error, "ASSETS", TextFormat(
@@ -885,13 +882,13 @@ bool CAssetLibrary::ApplyResourceScan(SResourceScanResult& scan,
 
         for (int materialIndex = 0; materialIndex < pMesh->m_Model.materialCount; ++materialIndex)
         {
-            qc::Material& material = pMesh->m_Model.materials[materialIndex];
+            Material& material = pMesh->m_Model.materials[materialIndex];
             if (!material.maps)
             {
                 continue;
             }
 
-            qc::Texture2D& texture = material.maps[MATERIAL_MAP_ALBEDO].texture;
+            Texture2D& texture = material.maps[MATERIAL_MAP_ALBEDO].texture;
             const auto replacement = textureReplacements.find(texture.id);
             if (replacement != textureReplacements.end())
             {

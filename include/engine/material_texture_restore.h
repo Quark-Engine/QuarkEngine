@@ -20,7 +20,7 @@ enum class EMaterialTextureRestore
 struct SMaterialTextureRestore
 {
     EMaterialTextureRestore Action = EMaterialTextureRestore::None;
-    qc::Texture2D DirectTexture = {0};
+    Texture2D DirectTexture = {0};
 };
 
 SMaterialTextureRestore PlanMaterialTextureRestore(const CMaterialComponent& material,

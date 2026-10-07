@@ -5,7 +5,7 @@
 
 CTextureCache::~CTextureCache() = default;
 
-const qc::Texture2D* CTextureCache::Load(const std::string& imagePath)
+const Texture2D* CTextureCache::Load(const std::string& imagePath)
 {
     namespace fs = std::filesystem;
 
@@ -17,7 +17,7 @@ const qc::Texture2D* CTextureCache::Load(const std::string& imagePath)
         {
             if (existing->second.id != 0)
             {
-                qc::UnloadTexture(existing->second);
+                UnloadTexture(existing->second);
             }
             m_Textures.erase(existing);
             m_Fingerprints.erase(imagePath);
@@ -49,11 +49,11 @@ const qc::Texture2D* CTextureCache::Load(const std::string& imagePath)
         }
     }
 
-    const qc::Texture2D texture = qc::LoadTexture(imagePath.c_str());
+    const Texture2D texture = LoadTexture(imagePath.c_str());
     if (texture.id == 0)
     {
-        qc::TraceLog(qc::LogLevel::Error, "ASSETS",
-            qc::TextFormat("Failed to load texture file: %s", imagePath.c_str()));
+        TraceLog(LogLevel::Error, "ASSETS",
+            TextFormat("Failed to load texture file: %s", imagePath.c_str()));
         return existing != m_Textures.end() ? &existing->second : nullptr;
     }
 
@@ -61,7 +61,7 @@ const qc::Texture2D* CTextureCache::Load(const std::string& imagePath)
     {
         if (existing->second.id != 0)
         {
-            qc::UnloadTexture(existing->second);
+            UnloadTexture(existing->second);
         }
         existing->second = texture;
         m_Fingerprints[imagePath] = fingerprint;
@@ -73,7 +73,7 @@ const qc::Texture2D* CTextureCache::Load(const std::string& imagePath)
     return &inserted.first->second;
 }
 
-const qc::Texture2D* CTextureCache::Find(const std::string& imagePath) const
+const Texture2D* CTextureCache::Find(const std::string& imagePath) const
 {
     const auto it = m_Textures.find(imagePath);
     return it == m_Textures.end() ? nullptr : &it->second;
@@ -90,7 +90,7 @@ void CTextureCache::Unload()
     {
         if (pair.second.id != 0)
         {
-            qc::UnloadTexture(pair.second);
+            UnloadTexture(pair.second);
         }
     }
     m_Textures.clear();

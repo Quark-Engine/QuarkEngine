@@ -17,9 +17,6 @@
 #include <chrono>
 #include <iostream>
 #include <SDL3/SDL_video.h>
-
-using namespace qc;
-
 namespace fs = std::filesystem;
 
 static bool LanguageUsesMsPgothic(const std::string& languageCode)
@@ -156,7 +153,7 @@ void CApplication::Initialize()
 
     SetMSAASamples(m_Editor.m_Preferences.m_MsaaSamples);
     SetTextureFilterMode(m_Editor.m_Preferences.m_TextureFilter == 0
-        ? TextureFilterMode::Nearest : TextureFilterMode::Linear);
+        ? TEXTURE_FILTER_POINT : TEXTURE_FILTER_BILINEAR);
 
     InitWindow(1280, 720, "Quark Engine", rendererType);
     m_WindowOpen = true;
@@ -310,7 +307,7 @@ void CApplication::UpdateFrame()
         {
             const int selectedIndex = m_Editor.m_Scene.m_Selected;
             const Vec3 worldPosition = Vec3Transform(
-                {0.0f, 0.0f, 0.0f},
+                Vec3{0.0f, 0.0f, 0.0f},
                 quark::ComposeWorld(m_Editor.m_Scene, selectedIndex)
             );
             m_Camera.FocusOn(worldPosition);

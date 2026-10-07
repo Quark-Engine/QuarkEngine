@@ -19,12 +19,12 @@ class CLightState
 public:
     int m_Id = -1;
 
-    qc::Light m_Light;
-    qc::Vec3 m_Position;
-    qc::Vec3 m_Target;
-    qc::Vec3 m_Rotation;
+    Light m_Light;
+    Vec3 m_Position;
+    Vec3 m_Target;
+    Vec3 m_Rotation;
 
-    qc::Color m_Color = qc::WHITE;
+    Color m_Color = WHITE;
     bool m_Enabled = true;
 
     float m_SpotAngle = 30.0f;
@@ -36,10 +36,10 @@ public:
     float m_Range = 5.0f;
 };
 
-CLightState CreateLighting(qc::Vec3 pos, qc::Color color);
-qc::Light CreateLightAtSlot(int slot, int type, qc::Vec3 position, qc::Vec3 target, qc::Color color, qc::Shader shader);
-void InitializeLightingUniformCache(CLightState& lighting, qc::Shader shader, int slot);
-void UpdateLighting(qc::Shader shader, CLightState& lighting);
+CLightState CreateLighting(Vec3 pos, Color color);
+Light CreateLightAtSlot(int slot, int type, Vec3 position, Vec3 target, Color color, Shader shader);
+void InitializeLightingUniformCache(CLightState& lighting, Shader shader, int slot);
+void UpdateLighting(Shader shader, CLightState& lighting);
 
 class CLightRegistry
 {

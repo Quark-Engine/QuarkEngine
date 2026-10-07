@@ -1,8 +1,5 @@
 #include "lighting.h"
 #include <cstring>
-
-using namespace qc;
-
 void UpdateLighting(Shader shader, CLightState& l)
 {
     l.m_Light.position = l.m_Position;

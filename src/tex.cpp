@@ -6,9 +6,6 @@
 #include <iomanip>
 #include <random>
 #include <sstream>
-
-using namespace qc;
-
 namespace fs = std::filesystem;
 
 bool CTextureMetadataStore::IsImageFile(const fs::path& path)
@@ -183,7 +180,7 @@ bool CTextureMetadataStore::Ensure(const fs::path& texturePath)
     return Save(texturePath, meta);
 }
 
-void CTextureMetadataStore::ApplyToTexture(qc::Texture2D& texture, const STextureMeta& meta)
+void CTextureMetadataStore::ApplyToTexture(Texture2D& texture, const STextureMeta& meta)
 {
     if (texture.id == 0)
     {
@@ -511,7 +508,7 @@ void DrawCollisionDebug(CEntity& entity, const Mat4& worldTransform, const CPref
     PopMatrix();
 }
 
-void CEntityTextureService::DrawEntityWithTexture(CEntity& entity, const qc::Mat4& worldTransform, const CPreferences& preferences)
+void CEntityTextureService::DrawEntityWithTexture(CEntity& entity, const Mat4& worldTransform, const CPreferences& preferences)
 {
     RefreshEntityRenderState(entity);
     const CMeshComponent* pMesh = entity.GetMeshComponent();

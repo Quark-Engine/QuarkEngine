@@ -5,9 +5,6 @@
 
 #include <fstream>
 #include <memory>
-
-using namespace qc;
-
 void CEntityFactory::AssignName(CEntity& entity, const char* pNewName)
 {
     if (!pNewName || pNewName[0] == '\0')

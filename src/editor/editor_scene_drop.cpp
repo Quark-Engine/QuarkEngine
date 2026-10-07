@@ -13,10 +13,7 @@
 
 #include <cstring>
 #include <string>
-
-using namespace qc;
-
-void CSceneAssetDrop::Handle(CEditor& editor, const qc::Camera3D& camera)
+void CSceneAssetDrop::Handle(CEditor& editor, const Camera3D& camera)
 {
     CViewportState& viewport = editor.m_Ui.m_Viewport;
     if (!editor.m_Ui.m_Layout.SceneAssetDragging)
@@ -54,7 +51,7 @@ void CSceneAssetDrop::Handle(CEditor& editor, const qc::Camera3D& camera)
 
     if (isMaterial)
     {
-        const qc::Ray ray = GetScreenToWorldRay({ mouse.x, mouse.y }, camera);
+        const Ray ray = GetScreenToWorldRay({ mouse.x, mouse.y }, camera);
 
         CEntity* pHitEntity = nullptr;
         float bestDistance = FLT_MAX;

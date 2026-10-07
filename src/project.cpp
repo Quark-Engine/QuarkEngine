@@ -11,9 +11,6 @@
 #include <fstream>
 #include <memory>
 #include <sstream>
-
-using namespace qc;
-
 namespace fs = std::filesystem;
 using json = nlohmann::json;
 

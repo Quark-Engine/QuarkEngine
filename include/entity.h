@@ -28,10 +28,10 @@ public:
 
     EObjectType m_Type = OBJECT_CUBE;
     bool m_IsProcedural = false;
-    std::function<qc::Model(int)> pfnGenerator;
-    qc::Model m_LoadedModel;
+    std::function<Model(int)> pfnGenerator;
+    Model m_LoadedModel;
 
-    qc::Model TakeLoadedModel();
+    Model TakeLoadedModel();
     void Unload();
 };
 

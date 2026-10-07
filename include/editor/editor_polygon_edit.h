@@ -9,9 +9,9 @@ class CEditor;
 class CPolygonEditor
 {
 public:
-    static void Draw(CEditor& editor, const qc::Camera3D& camera);
+    static void Draw(CEditor& editor, const Camera3D& camera);
 
-    static bool CreateVertex(const CScene& scene, CEntity& entity, const qc::Vec3& worldPosition);
+    static bool CreateVertex(const CScene& scene, CEntity& entity, const Vec3& worldPosition);
     static void CreateTriangle(CEntity& entity, int a, int b, int c);
 };
 

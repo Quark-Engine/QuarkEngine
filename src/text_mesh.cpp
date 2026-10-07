@@ -25,13 +25,13 @@ namespace fs = std::filesystem;
 
 struct SFTContour
 {
-    std::vector<qc::Vector2> vPoints;
+    std::vector<Vector2> vPoints;
 };
 
 struct SFTOutlineCtx
 {
     std::vector<SFTContour> vContours;
-    qc::Vector2 Current = {0, 0};
+    Vector2 Current = {0, 0};
     float Scale = 1.0f;
 };
 
@@ -62,7 +62,7 @@ void CFreetypeTextMesh::Init()
     FT_Library library = nullptr;
     if (FT_Init_FreeType(&library))
     {
-        qc::TraceLog(qc::LogLevel::Error, "Freetype", "failed to init");
+        TraceLog(LogLevel::Error, "Freetype", "failed to init");
         return;
     }
     m_pLibrary = library;
@@ -143,12 +143,12 @@ std::vector<std::pair<std::string, std::string>> CFreetypeTextMesh::GetSystemFon
     return vResult;
 }
 
-static float Cross2(qc::Vector2 origin, qc::Vector2 a, qc::Vector2 b)
+static float Cross2(Vector2 origin, Vector2 a, Vector2 b)
 {
     return (a.x - origin.x) * (b.y - origin.y) - (a.y - origin.y) * (b.x - origin.x);
 }
 
-static void PushQuadBezier(std::vector<qc::Vector2>& vOut, qc::Vector2 point0, qc::Vector2 point1, qc::Vector2 point2, int steps = 8)
+static void PushQuadBezier(std::vector<Vector2>& vOut, Vector2 point0, Vector2 point1, Vector2 point2, int steps = 8)
 {
     for (int i = 1; i <= steps; i++)
     {
@@ -162,7 +162,7 @@ static void PushQuadBezier(std::vector<qc::Vector2>& vOut, qc::Vector2 point0, q
     }
 }
 
-static void PushCubicBezier(std::vector<qc::Vector2>& vOut, qc::Vector2 point0, qc::Vector2 point1, qc::Vector2 point2, qc::Vector2 point3, int steps = 8)
+static void PushCubicBezier(std::vector<Vector2>& vOut, Vector2 point0, Vector2 point1, Vector2 point2, Vector2 point3, int steps = 8)
 {
     for (int i = 1; i <= steps; i++)
     {
@@ -174,7 +174,7 @@ static void PushCubicBezier(std::vector<qc::Vector2>& vOut, qc::Vector2 point0, 
     }
 }
 
-static float PolygonSignedArea(const std::vector<qc::Vector2>& vPoints)
+static float PolygonSignedArea(const std::vector<Vector2>& vPoints)
 {
     float a = 0;
     int n = (int)vPoints.size();
@@ -188,7 +188,7 @@ static float PolygonSignedArea(const std::vector<qc::Vector2>& vPoints)
     return a * .5f;
 }
 
-static std::vector<int> EarClip(const std::vector<qc::Vector2>& vPoints)
+static std::vector<int> EarClip(const std::vector<Vector2>& vPoints)
 {
     std::vector<int> vResult;
     int n = (int)vPoints.size();
@@ -206,7 +206,7 @@ static std::vector<int> EarClip(const std::vector<qc::Vector2>& vPoints)
     
     if (a < 0) std::reverse(vIndices.begin(), vIndices.end());
 
-    auto pointInTriangle = [&](qc::Vector2 p, qc::Vector2 a, qc::Vector2 b, qc::Vector2 c)
+    auto pointInTriangle = [&](Vector2 p, Vector2 a, Vector2 b, Vector2 c)
     {
         return Cross2(a,b,p) >= 0 && Cross2(b,c,p) >= 0 && Cross2(c,a,p) >= 0;
     };
@@ -220,7 +220,7 @@ static std::vector<int> EarClip(const std::vector<qc::Vector2>& vPoints)
         int prev = (i - 1 + sz) % sz;
         int next = (i + 1) % sz;
 
-        qc::Vector2 a = vPoints[vIndices[prev]], b = vPoints[vIndices[i]], c = vPoints[vIndices[next]];
+        Vector2 a = vPoints[vIndices[prev]], b = vPoints[vIndices[i]], c = vPoints[vIndices[next]];
         bool ear = Cross2(a, b, c) > 0;
         if (ear)
         {
@@ -286,8 +286,8 @@ static int FtConicTo(const FT_Vector* pCtrl, const FT_Vector* pTo, void* pUser)
     SFTOutlineCtx* pCtx = (SFTOutlineCtx*)pUser;
     if (pCtx->vContours.empty()) return 0;
 
-    qc::Vector2 point1 = { (float)pCtrl->x * pCtx->Scale, (float)pCtrl->y * pCtx->Scale };
-    qc::Vector2 point2 = { (float)pTo->x * pCtx->Scale, (float)pTo->y * pCtx->Scale };
+    Vector2 point1 = { (float)pCtrl->x * pCtx->Scale, (float)pCtrl->y * pCtx->Scale };
+    Vector2 point2 = { (float)pTo->x * pCtx->Scale, (float)pTo->y * pCtx->Scale };
 
     PushQuadBezier(pCtx->vContours.back().vPoints, pCtx->Current, point1, point2);
     pCtx->Current = point2;
@@ -300,9 +300,9 @@ static int FtCubicTo(const FT_Vector* pC1, const FT_Vector* pC2, const FT_Vector
     auto* pCtx = (SFTOutlineCtx*)pUser;
     if (pCtx->vContours.empty()) return 0;
 
-    qc::Vector2 point1 = { (float)pC1->x * pCtx->Scale, (float)pC1->y * pCtx->Scale };
-    qc::Vector2 point2 = { (float)pC2->x * pCtx->Scale, (float)pC2->y * pCtx->Scale };
-    qc::Vector2 point3 = { (float)pTo->x * pCtx->Scale, (float)pTo->y * pCtx->Scale };
+    Vector2 point1 = { (float)pC1->x * pCtx->Scale, (float)pC1->y * pCtx->Scale };
+    Vector2 point2 = { (float)pC2->x * pCtx->Scale, (float)pC2->y * pCtx->Scale };
+    Vector2 point3 = { (float)pTo->x * pCtx->Scale, (float)pTo->y * pCtx->Scale };
     
     PushCubicBezier(pCtx->vContours.back().vPoints, pCtx->Current, point1, point2, point3);
     pCtx->Current = point3;
@@ -329,7 +329,7 @@ struct SMeshBuilder
         vUvs.insert(vUvs.end(), { u, v });
     }
 
-    void AddFace(const std::vector<qc::Vector2>& vContour, float z, float normalZ, bool flipWinding)
+    void AddFace(const std::vector<Vector2>& vContour, float z, float normalZ, bool flipWinding)
     {
         auto vTris = EarClip(vContour);
         int n = (int)vContour.size();
@@ -355,14 +355,14 @@ struct SMeshBuilder
         Base += n;
     }
 
-    void AddWall(const std::vector<qc::Vector2>& vContour, float depth)
+    void AddWall(const std::vector<Vector2>& vContour, float depth)
     {
         int n = (int)vContour.size();
 
         for (int i = 0; i < n; i++)
         {
             int j = (i + 1) % n;
-            qc::Vector2 a = vContour[i], b = vContour[j];
+            Vector2 a = vContour[i], b = vContour[j];
 
             float ex = b.y - a.y, ey = -(b.x - a.x);
             float len = sqrtf(ex*ex + ey*ey);
@@ -385,9 +385,9 @@ struct SMeshBuilder
         }
     }
 
-    qc::Mesh Build()
+    Mesh Build()
     {
-        qc::Mesh m = {0};
+        Mesh m = {0};
         if (vVerts.empty()) return m;
 
         m.vertexCount   = (int)(vVerts.size() / 3);
@@ -408,23 +408,23 @@ struct SMeshBuilder
     }
 };
 
-qc::Model CFreetypeTextMesh::Generate(const std::string& text, float size, float thickness, float letterSpacing, const std::string& fontPath) const
+Model CFreetypeTextMesh::Generate(const std::string& text, float size, float thickness, float letterSpacing, const std::string& fontPath) const
 {
     auto makeFallback = []()
     {
-        return qc::LoadModelFromMesh(qc::GenMeshCube(0.001f, 0.001f, 0.001f));
+        return LoadModelFromMesh(GenMeshCube(0.001f, 0.001f, 0.001f));
     };
 
     if (!m_pLibrary)
     {
-        qc::TraceLog(qc::LogLevel::Warn, "Freetype", "not initialised"); return makeFallback();
+        TraceLog(LogLevel::Warn, "Freetype", "not initialised"); return makeFallback();
     }
     if (text.empty() || fontPath.empty()) return makeFallback();
 
     FT_Face pFace;
     if (FT_New_Face(m_pLibrary, fontPath.c_str(), 0, &pFace))
     {
-        qc::TraceLog(qc::LogLevel::Warn, "Freetype", qc::TextFormat("cannot load font %s", fontPath.c_str()));
+        TraceLog(LogLevel::Warn, "Freetype", TextFormat("cannot load font %s", fontPath.c_str()));
         return makeFallback();
     }
 
@@ -472,21 +472,21 @@ qc::Model CFreetypeTextMesh::Generate(const std::string& text, float size, float
 
     FT_Done_Face(pFace);
 
-    qc::Mesh mesh = builder.Build();
+    Mesh mesh = builder.Build();
     if (mesh.vertexCount == 0) return makeFallback();
 
     float halfWidth = cursorX * 0.5f;
     for (int i = 0; i < mesh.vertexCount; i++)
         mesh.vertices[i * 3] -= halfWidth;
 
-    qc::UpdateMeshBuffer(mesh, 0, mesh.vertices, mesh.vertexCount * 3 * sizeof(float), 0);
+    UpdateMeshBuffer(mesh, 0, mesh.vertices, mesh.vertexCount * 3 * sizeof(float), 0);
 
-    qc::Model model = qc::LoadModelFromMesh(mesh);
+    Model model = LoadModelFromMesh(mesh);
 
     if (model.materialCount == 0)
     {
-        model.materials  = (qc::Material*)malloc(sizeof(qc::Material));
-        model.materials[0] = qc::LoadMaterialDefault();
+        model.materials  = (Material*)malloc(sizeof(Material));
+        model.materials[0] = LoadMaterialDefault();
         model.materialCount = 1;
     }
     return model;

@@ -12,8 +12,8 @@ constexpr int kMaxLinesPerAxis = 256;
 
 struct Plane
 {
-    qc::Vec3 normal{};
-    qc::Vec3 point{};
+    Vec3 normal{};
+    Vec3 point{};
     float offset = 0.0f;
 };
 
@@ -23,21 +23,21 @@ float EvaluateAtGround(const Plane& plane, float x, float z)
         - plane.normal.y*plane.point.y + plane.offset;
 }
 
-void ClipPolygon(const Plane& plane, std::vector<qc::Vec2>& vPolygon)
+void ClipPolygon(const Plane& plane, std::vector<Vec2>& vPolygon)
 {
     if (vPolygon.empty())
     {
         return;
     }
 
-    std::vector<qc::Vec2> vClipped;
+    std::vector<Vec2> vClipped;
     vClipped.reserve(vPolygon.size() + 4);
 
-    qc::Vec2 last = vPolygon.back();
+    Vec2 last = vPolygon.back();
     float previousDistance = EvaluateAtGround(plane, last.x, last.y);
     bool previousInside = previousDistance >= 0.0f;
 
-    for (const qc::Vec2& current : vPolygon)
+    for (const Vec2& current : vPolygon)
     {
         const float currentDistance = EvaluateAtGround(plane, current.x, current.y);
         const bool currentInside = currentDistance >= 0.0f;
@@ -68,7 +68,7 @@ void ClipPolygon(const Plane& plane, std::vector<qc::Vec2>& vPolygon)
     vPolygon.swap(vClipped);
 }
 
-Plane MakeSidePlane(const qc::Vec3& eye, const qc::Vec3& first, const qc::Vec3& second)
+Plane MakeSidePlane(const Vec3& eye, const Vec3& first, const Vec3& second)
 {
     Plane plane;
     plane.normal = first.cross(second);
@@ -82,8 +82,8 @@ Plane MakeSidePlane(const qc::Vec3& eye, const qc::Vec3& first, const qc::Vec3& 
 }
 }
 
-void CInfiniteGrid::Draw(const qc::Camera3D& camera, int viewportWidth, int viewportHeight,
-    float spacing, qc::Color color, float maxExtent)
+void CInfiniteGrid::Draw(const Camera3D& camera, int viewportWidth, int viewportHeight,
+    float spacing, Color color, float maxExtent)
 {
     if (spacing <= 0.0f || viewportWidth <= 0 || viewportHeight <= 0 || maxExtent <= 0.0f)
     {
@@ -96,18 +96,18 @@ void CInfiniteGrid::Draw(const qc::Camera3D& camera, int viewportWidth, int view
         return;
     }
 
-    qc::Vec3 forward = camera.target - camera.position;
+    Vec3 forward = camera.target - camera.position;
     float length = forward.length();
-    forward = (length > kPlaneEpsilon) ? forward * (1.0f / length) : qc::Vec3{ 0.0f, 0.0f, -1.0f };
+    forward = (length > kPlaneEpsilon) ? forward * (1.0f / length) : Vec3{ 0.0f, 0.0f, -1.0f };
 
-    qc::Vec3 up = camera.up;
+    Vec3 up = camera.up;
     if (std::fabs(forward.dot(up)) > 0.999f)
     {
-        up = (std::fabs(up.y) > 0.5f) ? qc::Vec3{ 0.0f, 0.0f, 1.0f } : qc::Vec3{ 0.0f, 1.0f, 0.0f };
+        up = (std::fabs(up.y) > 0.5f) ? Vec3{ 0.0f, 0.0f, 1.0f } : Vec3{ 0.0f, 1.0f, 0.0f };
     }
 
-    const qc::Vec3 right = forward.cross(up).normalized();
-    const qc::Vec3 cameraUp = right.cross(forward);
+    const Vec3 right = forward.cross(up).normalized();
+    const Vec3 cameraUp = right.cross(forward);
 
     const float tanHalfFovy = std::tan(camera.fovy * DEG2RAD * 0.5f);
     const float tanHalfFovx = tanHalfFovy * aspect;
@@ -117,10 +117,10 @@ void CInfiniteGrid::Draw(const qc::Camera3D& camera, int viewportWidth, int view
         return right*(ndcX * tanHalfFovx) + cameraUp*(ndcY * tanHalfFovy) + forward;
     };
 
-    const qc::Vec3 rayBottomLeft = rayDirection(-1.0f, -1.0f);
-    const qc::Vec3 rayBottomRight = rayDirection(1.0f, -1.0f);
-    const qc::Vec3 rayTopRight = rayDirection(1.0f, 1.0f);
-    const qc::Vec3 rayTopLeft = rayDirection(-1.0f, 1.0f);
+    const Vec3 rayBottomLeft = rayDirection(-1.0f, -1.0f);
+    const Vec3 rayBottomRight = rayDirection(1.0f, -1.0f);
+    const Vec3 rayTopRight = rayDirection(1.0f, 1.0f);
+    const Vec3 rayTopLeft = rayDirection(-1.0f, 1.0f);
 
     std::vector<Plane> vPlanes =
     {
@@ -131,7 +131,7 @@ void CInfiniteGrid::Draw(const qc::Camera3D& camera, int viewportWidth, int view
         { forward * -1.0f, camera.position, kGridFarDistance }
     };
 
-    const qc::Vec3 viewCentre = camera.position + forward;
+    const Vec3 viewCentre = camera.position + forward;
     for (Plane& plane : vPlanes)
     {
         const float side = plane.normal.dot(viewCentre - plane.point) + plane.offset;
@@ -144,7 +144,7 @@ void CInfiniteGrid::Draw(const qc::Camera3D& camera, int viewportWidth, int view
     const float centerX = std::floor(camera.position.x / spacing) * spacing;
     const float centerZ = std::floor(camera.position.z / spacing) * spacing;
 
-    std::vector<qc::Vec2> vPolygon =
+    std::vector<Vec2> vPolygon =
     {
         { centerX - maxExtent, centerZ - maxExtent },
         { centerX + maxExtent, centerZ - maxExtent },
@@ -166,7 +166,7 @@ void CInfiniteGrid::Draw(const qc::Camera3D& camera, int viewportWidth, int view
     float maxX = minX;
     float minZ = vPolygon.front().y;
     float maxZ = minZ;
-    for (const qc::Vec2& vertex : vPolygon)
+    for (const Vec2& vertex : vPolygon)
     {
         minX = std::fmin(minX, vertex.x);
         maxX = std::fmax(maxX, vertex.x);
@@ -194,14 +194,14 @@ void CInfiniteGrid::Draw(const qc::Camera3D& camera, int viewportWidth, int view
 
     for (float x = firstX; x <= maxX; x += step)
     {
-        qc::DrawLine3D({ x, 0.0f, minZ }, { x, 0.0f, maxZ }, color);
+        DrawLine3D({ x, 0.0f, minZ }, { x, 0.0f, maxZ }, color);
     }
     for (float z = firstZ; z <= maxZ; z += step)
     {
-        qc::DrawLine3D({ minX, 0.0f, z }, { maxX, 0.0f, z }, color);
+        DrawLine3D({ minX, 0.0f, z }, { maxX, 0.0f, z }, color);
     }
 
-    const qc::Color axisColor(
+    const Color axisColor(
         static_cast<unsigned char>(std::min(255, static_cast<int>(color.r) + 55)),
         static_cast<unsigned char>(std::min(255, static_cast<int>(color.g) + 55)),
         static_cast<unsigned char>(std::min(255, static_cast<int>(color.b) + 55)),
@@ -210,10 +210,10 @@ void CInfiniteGrid::Draw(const qc::Camera3D& camera, int viewportWidth, int view
 
     if (0.0f >= minX && 0.0f <= maxX)
     {
-        qc::DrawLine3D({ 0.0f, 0.0f, minZ }, { 0.0f, 0.0f, maxZ }, axisColor);
+        DrawLine3D({ 0.0f, 0.0f, minZ }, { 0.0f, 0.0f, maxZ }, axisColor);
     }
     if (0.0f >= minZ && 0.0f <= maxZ)
     {
-        qc::DrawLine3D({ minX, 0.0f, 0.0f }, { maxX, 0.0f, 0.0f }, axisColor);
+        DrawLine3D({ minX, 0.0f, 0.0f }, { maxX, 0.0f, 0.0f }, axisColor);
     }
 }

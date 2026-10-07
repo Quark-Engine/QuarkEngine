@@ -10,10 +10,6 @@
 
 #include <cmath>
 #include <utility>
-
-namespace qc
-{
-
 namespace
 {
 
@@ -444,5 +440,3 @@ void QcImGuiImageRect(const Texture2D* pTexture, int width, int height, Rectangl
         ImVec2(u1, v1)
     );
 }
-
-} // qc

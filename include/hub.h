@@ -22,7 +22,7 @@ struct SHubPlugin
     std::string Path;
     std::string Description;
     bool Enabled = false;
-    qc::Texture2D Icon = { 0 };
+    Texture2D Icon = { 0 };
 };
 
 struct SHubState

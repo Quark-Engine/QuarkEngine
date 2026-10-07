@@ -8,11 +8,6 @@
 
 #include <vector>
 
-using namespace qc;
-
-using qc::Mat4;
-using qc::Vec3;
-
 namespace
 {
 
@@ -50,16 +45,16 @@ int PushEntity(CScene& target, Vec3 position, Vec3 rotationDegrees, Vec3 scale, 
 
 Mat4 LegacyRaylibStyleCompose(const CTransformComponent& transform)
 {
-    Mat4 matScale = qc::Mat4Scale(transform.m_Scale.x, transform.m_Scale.y, transform.m_Scale.z);
-    Mat4 matRotation = qc::Mat4RotateXYZ(
+    Mat4 matScale = Mat4Scale(transform.m_Scale.x, transform.m_Scale.y, transform.m_Scale.z);
+    Mat4 matRotation = Mat4RotateXYZ(
     {
         transform.m_Rotation.x * DEG2RAD,
         transform.m_Rotation.y * DEG2RAD,
         transform.m_Rotation.z * DEG2RAD
     });
-    Mat4 matTranslation = qc::Mat4Translate(
+    Mat4 matTranslation = Mat4Translate(
         transform.m_Position.x, transform.m_Position.y, transform.m_Position.z);
-    return qc::Mat4Multiply(qc::Mat4Multiply(matTranslation, matRotation), matScale);
+    return Mat4Multiply(Mat4Multiply(matTranslation, matRotation), matScale);
 }
 
 } // anonymous

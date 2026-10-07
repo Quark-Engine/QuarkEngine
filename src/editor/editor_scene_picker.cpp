@@ -3,10 +3,7 @@
 #include "editor/editor_utils.h"
 #include "engine/transform.h"
 #include "models.h"
-
-using namespace qc;
-
-qc::Vec3 CScenePicker::RayPlaneHit(qc::Ray ray)
+Vec3 CScenePicker::RayPlaneHit(Ray ray)
 {
     if (fabsf(ray.direction.y) < 0.0001f)
     {
@@ -22,17 +19,17 @@ qc::Vec3 CScenePicker::RayPlaneHit(qc::Ray ray)
     };
 }
 
-qc::Vec2 CScenePicker::WorldToScreen(const CViewportState& viewport, const qc::Vec3& world,
-    const qc::Camera3D& camera)
+Vec2 CScenePicker::WorldToScreen(const CViewportState& viewport, const Vec3& world,
+    const Camera3D& camera)
 {
-    const qc::Mat4 view = qc::Mat4::lookAt(camera.position, camera.target, camera.up);
-    const qc::Mat4 projection = qc::Mat4::perspective(
+    const Mat4 view = Mat4::lookAt(camera.position, camera.target, camera.up);
+    const Mat4 projection = Mat4::perspective(
         camera.fovy * DEG2RAD,
         viewport.m_WindowSize.x / viewport.m_WindowSize.y,
         0.1f,
         1000.0f
     );
-    const qc::Vec4 clip = projection * (view * qc::Vec4{world.x, world.y, world.z, 1.0f});
+    const Vec4 clip = projection * (view * Vec4{world.x, world.y, world.z, 1.0f});
     if (fabsf(clip.w) <= 0.000001f)
     {
         return {viewport.m_WindowPos.x, viewport.m_WindowPos.y};
@@ -46,31 +43,31 @@ qc::Vec2 CScenePicker::WorldToScreen(const CViewportState& viewport, const qc::V
     };
 }
 
-qc::Ray CScenePicker::ScreenToWorldRay(const CViewportState& viewport, const qc::Vec2& mouse,
-    const qc::Camera3D& camera)
+Ray CScenePicker::ScreenToWorldRay(const CViewportState& viewport, const Vec2& mouse,
+    const Camera3D& camera)
 {
     const float nx = (mouse.x - viewport.m_WindowPos.x) / viewport.m_WindowSize.x;
     const float ny = (mouse.y - viewport.m_WindowPos.y) / viewport.m_WindowSize.y;
 
-    const qc::Mat4 view = qc::Mat4::lookAt(
+    const Mat4 view = Mat4::lookAt(
         camera.position,
         camera.target,
         camera.up
     );
 
-    const qc::Mat4 proj = qc::Mat4::perspective(
+    const Mat4 proj = Mat4::perspective(
         camera.fovy * DEG2RAD,
         viewport.m_WindowSize.x / viewport.m_WindowSize.y,
         0.1f,
         1000.0f
     );
 
-    const qc::Mat4 invVp = (proj * view).inverted();
+    const Mat4 invVp = (proj * view).inverted();
 
     const float ndcX =  nx * 2.0f - 1.0f;
     const float ndcY = -(ny * 2.0f - 1.0f);
 
-    auto mul = [](qc::Mat4 m, qc::Vec4 v) -> qc::Vec4
+    auto mul = [](Mat4 m, Vec4 v) -> Vec4
     {
         return {
             m.m0*v.x + m.m4*v.y + m.m8*v.z  + m.m12*v.w,
@@ -80,15 +77,15 @@ qc::Ray CScenePicker::ScreenToWorldRay(const CViewportState& viewport, const qc:
         };
     };
 
-    const qc::Vec4 nearW = mul(invVp, {ndcX, ndcY, -1.0f, 1.0f});
-    const qc::Vec4 farW  = mul(invVp, {ndcX, ndcY,  1.0f, 1.0f});
+    const Vec4 nearW = mul(invVp, {ndcX, ndcY, -1.0f, 1.0f});
+    const Vec4 farW  = mul(invVp, {ndcX, ndcY,  1.0f, 1.0f});
 
-    const qc::Vec3 nearPos = { nearW.x/nearW.w, nearW.y/nearW.w, nearW.z/nearW.w };
-    const qc::Vec3 farPos  = { farW.x/farW.w,   farW.y/farW.w,   farW.z/farW.w  };
+    const Vec3 nearPos = { nearW.x/nearW.w, nearW.y/nearW.w, nearW.z/nearW.w };
+    const Vec3 farPos  = { farW.x/farW.w,   farW.y/farW.w,   farW.z/farW.w  };
 
-    qc::Ray ray;
+    Ray ray;
     ray.position  = nearPos;
-    ray.direction = qc::Vec3Normalize(qc::Vec3Subtract(farPos, nearPos));
+    ray.direction = Vec3Normalize(Vec3Subtract(farPos, nearPos));
     return ray;
 }
 
@@ -96,7 +93,7 @@ bool CScenePicker::PickMeshTriangle(
     const CScene& scene,
     const CEntity& entity,
     int meshIndex,
-    qc::Ray ray,
+    Ray ray,
     int& outTriangleIndex,
     int& outVertexCorner
 )
@@ -111,13 +108,13 @@ bool CScenePicker::PickMeshTriangle(
         return false;
     }
 
-    const qc::Mesh& mesh = pMeshComponent->m_Model.meshes[meshIndex];
+    const Mesh& mesh = pMeshComponent->m_Model.meshes[meshIndex];
     if (!mesh.vertices || mesh.triangleCount <= 0)
     {
         return false;
     }
 
-    const qc::Mat4 transform = quark::ComposeMeshWorld(scene, entity);
+    const Mat4 transform = quark::ComposeMeshWorld(scene, entity);
     float bestDistance = FLT_MAX;
     int bestTriangle = -1;
     int bestCorner = 0;
@@ -130,17 +127,17 @@ bool CScenePicker::PickMeshTriangle(
             continue;
         }
 
-        qc::Vec3 aVertices[3] = {};
+        Vec3 aVertices[3] = {};
         for (int i = 0; i < 3; i++)
         {
-            aVertices[i] = transform * qc::Vec3(
+            aVertices[i] = transform * Vec3(
                 mesh.vertices[aIndices[i] * 3 + 0],
                 mesh.vertices[aIndices[i] * 3 + 1],
                 mesh.vertices[aIndices[i] * 3 + 2]
             );
         }
 
-        const qc::RayCollision hit = GetRayCollisionTriangle(ray, aVertices[0], aVertices[1], aVertices[2]);
+        const RayCollision hit = GetRayCollisionTriangle(ray, aVertices[0], aVertices[1], aVertices[2]);
         if (!hit.hit || hit.distance >= bestDistance)
         {
             continue;
@@ -171,7 +168,7 @@ bool CScenePicker::PickMeshTriangle(
     return true;
 }
 
-bool CScenePicker::RaycastEntity(const CScene& scene, const CEntity& entity, qc::Ray ray,
+bool CScenePicker::RaycastEntity(const CScene& scene, const CEntity& entity, Ray ray,
     float& outDistance)
 {
     const CMeshComponent* pMesh = entity.GetMeshComponent();
@@ -180,14 +177,14 @@ bool CScenePicker::RaycastEntity(const CScene& scene, const CEntity& entity, qc:
         return false;
     }
 
-    const qc::Mat4 transform = quark::ComposeMeshWorld(scene, entity);
+    const Mat4 transform = quark::ComposeMeshWorld(scene, entity);
 
     bool hitAny = false;
     float bestDistance = FLT_MAX;
 
     for (int i = 0; i < pMesh->m_Model.meshCount; i++)
     {
-        const qc::Mesh& m = pMesh->m_Model.meshes[i];
+        const Mesh& m = pMesh->m_Model.meshes[i];
 
         for (int j = 0; j < m.triangleCount; j++)
         {
@@ -197,19 +194,18 @@ bool CScenePicker::RaycastEntity(const CScene& scene, const CEntity& entity, qc:
                 continue;
             }
 
-            qc::Vec3 aVerts[3];
+            Vec3 aVerts[3];
 
             for (int k = 0; k < 3; k++)
             {
-                aVerts[k] = qc::Vec3Transform(
-                {
+                aVerts[k] = Vec3Transform(Vec3{
                     m.vertices[aIndices[k] * 3 + 0],
                     m.vertices[aIndices[k] * 3 + 1],
                     m.vertices[aIndices[k] * 3 + 2],
                 }, transform);
             }
 
-            const qc::RayCollision hit = GetRayCollisionTriangle(ray, aVerts[0], aVerts[1], aVerts[2]);
+            const RayCollision hit = GetRayCollisionTriangle(ray, aVerts[0], aVerts[1], aVerts[2]);
 
             if (hit.hit && hit.distance < bestDistance)
             {

@@ -16,9 +16,6 @@
 #include <algorithm>
 #include <cstring>
 #include <limits>
-
-using namespace qc;
-
 namespace
 {
 CEditor* s_pEditor = nullptr;
@@ -445,9 +442,9 @@ void AssignUiCallbacks(SPluginContext* pCtx)
             return false;
         }
 
-        const qc::Texture2D& texture =
+        const Texture2D& texture =
             pAssets->TextureByIndex(static_cast<size_t>(textureIndex)).Texture;
-        const ImTextureID textureId = qc::QcImGuiGetTextureId(&texture);
+        const ImTextureID textureId = QcImGuiGetTextureId(&texture);
         if (textureId == ImTextureID_Invalid)
         {
             return false;
@@ -465,9 +462,9 @@ void AssignUiCallbacks(SPluginContext* pCtx)
             return false;
         }
 
-        const qc::Texture2D& texture =
+        const Texture2D& texture =
             pAssets->TextureByIndex(static_cast<size_t>(textureIndex)).Texture;
-        const ImTextureID textureId = qc::QcImGuiGetTextureId(&texture);
+        const ImTextureID textureId = QcImGuiGetTextureId(&texture);
         return textureId != ImTextureID_Invalid &&
             ImGui::ImageButton(pLabel, ImTextureRef(textureId), ImVec2(width, height));
     };
@@ -1985,9 +1982,9 @@ void AssignUiCallbacks(SPluginContext* pCtx)
         {
             return false;
         }
-        const qc::Texture2D& texture =
+        const Texture2D& texture =
             pAssets->TextureByIndex(static_cast<size_t>(textureIndex)).Texture;
-        const ImTextureID textureId = qc::QcImGuiGetTextureId(&texture);
+        const ImTextureID textureId = QcImGuiGetTextureId(&texture);
         if (textureId == ImTextureID_Invalid)
         {
             return false;
@@ -2715,8 +2712,8 @@ void EditorFocusEntity(int index)
     }
 
     s_pEditor->m_Scene.SelectEntity(index, false);
-    const qc::Mat4 world = quark::ComposeWorld(s_pEditor->m_Scene, index);
-    const qc::Vec3 position = qc::Vec3(world * qc::Vec3{0.0f, 0.0f, 0.0f});
+    const Mat4 world = quark::ComposeWorld(s_pEditor->m_Scene, index);
+    const Vec3 position = Vec3(world * Vec3{0.0f, 0.0f, 0.0f});
     s_pCamera->FocusOn(position);
 }
 

@@ -58,14 +58,11 @@
 #include <vector>
 
 #define lang CLanguageManager::Get()
-
-using namespace qc;
-
 void CViewportState::Release()
 {
     if (m_RenderTexture.id != 0)
     {
-        qc::UnloadRenderTexture(m_RenderTexture);
+        UnloadRenderTexture(m_RenderTexture);
         m_RenderTexture = { 0 };
     }
 }
@@ -75,7 +72,7 @@ void CViewportState::Unload()
     Release();
 }
 
-void CEditor::DrawUi(qc::Shader shader, CFlyCamera& camera, SPluginContext* pPluginCtx)
+void CEditor::DrawUi(Shader shader, CFlyCamera& camera, SPluginContext* pPluginCtx)
 {
     const auto drawHistoryRestoreOverlay = [this]()
     {
@@ -611,7 +608,7 @@ void CEditor::HierarchyDrawEntityTree(int parentId)
     }
 }
 
-void CEditor::DrawInspectorPanel(qc::Shader shader, SPluginContext* pPluginCtx)
+void CEditor::DrawInspectorPanel(Shader shader, SPluginContext* pPluginCtx)
 {
     SInspectorUiState& inspector = m_Ui.m_Inspector;
 
@@ -838,7 +835,7 @@ void CEditor::DrawAboutModal()
         constexpr float kLogoWidth = 400.0f;
         constexpr float kLogoHeight = kLogoWidth * 648.0f / 1500.0f;
 
-        const qc::Texture2D* pLogo = m_Textures.Load("assets/quark_engine.png");
+        const Texture2D* pLogo = m_Textures.Load("assets/quark_engine.png");
         if (pLogo != nullptr)
         {
             const float logoOffsetX = (ImGui::GetContentRegionAvail().x - kLogoWidth) * 0.5f;
@@ -850,15 +847,15 @@ void CEditor::DrawAboutModal()
             ImGui::Spacing();
         }
 
-        const auto backend = qc::GetCurrentBackend();
+        const auto backend = GetCurrentBackend();
 
         ImGui::Text("Quark Engine %s (Build %s | %s) using %s",
             QUARK_ENGINE_VERSION,
             QUARK_ENGINE_BUILD_NUMBER,
             QUARK_ENGINE_BUILD_DATE_STRING,
-            backend == qc::RendererType::Vulkan ? "Vulkan" :
-            backend == qc::RendererType::OpenGL ? "OpenGL" :
-            backend == qc::RendererType::Auto ? "Auto" :
+            backend == RendererType::Vulkan ? "Vulkan" :
+            backend == RendererType::OpenGL ? "OpenGL" :
+            backend == RendererType::Auto ? "Auto" :
             "Unknown"
         );
         ImGui::Separator();

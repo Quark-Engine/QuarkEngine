@@ -89,10 +89,10 @@ using FComponentFactory = std::function<std::shared_ptr<IComponent>()>;
 class CTransformComponent : public IComponent
 {
 public:
-    qc::Vec3 m_Position = {0, 0, 0};
-    qc::Vec3 m_Rotation = {0, 0, 0};
-    qc::Vec3 m_Scale = {1, 1, 1};
-    qc::Mat4 m_LocalMatrixOverride = qc::Mat4::identity();
+    Vec3 m_Position = {0, 0, 0};
+    Vec3 m_Rotation = {0, 0, 0};
+    Vec3 m_Scale = {1, 1, 1};
+    Mat4 m_LocalMatrixOverride = Mat4::identity();
     bool m_HasLocalMatrixOverride = false;
 
     CTransformComponent()
@@ -110,7 +110,7 @@ public:
         return "Transform";
     }
 
-    void SetLocalMatrixOverride(const qc::Mat4& matrix)
+    void SetLocalMatrixOverride(const Mat4& matrix)
     {
         m_LocalMatrixOverride = matrix;
         m_HasLocalMatrixOverride = true;
@@ -168,7 +168,7 @@ public:
 class CMeshComponent : public IComponent
 {
 public:
-    qc::Model m_Model;
+    Model m_Model;
     bool m_OwnsModelInstance = false;
     CModelAsset* m_pAsset = nullptr;
     std::string m_AssetName;
@@ -182,7 +182,7 @@ public:
     bool m_OwnsMaterials = false;
     bool m_UvDirty = true;
     bool m_BoundsDirty = true;
-    qc::BoundingBox m_CachedLocalBounds = {{0, 0, 0}, {0, 0, 0}};
+    BoundingBox m_CachedLocalBounds = {{0, 0, 0}, {0, 0, 0}};
 
     CEditableMesh m_EditableMesh;
     bool m_IsEditableMesh = false;
@@ -283,7 +283,7 @@ public:
 class CMaterialComponent : public IComponent
 {
 public:
-    qc::Texture2D m_Texture = {0};
+    Texture2D m_Texture = {0};
     ETextureSource m_TextureSource = TEXTURE_NONE;
     std::string m_AlbedoTextureName;
     std::string m_TextureName;
@@ -292,17 +292,17 @@ public:
     std::string m_MetallicTextureName;
     std::vector<std::string> m_vMaterialSlotSources;
 
-    qc::Color m_Color = qc::WHITE;
-    qc::Color m_OutlineColor = qc::LIGHTGRAY;
+    Color m_Color = WHITE;
+    Color m_OutlineColor = LIGHTGRAY;
 
     bool m_AutoUv = false;
     bool m_TextureStretch = true;
     float m_TextureRepeatU = 1.0f;
     float m_TextureRepeatV = 1.0f;
 
-    qc::Vec2 m_UvScale = {1, 1};
+    Vec2 m_UvScale = {1, 1};
     std::vector<std::vector<float>> m_vOriginalTexcoords;
-    std::vector<qc::Texture2D> m_vOriginalMaterialTextures;
+    std::vector<Texture2D> m_vOriginalMaterialTextures;
 
     CMaterialComponent()
     {
@@ -403,15 +403,15 @@ public:
     bool m_Visualize = true;
 
     // box
-    qc::Vec3 m_Size = {1, 1, 1};
+    Vec3 m_Size = {1, 1, 1};
 
     // sphere/capsule
     float m_Radius = 0.5f;
     float m_Height = 2.0f;
 
-    qc::Vec3 m_Center = {0, 0, 0};
+    Vec3 m_Center = {0, 0, 0};
 
-    qc::BoundingBox m_WorldBounds = {{0, 0, 0}, {0, 0, 0}};
+    BoundingBox m_WorldBounds = {{0, 0, 0}, {0, 0, 0}};
     bool m_Dirty = true;
 
     CCollisionComponent()

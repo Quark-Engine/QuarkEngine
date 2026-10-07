@@ -24,7 +24,7 @@ public:
 
     bool IsReady() const;
 
-    qc::Model Generate(const std::string& text, float size, float thickness,
+    Model Generate(const std::string& text, float size, float thickness,
                        float letterSpacing, const std::string& fontPath) const;
 
     static std::vector<std::pair<std::string, std::string>> GetSystemFonts();

@@ -6,26 +6,26 @@
 namespace quark
 {
 
-qc::Mat4 ComposeLocal(const CTransformComponent& transform)
+Mat4 ComposeLocal(const CTransformComponent& transform)
 {
     if (transform.m_HasLocalMatrixOverride)
     {
         return transform.m_LocalMatrixOverride;
     }
 
-    return qc::Mat4::translation(transform.m_Position.x, transform.m_Position.y, transform.m_Position.z) *
-        qc::Mat4::rotationX(transform.m_Rotation.x * DEG2RAD) *
-        qc::Mat4::rotationY(transform.m_Rotation.y * DEG2RAD) *
-        qc::Mat4::rotationZ(transform.m_Rotation.z * DEG2RAD) *
-        qc::Mat4::scale(transform.m_Scale.x, transform.m_Scale.y, transform.m_Scale.z);
+    return Mat4::translation(transform.m_Position.x, transform.m_Position.y, transform.m_Position.z) *
+        Mat4::rotationX(transform.m_Rotation.x * DEG2RAD) *
+        Mat4::rotationY(transform.m_Rotation.y * DEG2RAD) *
+        Mat4::rotationZ(transform.m_Rotation.z * DEG2RAD) *
+        Mat4::scale(transform.m_Scale.x, transform.m_Scale.y, transform.m_Scale.z);
 }
 
-qc::Mat4 ComposeLocal(const CEntity& entity)
+Mat4 ComposeLocal(const CEntity& entity)
 {
     const CTransformComponent* pTransform = entity.GetTransformComponent();
     if (!pTransform)
     {
-        return qc::Mat4::identity();
+        return Mat4::identity();
     }
     return ComposeLocal(*pTransform);
 }
@@ -43,11 +43,11 @@ int IndexOfEntity(const CScene& scene, const CEntity& entity)
     return -1;
 }
 
-qc::Mat4 ComposeWorld(const CScene& scene, int entityIndex, std::vector<int>& vStack)
+Mat4 ComposeWorld(const CScene& scene, int entityIndex, std::vector<int>& vStack)
 {
     if (entityIndex < 0 || entityIndex >= static_cast<int>(scene.m_vEntities.size()))
     {
-        return qc::Mat4::identity();
+        return Mat4::identity();
     }
 
     if (std::find(vStack.begin(), vStack.end(), entityIndex) != vStack.end())
@@ -57,7 +57,7 @@ qc::Mat4 ComposeWorld(const CScene& scene, int entityIndex, std::vector<int>& vS
 
     vStack.push_back(entityIndex);
     const CEntity& entity = scene.m_vEntities[entityIndex];
-    qc::Mat4 world = ComposeLocal(entity);
+    Mat4 world = ComposeLocal(entity);
     if (entity.m_ParentId != entityIndex &&
         entity.m_ParentId >= 0 && entity.m_ParentId < static_cast<int>(scene.m_vEntities.size()))
     {
@@ -67,13 +67,13 @@ qc::Mat4 ComposeWorld(const CScene& scene, int entityIndex, std::vector<int>& vS
     return world;
 }
 
-qc::Mat4 ComposeWorld(const CScene& scene, int entityIndex)
+Mat4 ComposeWorld(const CScene& scene, int entityIndex)
 {
     std::vector<int> vStack;
     return ComposeWorld(scene, entityIndex, vStack);
 }
 
-qc::Mat4 ComposeWorld(const CScene& scene, const CEntity& entity)
+Mat4 ComposeWorld(const CScene& scene, const CEntity& entity)
 {
     const int index = IndexOfEntity(scene, entity);
     if (index < 0)
@@ -83,7 +83,7 @@ qc::Mat4 ComposeWorld(const CScene& scene, const CEntity& entity)
     return ComposeWorld(scene, index);
 }
 
-qc::Mat4 ComposeMeshWorld(const CScene& scene, const CEntity& entity)
+Mat4 ComposeMeshWorld(const CScene& scene, const CEntity& entity)
 {
     const CMeshComponent* pMesh = entity.GetMeshComponent();
     if (!pMesh)
@@ -93,24 +93,24 @@ qc::Mat4 ComposeMeshWorld(const CScene& scene, const CEntity& entity)
     return ComposeWorld(scene, entity) * pMesh->m_Model.transform;
 }
 
-qc::Mat4 ParentWorld(const CScene& scene, const CEntity& entity)
+Mat4 ParentWorld(const CScene& scene, const CEntity& entity)
 {
     if (IndexOfEntity(scene, entity) < 0)
     {
-        return qc::Mat4::identity();
+        return Mat4::identity();
     }
     if (entity.m_ParentId < 0 || entity.m_ParentId >= static_cast<int>(scene.m_vEntities.size()))
     {
-        return qc::Mat4::identity();
+        return Mat4::identity();
     }
     if (&scene.m_vEntities[entity.m_ParentId] == &entity)
     {
-        return qc::Mat4::identity();
+        return Mat4::identity();
     }
     return ComposeWorld(scene, entity.m_ParentId);
 }
 
-bool TryInvertAffine(const qc::Mat4& matrix, qc::Mat4& inverse)
+bool TryInvertAffine(const Mat4& matrix, Mat4& inverse)
 {
     const float a00 = matrix.m[0];
     const float a01 = matrix.m[4];
@@ -132,7 +132,7 @@ bool TryInvertAffine(const qc::Mat4& matrix, qc::Mat4& inverse)
     }
 
     const float inverseDeterminant = 1.0f / determinant;
-    inverse = qc::Mat4::identity();
+    inverse = Mat4::identity();
     inverse.m[0] = (a11 * a22 - a12 * a21) * inverseDeterminant;
     inverse.m[4] = (a02 * a21 - a01 * a22) * inverseDeterminant;
     inverse.m[8] = (a01 * a12 - a02 * a11) * inverseDeterminant;
@@ -152,16 +152,16 @@ bool TryInvertAffine(const qc::Mat4& matrix, qc::Mat4& inverse)
     return true;
 }
 
-void DecomposeLocal(const qc::Mat4& parentWorld, const qc::Mat4& world, CTransformComponent& out)
+void DecomposeLocal(const Mat4& parentWorld, const Mat4& world, CTransformComponent& out)
 {
-    qc::Mat4 inverseParent;
-    const qc::Mat4 local = TryInvertAffine(parentWorld, inverseParent)
+    Mat4 inverseParent;
+    const Mat4 local = TryInvertAffine(parentWorld, inverseParent)
         ? inverseParent * world
         : world;
-    out.m_Position = qc::Vec3(local.m[12], local.m[13], local.m[14]);
+    out.m_Position = Vec3(local.m[12], local.m[13], local.m[14]);
 
-    qc::Mat4 parent3x3{};
-    qc::Mat4 world3x3{};
+    Mat4 parent3x3{};
+    Mat4 world3x3{};
     for (int column = 0; column < 3; ++column)
     {
         for (int row = 0; row < 3; ++row)
@@ -171,10 +171,10 @@ void DecomposeLocal(const qc::Mat4& parentWorld, const qc::Mat4& world, CTransfo
         }
     }
 
-    qc::Vec3 scale = {
-        qc::Mat4Column(local, 0).length(),
-        qc::Mat4Column(local, 1).length(),
-        qc::Mat4Column(local, 2).length()
+    Vec3 scale = {
+        Mat4Column(local, 0).length(),
+        Mat4Column(local, 1).length(),
+        Mat4Column(local, 2).length()
     };
     if (scale.x < 1e-6f)
     {
@@ -191,20 +191,20 @@ void DecomposeLocal(const qc::Mat4& parentWorld, const qc::Mat4& world, CTransfo
 
     for (int iteration = 0; iteration < 16; ++iteration)
     {
-        qc::Mat4 inverseScale{};
+        Mat4 inverseScale{};
         inverseScale.m[0] = (scale.x > 1e-6f) ? 1.0f / scale.x : 1.0f;
         inverseScale.m[5] = (scale.y > 1e-6f) ? 1.0f / scale.y : 1.0f;
         inverseScale.m[10] = (scale.z > 1e-6f) ? 1.0f / scale.z : 1.0f;
 
-        qc::Mat4 rotation = qc::Mat4PolarRotation(qc::Mat4Transpose(parent3x3) * world3x3 * inverseScale);
+        Mat4 rotation = Mat4PolarRotation(Mat4Transpose(parent3x3) * world3x3 * inverseScale);
 
-        const qc::Mat4 scaledRotation = parent3x3 * rotation;
+        const Mat4 scaledRotation = parent3x3 * rotation;
         for (int column = 0; column < 3; ++column)
         {
-            const qc::Vec3 a = qc::Mat4Column(scaledRotation, column);
-            const qc::Vec3 b = qc::Mat4Column(world3x3, column);
-            const float denominator = qc::Vec3SquaredLength(a);
-            float next = (denominator > 1e-6f) ? qc::Vec3Dot(a, b) / denominator : 0.0f;
+            const Vec3 a = Mat4Column(scaledRotation, column);
+            const Vec3 b = Mat4Column(world3x3, column);
+            const float denominator = Vec3SquaredLength(a);
+            float next = (denominator > 1e-6f) ? Vec3Dot(a, b) / denominator : 0.0f;
             if (next < 0.0f)
             {
                 next = 0.0f;
@@ -225,10 +225,10 @@ void DecomposeLocal(const qc::Mat4& parentWorld, const qc::Mat4& world, CTransfo
 
         if (iteration == 15)
         {
-            const qc::Vec3 right = qc::Mat4Column(rotation, 0);
-            const qc::Vec3 up = qc::Mat4Column(rotation, 1);
-            const qc::Vec3 dir = qc::Mat4Column(rotation, 2);
-            out.m_Rotation = qc::Vec3(
+            const Vec3 right = Mat4Column(rotation, 0);
+            const Vec3 up = Mat4Column(rotation, 1);
+            const Vec3 dir = Mat4Column(rotation, 2);
+            out.m_Rotation = Vec3(
                 std::atan2(-dir.y, dir.z) * RAD2DEG,
                 std::asin(dir.x) * RAD2DEG,
                 std::atan2(-up.x, right.x) * RAD2DEG
@@ -254,9 +254,9 @@ void DecomposeLocal(const qc::Mat4& parentWorld, const qc::Mat4& world, CTransfo
     cleanup(out.m_Scale.x); cleanup(out.m_Scale.y); cleanup(out.m_Scale.z);
 }
 
-void DecomposeWorld(const qc::Mat4& world, CTransformComponent& out)
+void DecomposeWorld(const Mat4& world, CTransformComponent& out)
 {
-    DecomposeLocal(qc::Mat4::identity(), world, out);
+    DecomposeLocal(Mat4::identity(), world, out);
 }
 
 } // quark

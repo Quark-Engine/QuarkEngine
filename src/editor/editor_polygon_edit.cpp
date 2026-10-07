@@ -12,11 +12,8 @@
 #include <algorithm>
 #include <cmath>
 #include <cstring>
-
-using namespace qc;
-
 bool CPolygonEditor::CreateVertex(const CScene& scene, CEntity& entity,
-    const qc::Vec3& worldPosition)
+    const Vec3& worldPosition)
 {
     CMeshComponent* pMesh = entity.GetMeshComponent();
     if (!pMesh)
@@ -25,7 +22,7 @@ bool CPolygonEditor::CreateVertex(const CScene& scene, CEntity& entity,
     }
 
     SEditableVertex vert;
-    vert.Position = qc::Vec3Transform(worldPosition, quark::ComposeMeshWorld(scene, entity).inverted());
+    vert.Position = Vec3Transform(worldPosition, quark::ComposeMeshWorld(scene, entity).inverted());
     pMesh->m_EditableMesh.m_vVertices.push_back(vert);
     return true;
 }
@@ -38,7 +35,7 @@ void CPolygonEditor::CreateTriangle(CEntity& entity, int a, int b, int c)
     RebuildMeshFromEditable(pMesh->m_Model, pMesh->m_EditableMesh);
 }
 
-void CPolygonEditor::Draw(CEditor& editor, const qc::Camera3D& camera)
+void CPolygonEditor::Draw(CEditor& editor, const Camera3D& camera)
 {
     SGizmoState& gizmo = editor.m_Ui.m_Gizmo;
     CViewportState& viewport = editor.m_Ui.m_Viewport;
@@ -64,10 +61,10 @@ void CPolygonEditor::Draw(CEditor& editor, const qc::Camera3D& camera)
     }
 
     ImDrawList* pDraw = ImGui::GetForegroundDrawList();
-    const qc::Mat4 meshWorldTransform = quark::ComposeMeshWorld(editor.m_Scene, *pEntity);
-    const auto toWorld = [&meshWorldTransform](const qc::Vec3& localPosition)
+    const Mat4 meshWorldTransform = quark::ComposeMeshWorld(editor.m_Scene, *pEntity);
+    const auto toWorld = [&meshWorldTransform](const Vec3& localPosition)
     {
-        return qc::Vec3Transform(localPosition, meshWorldTransform);
+        return Vec3Transform(localPosition, meshWorldTransform);
     };
 
     for (const auto& tri : eMesh.m_vTriangles)
@@ -85,9 +82,9 @@ void CPolygonEditor::Draw(CEditor& editor, const qc::Camera3D& camera)
             continue;
         }
 
-        qc::Vec2 p1 = CScenePicker::WorldToScreen(viewport, toWorld(eMesh.m_vVertices[tri.A].Position), camera);
-        qc::Vec2 p2 = CScenePicker::WorldToScreen(viewport, toWorld(eMesh.m_vVertices[tri.B].Position), camera);
-        qc::Vec2 p3 = CScenePicker::WorldToScreen(viewport, toWorld(eMesh.m_vVertices[tri.C].Position), camera);
+        Vec2 p1 = CScenePicker::WorldToScreen(viewport, toWorld(eMesh.m_vVertices[tri.A].Position), camera);
+        Vec2 p2 = CScenePicker::WorldToScreen(viewport, toWorld(eMesh.m_vVertices[tri.B].Position), camera);
+        Vec2 p3 = CScenePicker::WorldToScreen(viewport, toWorld(eMesh.m_vVertices[tri.C].Position), camera);
 
         pDraw->AddLine({p1.x,p1.y}, {p2.x,p2.y}, IM_COL32(0,255,0,255), 2.0f);
         pDraw->AddLine({p2.x,p2.y}, {p3.x,p3.y}, IM_COL32(0,255,0,255), 2.0f);
@@ -96,7 +93,7 @@ void CPolygonEditor::Draw(CEditor& editor, const qc::Camera3D& camera)
 
     for (int i = 0; i < (int)eMesh.m_vVertices.size(); i++)
     {
-        const qc::Vec2 screen = CScenePicker::WorldToScreen(viewport, toWorld(eMesh.m_vVertices[i].Position), camera);
+        const Vec2 screen = CScenePicker::WorldToScreen(viewport, toWorld(eMesh.m_vVertices[i].Position), camera);
 
         bool selected = false;
         for (int si : edit.vSelectedVertices)
@@ -119,14 +116,14 @@ void CPolygonEditor::Draw(CEditor& editor, const qc::Camera3D& camera)
         const int sel = edit.vSelectedVertices[0];
         if (sel >= 0 && sel < (int)eMesh.m_vVertices.size())
         {
-            const qc::Vec3 worldPos = toWorld(eMesh.m_vVertices[sel].Position);
+            const Vec3 worldPos = toWorld(eMesh.m_vVertices[sel].Position);
 
             float aViewMat4[16] = {};
             float aProjectionMat4[16] = {};
             float aTransformMat4[16] = {};
 
-            const qc::Mat4 view = qc::Mat4::lookAt(camera.position, camera.target, camera.up);
-            const qc::Mat4 projection = qc::Mat4::perspective(
+            const Mat4 view = Mat4::lookAt(camera.position, camera.target, camera.up);
+            const Mat4 projection = Mat4::perspective(
                 camera.fovy * DEG2RAD,
                 viewport.m_WindowSize.x / viewport.m_WindowSize.y,
                 0.1f,
@@ -145,7 +142,7 @@ void CPolygonEditor::Draw(CEditor& editor, const qc::Camera3D& camera)
             ImGuizmo::RecomposeMatrixFromComponents(aT, aR, aS, aTransformMat4);
 
             const bool gizmoSnapEnabled = editor.m_Preferences.m_GizmoSnapEnabled ||
-                IsKeyDown(KeyboardKey::LeftControl) || IsKeyDown(KeyboardKey::RightControl);
+                IsKeyDown(KEY_LEFT_CONTROL) || IsKeyDown(KEY_RIGHT_CONTROL);
             const float aSnap[3] = {
                 editor.m_Preferences.m_GizmoTranslationSnap,
                 editor.m_Preferences.m_GizmoTranslationSnap,
@@ -170,9 +167,9 @@ void CPolygonEditor::Draw(CEditor& editor, const qc::Camera3D& camera)
             {
                 float aNt[3]={}, nr[3]={}, ns[3]={};
                 ImGuizmo::DecomposeMatrixToComponents(aTransformMat4, aNt, nr, ns);
-                eMesh.m_vVertices[sel].Position = qc::Vec3Transform(
-                    {aNt[0], aNt[1], aNt[2]},
-                    qc::Mat4Invert(meshWorldTransform)
+                eMesh.m_vVertices[sel].Position = Vec3Transform(
+                    Vec3{aNt[0], aNt[1], aNt[2]},
+                    Mat4Invert(meshWorldTransform)
                 );
                 RebuildMeshFromEditable(pMesh->m_Model, eMesh);
                 CEntityTextureService::MarkEntityBoundsDirty(pEntity);
@@ -191,16 +188,16 @@ void CPolygonEditor::Draw(CEditor& editor, const qc::Camera3D& camera)
         return;
     }
 
-    const qc::Vec2 mouse = GetMousePosition();
+    const Vec2 mouse = GetMousePosition();
 
-    if (IsMouseButtonPressed(MOUSE_LEFT_BUTTON) && poly != POLY_CREATE)
+    if (IsMouseButtonPressed(MOUSE_BUTTON_LEFT) && poly != POLY_CREATE)
     {
         float bestDist = 16.0f;
         int bestVert = -1;
 
         for (int i = 0; i < (int)eMesh.m_vVertices.size(); i++)
         {
-            const qc::Vec2 sp = CScenePicker::WorldToScreen(viewport, toWorld(eMesh.m_vVertices[i].Position), camera);
+            const Vec2 sp = CScenePicker::WorldToScreen(viewport, toWorld(eMesh.m_vVertices[i].Position), camera);
             const float dx = mouse.x - sp.x, dy = mouse.y - sp.y;
             const float d = sqrtf(dx*dx + dy*dy);
             if (d < bestDist)
@@ -232,7 +229,7 @@ void CPolygonEditor::Draw(CEditor& editor, const qc::Camera3D& camera)
         }
         else
         {
-            const qc::Ray ray = CScenePicker::ScreenToWorldRay(viewport, mouse, camera);
+            const Ray ray = CScenePicker::ScreenToWorldRay(viewport, mouse, camera);
             float bestHitDist = FLT_MAX;
             int pickedTriangle = -1;
             int pickedCorner = 0;
@@ -253,11 +250,11 @@ void CPolygonEditor::Draw(CEditor& editor, const qc::Camera3D& camera)
                     continue;
                 }
 
-                const qc::Vec3 va = toWorld(eMesh.m_vVertices[tri.A].Position);
-                const qc::Vec3 vb = toWorld(eMesh.m_vVertices[tri.B].Position);
-                const qc::Vec3 vc = toWorld(eMesh.m_vVertices[tri.C].Position);
+                const Vec3 va = toWorld(eMesh.m_vVertices[tri.A].Position);
+                const Vec3 vb = toWorld(eMesh.m_vVertices[tri.B].Position);
+                const Vec3 vc = toWorld(eMesh.m_vVertices[tri.C].Position);
 
-                const qc::RayCollision hit = GetRayCollisionTriangle(ray, va, vb, vc);
+                const RayCollision hit = GetRayCollisionTriangle(ray, va, vb, vc);
                 if (!hit.hit || hit.distance >= bestHitDist)
                 {
                     continue;
@@ -266,9 +263,9 @@ void CPolygonEditor::Draw(CEditor& editor, const qc::Camera3D& camera)
                 pickedTriangle = t;
 
                 const float aCd[3] = {
-                    qc::Vec3Distance(hit.point, va),
-                    qc::Vec3Distance(hit.point, vb),
-                    qc::Vec3Distance(hit.point, vc)
+                    Vec3Distance(hit.point, va),
+                    Vec3Distance(hit.point, vb),
+                    Vec3Distance(hit.point, vc)
                 };
 
                 pickedCorner = (aCd[0]<aCd[1]) ? (aCd[0]<aCd[2]?0:2) : (aCd[1]<aCd[2]?1:2);
@@ -298,10 +295,10 @@ void CPolygonEditor::Draw(CEditor& editor, const qc::Camera3D& camera)
         }
     }
 
-    if (poly == POLY_CREATE && IsMouseButtonPressed(MOUSE_LEFT_BUTTON))
+    if (poly == POLY_CREATE && IsMouseButtonPressed(MOUSE_BUTTON_LEFT))
     {
-        const qc::Ray ray = CScenePicker::ScreenToWorldRay(viewport, mouse, camera);
-        qc::Vec3 placePos = {};
+        const Ray ray = CScenePicker::ScreenToWorldRay(viewport, mouse, camera);
+        Vec3 placePos = {};
         bool hitMesh = false;
 
         for (int t = 0; t < (int)eMesh.m_vTriangles.size(); t++)
@@ -320,7 +317,7 @@ void CPolygonEditor::Draw(CEditor& editor, const qc::Camera3D& camera)
                 continue;
             }
 
-            const qc::RayCollision hit = GetRayCollisionTriangle(ray,
+            const RayCollision hit = GetRayCollisionTriangle(ray,
                 toWorld(eMesh.m_vVertices[tri.A].Position),
                 toWorld(eMesh.m_vVertices[tri.B].Position),
                 toWorld(eMesh.m_vVertices[tri.C].Position));

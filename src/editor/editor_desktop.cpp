@@ -18,8 +18,6 @@
 #include "QuarkCore/QuarkCore.hpp"
 
 #include <cstdio>
-
-using namespace qc;
 #include <cstdlib>
 #include <cstring>
 

@@ -37,7 +37,7 @@ public:
     CEditor(const CEditor&) = delete;
     CEditor& operator=(const CEditor&) = delete;
 
-    void DrawUi(qc::Shader shader, CFlyCamera& camera, SPluginContext* pCtx);
+    void DrawUi(Shader shader, CFlyCamera& camera, SPluginContext* pCtx);
     void DrawAssetsUi();
     void HandleInput();
     void SaveState();
@@ -96,7 +96,7 @@ private:
     void StartHistoryRestore(bool undo);
     void DrawMainMenuBar(SPluginContext* pCtx, ImGuiID dockspaceId);
     void DrawHierarchyPanel(SPluginContext* pCtx);
-    void DrawInspectorPanel(qc::Shader shader, SPluginContext* pCtx);
+    void DrawInspectorPanel(Shader shader, SPluginContext* pCtx);
     void DrawScenePanel(CFlyCamera& camera, SPluginContext* pCtx);
     void DrawRenameModal();
     void DrawAboutModal();

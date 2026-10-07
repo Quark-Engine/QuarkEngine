@@ -4,9 +4,6 @@
 #include "models.h"
 #include "tex.h"
 #include "editor/editor_viewers.h"
-
-using namespace qc;
-
 namespace quark
 {
 

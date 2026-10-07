@@ -13,9 +13,6 @@
 #include <algorithm>
 #include "editor/editor_assets.h"
 #include "editor/editor_grid.h"
-
-using namespace qc;
-
 #define lang CLanguageManager::Get()
 
 static void ApplyMaterialSettings(CMaterialViewerState& state);
@@ -96,7 +93,7 @@ bool OpenModelViewerForAsset(CModelViewerState& state, const CModelAsset& asset)
     state.m_Orbit.Radius = 5.0f;
     state.m_Orbit.Phi = 20.0f;
     state.m_Orbit.Theta = 45.0f;
-    state.m_Orbit.Target = qc::Vec3(0, 0, 0);
+    state.m_Orbit.Target = Vec3(0, 0, 0);
     state.m_Orbit.ModelRotation = { 0, 0, 0 };
 
     const BoundingBox box = GetModelBoundingBox(state.m_PreviewModel);
@@ -175,7 +172,7 @@ bool OpenMaterialViewerForPath(CEditor& editor, CMaterialViewerState& state, con
 
             state.m_DiffuseTextureName = textureName;
             const std::filesystem::path texturePath = materialPath.parent_path() / textureName;
-            const qc::Texture2D* pTexture = editor.m_Textures.Load(texturePath.string());
+            const Texture2D* pTexture = editor.m_Textures.Load(texturePath.string());
 
             if (pTexture)
             {
@@ -190,7 +187,7 @@ bool OpenMaterialViewerForPath(CEditor& editor, CMaterialViewerState& state, con
     state.m_Orbit.Radius = 2.5f;
     state.m_Orbit.Phi = 20.0f;
     state.m_Orbit.Theta = 45.0f;
-    state.m_Orbit.Target = qc::Vec3(0, 0, 0);
+    state.m_Orbit.Target = Vec3(0, 0, 0);
     state.m_Orbit.ModelRotation = { 0, 0, 0 };
     return true;
 }
@@ -523,7 +520,7 @@ static void LoadMaterialTexture(CEditor& editor, CMaterialViewerState& state, co
         return;
     }
 
-    const qc::Texture2D* pTexture = editor.m_Textures.Load(textureFullPath.string());
+    const Texture2D* pTexture = editor.m_Textures.Load(textureFullPath.string());
     if (!pTexture)
     {
         return;

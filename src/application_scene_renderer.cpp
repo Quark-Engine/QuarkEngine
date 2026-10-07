@@ -6,9 +6,6 @@
 #include "engine/transform.h"
 
 #include <cfloat>
-
-using namespace qc;
-
 namespace
 {
 void ExpandBoundsWithPoint(BoundingBox& bounds, const Vec3& point)
@@ -348,13 +345,13 @@ void CSceneRenderer::UnloadShaders()
     if (m_LightingShader.id != 0)
     {
         UnloadShader(m_LightingShader);
-        m_LightingShader = qc::Shader{};
+        m_LightingShader = Shader{};
     }
 
     if (m_ShadowShader.id != 0)
     {
         UnloadShader(m_ShadowShader);
-        m_ShadowShader = qc::Shader{};
+        m_ShadowShader = Shader{};
     }
 }
 
@@ -365,7 +362,7 @@ void CSceneRenderer::UnloadShadowMaps()
         if (shadowMap.id != 0)
         {
             UnloadRenderTexture(shadowMap);
-            shadowMap = qc::RenderTexture2D{};
+            shadowMap = RenderTexture2D{};
         }
     }
 }

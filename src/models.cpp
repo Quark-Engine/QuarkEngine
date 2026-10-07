@@ -12,9 +12,6 @@
 #include <csetjmp>
 #include <cstdlib>
 #endif
-
-using namespace qc;
-
 namespace
 {
 
@@ -219,7 +216,7 @@ void CModelService::CModelLoadGuard::Remove()
 }
 #endif
 
-bool CMeshOverrideService::GetTriangleVertexIndices(const qc::Mesh& mesh, int triangleIndex, int aOutIndices[3])
+bool CMeshOverrideService::GetTriangleVertexIndices(const Mesh& mesh, int triangleIndex, int aOutIndices[3])
 {
     if (!aOutIndices || triangleIndex < 0 || triangleIndex >= mesh.triangleCount)
     {
@@ -252,7 +249,7 @@ bool CMeshOverrideService::GetTriangleVertexIndices(const qc::Mesh& mesh, int tr
     return true;
 }
 
-void CModelService::RebuildMeshNormals(qc::Mesh& mesh)
+void CModelService::RebuildMeshNormals(Mesh& mesh)
 {
     if (!mesh.vertices || !mesh.normals || mesh.vertexCount <= 0)
     {
@@ -483,7 +480,7 @@ bool CModelService::EnsureAssetLoaded(CModelAsset& asset)
     return asset.m_LoadedModel.meshCount > 0 && asset.m_LoadedModel.meshes != nullptr;
 }
 
-bool CModelService::LoadInstance(const CModelAsset& asset, qc::Model& model)
+bool CModelService::LoadInstance(const CModelAsset& asset, Model& model)
 {
     if (asset.m_IsProcedural)
     {

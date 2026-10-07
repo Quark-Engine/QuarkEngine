@@ -34,9 +34,6 @@
 #endif
 
 #define lang CLanguageManager::Get()
-
-using namespace qc;
-
 namespace fs = std::filesystem;
 
 namespace
@@ -115,9 +112,9 @@ void OpenInSystemFileExplorer(const fs::path& path, bool bIsDirectory)
 
 } // anonymous
 
-static qc::RenderTexture2D CreateModelPreview(const CModelAsset& asset, int previewSize)
+static RenderTexture2D CreateModelPreview(const CModelAsset& asset, int previewSize)
 {
-    qc::RenderTexture2D renderTexture = { 0 };
+    RenderTexture2D renderTexture = { 0 };
 
     Model previewModel;
     if (!CModelService::LoadInstance(asset, previewModel))
@@ -282,7 +279,7 @@ bool ImportPathToResources(const fs::path& src, const fs::path& resourceDir)
     return false;
 }
 
-static qc::RenderTexture2D CreateMaterialPreview(CEditor& editor, const std::string& mtlPath)
+static RenderTexture2D CreateMaterialPreview(CEditor& editor, const std::string& mtlPath)
 {
     std::ifstream file(mtlPath);
     if (!file.is_open())
@@ -290,10 +287,10 @@ static qc::RenderTexture2D CreateMaterialPreview(CEditor& editor, const std::str
         return {0};
     }
 
-    qc::Model sphere = LoadModelFromMesh(GenMeshSphere(1.0f, 64, 64));
+    Model sphere = LoadModelFromMesh(GenMeshSphere(1.0f, 64, 64));
 
-    qc::Color albedo = WHITE;
-    qc::Texture2D tex = {0};
+    Color albedo = WHITE;
+    Texture2D tex = {0};
     std::string texPath;
 
     std::string line;
@@ -325,14 +322,14 @@ static qc::RenderTexture2D CreateMaterialPreview(CEditor& editor, const std::str
         }
     }
 
-    qc::Material& mat = sphere.materials[0];
+    Material& mat = sphere.materials[0];
 
     mat.maps[MATERIAL_MAP_DIFFUSE].color = albedo;
 
     if (!texPath.empty())
     {
         const fs::path full = fs::path(mtlPath).parent_path() / fs::path(texPath);
-        const qc::Texture2D* pTexture = editor.m_Textures.Load(full.string());
+        const Texture2D* pTexture = editor.m_Textures.Load(full.string());
         if (pTexture)
         {
             tex = *pTexture;
@@ -340,7 +337,7 @@ static qc::RenderTexture2D CreateMaterialPreview(CEditor& editor, const std::str
         }
     }
 
-    qc::RenderTexture2D rt = LoadRenderTexture(128, 128);
+    RenderTexture2D rt = LoadRenderTexture(128, 128);
     if (rt.id == 0)
     {
         mat.maps[MATERIAL_MAP_DIFFUSE].texture = {0};
@@ -348,7 +345,7 @@ static qc::RenderTexture2D CreateMaterialPreview(CEditor& editor, const std::str
         return rt;
     }
 
-    qc::Camera3D cam = {};
+    Camera3D cam = {};
     cam.fovy = 45.0f;
     cam.projection = CAMERA_PERSPECTIVE;
     cam.target = {0, 0, 0};
@@ -370,14 +367,14 @@ static qc::RenderTexture2D CreateMaterialPreview(CEditor& editor, const std::str
     return rt;
 }
 
-static qc::Texture GetModelPreview(CEditor& editor, const CModelAsset& asset, const std::string& cacheKey)
+static Texture GetModelPreview(CEditor& editor, const CModelAsset& asset, const std::string& cacheKey)
 {
     if (editor.m_Previews.HasModelPreview(cacheKey))
     {
         return editor.m_Previews.ModelPreview(cacheKey);
     }
 
-    const qc::RenderTexture2D renderTexture = CreateModelPreview(asset, editor.m_Preferences.m_AssetPreviewSize);
+    const RenderTexture2D renderTexture = CreateModelPreview(asset, editor.m_Preferences.m_AssetPreviewSize);
     if (renderTexture.id == 0)
     {
         return { 0 };
@@ -387,14 +384,14 @@ static qc::Texture GetModelPreview(CEditor& editor, const CModelAsset& asset, co
     return renderTexture.texture;
 }
 
-static qc::Texture GetMaterialPreview(CEditor& editor, const std::string& mtlPath)
+static Texture GetMaterialPreview(CEditor& editor, const std::string& mtlPath)
 {
     if (editor.m_Previews.HasMaterialPreview(mtlPath))
     {
         return editor.m_Previews.MaterialPreview(mtlPath);
     }
 
-    const qc::RenderTexture2D renderTexture = CreateMaterialPreview(editor, mtlPath);
+    const RenderTexture2D renderTexture = CreateMaterialPreview(editor, mtlPath);
     if (renderTexture.id == 0)
     {
         return { 0 };

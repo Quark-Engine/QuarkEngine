@@ -12,9 +12,6 @@
 #include "imgui.h"
 
 #include <cstring>
-
-using namespace qc;
-
 void CGizmoController::Draw(CEditor& editor, CFlyCamera& camera)
 {
     SGizmoState& gizmo = editor.m_Ui.m_Gizmo;
@@ -68,15 +65,15 @@ void CGizmoController::Draw(CEditor& editor, CFlyCamera& camera)
         editor.m_Preferences.m_GizmoScaleSnap
     };
     const bool gizmoSnapEnabled = editor.m_Preferences.m_GizmoSnapEnabled ||
-        IsKeyDown(KeyboardKey::LeftControl) || IsKeyDown(KeyboardKey::RightControl);
+        IsKeyDown(KEY_LEFT_CONTROL) || IsKeyDown(KEY_RIGHT_CONTROL);
 
-    const qc::Mat4 view = qc::Mat4::lookAt(
+    const Mat4 view = Mat4::lookAt(
         camera.GetCamera().position,
         camera.GetCamera().target,
         camera.GetCamera().up
     );
 
-    const qc::Mat4 projection = qc::Mat4::perspective(
+    const Mat4 projection = Mat4::perspective(
         camera.GetCamera().fovy * DEG2RAD,
         viewport.m_WindowSize.x / viewport.m_WindowSize.y,
         0.1f,
@@ -107,7 +104,7 @@ void CGizmoController::Draw(CEditor& editor, CFlyCamera& camera)
             edit.VertexCorner,
             vertexIndex))
         {
-            const qc::Vec3 vertexWorld = CMeshEditor::GetVertexWorldPosition(
+            const Vec3 vertexWorld = CMeshEditor::GetVertexWorldPosition(
                 editor.m_Scene,
                 *pEntity,
                 edit.MeshIndex,
@@ -168,7 +165,7 @@ void CGizmoController::Draw(CEditor& editor, CFlyCamera& camera)
 
     float aTranslation[3] = { pTransform->m_Position.x, pTransform->m_Position.y, pTransform->m_Position.z };
 
-    const qc::Mat4 gizmoTransform = quark::ComposeWorld(editor.m_Scene, *pEntity);
+    const Mat4 gizmoTransform = quark::ComposeWorld(editor.m_Scene, *pEntity);
     memcpy(aTransformMat4, &gizmoTransform, sizeof(aTransformMat4));
 
     ImGuizmo::Manipulate(
@@ -191,19 +188,19 @@ void CGizmoController::Draw(CEditor& editor, CFlyCamera& camera)
 
     if (ImGuizmo::IsUsing())
     {
-        qc::Mat4 worldTransform = qc::Mat4::identity();
+        Mat4 worldTransform = Mat4::identity();
         memcpy(&worldTransform, aTransformMat4, sizeof(aTransformMat4));
         quark::DecomposeLocal(
             quark::ParentWorld(editor.m_Scene, *pEntity),
             worldTransform,
             *pTransform);
-        qc::Mat4 inverseParent;
+        Mat4 inverseParent;
         if (quark::TryInvertAffine(quark::ParentWorld(editor.m_Scene, *pEntity), inverseParent))
         {
             pTransform->SetLocalMatrixOverride(inverseParent * worldTransform);
         }
 
-        const qc::Vec3 positionDelta = pTransform->m_Position - qc::Vec3{aTranslation[0], aTranslation[1], aTranslation[2]};
+        const Vec3 positionDelta = pTransform->m_Position - Vec3{aTranslation[0], aTranslation[1], aTranslation[2]};
         if (editor.m_Scene.m_vSelectedEntities.size() > 1)
         {
             for (int selected_index : editor.m_Scene.m_vSelectedEntities)

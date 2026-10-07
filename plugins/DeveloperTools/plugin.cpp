@@ -170,7 +170,7 @@ SEntityDebugData ReadEntityDebugData(const CEntity& entity)
         bool hasVertices = false;
         for (int meshIndex = 0; meshIndex < pMesh->m_Model.meshCount; ++meshIndex)
         {
-            const qc::Mesh& mesh = pMesh->m_Model.meshes[meshIndex];
+            const Mesh& mesh = pMesh->m_Model.meshes[meshIndex];
             if (!mesh.vertices)
             {
                 continue;

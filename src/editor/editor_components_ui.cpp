@@ -11,9 +11,6 @@
 #include "language_manager.h"
 #include <filesystem>
 #include <cstring>
-
-using namespace qc;
-
 #define lang CLanguageManager::Get()
 
 void CComponentUIHelper::DrawEntityInspector(CEditor& editor, CEntity& entity, Shader shader)
@@ -255,7 +252,7 @@ void CComponentUIHelper::DrawTransformComponent(CEditor& editor, CEntity& entity
     if (ImGui::DragFloat3(lang.Word("position"), aPosition, 0.1f))
     {
         pTransform->ClearLocalMatrixOverride();
-        pTransform->m_Position = qc::Vec3(aPosition[0], aPosition[1], aPosition[2]);
+        pTransform->m_Position = Vec3(aPosition[0], aPosition[1], aPosition[2]);
         DispatchPluginEvent(PLUGIN_EVENT_TRANSFORM_CHANGED,
             static_cast<int>(&entity - editor.m_Scene.m_vEntities.data()));
         CEntityTextureService::MarkEntityBoundsDirty(&entity);
@@ -265,7 +262,7 @@ void CComponentUIHelper::DrawTransformComponent(CEditor& editor, CEntity& entity
     if (ImGui::DragFloat3(lang.Word("rotation"), aRotation, 1.0f))
     {
         pTransform->ClearLocalMatrixOverride();
-        pTransform->m_Rotation = qc::Vec3(aRotation[0], aRotation[1], aRotation[2]);
+        pTransform->m_Rotation = Vec3(aRotation[0], aRotation[1], aRotation[2]);
         DispatchPluginEvent(PLUGIN_EVENT_TRANSFORM_CHANGED,
             static_cast<int>(&entity - editor.m_Scene.m_vEntities.data()));
         CEntityTextureService::MarkEntityBoundsDirty(&entity);
@@ -283,7 +280,7 @@ void CComponentUIHelper::DrawTransformComponent(CEditor& editor, CEntity& entity
         bool willFlip = countNeg(aScale[0], aScale[1], aScale[2]) % 2 != 0;
 
         pTransform->ClearLocalMatrixOverride();
-        pTransform->m_Scale = qc::Vec3(aScale[0], aScale[1], aScale[2]);
+        pTransform->m_Scale = Vec3(aScale[0], aScale[1], aScale[2]);
         DispatchPluginEvent(PLUGIN_EVENT_TRANSFORM_CHANGED,
             static_cast<int>(&entity - editor.m_Scene.m_vEntities.data()));
         CEntityTextureService::MarkEntityBoundsDirty(&entity);
@@ -478,7 +475,7 @@ void CComponentUIHelper::DrawMeshComponent(CEditor& editor, CEntity& entity, CMe
             {
                 editor.SaveState();
 
-                selectedVertex.Position = qc::Vec3(aVertexPos[0],
+                selectedVertex.Position = Vec3(aVertexPos[0],
                     aVertexPos[1],
                     aVertexPos[2]);
 
@@ -835,10 +832,10 @@ void CComponentUIHelper::DrawLightComponent(CEditor& editor, CEntity& entity, CL
         if (pTransform)
         {
             pTransform->ClearLocalMatrixOverride();
-            pTransform->m_Position = qc::Vec3(aLightPosition[0], aLightPosition[1], aLightPosition[2]);
+            pTransform->m_Position = Vec3(aLightPosition[0], aLightPosition[1], aLightPosition[2]);
             CEntityTextureService::MarkEntityBoundsDirty(&entity);
         }
-        pLight->m_Light.m_Position = qc::Vec3(aLightPosition[0], aLightPosition[1], aLightPosition[2]);
+        pLight->m_Light.m_Position = Vec3(aLightPosition[0], aLightPosition[1], aLightPosition[2]);
         changed = true;
     }
     changed |= ImGui::DragFloat3(lang.Word("target"), (float*)&pLight->m_Light.m_Target, 0.1f);

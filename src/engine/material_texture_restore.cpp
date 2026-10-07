@@ -54,7 +54,7 @@ void RestoreOriginalMaterialTextures(CMeshComponent& mesh, const CMaterialCompon
     {
         if (mesh.m_Model.materials[index].maps)
         {
-            mesh.m_Model.materials[index].maps[qc::MATERIAL_MAP_ALBEDO].texture =
+            mesh.m_Model.materials[index].maps[MATERIAL_MAP_ALBEDO].texture =
                 material.m_vOriginalMaterialTextures[index];
         }
     }

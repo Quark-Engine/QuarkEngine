@@ -6,9 +6,6 @@
 #include "imgui.h"
 #include "imgui_internal.h"
 #include "version.h"
-
-using namespace qc;
-
 void CStatusBar::Draw(const CEditor& editor)
 {
     ImGuiViewport* pViewport = ImGui::GetMainViewport();

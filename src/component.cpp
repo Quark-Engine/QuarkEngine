@@ -4,9 +4,6 @@
 #include "engine/component_factory_registry.h"
 #include "entity.h"
 #include "nlohmann/json.hpp"
-
-using namespace qc;
-
 void CMeshComponent::Serialize(nlohmann::json& json) const
 {
     json["segments"] = m_Segments;
@@ -64,7 +61,7 @@ void CMeshComponent::Deserialize(const nlohmann::json& json)
         for (auto& v : json["editable_vertices"])
         {
             SEditableVertex vert;
-            vert.Position = qc::Vec3(v[0],
+            vert.Position = Vec3(v[0],
                 v[1],
                 v[2]);
             if (v.size() >= 5)
@@ -112,7 +109,7 @@ void CLightComponent::Serialize(nlohmann::json& json) const
 
 CLightComponent::CLightComponent() : IComponent(COMPONENT_LIGHT, "Light"), m_Created(false)
 {
-    m_Light = CreateLighting({0, 0, 0}, qc::WHITE);
+    m_Light = CreateLighting({0, 0, 0}, WHITE);
 }
 
 void CLightComponent::Deserialize(const nlohmann::json& json)
@@ -121,17 +118,17 @@ void CLightComponent::Deserialize(const nlohmann::json& json)
     if (json.contains("light_position"))
     {
         auto& p = json["light_position"];
-        m_Light.m_Position = qc::Vec3(p[0], p[1], p[2]);
+        m_Light.m_Position = Vec3(p[0], p[1], p[2]);
     }
     if (json.contains("light_target"))
     {
         auto& t = json["light_target"];
-        m_Light.m_Target = qc::Vec3(t[0], t[1], t[2]);
+        m_Light.m_Target = Vec3(t[0], t[1], t[2]);
     }
     if (json.contains("light_rotation"))
     {
         auto& r = json["light_rotation"];
-        m_Light.m_Rotation = qc::Vec3(r[0], r[1], r[2]);
+        m_Light.m_Rotation = Vec3(r[0], r[1], r[2]);
     }
     if (json.contains("light_color"))
     {
@@ -174,7 +171,7 @@ void CCollisionComponent::Deserialize(const nlohmann::json& json)
     if (json.contains("size"))
     {
         auto& s = json["size"];
-        m_Size = qc::Vec3(s[0], s[1], s[2]);
+        m_Size = Vec3(s[0], s[1], s[2]);
     }
 
     if (json.contains("radius")) m_Radius = json["radius"];
@@ -183,7 +180,7 @@ void CCollisionComponent::Deserialize(const nlohmann::json& json)
     if (json.contains("center"))
     {
         auto& c = json["center"];
-        m_Center = qc::Vec3(c[0], c[1], c[2]);
+        m_Center = Vec3(c[0], c[1], c[2]);
     }
 
     m_Dirty = true;

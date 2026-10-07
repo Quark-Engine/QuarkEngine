@@ -19,7 +19,7 @@ struct SScannedTexture
 {
     std::string name;
     std::string fingerprint;
-    qc::Image imageData{};
+    Image imageData{};
     STextureMeta meta;
     bool hasImage = false;
     std::string error;

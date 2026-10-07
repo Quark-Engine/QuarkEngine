@@ -1,8 +1,5 @@
 #include "entity.h"
 #include "component.h"
-
-using namespace qc;
-
 namespace
 {
 bool OwnsLoadedModel(const CModelAsset& asset)
@@ -51,9 +48,9 @@ CModelAsset& CModelAsset::operator=(CModelAsset&& other) noexcept
     return *this;
 }
 
-qc::Model CModelAsset::TakeLoadedModel()
+Model CModelAsset::TakeLoadedModel()
 {
-    qc::Model model = m_LoadedModel;
+    Model model = m_LoadedModel;
     m_LoadedModel = {};
     return model;
 }
