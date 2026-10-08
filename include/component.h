@@ -249,6 +249,8 @@ public:
 
     void ReleaseOwnedResources()
     {
+        ClearRuntimeShadowMapBindings();
+
         if (m_OwnsMaterials)
         {
             if (m_Model.materials)
@@ -274,6 +276,28 @@ public:
 
         m_Model = {};
         m_OwnsModelInstance = false;
+    }
+
+    void ClearRuntimeShadowMapBindings()
+    {
+        if (!m_Model.materials)
+        {
+            return;
+        }
+
+        for (int materialIndex = 0; materialIndex < m_Model.materialCount; ++materialIndex)
+        {
+            Material& material = m_Model.materials[materialIndex];
+            if (!material.maps)
+            {
+                continue;
+            }
+
+            for (int shadowIndex = 0; shadowIndex < QC_MAX_LIGHTS; ++shadowIndex)
+            {
+                material.maps[MATERIAL_MAP_HEIGHT + shadowIndex].texture = {};
+            }
+        }
     }
 
     void Serialize(nlohmann::json& json) const override;

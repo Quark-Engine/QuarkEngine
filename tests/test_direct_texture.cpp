@@ -352,6 +352,30 @@ TEST(DirectTexture, restores_asset_owned_texture_before_unloading_the_model)
     CHECK(aMaps[MATERIAL_MAP_ALBEDO].texture.id == 22);
 }
 
+TEST(DirectTexture, clears_runtime_shadow_maps_before_model_release)
+{
+    CMeshComponent mesh;
+    Material modelMaterial = {};
+    MaterialMap aMaps[MATERIAL_MAP_BRDF + 1] = {};
+    modelMaterial.maps = aMaps;
+    mesh.m_Model.materials = &modelMaterial;
+    mesh.m_Model.materialCount = 1;
+
+    for (int shadowIndex = 0; shadowIndex < QC_MAX_LIGHTS; ++shadowIndex)
+    {
+        aMaps[MATERIAL_MAP_HEIGHT + shadowIndex].texture = FakeTexture(100 + shadowIndex);
+    }
+
+    mesh.ClearRuntimeShadowMapBindings();
+
+    for (int shadowIndex = 0; shadowIndex < QC_MAX_LIGHTS; ++shadowIndex)
+    {
+        const Texture2D& texture = aMaps[MATERIAL_MAP_HEIGHT + shadowIndex].texture;
+        CHECK(texture.id == 0);
+        CHECK(!texture.valid);
+    }
+}
+
 TEST(DirectTexture, plan_restores_the_model_textures_for_a_model_sourced_material)
 {
     CMaterialComponent material;

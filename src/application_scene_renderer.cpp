@@ -105,15 +105,27 @@ bool PrepareSceneLightUniforms(CScene& scene, CLightRegistry& lights, Shader sha
         CEntity& e = scene.m_vEntities[entityIndex];
         CLightComponent* pLight = e.GetLightComponent();
         CTransformComponent* pTransform = e.GetTransformComponent();
-        if (!pLight || !pTransform || !pLight->m_Enabled)
+        if (!pLight || !pTransform)
         {
             continue;
         }
 
+        if (!pLight->m_Enabled)
+        {
+            if (pLight->m_Created)
+            {
+                lights.Free(pLight->m_Light.m_Id);
+                pLight->m_Created = false;
+                pLight->m_Light.m_Id = -1;
+            }
+            pLight->m_Light.m_Enabled = false;
+            continue;
+        }
+
+        pLight->m_Light.m_Enabled = true;
         const Mat4 worldTransform = quark::ComposeWorld(scene, entityIndex);
         const Vec3 worldPosition = Vec3(worldTransform * Vec3{0.0f, 0.0f, 0.0f});
 
-        pLight->m_Light.m_Enabled = true;
         if (!pLight->m_Created)
         {
             int newId = lights.Allocate();
@@ -227,6 +239,25 @@ void RenderSceneShadowMaps(CScene& scene, Shader shadowShader,
         EndShaderMode();
         EndMode3D();
         EndTextureMode();
+    }
+
+    const Mat4 identity = Mat4::identity();
+    for (int slot = 0; slot < QC_MAX_LIGHTS; ++slot)
+    {
+        if (aRendered[slot])
+        {
+            continue;
+        }
+
+        if (aShadowMaps[slot].id != 0)
+        {
+            BeginTextureMode(aShadowMaps[slot]);
+            ClearBackground(WHITE);
+            EndTextureMode();
+        }
+
+        SetShaderValueMatrix(lightingShader, aLightViewLocations[slot], identity.m);
+        SetShaderValueMatrix(lightingShader, aLightProjectionLocations[slot], identity.m);
     }
 }
 
