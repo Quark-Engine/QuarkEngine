@@ -505,7 +505,8 @@ void DrawAssetsUi(CEditor& editor)
     ImGui::Separator();
 
     const char* apAssetFilterNames[] = {
-        "All", "Images + Models", "Materials", "Texture Metadata", "Prefabs"
+        lang.Word("all"), lang.Word("images_models"), lang.Word("materials"),
+        lang.Word("texture_metadata"), lang.Word("prefabs")
     };
     ImGui::SetNextItemWidth(150.0f);
     if (ImGui::Combo("##asset_type_filter_browser", &editor.m_Preferences.m_AssetFilter,
@@ -515,7 +516,7 @@ void DrawAssetsUi(CEditor& editor)
     }
     ImGui::SameLine();
     ImGui::SetNextItemWidth(-1.0f);
-    ImGui::InputTextWithHint("##asset_search", "Search assets...", browser.aSearchBuffer,
+    ImGui::InputTextWithHint("##asset_search", lang.Word("search_assets"), browser.aSearchBuffer,
         IM_ARRAYSIZE(browser.aSearchBuffer));
 
     std::vector<SLocalEntry> vDirectories;
@@ -1446,7 +1447,7 @@ static void DrawAssetDependencies(CEditor& editor, const fs::path& selected)
     browser.dependencyCacheReady = true;
 
     ImGui::Separator();
-    ImGui::Text("Dependencies");
+    ImGui::TextUnformatted(lang.Word("dependencies"));
     for (const std::string& reference : browser.vCachedFileDependencies)
     {
         ImGui::TextWrapped("%s", reference.c_str());
@@ -1462,7 +1463,7 @@ static void DrawAssetDependencies(CEditor& editor, const fs::path& selected)
     }
     if (browser.vCachedFileDependencies.empty() && vEntityReferences.empty())
     {
-        ImGui::TextDisabled("No references found.");
+        ImGui::TextDisabled("%s", lang.Word("no_references_found"));
     }
 }
 
@@ -1497,26 +1498,30 @@ void DrawSelectedTextureInspector(CEditor& editor)
     }
 
     ImGui::Separator();
-    ImGui::Text("Texture Importer");
+    ImGui::TextUnformatted(lang.Word("texture_importer"));
     ImGui::TextWrapped("%s", texturePath.filename().string().c_str());
     ImGui::TextDisabled("GUID: %s", meta.Guid.c_str());
 
     bool changed = false;
-    changed |= ImGui::Checkbox("Enable mip maps", &meta.EnableMipMap);
-    changed |= ImGui::Checkbox("sRGB texture", &meta.SrgbTexture);
-    changed |= ImGui::Checkbox("Readable", &meta.IsReadable);
-    changed |= ImGui::Checkbox("Alpha is transparency", &meta.AlphaIsTransparency);
-    const char* apFilterModes[] = { "Nearest", "Linear" };
-    const char* apWrapModes[] = { "Repeat", "Clamp" };
-    const char* apSpriteModes[] = { "None", "Single", "Multiple" };
-    const char* apTextureTypes[] = { "Default", "Normal", "Sprite", "Cursor", "Cookie", "Lightmap", "Shadowmask", "Directional", "Single channel" };
-    changed |= ImGui::Combo("Filter mode", &meta.FilterMode, apFilterModes, IM_ARRAYSIZE(apFilterModes));
-    changed |= ImGui::Combo("Wrap U", &meta.WrapU, apWrapModes, IM_ARRAYSIZE(apWrapModes));
-    changed |= ImGui::Combo("Wrap V", &meta.WrapV, apWrapModes, IM_ARRAYSIZE(apWrapModes));
-    changed |= ImGui::SliderInt("Max texture size", &meta.MaxTextureSize, 32, 8192);
-    changed |= ImGui::SliderInt("Compression quality", &meta.CompressionQuality, 0, 100);
-    changed |= ImGui::Combo("Sprite mode", &meta.SpriteMode, apSpriteModes, IM_ARRAYSIZE(apSpriteModes));
-    changed |= ImGui::Combo("Texture type", &meta.TextureType, apTextureTypes, IM_ARRAYSIZE(apTextureTypes));
+    changed |= ImGui::Checkbox(lang.Word("enable_mip_maps"), &meta.EnableMipMap);
+    changed |= ImGui::Checkbox(lang.Word("srgb_texture"), &meta.SrgbTexture);
+    changed |= ImGui::Checkbox(lang.Word("readable"), &meta.IsReadable);
+    changed |= ImGui::Checkbox(lang.Word("alpha_transparency"), &meta.AlphaIsTransparency);
+    const char* apFilterModes[] = { lang.Word("nearest"), lang.Word("linear") };
+    const char* apWrapModes[] = { lang.Word("repeat"), lang.Word("clamp") };
+    const char* apSpriteModes[] = { lang.Word("none"), lang.Word("single"), lang.Word("multiple") };
+    const char* apTextureTypes[] = {
+        lang.Word("default"), lang.Word("normal"), lang.Word("sprite"), lang.Word("cursor"),
+        lang.Word("cookie"), lang.Word("lightmap"), lang.Word("shadowmask"), lang.Word("directional"),
+        lang.Word("single_channel")
+    };
+    changed |= ImGui::Combo(lang.Word("filter_mode"), &meta.FilterMode, apFilterModes, IM_ARRAYSIZE(apFilterModes));
+    changed |= ImGui::Combo(lang.Word("wrap_u"), &meta.WrapU, apWrapModes, IM_ARRAYSIZE(apWrapModes));
+    changed |= ImGui::Combo(lang.Word("wrap_v"), &meta.WrapV, apWrapModes, IM_ARRAYSIZE(apWrapModes));
+    changed |= ImGui::SliderInt(lang.Word("max_texture_size"), &meta.MaxTextureSize, 32, 8192);
+    changed |= ImGui::SliderInt(lang.Word("compression_quality"), &meta.CompressionQuality, 0, 100);
+    changed |= ImGui::Combo(lang.Word("sprite_mode"), &meta.SpriteMode, apSpriteModes, IM_ARRAYSIZE(apSpriteModes));
+    changed |= ImGui::Combo(lang.Word("texture_type"), &meta.TextureType, apTextureTypes, IM_ARRAYSIZE(apTextureTypes));
 
     if (changed)
     {

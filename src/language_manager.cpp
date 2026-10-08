@@ -27,6 +27,20 @@ bool CLanguageManager::Load(const std::string& path)
     if (!file.is_open()) return false;
     m_Cache.clear();
     file >> m_Data;
+
+    m_FallbackData = json::object();
+    std::ifstream fallbackFile("assets/lang/english.json");
+    if (fallbackFile.is_open())
+    {
+        try
+        {
+            fallbackFile >> m_FallbackData;
+        }
+        catch (...)
+        {
+            m_FallbackData = json::object();
+        }
+    }
     return true;
 }
 
@@ -68,7 +82,27 @@ const char* CLanguageManager::Word(const std::string& key) const
 
         if (!pNode->contains(part))
         {
-            m_Cache[key] = key;
+            const nlohmann::json* pFallback = &m_FallbackData;
+            size_t fallbackStart = 0;
+            bool fallbackFound = true;
+            while (true)
+            {
+                size_t fallbackDot = key.find('.', fallbackStart);
+                std::string fallbackPart = key.substr(
+                    fallbackStart,
+                    fallbackDot == std::string::npos ? std::string::npos : fallbackDot - fallbackStart);
+                if (!pFallback->contains(fallbackPart))
+                {
+                    fallbackFound = false;
+                    break;
+                }
+                pFallback = &(*pFallback)[fallbackPart];
+                if (fallbackDot == std::string::npos)
+                    break;
+                fallbackStart = fallbackDot + 1;
+            }
+            m_Cache[key] = fallbackFound && pFallback->is_string()
+                ? pFallback->get<std::string>() : key;
             return m_Cache[key].c_str();
         }
 

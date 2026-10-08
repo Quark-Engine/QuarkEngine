@@ -1184,6 +1184,14 @@ std::string CHubApp::Run(CPreferences& preferences)
         ClearBackground(ToQuarkColor(ImGui::GetStyle().Colors[ImGuiCol_WindowBg]));
         QcImGuiBegin();
 
+        const bool rtl = CLanguageManager::Get().m_Current == "arabic";
+        if (rtl)
+        {
+            ImGui::PushStyleVar(ImGuiStyleVar_WindowTitleAlign, ImVec2(1.0f, 0.5f));
+            ImGui::PushStyleVar(ImGuiStyleVar_ButtonTextAlign, ImVec2(1.0f, 0.5f));
+            ImGui::PushStyleVar(ImGuiStyleVar_SelectableTextAlign, ImVec2(1.0f, 0.5f));
+        }
+
         ImGui::SetNextWindowPos(ImVec2(0, 0));
         ImGui::SetNextWindowSize(ImVec2(
             static_cast<float>(GetScreenWidth()),
@@ -1203,6 +1211,11 @@ std::string CHubApp::Run(CPreferences& preferences)
         DrawDeletePopup();
         DrawVersionWarningPopup();
         DrawPluginManager();
+
+        if (rtl)
+        {
+            ImGui::PopStyleVar(3);
+        }
 
         QcImGuiEnd();
         EndDrawing();

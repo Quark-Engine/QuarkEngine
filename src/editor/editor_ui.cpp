@@ -74,6 +74,14 @@ void CViewportState::Unload()
 
 void CEditor::DrawUi(Shader shader, CFlyCamera& camera, SPluginContext* pPluginCtx)
 {
+    const bool rtl = CLanguageManager::Get().m_Current == "arabic";
+    if (rtl)
+    {
+        ImGui::PushStyleVar(ImGuiStyleVar_WindowTitleAlign, ImVec2(1.0f, 0.5f));
+        ImGui::PushStyleVar(ImGuiStyleVar_ButtonTextAlign, ImVec2(1.0f, 0.5f));
+        ImGui::PushStyleVar(ImGuiStyleVar_SelectableTextAlign, ImVec2(1.0f, 0.5f));
+    }
+
     const auto drawHistoryRestoreOverlay = [this]()
     {
         ImGuiViewport* pViewport = ImGui::GetMainViewport();
@@ -86,7 +94,7 @@ void CEditor::DrawUi(Shader shader, CFlyCamera& camera, SPluginContext* pPluginC
             ImGuiCond_Always,
             ImVec2(0.5f, 0.5f));
         ImGui::SetNextWindowBgAlpha(0.9f);
-        if (ImGui::Begin("Restoring scene", nullptr,
+        if (ImGui::Begin(lang.Word("restoring_scene"), nullptr,
             ImGuiWindowFlags_AlwaysAutoResize |
             ImGuiWindowFlags_NoCollapse |
             ImGuiWindowFlags_NoSavedSettings |
@@ -151,6 +159,11 @@ void CEditor::DrawUi(Shader shader, CFlyCamera& camera, SPluginContext* pPluginC
     {
         drawHistoryRestoreOverlay();
     }
+
+    if (rtl)
+    {
+        ImGui::PopStyleVar(3);
+    }
 }
 
 void CEditor::DrawMainMenuBar(SPluginContext* pPluginCtx, ImGuiID dockspaceId)
@@ -169,7 +182,7 @@ void CEditor::DrawMainMenuBar(SPluginContext* pPluginCtx, ImGuiID dockspaceId)
                 DispatchPluginEvent(PLUGIN_EVENT_SCENE_SAVED);
                 m_SceneDirty = false;
             }
-            if (ImGui::MenuItem("Save As...", "Ctrl+Shift+S"))
+            if (ImGui::MenuItem(lang.Word("save_as"), "Ctrl+Shift+S"))
             {
                 CSceneFileService::SaveAs(*this);
             }
@@ -916,25 +929,25 @@ void CEditor::DrawPreferencesUi(CFlyCamera& camera, SPluginContext* pPluginCtx)
     bool preferencesChanged = false;
     if (ImGui::BeginTabBar("PreferencesTabs"))
     {
-        if (ImGui::BeginTabItem("General"))
+        if (ImGui::BeginTabItem(lang.Word("general")))
         {
             preferencesChanged |= DrawPreferencesGeneralTab();
             ImGui::EndTabItem();
         }
 
-        if (ImGui::BeginTabItem("Rendering"))
+        if (ImGui::BeginTabItem(lang.Word("rendering")))
         {
             preferencesChanged |= DrawPreferencesRenderingTab(camera);
             ImGui::EndTabItem();
         }
 
-        if (ImGui::BeginTabItem("Interface"))
+        if (ImGui::BeginTabItem(lang.Word("interface")))
         {
             preferencesChanged |= DrawPreferencesInterfaceTab();
             ImGui::EndTabItem();
         }
 
-        if (ImGui::BeginTabItem("Plugins"))
+        if (ImGui::BeginTabItem(lang.Word("plugins")))
         {
             preferencesChanged |= DrawPreferencesPluginsTab(pPluginCtx);
             ImGui::EndTabItem();
@@ -971,13 +984,13 @@ bool CEditor::DrawPreferencesGeneralTab()
         changed = true;
     }
 
-    changed |= ImGui::Checkbox("Wireframe", &m_Preferences.m_WireframeEnabled);
-    changed |= ImGui::Checkbox("Show collision shapes", &m_Preferences.m_ShowColliders);
-    changed |= ImGui::Checkbox("Confirm delete", &m_Preferences.m_ConfirmDelete);
-    changed |= ImGui::Checkbox("Show bounding boxes", &m_Preferences.m_ShowBoundingBoxes);
-    changed |= ImGui::Checkbox("Focus camera on selection", &m_Preferences.m_FocusOnSelection);
-    changed |= ImGui::Checkbox("Confirm exit with unsaved changes", &m_Preferences.m_ConfirmExit);
-    changed |= ImGui::Checkbox("Open last project", &m_Preferences.m_OpenLastProject);
+    changed |= ImGui::Checkbox(lang.Word("wireframe"), &m_Preferences.m_WireframeEnabled);
+    changed |= ImGui::Checkbox(lang.Word("show_collision_shapes"), &m_Preferences.m_ShowColliders);
+    changed |= ImGui::Checkbox(lang.Word("confirm_delete"), &m_Preferences.m_ConfirmDelete);
+    changed |= ImGui::Checkbox(lang.Word("show_bounding_boxes"), &m_Preferences.m_ShowBoundingBoxes);
+    changed |= ImGui::Checkbox(lang.Word("focus_camera_on_selection"), &m_Preferences.m_FocusOnSelection);
+    changed |= ImGui::Checkbox(lang.Word("confirm_exit_unsaved"), &m_Preferences.m_ConfirmExit);
+    changed |= ImGui::Checkbox(lang.Word("open_last_project"), &m_Preferences.m_OpenLastProject);
 
     return changed;
 }
@@ -986,11 +999,11 @@ bool CEditor::DrawPreferencesPluginsTab(SPluginContext* pPluginCtx)
 {
     bool changed = false;
 
-    ImGui::TextUnformatted("Loaded plugins");
+    ImGui::TextUnformatted(lang.Word("loaded_plugins"));
 
     if (!m_pPluginManager)
     {
-        ImGui::TextUnformatted("Plugin manager is not available.");
+        ImGui::TextUnformatted(lang.Word("plugin_manager_unavailable"));
         return false;
     }
 
@@ -1078,12 +1091,12 @@ bool CEditor::DrawPreferencesPluginsTab(SPluginContext* pPluginCtx)
 
     if (vRows.empty())
     {
-        ImGui::TextDisabled("No plugins are currently loaded.");
+        ImGui::TextDisabled("%s", lang.Word("no_plugins_loaded"));
     }
     else if (ImGui::BeginTable("PluginsTable", 2, ImGuiTableFlags_SizingStretchProp | ImGuiTableFlags_RowBg))
     {
-        ImGui::TableSetupColumn("Enabled", ImGuiTableColumnFlags_WidthFixed);
-        ImGui::TableSetupColumn("Plugin", ImGuiTableColumnFlags_WidthStretch);
+        ImGui::TableSetupColumn(lang.Word("enabled"), ImGuiTableColumnFlags_WidthFixed);
+        ImGui::TableSetupColumn(lang.Word("plugin"), ImGuiTableColumnFlags_WidthStretch);
         ImGui::TableHeadersRow();
 
         for (std::pair<std::string, bool>& row : vRows)
@@ -1182,38 +1195,40 @@ bool CEditor::DrawPreferencesPluginsTab(SPluginContext* pPluginCtx)
 bool CEditor::DrawPreferencesRenderingTab(CFlyCamera& camera)
 {
     bool changed = false;
-    changed |= ImGui::Checkbox("Show scene grid", &m_Preferences.m_ShowGrid);
-    changed |= ImGui::Checkbox("Show coordinate axes", &m_Preferences.m_ShowAxes);
-    changed |= ImGui::Checkbox("Limit frame rate", &m_Preferences.m_LimitFps);
+    changed |= ImGui::Checkbox(lang.Word("show_scene_grid"), &m_Preferences.m_ShowGrid);
+    changed |= ImGui::Checkbox(lang.Word("show_coordinate_axes"), &m_Preferences.m_ShowAxes);
+    changed |= ImGui::Checkbox(lang.Word("limit_frame_rate"), &m_Preferences.m_LimitFps);
     ImGui::BeginDisabled(!m_Preferences.m_LimitFps);
-    changed |= ImGui::SliderInt("Target FPS", &m_Preferences.m_TargetFps, 30, 240);
+    changed |= ImGui::SliderInt(lang.Word("target_fps"), &m_Preferences.m_TargetFps, 30, 240);
     ImGui::EndDisabled();
-    changed |= ImGui::SliderFloat("Camera speed", &m_Preferences.m_CameraSpeed, 0.1f, 20.0f, "%.1f");
-    changed |= ImGui::SliderFloat("Camera sensitivity", &m_Preferences.m_CameraSensitivity, 0.0005f, 0.02f, "%.4f");
-    changed |= ImGui::SliderFloat("Zoom sensitivity", &m_Preferences.m_CameraZoomSensitivity, 0.1f, 5.0f, "%.1f");
-    changed |= ImGui::SliderFloat("Camera FOV", &m_Preferences.m_CameraFov, 20.0f, 120.0f, "%.0f deg");
-    changed |= ImGui::SliderFloat("Shadow bias", &m_Preferences.m_ShadowBias, 0.0001f, 0.05f, "%.4f");
+    changed |= ImGui::SliderFloat(lang.Word("camera_speed"), &m_Preferences.m_CameraSpeed, 0.1f, 20.0f, "%.1f");
+    changed |= ImGui::SliderFloat(lang.Word("camera_sensitivity"), &m_Preferences.m_CameraSensitivity, 0.0005f, 0.02f, "%.4f");
+    changed |= ImGui::SliderFloat(lang.Word("zoom_sensitivity"), &m_Preferences.m_CameraZoomSensitivity, 0.1f, 5.0f, "%.1f");
+    changed |= ImGui::SliderFloat(lang.Word("camera_fov"), &m_Preferences.m_CameraFov, 20.0f, 120.0f, "%.0f deg");
+    changed |= ImGui::SliderFloat(lang.Word("shadow_bias"), &m_Preferences.m_ShadowBias, 0.0001f, 0.05f, "%.4f");
 
-    const char* apShadowFilterNames[] = { "Hard", "9 samples", "25 samples" };
-    changed |= ImGui::Combo("Shadow filtering", &m_Preferences.m_ShadowFilterQuality, apShadowFilterNames, 3);
-    changed |= ImGui::SliderInt("Undo history limit", &m_Preferences.m_UndoHistoryLimit, 10, 500);
+    const char* apShadowFilterNames[] = { lang.Word("hard"), lang.Word("samples_9"), lang.Word("samples_25") };
+    changed |= ImGui::Combo(lang.Word("shadow_filtering"), &m_Preferences.m_ShadowFilterQuality, apShadowFilterNames, 3);
+    changed |= ImGui::SliderInt(lang.Word("undo_history_limit"), &m_Preferences.m_UndoHistoryLimit, 10, 500);
     camera.m_Cam.fovy = m_Preferences.m_CameraFov;
 
-    const char* apBackendNames[] = { "Auto", "OpenGL", "Vulkan", "Direct3D 11" };
-    ImGui::Text("Renderer backend (restart required)");
+    const char* apBackendNames[] = {
+        lang.Word("auto"), lang.Word("opengl"), lang.Word("vulkan"), lang.Word("direct3d11")
+    };
+    ImGui::TextUnformatted(lang.Word("renderer_backend_restart"));
     changed |= ImGui::Combo("##renderer_backend", &m_Preferences.m_RendererBackend, apBackendNames, 4);
 
-    const char* apMsaaNames[] = { "Off", "2x", "4x", "8x" };
+    const char* apMsaaNames[] = { lang.Word("off"), "2x", "4x", "8x" };
     int msaaIndex = m_Preferences.m_MsaaSamples == 2 ? 1 : m_Preferences.m_MsaaSamples == 4 ? 2 : m_Preferences.m_MsaaSamples == 8 ? 3 : 0;
-    ImGui::Text("MSAA (restart required)");
+    ImGui::TextUnformatted(lang.Word("msaa_restart"));
     if (ImGui::Combo("##msaa", &msaaIndex, apMsaaNames, 4))
     {
         m_Preferences.m_MsaaSamples = msaaIndex == 1 ? 2 : msaaIndex == 2 ? 4 : msaaIndex == 3 ? 8 : 1;
         changed = true;
     }
 
-    const char* apFilterNames[] = { "Nearest", "Linear" };
-    ImGui::Text("Texture filtering (restart required)");
+    const char* apFilterNames[] = { lang.Word("nearest"), lang.Word("linear") };
+    ImGui::TextUnformatted(lang.Word("texture_filtering_restart"));
     changed |= ImGui::Combo("##texture_filter", &m_Preferences.m_TextureFilter, apFilterNames, 2);
 
     float aBackgroundColor[3] = {
@@ -1221,7 +1236,7 @@ bool CEditor::DrawPreferencesRenderingTab(CFlyCamera& camera)
         m_Preferences.m_BackgroundGreen / 255.0f,
         m_Preferences.m_BackgroundBlue / 255.0f
     };
-    if (ImGui::ColorEdit3("Scene background", aBackgroundColor))
+    if (ImGui::ColorEdit3(lang.Word("scene_background"), aBackgroundColor))
     {
         m_Preferences.m_BackgroundRed = static_cast<int>(std::round(aBackgroundColor[0] * 255.0f));
         m_Preferences.m_BackgroundGreen = static_cast<int>(std::round(aBackgroundColor[1] * 255.0f));
@@ -1229,25 +1244,25 @@ bool CEditor::DrawPreferencesRenderingTab(CFlyCamera& camera)
         changed = true;
     }
 
-    changed |= ImGui::Checkbox("Enable autosave", &m_Preferences.m_AutosaveEnabled);
-    changed |= ImGui::Checkbox("Create autosave backup", &m_Preferences.m_AutosaveBackupEnabled);
+    changed |= ImGui::Checkbox(lang.Word("enable_autosave"), &m_Preferences.m_AutosaveEnabled);
+    changed |= ImGui::Checkbox(lang.Word("create_autosave_backup"), &m_Preferences.m_AutosaveBackupEnabled);
     ImGui::BeginDisabled(!m_Preferences.m_AutosaveEnabled);
-    changed |= ImGui::SliderInt("Autosave interval (minutes)", &m_Preferences.m_AutosaveIntervalMinutes, 1, 60);
+    changed |= ImGui::SliderInt(lang.Word("autosave_interval"), &m_Preferences.m_AutosaveIntervalMinutes, 1, 60);
     ImGui::EndDisabled();
     ImGui::Separator();
 
-    changed |= ImGui::Checkbox("Enable Gizmo snapping", &m_Preferences.m_GizmoSnapEnabled);
+    changed |= ImGui::Checkbox(lang.Word("enable_gizmo_snapping"), &m_Preferences.m_GizmoSnapEnabled);
     ImGui::BeginDisabled(!m_Preferences.m_GizmoSnapEnabled);
-    changed |= ImGui::SliderFloat("Translation snap", &m_Preferences.m_GizmoTranslationSnap, 0.01f, 10.0f, "%.2f");
-    changed |= ImGui::SliderFloat("Rotation snap", &m_Preferences.m_GizmoRotationSnap, 1.0f, 90.0f, "%.1f deg");
-    changed |= ImGui::SliderFloat("Scale snap", &m_Preferences.m_GizmoScaleSnap, 0.01f, 1.0f, "%.2f");
+    changed |= ImGui::SliderFloat(lang.Word("translation_snap"), &m_Preferences.m_GizmoTranslationSnap, 0.01f, 10.0f, "%.2f");
+    changed |= ImGui::SliderFloat(lang.Word("rotation_snap"), &m_Preferences.m_GizmoRotationSnap, 1.0f, 90.0f, "%.1f deg");
+    changed |= ImGui::SliderFloat(lang.Word("scale_snap"), &m_Preferences.m_GizmoScaleSnap, 0.01f, 1.0f, "%.2f");
     ImGui::EndDisabled();
 
-    changed |= ImGui::Checkbox("Enable shadows", &m_Preferences.m_ShadowsEnabled);
+    changed |= ImGui::Checkbox(lang.Word("enable_shadows"), &m_Preferences.m_ShadowsEnabled);
     const char* apShadowSizes[] = { "512", "1024", "2048" };
     int shadowSizeIndex = m_Preferences.m_ShadowMapSize == 512 ? 0 :
         m_Preferences.m_ShadowMapSize == 2048 ? 2 : 1;
-    if (ImGui::Combo("Shadow map size (restart required)", &shadowSizeIndex, apShadowSizes, 3))
+    if (ImGui::Combo(lang.Word("shadow_map_size_restart"), &shadowSizeIndex, apShadowSizes, 3))
     {
         m_Preferences.m_ShadowMapSize = shadowSizeIndex == 0 ? 512 :
             shadowSizeIndex == 2 ? 2048 : 1024;
@@ -1272,18 +1287,18 @@ bool CEditor::DrawPreferencesInterfaceTab()
     }
 
     bool changed = false;
-    changed |= ImGui::Checkbox("Hierarchy", &m_Preferences.m_ShowHierarchy);
-    changed |= ImGui::Checkbox("Inspector", &m_Preferences.m_ShowInspector);
-    changed |= ImGui::Checkbox("Assets", &m_Preferences.m_ShowAssets);
-    changed |= ImGui::Checkbox("Scene", &m_Preferences.m_ShowScene);
-    changed |= ImGui::Checkbox("VSync (restart required)", &m_Preferences.m_VsyncEnabled);
+    changed |= ImGui::Checkbox(lang.Word("hierarchy"), &m_Preferences.m_ShowHierarchy);
+    changed |= ImGui::Checkbox(lang.Word("inspector"), &m_Preferences.m_ShowInspector);
+    changed |= ImGui::Checkbox(lang.Word("assets"), &m_Preferences.m_ShowAssets);
+    changed |= ImGui::Checkbox(lang.Word("scene"), &m_Preferences.m_ShowScene);
+    changed |= ImGui::Checkbox(lang.Word("vsync_restart"), &m_Preferences.m_VsyncEnabled);
 
     static const std::vector<SEditorTheme> s_vThemes = CThemeManager::GetAvailableThemes();
     const auto selectedTheme = std::find_if(s_vThemes.begin(), s_vThemes.end(),
         [this](const SEditorTheme& theme) { return theme.id == m_Preferences.m_ThemeName; });
     const std::string preview = selectedTheme != s_vThemes.end()
-        ? selectedTheme->name : "Missing theme: " + m_Preferences.m_ThemeName;
-    if (ImGui::BeginCombo("Theme", preview.c_str()))
+        ? selectedTheme->name : TextFormat(lang.Word("missing_theme"), m_Preferences.m_ThemeName.c_str());
+    if (ImGui::BeginCombo(lang.Word("theme"), preview.c_str()))
     {
         for (const SEditorTheme& theme : s_vThemes)
         {
@@ -1310,13 +1325,16 @@ bool CEditor::DrawPreferencesInterfaceTab()
         ImGui::EndCombo();
     }
 
-    changed |= ImGui::Checkbox("Show light helpers", &m_Preferences.m_ShowLightHelpers);
-    changed |= ImGui::Checkbox("Show camera frustum", &m_Preferences.m_ShowCameras);
-    changed |= ImGui::Checkbox("Show selection visualization", &m_Preferences.m_ShowSelectionVisualization);
-    changed |= ImGui::SliderInt("Asset preview size", &m_Preferences.m_AssetPreviewSize, 32, 128);
+    changed |= ImGui::Checkbox(lang.Word("show_light_helpers"), &m_Preferences.m_ShowLightHelpers);
+    changed |= ImGui::Checkbox(lang.Word("show_camera_frustum"), &m_Preferences.m_ShowCameras);
+    changed |= ImGui::Checkbox(lang.Word("show_selection_visualization"), &m_Preferences.m_ShowSelectionVisualization);
+    changed |= ImGui::SliderInt(lang.Word("asset_preview_size"), &m_Preferences.m_AssetPreviewSize, 32, 128);
 
-    const char* apAssetFilterNames[] = { "All", "Images + Models", "Materials", "Texture Metadata", "Prefabs" };
-    ImGui::Text("Asset type filter");
+    const char* apAssetFilterNames[] = {
+        lang.Word("all"), lang.Word("images_models"), lang.Word("materials"),
+        lang.Word("texture_metadata"), lang.Word("prefabs")
+    };
+    ImGui::TextUnformatted(lang.Word("asset_type_filter"));
     changed |= ImGui::Combo("##asset_type_filter", &m_Preferences.m_AssetFilter, apAssetFilterNames, IM_ARRAYSIZE(apAssetFilterNames));
 
     float aSelectionColor[3] = {
@@ -1324,7 +1342,7 @@ bool CEditor::DrawPreferencesInterfaceTab()
         m_Preferences.m_SelectionGreen / 255.0f,
         m_Preferences.m_SelectionBlue / 255.0f
     };
-    if (ImGui::ColorEdit3("Selection color", aSelectionColor))
+    if (ImGui::ColorEdit3(lang.Word("selection_color"), aSelectionColor))
     {
         m_Preferences.m_SelectionRed = static_cast<int>(aSelectionColor[0] * 255.0f);
         m_Preferences.m_SelectionGreen = static_cast<int>(aSelectionColor[1] * 255.0f);
@@ -1337,7 +1355,7 @@ bool CEditor::DrawPreferencesInterfaceTab()
         m_Preferences.m_WireframeGreen / 255.0f,
         m_Preferences.m_WireframeBlue / 255.0f
     };
-    if (ImGui::ColorEdit3("Wireframe color", aWireframeColor))
+    if (ImGui::ColorEdit3(lang.Word("wireframe_color"), aWireframeColor))
     {
         m_Preferences.m_WireframeRed = static_cast<int>(aWireframeColor[0] * 255.0f);
         m_Preferences.m_WireframeGreen = static_cast<int>(aWireframeColor[1] * 255.0f);
@@ -1350,7 +1368,7 @@ bool CEditor::DrawPreferencesInterfaceTab()
         m_Preferences.m_BoundsGreen / 255.0f,
         m_Preferences.m_BoundsBlue / 255.0f
     };
-    if (ImGui::ColorEdit3("Bounding box color", aBoundsColor))
+    if (ImGui::ColorEdit3(lang.Word("bounding_box_color"), aBoundsColor))
     {
         m_Preferences.m_BoundsRed = static_cast<int>(aBoundsColor[0] * 255.0f);
         m_Preferences.m_BoundsGreen = static_cast<int>(aBoundsColor[1] * 255.0f);
@@ -1358,7 +1376,7 @@ bool CEditor::DrawPreferencesInterfaceTab()
         changed = true;
     }
 
-    if (ImGui::SliderFloat("Interface scale", &m_Preferences.m_InterfaceScale, 0.75f, 2.0f, "%.2fx"))
+    if (ImGui::SliderFloat(lang.Word("interface_scale"), &m_Preferences.m_InterfaceScale, 0.75f, 2.0f, "%.2fx"))
     {
         ImGui::GetStyle() = iface.BaseStyle;
         ImGui::GetStyle().ScaleAllSizes(m_Preferences.m_InterfaceScale / iface.BaseScale);
@@ -1392,10 +1410,10 @@ void CEditor::DrawConfirmationModals()
 
     if (modal.PendingDelete.pEditor && modal.PendingDelete.pEntity)
     {
-        if (ImGui::BeginPopupModal("Confirm Delete", nullptr, ImGuiWindowFlags_AlwaysAutoResize))
+        if (ImGui::BeginPopupModal(lang.Word("confirm_delete_title"), nullptr, ImGuiWindowFlags_AlwaysAutoResize))
         {
-            ImGui::Text("Delete selected entity?");
-            if (ImGui::Button("Delete"))
+            ImGui::TextUnformatted(lang.Word("delete_selected_entity"));
+            if (ImGui::Button(lang.Word("delete")))
             {
                 CEditor* pEditorToDelete = modal.PendingDelete.pEditor;
                 CEntity* pEntityToDelete = modal.PendingDelete.pEntity;
@@ -1408,7 +1426,7 @@ void CEditor::DrawConfirmationModals()
                 ImGui::CloseCurrentPopup();
             }
             ImGui::SameLine();
-            if (ImGui::Button("Cancel"))
+            if (ImGui::Button(lang.Word("cancel")))
             {
                 modal.PendingDelete.pEditor = nullptr;
                 modal.PendingDelete.pEntity = nullptr;
@@ -1420,13 +1438,13 @@ void CEditor::DrawConfirmationModals()
 
     if (modal.ShowExitConfirmation)
     {
-        ImGui::OpenPopup("Unsaved Changes");
+        ImGui::OpenPopup(lang.Word("unsaved_changes"));
         modal.ShowExitConfirmation = false;
     }
-    if (ImGui::BeginPopupModal("Unsaved Changes", nullptr, ImGuiWindowFlags_AlwaysAutoResize))
+    if (ImGui::BeginPopupModal(lang.Word("unsaved_changes"), nullptr, ImGuiWindowFlags_AlwaysAutoResize))
     {
-        ImGui::Text("The scene has unsaved changes.");
-        if (ImGui::Button("Save and Exit"))
+        ImGui::TextUnformatted(lang.Word("unsaved_scene_message"));
+        if (ImGui::Button(lang.Word("save_and_exit")))
         {
             CProjectService::Save(m_ProjectPath, m_Scene);
             DispatchPluginEvent(PLUGIN_EVENT_SCENE_SAVED);
@@ -1435,13 +1453,13 @@ void CEditor::DrawConfirmationModals()
             ImGui::CloseCurrentPopup();
         }
         ImGui::SameLine();
-        if (ImGui::Button("Exit Without Saving"))
+        if (ImGui::Button(lang.Word("exit_without_saving")))
         {
             CloseWindow();
             ImGui::CloseCurrentPopup();
         }
         ImGui::SameLine();
-        if (ImGui::Button("Cancel"))
+        if (ImGui::Button(lang.Word("cancel")))
         {
             ImGui::CloseCurrentPopup();
         }

@@ -3,6 +3,7 @@
 
 #include "nlohmann/json.hpp"
 #include <string>
+#include <unordered_map>
 
 
 class CLanguageManager
@@ -24,6 +25,7 @@ public:
 
 private:
     nlohmann::json m_Data;
+    nlohmann::json m_FallbackData;
     mutable std::unordered_map<std::string, std::string> m_Cache;
 };
 
