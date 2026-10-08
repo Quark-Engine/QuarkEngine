@@ -373,6 +373,17 @@ if(BUILD_ENGINE)
         )
         if(APPLE)
             add_custom_command(TARGET ${PROJECT_NAME} POST_BUILD
+                COMMAND ${CMAKE_COMMAND} -E copy_if_different
+                    $<TARGET_FILE:CURL::libcurl>
+                    $<TARGET_FILE:OpenSSL::SSL>
+                    $<TARGET_FILE:OpenSSL::Crypto>
+                    $<TARGET_FILE:nghttp2::nghttp2>
+                    $<TARGET_FILE_DIR:${PROJECT_NAME}>
+                COMMAND ${CMAKE_COMMAND} -E rm -f
+                    "$<TARGET_FILE_DIR:${PROJECT_NAME}>/$<IF:$<CONFIG:Debug>,libcurl-d.4.dylib,libcurl.4.dylib>"
+                COMMAND ${CMAKE_COMMAND} -E create_symlink
+                    "$<TARGET_FILE_NAME:CURL::libcurl>"
+                    "$<TARGET_FILE_DIR:${PROJECT_NAME}>/$<IF:$<CONFIG:Debug>,libcurl-d.4.dylib,libcurl.4.dylib>"
                 COMMAND ${CMAKE_COMMAND} -E rm -f $<TARGET_FILE_DIR:${PROJECT_NAME}>/$<IF:$<CONFIG:Debug>,libassimpd.6.dylib,libassimp.6.dylib>
                 COMMAND ${CMAKE_COMMAND} -E create_symlink $<TARGET_FILE_NAME:assimp::assimp> $<TARGET_FILE_DIR:${PROJECT_NAME}>/$<IF:$<CONFIG:Debug>,libassimpd.6.dylib,libassimp.6.dylib>
                 COMMAND ${CMAKE_COMMAND} -E rm -f $<TARGET_FILE_DIR:${PROJECT_NAME}>/$<IF:$<CONFIG:Debug>,libfreetyped.6.dylib,libfreetype.6.dylib>
@@ -452,6 +463,13 @@ if(QUARK_BUILD_TESTS)
 
     target_compile_definitions(QuarkEngineTests PRIVATE QUARKENGINE_BUILD QUARKCORE_STATIC)
 
+    if(APPLE)
+        set_target_properties(QuarkEngineTests PROPERTIES
+            BUILD_RPATH "@loader_path"
+            INSTALL_RPATH "@loader_path"
+        )
+    endif()
+
     add_test(NAME QuarkEngineTests COMMAND QuarkEngineTests)
 
     if(WIN32)
@@ -487,6 +505,17 @@ if(QUARK_BUILD_TESTS)
         )
         if(APPLE)
             add_custom_command(TARGET QuarkEngineTests POST_BUILD
+                COMMAND ${CMAKE_COMMAND} -E copy_if_different
+                    $<TARGET_FILE:CURL::libcurl>
+                    $<TARGET_FILE:OpenSSL::SSL>
+                    $<TARGET_FILE:OpenSSL::Crypto>
+                    $<TARGET_FILE:nghttp2::nghttp2>
+                    $<TARGET_FILE_DIR:QuarkEngineTests>
+                COMMAND ${CMAKE_COMMAND} -E rm -f
+                    "$<TARGET_FILE_DIR:QuarkEngineTests>/$<IF:$<CONFIG:Debug>,libcurl-d.4.dylib,libcurl.4.dylib>"
+                COMMAND ${CMAKE_COMMAND} -E create_symlink
+                    "$<TARGET_FILE_NAME:CURL::libcurl>"
+                    "$<TARGET_FILE_DIR:QuarkEngineTests>/$<IF:$<CONFIG:Debug>,libcurl-d.4.dylib,libcurl.4.dylib>"
                 COMMAND ${CMAKE_COMMAND} -E rm -f
                     "$<TARGET_FILE_DIR:QuarkEngineTests>/$<IF:$<CONFIG:Debug>,libassimpd.6.dylib,libassimp.6.dylib>"
                 COMMAND ${CMAKE_COMMAND} -E create_symlink
