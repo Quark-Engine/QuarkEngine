@@ -102,14 +102,14 @@ void CPreviewCache::EnsureIcons()
 {
     if (m_IconFile.id == 0)
     {
-        m_IconFile = LoadTexture("assets/file.png");
+        m_IconFile = LoadTexture("assets/img/file.png");
     }
     if (m_IconFolder.id == 0)
     {
-        m_IconFolder = LoadTexture("assets/folder.png");
+        m_IconFolder = LoadTexture("assets/img/folder.png");
     }
     if (m_IconFullFolder.id == 0)
     {
-        m_IconFullFolder = LoadTexture("assets/full_folder.png");
+        m_IconFullFolder = LoadTexture("assets/img/full_folder.png");
     }
 }

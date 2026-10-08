@@ -406,7 +406,7 @@ void CApplication::RenderFrame()
 
             if (m_Editor.m_Preferences.m_ShowLightHelpers && m_Editor.m_Ui.m_Viewport.m_WindowSize.x > 0.0f && m_Editor.m_Ui.m_Viewport.m_WindowSize.y > 0.0f)
             {
-                const Texture2D* pLightHelper = m_Editor.m_Textures.Load("assets/light_helper.png");
+                const Texture2D* pLightHelper = m_Editor.m_Textures.Load("assets/img/light_helper.png");
                 if (pLightHelper != nullptr)
                 {
                     const Camera3D& editorCamera = m_Camera.GetCamera();

@@ -294,10 +294,10 @@ void AssignShadowMaps(CScene& scene,
 void CSceneRenderer::Initialize(bool vulkanBackend, int shadowMapSize, bool shadowsEnabled,
     float shadowBias, int shadowFilterQuality)
 {
-    m_LightingShader = LoadShader(vulkanBackend ? "assets/vulkan_lighting.vs" : "assets/lighting.vs",
-        vulkanBackend ? "assets/vulkan_lighting.fs" : "assets/lighting.fs");
-    m_ShadowShader = LoadShader(vulkanBackend ? "assets/vulkan_shadow_depth.vs" : "assets/shadow_depth.vs",
-        vulkanBackend ? "assets/vulkan_shadow_depth.fs" : "assets/shadow_depth.fs");
+    m_LightingShader = LoadShader(vulkanBackend ? "assets/shader/vulkan_lighting.vs" : "assets/shader/lighting.vs",
+        vulkanBackend ? "assets/shader/vulkan_lighting.fs" : "assets/shader/lighting.fs");
+    m_ShadowShader = LoadShader(vulkanBackend ? "assets/shader/vulkan_shadow_depth.vs" : "assets/shader/shadow_depth.vs",
+        vulkanBackend ? "assets/shader/vulkan_shadow_depth.fs" : "assets/shader/shadow_depth.fs");
     m_LightingShader.locs[SHADER_LOC_VECTOR_VIEW] = GetShaderLocation(m_LightingShader, "viewPos");
     m_ShadowsEnabledLoc = GetShaderLocation(m_LightingShader, "shadowsEnabled");
     m_ShadowBiasLoc = GetShaderLocation(m_LightingShader, "shadowBias");

@@ -14,10 +14,10 @@ std::string NormalizeLanguageCode(const std::string& code)
 
 std::string ResolveFontPath(const std::string& fontValue)
 {
-    if (fontValue.empty()) return "assets/Rubik-Regular.ttf";
+    if (fontValue.empty()) return "assets/font/Rubik-Regular.ttf";
     if (fontValue.find('/') != std::string::npos || fontValue.find('\\') != std::string::npos)
         return fontValue;
-    return "assets/" + fontValue;
+    return "assets/font/" + fontValue;
 }
 } // anonymous
 
@@ -127,7 +127,7 @@ std::string CLanguageManager::EditorFontPath() const
             return ResolveFontPath(meta["editor_font"].get<std::string>());
     }
 
-    return "assets/Rubik-Regular.ttf";
+    return "assets/font/Rubik-Regular.ttf";
 }
 
 std::string CLanguageManager::EditorFontMergePath() const

@@ -38,9 +38,9 @@ A light-weight engine in C++ and QuarkCore.
 
 ### Directory Structure
 Ensure your project folder contains an `assets` directory with the following resources:
-*   `Rubik-Regular.ttf` (Editor font)
-*   `lighting.vs` / `lighting.fs` (Shaders)
-*   `file.png`, `folder.png`, `full_folder.png` (Editor icons)
+*   `font/Rubik-Regular.ttf` (Editor font)
+*   `shader/lighting.vs` / `shader/lighting.fs` (Shaders)
+*   `img/file.png`, `img/folder.png`, `img/full_folder.png` (Editor icons)
 
 *   **projects:** Array of registered projects for the Quark Hub
 

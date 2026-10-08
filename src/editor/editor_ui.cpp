@@ -848,7 +848,7 @@ void CEditor::DrawAboutModal()
         constexpr float kLogoWidth = 400.0f;
         constexpr float kLogoHeight = kLogoWidth * 648.0f / 1500.0f;
 
-        const Texture2D* pLogo = m_Textures.Load("assets/quark_engine.png");
+        const Texture2D* pLogo = m_Textures.Load("assets/img/quark_engine.png");
         if (pLogo != nullptr)
         {
             const float logoOffsetX = (ImGui::GetContentRegionAvail().x - kLogoWidth) * 0.5f;

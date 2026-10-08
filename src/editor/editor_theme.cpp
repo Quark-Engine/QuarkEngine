@@ -500,9 +500,9 @@ bool ReloadEditorFonts(const SThemeOverrides& overrides, std::string& error)
         mergeFont(mergeFontPath, nullptr);
     }
     if (LanguageUsesMsPgothic(languageCode) &&
-        fontPath != "assets/MS-Pgothic-Regular.ttf")
+        fontPath != "assets/font/MS-Pgothic-Regular.ttf")
     {
-        mergeFont("assets/MS-Pgothic-Regular.ttf",
+        mergeFont("assets/font/MS-Pgothic-Regular.ttf",
             GetMsPgothicGlyphRanges(io, languageCode));
     }
 

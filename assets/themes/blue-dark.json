@@ -2,7 +2,7 @@
     "name": "Blue Dark",
     "base": "dark",
     "font": {
-        "path": "assets/Rubik-Regular.ttf",
+        "path": "assets/font/Rubik-Regular.ttf",
         "size": 16,
         "scale": 1.0
     },
