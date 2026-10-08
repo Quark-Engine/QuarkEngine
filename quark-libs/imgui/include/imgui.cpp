@@ -1540,6 +1540,7 @@ ImGuiStyle::ImGuiStyle()
     ColorMarkerSize             = 3.0f;             // Size of R/G/B/A color markers for ColorEdit4() and for Drags/Sliders when using ImGuiSliderFlags_ColorMarkers.
     ColorButtonPosition         = ImGuiDir_Right;   // Side of the color button in the ColorEdit4 widget (left/right). Defaults to ImGuiDir_Right.
     ButtonTextAlign             = ImVec2(0.5f,0.5f);// Alignment of button text when button is larger than text.
+    QuarkLegacyWidgetStyle      = false;
     ButtonGradient              = true;            // Preserve Quark Engine's original gradient button rendering.
     ButtonGradientTop           = ImVec4(96.0f / 255.0f, 101.0f / 255.0f, 107.0f / 255.0f, 1.0f);
     ButtonGradientBottom        = ImVec4(68.0f / 255.0f, 73.0f / 255.0f, 79.0f / 255.0f, 1.0f);

@@ -2420,6 +2420,7 @@ struct ImGuiStyle
     float       ColorMarkerSize;            // Size of R/G/B/A color markers for ColorEdit4() and for Drags/Sliders when using ImGuiSliderFlags_ColorMarkers.
     ImGuiDir    ColorButtonPosition;        // Side of the color button in the ColorEdit4 widget (left/right). Defaults to ImGuiDir_Right.
     ImVec2      ButtonTextAlign;            // Alignment of button text when button is larger than text. Defaults to (0.5f, 0.5f) (centered).
+    bool        QuarkLegacyWidgetStyle;      // Use the original Quark button and combo rendering.
     bool        ButtonGradient;             // Enable Quark Engine's custom button gradient and bevel.
     ImVec4      ButtonGradientTop;
     ImVec4      ButtonGradientBottom;

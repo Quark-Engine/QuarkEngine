@@ -23,6 +23,7 @@
 
 #include "version.h"
 #include "language_manager.h"
+#include "editor/editor_theme.h"
 #include "editor/editor_preferences.h"
 #include "project.h"
 #include "nlohmann/json.hpp"
@@ -44,6 +45,19 @@ namespace
 
 const char* const HUB_PROJECTS_ROOT = "projects";
 const char* const HUB_REGISTRY_FILE = "config.json";
+
+bool ThemedButton(const char* pLabel, const ImVec2& size, const std::string& variant,
+    bool disabled = false)
+{
+    if (!CThemeManager::PushVariant("button", variant, disabled))
+    {
+        return ImGui::Button(pLabel, size);
+    }
+
+    const bool clicked = ImGui::Button(pLabel, size);
+    CThemeManager::PopVariant();
+    return clicked;
+}
 
 bool IsSupportedPluginExtension(const std::string& extension)
 {
@@ -585,7 +599,7 @@ void CHubApp::DrawProjectList()
         return;
     }
 
-    if (ImGui::Button(lang.Word("open_selected"), ImVec2(140, 30)))
+    if (ThemedButton(lang.Word("open_selected"), ImVec2(140, 30), "secondary"))
     {
         m_PendingResult = m_State.vProjects[m_State.SelectedProject].Path;
         m_ShouldExit = true;
@@ -612,7 +626,7 @@ void CHubApp::DrawHeader()
 
     ImGui::SameLine();
 
-    if (ImGui::Button(("+ %s", lang.Word("create_project")), ImVec2(134, 28)))
+    if (ThemedButton(("+ %s", lang.Word("create_project")), ImVec2(134, 28), "secondary"))
     {
         memset(m_State.aCreateName, 0, sizeof(m_State.aCreateName));
         snprintf(m_State.aCreatePath, sizeof(m_State.aCreatePath), "%s", ProjectsRoot());
@@ -679,7 +693,7 @@ void CHubApp::DrawCreatePopup()
         ImGui::BeginDisabled();
     }
 
-    if (ImGui::Button(lang.Word("create"), ImVec2(110, 30)))
+    if (ThemedButton(lang.Word("create"), ImVec2(110, 30), "primary", !canCreate))
     {
         CreateProject(m_State.aCreateName, m_State.aCreatePath);
         Refresh();
@@ -778,7 +792,7 @@ void CHubApp::DrawDeletePopup()
     ImGui::Separator();
     ImGui::Spacing();
 
-    if (ImGui::Button(lang.Word("delete"), ImVec2(110, 28)))
+    if (ThemedButton(lang.Word("delete"), ImVec2(110, 28), "danger"))
     {
         if (m_State.SelectedProject >= 0)
         {
@@ -1050,15 +1064,10 @@ void CHubApp::DrawPluginManager()
                 ImGui::PopStyleColor(3);
 
                 ImGui::SameLine();
-                ImGui::PushStyleColor(ImGuiCol_Button,        ImVec4(0.55f, 0.15f, 0.15f, 1.0f));
-                ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImVec4(0.70f, 0.20f, 0.20f, 1.0f));
-                ImGui::PushStyleColor(ImGuiCol_ButtonActive,  ImVec4(0.40f, 0.10f, 0.10f, 1.0f));
-
-                if (ImGui::Button("Delete", ImVec2(90, 28)))
+                if (ThemedButton("Delete", ImVec2(90, 28), "danger"))
                 {
                     ImGui::OpenPopup("Confirm Delete");
                 }
-                ImGui::PopStyleColor(3);
 
                 ImGui::SetNextWindowSize(ImVec2(320, 100), ImGuiCond_Always);
                 ImGui::SetNextWindowPos(
@@ -1075,11 +1084,7 @@ void CHubApp::DrawPluginManager()
                     ImGui::Separator();
                     ImGui::Spacing();
 
-                    ImGui::PushStyleColor(ImGuiCol_Button,        ImVec4(0.55f, 0.15f, 0.15f, 1.0f));
-                    ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImVec4(0.70f, 0.20f, 0.20f, 1.0f));
-                    ImGui::PushStyleColor(ImGuiCol_ButtonActive,  ImVec4(0.40f, 0.10f, 0.10f, 1.0f));
-
-                    if (ImGui::Button("Delete", ImVec2(90, 26)))
+                    if (ThemedButton("Delete", ImVec2(90, 26), "danger"))
                     {
                         if (plugin.Icon.id != 0)
                         {
@@ -1109,7 +1114,6 @@ void CHubApp::DrawPluginManager()
                         ImGui::CloseCurrentPopup();
                     }
 
-                    ImGui::PopStyleColor(3);
                     ImGui::SameLine();
 
                     if (ImGui::Button("Cancel", ImVec2(80, 26)))

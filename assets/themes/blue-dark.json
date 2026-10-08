@@ -1,10 +1,69 @@
 {
+    "schema_version": 1,
     "name": "Blue Dark",
     "base": "dark",
+    "semantic": {
+        "accent": "#8da5ce",
+        "surface": "#242433",
+        "surface_raised": "#303044",
+        "text": "#d6d6e0",
+        "text_muted": "#85859a",
+        "border": "#404056",
+        "danger": "#a84242",
+        "success": "#43865c",
+        "warning": "#d6a64f",
+        "info": "#568fd1"
+    },
     "font": {
         "path": "assets/font/Rubik-Regular.ttf",
         "size": 16,
         "scale": 1.0
+    },
+    "components": {
+        "button": {
+            "primary": {
+                "normal": {
+                    "color": "@accent",
+                    "gradient": {
+                        "top": "@accent_hovered",
+                        "bottom": "@accent"
+                    }
+                },
+                "hovered": {
+                    "color": "@accent_hovered",
+                    "gradient": {
+                        "top": "@accent_hovered",
+                        "bottom": "@accent"
+                    }
+                },
+                "active": {
+                    "color": "@accent_active",
+                    "gradient": {
+                        "top": "@accent",
+                        "bottom": "@accent_active"
+                    }
+                },
+                "disabled": {
+                    "alpha": 0.45
+                }
+            },
+            "secondary": {
+                "normal": "#39394d",
+                "hovered": "#46465e",
+                "active": "#52526b",
+                "disabled": {
+                    "alpha": 0.45
+                }
+            },
+            "danger": {
+                "normal": "@danger",
+                "hovered": "@danger_hovered",
+                "active": "@danger_active",
+                "disabled": {
+                    "alpha": 0.45
+                }
+            }
+        }
     },
     "style": {
         "alpha": 1.0,
@@ -36,7 +95,7 @@
         "hub_card_selected": "#36364b",
         "hub_card_hovered": "#41415a",
         "hub_card_border": "#404056",
-        "hub_card_selected_border": "#8da5ce",
+        "hub_card_selected_border": "@accent",
         "item_spacing": [6, 5],
         "item_inner_spacing": [5, 4],
         "indent_spacing": 16,
@@ -64,12 +123,12 @@
         "selectable_text_align": [0.0, 0.0]
     },
     "colors": {
-        "Text": "#d6d6e0",
-        "TextDisabled": "#85859a",
-        "WindowBg": "#242433",
-        "ChildBg": "#2b2b3c",
-        "PopupBg": "#303044",
-        "Border": "#404056",
+        "Text": "@text",
+        "TextDisabled": "@text_muted",
+        "WindowBg": "@surface",
+        "ChildBg": "@surface",
+        "PopupBg": "@surface_raised",
+        "Border": "@border",
         "BorderShadow": "#171722",
         "FrameBg": "#343448",
         "FrameBgHovered": "#41415a",
@@ -82,18 +141,18 @@
         "ScrollbarGrab": "#41415a",
         "ScrollbarGrabHovered": "#52526e",
         "ScrollbarGrabActive": "#62627d",
-        "CheckMark": "#8da5ce",
-        "SliderGrab": "#778fb8",
-        "SliderGrabActive": "#93acd6",
+        "CheckMark": "@accent",
+        "SliderGrab": "@accent",
+        "SliderGrabActive": "@accent_active",
         "Button": "#39394d",
         "ButtonHovered": "#46465e",
         "ButtonActive": "#52526b",
         "Header": "#36364b",
         "HeaderHovered": "#45455d",
-        "HeaderActive": "#4b4b65",
-        "Separator": "#3b3b50",
-        "SeparatorHovered": "#778fb8",
-        "SeparatorActive": "#93acd6",
+        "HeaderActive": "@accent_active",
+        "Separator": "@border",
+        "SeparatorHovered": "@accent_hovered",
+        "SeparatorActive": "@accent_active",
         "ResizeGrip": "#778fb866",
         "ResizeGripHovered": "#778fb8bb",
         "ResizeGripActive": "#93acd6",
@@ -106,13 +165,13 @@
         "TabDimmedSelectedOverline": "#778fb8",
         "DockingPreview": "#778fb866",
         "DockingEmptyBg": "#1d1d29",
-        "TextLink": "#9bb2d8",
+        "TextLink": "@accent",
         "TextSelectedBg": "#778fb866",
         "TableHeaderBg": "#303044",
         "TableBorderStrong": "#404056",
         "TableBorderLight": "#36364a",
         "TableRowBg": "#00000000",
         "TableRowBgAlt": "#ffffff08",
-        "NavCursor": "#8da5ce"
+        "NavCursor": "@accent"
     }
 }

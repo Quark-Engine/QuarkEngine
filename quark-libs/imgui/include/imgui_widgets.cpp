@@ -808,35 +808,90 @@ bool ImGui::ButtonEx(const char* label, const ImVec2& size_arg, ImGuiButtonFlags
 
     ImDrawList* draw = window->DrawList;
 
-    const ImGuiCol color = held && hovered ? ImGuiCol_ButtonActive
-        : hovered ? ImGuiCol_ButtonHovered : ImGuiCol_Button;
-    const ImVec4& gradient_top = held && hovered ? style.ButtonActiveGradientTop
-        : hovered ? style.ButtonHoveredGradientTop : style.ButtonGradientTop;
-    const ImVec4& gradient_bottom = held && hovered ? style.ButtonActiveGradientBottom
-        : hovered ? style.ButtonHoveredGradientBottom : style.ButtonGradientBottom;
-    if (style.ButtonGradient)
+    if (style.QuarkLegacyWidgetStyle)
     {
-        draw->AddRectFilledMultiColor(bb.Min, bb.Max,
-            GetColorU32(gradient_top), GetColorU32(gradient_top),
-            GetColorU32(gradient_bottom), GetColorU32(gradient_bottom));
+        ImU32 col_top;
+        ImU32 col_bottom;
+        ImU32 border_top = IM_COL32(114, 119, 126, 255);
+        ImU32 border_left = IM_COL32(102, 107, 114, 255);
+        ImU32 border_right = IM_COL32(57, 61, 67, 255);
+        ImU32 border_bottom = IM_COL32(49, 53, 59, 255);
+        ImU32 text_col = IM_COL32(221, 225, 228, 255);
+        const bool light_theme = style.Colors[ImGuiCol_WindowBg].x > 0.5f;
+
+        if (light_theme)
+        {
+            col_top = IM_COL32(246, 248, 252, 255);
+            col_bottom = IM_COL32(190, 204, 224, 255);
+            border_top = IM_COL32(210, 218, 232, 255);
+            border_left = IM_COL32(195, 205, 222, 255);
+            border_right = IM_COL32(145, 162, 188, 255);
+            border_bottom = IM_COL32(125, 145, 176, 255);
+            text_col = IM_COL32(18, 27, 42, 255);
+        }
+
+        if (held && hovered)
+        {
+            col_top = light_theme ? IM_COL32(155, 181, 218, 255) : IM_COL32(63, 67, 72, 255);
+            col_bottom = light_theme ? IM_COL32(104, 140, 191, 255) : IM_COL32(54, 58, 63, 255);
+            border_right = light_theme ? IM_COL32(65, 105, 165, 255) : IM_COL32(0, 49, 105, 255);
+            border_bottom = light_theme ? IM_COL32(45, 83, 143, 255) : IM_COL32(0, 99, 186, 255);
+            text_col = light_theme ? IM_COL32(10, 42, 85, 255) : IM_COL32(0, 208, 255, 255);
+        }
+        else if (hovered)
+        {
+            col_top = light_theme ? IM_COL32(225, 234, 247, 255) : IM_COL32(107, 113, 120, 255);
+            col_bottom = light_theme ? IM_COL32(160, 184, 217, 255) : IM_COL32(76, 81, 88, 255);
+        }
+        else
+        {
+            col_top = light_theme ? IM_COL32(246, 248, 252, 255) : IM_COL32(96, 101, 107, 255);
+            col_bottom = light_theme ? IM_COL32(190, 204, 224, 255) : IM_COL32(68, 73, 79, 255);
+        }
+
+        draw->AddRectFilledMultiColor(bb.Min, bb.Max, col_top, col_top, col_bottom, col_bottom);
+        draw->AddLine(bb.Min, ImVec2(bb.Max.x, bb.Min.y), border_top);
+        draw->AddLine(bb.Min, ImVec2(bb.Min.x, bb.Max.y), border_left);
+        draw->AddLine(ImVec2(bb.Max.x - 1, bb.Min.y), ImVec2(bb.Max.x - 1, bb.Max.y), border_right);
+        draw->AddLine(ImVec2(bb.Min.x, bb.Max.y - 1), ImVec2(bb.Max.x, bb.Max.y - 1), border_bottom);
+
+        const ImVec2 text_pos = ImVec2(
+            bb.Min.x + (size.x - label_size.x) * style.ButtonTextAlign.x,
+            bb.Min.y + (size.y - label_size.y) * style.ButtonTextAlign.y
+        );
+        draw->AddText(text_pos, text_col, label);
     }
     else
     {
-        draw->AddRectFilled(bb.Min, bb.Max, GetColorU32(color),
-            style.FrameRounding, ImDrawFlags_RoundCornersAll);
-    }
-    if (style.FrameBorderSize > 0.0f)
-    {
-        draw->AddRect(bb.Min, bb.Max, GetColorU32(ImGuiCol_Border),
-            style.FrameRounding, ImDrawFlags_RoundCornersAll, style.FrameBorderSize);
-    }
+        const ImGuiCol color = held && hovered ? ImGuiCol_ButtonActive
+            : hovered ? ImGuiCol_ButtonHovered : ImGuiCol_Button;
+        const ImVec4& gradient_top = held && hovered ? style.ButtonActiveGradientTop
+            : hovered ? style.ButtonHoveredGradientTop : style.ButtonGradientTop;
+        const ImVec4& gradient_bottom = held && hovered ? style.ButtonActiveGradientBottom
+            : hovered ? style.ButtonHoveredGradientBottom : style.ButtonGradientBottom;
+        if (style.ButtonGradient)
+        {
+            draw->AddRectFilledMultiColor(bb.Min, bb.Max,
+                GetColorU32(gradient_top), GetColorU32(gradient_top),
+                GetColorU32(gradient_bottom), GetColorU32(gradient_bottom));
+        }
+        else
+        {
+            draw->AddRectFilled(bb.Min, bb.Max, GetColorU32(color),
+                style.FrameRounding, ImDrawFlags_RoundCornersAll);
+        }
+        if (style.FrameBorderSize > 0.0f)
+        {
+            draw->AddRect(bb.Min, bb.Max, GetColorU32(ImGuiCol_Border),
+                style.FrameRounding, ImDrawFlags_RoundCornersAll, style.FrameBorderSize);
+        }
 
-    ImVec2 text_pos = ImVec2(
-        bb.Min.x + (size.x - label_size.x) * style.ButtonTextAlign.x,
-        bb.Min.y + (size.y - label_size.y) * style.ButtonTextAlign.y
-    );
-
-    draw->AddText(text_pos, GetColorU32(ImGuiCol_Text), label);
+        const ImVec2 text_pos = ImVec2(
+            bb.Min.x + (size.x - label_size.x) * style.ButtonTextAlign.x,
+            bb.Min.y + (size.y - label_size.y) * style.ButtonTextAlign.y
+        );
+        draw->AddText(text_pos, GetColorU32(ImGuiCol_Text), label);
+    }
     
     // Automatically close popups
     //if (pressed && !(flags & ImGuiButtonFlags_DontClosePopups) && (window->Flags & ImGuiWindowFlags_Popup))
@@ -2003,52 +2058,92 @@ bool ImGui::BeginCombo(const char* label, const char* preview_value, ImGuiComboF
     }
 
     // Render shape
+    const bool legacy_widget_style = style.QuarkLegacyWidgetStyle;
     const ImGuiCol combo_color = (held && hovered) || popup_open ? ImGuiCol_FrameBgActive
         : hovered ? ImGuiCol_FrameBgHovered : ImGuiCol_FrameBg;
     const ImVec4& combo_gradient_top = (held && hovered) || popup_open
         ? style.ComboActiveGradientTop : hovered ? style.ComboHoveredGradientTop : style.ComboGradientTop;
     const ImVec4& combo_gradient_bottom = (held && hovered) || popup_open
         ? style.ComboActiveGradientBottom : hovered ? style.ComboHoveredGradientBottom : style.ComboGradientBottom;
-    const ImU32 frame_col = GetColorU32(combo_color);
     const float value_x2 = ImMax(bb.Min.x, bb.Max.x - arrow_size);
     RenderNavCursor(bb, id);
-    if (!(flags & ImGuiComboFlags_NoPreview))
+    if (legacy_widget_style)
     {
-        const ImVec2 preview_max(value_x2, bb.Max.y);
-        if (style.ComboGradient)
+        ImU32 top = IM_COL32(96, 101, 107, 255);
+        ImU32 bottom = IM_COL32(68, 73, 79, 255);
+        const bool light_theme = style.Colors[ImGuiCol_WindowBg].x > 0.5f;
+        if (light_theme)
         {
-            window->DrawList->AddRectFilledMultiColor(bb.Min, preview_max,
-                GetColorU32(combo_gradient_top), GetColorU32(combo_gradient_top),
-                GetColorU32(combo_gradient_bottom), GetColorU32(combo_gradient_bottom));
+            top = IM_COL32(246, 248, 252, 255);
+            bottom = IM_COL32(190, 204, 224, 255);
         }
-        else
+        if (hovered || popup_open)
         {
-            window->DrawList->AddRectFilled(bb.Min, preview_max, frame_col,
-                style.FrameRounding, (flags & ImGuiComboFlags_NoArrowButton)
-                    ? ImDrawFlags_RoundCornersAll : ImDrawFlags_RoundCornersLeft);
+            top = light_theme ? IM_COL32(225, 234, 247, 255) : IM_COL32(107, 113, 120, 255);
+            bottom = light_theme ? IM_COL32(160, 184, 217, 255) : IM_COL32(76, 81, 88, 255);
+        }
+
+        window->DrawList->AddRectFilledMultiColor(bb.Min, bb.Max, top, top, bottom, bottom);
+        window->DrawList->AddRect(bb.Min, bb.Max,
+            light_theme ? IM_COL32(145, 162, 188, 255) : IM_COL32(72, 77, 82, 255));
+
+        if (!(flags & ImGuiComboFlags_NoArrowButton))
+        {
+            const ImVec2 arrow_min(value_x2, bb.Min.y);
+            window->DrawList->AddRectFilled(arrow_min, bb.Max,
+                light_theme ? IM_COL32(178, 194, 218, 255) : IM_COL32(57, 61, 66, 255));
+            window->DrawList->AddLine(arrow_min, ImVec2(arrow_min.x, bb.Max.y),
+                light_theme ? IM_COL32(145, 162, 188, 255) : IM_COL32(67, 72, 77, 255));
+
+            const ImVec2 center = (arrow_min + bb.Max) * 0.5f;
+            window->DrawList->AddTriangleFilled(
+                ImVec2(center.x - 4, center.y - 2),
+                ImVec2(center.x + 4, center.y - 2),
+                ImVec2(center.x, center.y + 3),
+                light_theme ? IM_COL32(24, 42, 68, 255) : IM_COL32(220, 224, 228, 255));
         }
     }
-    if (!(flags & ImGuiComboFlags_NoArrowButton))
+    else
     {
-        const ImU32 bg_col = style.ComboGradient
-            ? GetColorU32(combo_gradient_top) : GetColorU32((popup_open || hovered) ? ImGuiCol_ButtonHovered : ImGuiCol_Button);
-        ImU32 text_col = GetColorU32(ImGuiCol_Text);
-        const ImVec2 arrow_min(value_x2, bb.Min.y);
-        if (style.ComboGradient)
+        const ImU32 frame_col = GetColorU32(combo_color);
+        if (!(flags & ImGuiComboFlags_NoPreview))
         {
-            window->DrawList->AddRectFilledMultiColor(arrow_min, bb.Max,
-                GetColorU32(combo_gradient_top), GetColorU32(combo_gradient_top),
-                GetColorU32(combo_gradient_bottom), GetColorU32(combo_gradient_bottom));
+            const ImVec2 preview_max(value_x2, bb.Max.y);
+            if (style.ComboGradient)
+            {
+                window->DrawList->AddRectFilledMultiColor(bb.Min, preview_max,
+                    GetColorU32(combo_gradient_top), GetColorU32(combo_gradient_top),
+                    GetColorU32(combo_gradient_bottom), GetColorU32(combo_gradient_bottom));
+            }
+            else
+            {
+                window->DrawList->AddRectFilled(bb.Min, preview_max, frame_col,
+                    style.FrameRounding, (flags & ImGuiComboFlags_NoArrowButton)
+                        ? ImDrawFlags_RoundCornersAll : ImDrawFlags_RoundCornersLeft);
+            }
         }
-        else
+        if (!(flags & ImGuiComboFlags_NoArrowButton))
         {
-            window->DrawList->AddRectFilled(arrow_min, bb.Max, bg_col, style.FrameRounding,
-                (w <= arrow_size) ? ImDrawFlags_RoundCornersAll : ImDrawFlags_RoundCornersRight);
+            const ImU32 bg_col = style.ComboGradient
+                ? GetColorU32(combo_gradient_top) : GetColorU32((popup_open || hovered) ? ImGuiCol_ButtonHovered : ImGuiCol_Button);
+            const ImU32 text_col = GetColorU32(ImGuiCol_Text);
+            const ImVec2 arrow_min(value_x2, bb.Min.y);
+            if (style.ComboGradient)
+            {
+                window->DrawList->AddRectFilledMultiColor(arrow_min, bb.Max,
+                    GetColorU32(combo_gradient_top), GetColorU32(combo_gradient_top),
+                    GetColorU32(combo_gradient_bottom), GetColorU32(combo_gradient_bottom));
+            }
+            else
+            {
+                window->DrawList->AddRectFilled(arrow_min, bb.Max, bg_col, style.FrameRounding,
+                    (w <= arrow_size) ? ImDrawFlags_RoundCornersAll : ImDrawFlags_RoundCornersRight);
+            }
+            if (value_x2 + arrow_size - style.FramePadding.x <= bb.Max.x)
+                RenderArrow(window->DrawList, ImVec2(value_x2 + style.FramePadding.y, bb.Min.y + style.FramePadding.y), text_col, ImGuiDir_Down, 1.0f);
         }
-        if (value_x2 + arrow_size - style.FramePadding.x <= bb.Max.x)
-            RenderArrow(window->DrawList, ImVec2(value_x2 + style.FramePadding.y, bb.Min.y + style.FramePadding.y), text_col, ImGuiDir_Down, 1.0f);
+        RenderFrameBorder(bb.Min, bb.Max, style.FrameRounding);
     }
-    RenderFrameBorder(bb.Min, bb.Max, style.FrameRounding);
 
     // Custom preview
     if (flags & ImGuiComboFlags_CustomPreview)
@@ -2261,62 +2356,103 @@ bool ImGui::Combo(const char* label, int* current_item,
 
     ImDrawList* draw = window->DrawList;
 
-    const ImGuiCol combo_color = held ? ImGuiCol_FrameBgActive
-        : hovered ? ImGuiCol_FrameBgHovered : ImGuiCol_FrameBg;
-    const ImVec4& combo_gradient_top = held ? style.ComboActiveGradientTop
-        : hovered ? style.ComboHoveredGradientTop : style.ComboGradientTop;
-    const ImVec4& combo_gradient_bottom = held ? style.ComboActiveGradientBottom
-        : hovered ? style.ComboHoveredGradientBottom : style.ComboGradientBottom;
-    const ImRect arrow_bb(ImVec2(bb.Max.x - 18.0f, bb.Min.y), bb.Max);
-    if (style.ComboGradient)
+    if (style.QuarkLegacyWidgetStyle)
     {
-        draw->AddRectFilledMultiColor(bb.Min, bb.Max,
-            GetColorU32(combo_gradient_top), GetColorU32(combo_gradient_top),
-            GetColorU32(combo_gradient_bottom), GetColorU32(combo_gradient_bottom));
+        ImU32 top = IM_COL32(96, 101, 107, 255);
+        ImU32 bottom = IM_COL32(68, 73, 79, 255);
+        const bool light_theme = style.Colors[ImGuiCol_WindowBg].x > 0.5f;
+        if (light_theme)
+        {
+            top = IM_COL32(246, 248, 252, 255);
+            bottom = IM_COL32(190, 204, 224, 255);
+        }
+        if (hovered)
+        {
+            top = light_theme ? IM_COL32(225, 234, 247, 255) : IM_COL32(107, 113, 120, 255);
+            bottom = light_theme ? IM_COL32(160, 184, 217, 255) : IM_COL32(76, 81, 88, 255);
+        }
+
+        draw->AddRectFilledMultiColor(bb.Min, bb.Max, top, top, bottom, bottom);
+        draw->AddRect(bb.Min, bb.Max,
+            light_theme ? IM_COL32(145, 162, 188, 255) : IM_COL32(72, 77, 82, 255));
+
+        const ImRect arrow_bb(ImVec2(bb.Max.x - 18.0f, bb.Min.y), bb.Max);
+        draw->AddRectFilled(arrow_bb.Min, arrow_bb.Max,
+            light_theme ? IM_COL32(178, 194, 218, 255) : IM_COL32(57, 61, 66, 255));
+        draw->AddLine(arrow_bb.Min, ImVec2(arrow_bb.Min.x, arrow_bb.Max.y),
+            light_theme ? IM_COL32(145, 162, 188, 255) : IM_COL32(67, 72, 77, 255));
+
+        const ImVec2 center = (arrow_bb.Min + arrow_bb.Max) * 0.5f;
+        draw->AddTriangleFilled(
+            ImVec2(center.x - 4, center.y - 2),
+            ImVec2(center.x + 4, center.y - 2),
+            ImVec2(center.x, center.y + 3),
+            light_theme ? IM_COL32(24, 42, 68, 255) : IM_COL32(220, 224, 228, 255));
+
+        if (preview)
+        {
+            draw->AddText(
+                ImVec2(bb.Min.x + 6, bb.Min.y + (height - CalcTextSize(preview).y) * 0.5f),
+                light_theme ? IM_COL32(24, 42, 68, 255) : IM_COL32(205, 208, 212, 255),
+                preview);
+        }
     }
     else
     {
-        draw->AddRectFilled(bb.Min, bb.Max, GetColorU32(combo_color),
-            style.FrameRounding, ImDrawFlags_RoundCornersAll);
-    }
-    if (style.FrameBorderSize > 0.0f)
-    {
-        draw->AddRect(bb.Min, bb.Max, GetColorU32(ImGuiCol_Border),
-            style.FrameRounding, ImDrawFlags_RoundCornersAll, style.FrameBorderSize);
-    }
+        const ImGuiCol combo_color = held ? ImGuiCol_FrameBgActive
+            : hovered ? ImGuiCol_FrameBgHovered : ImGuiCol_FrameBg;
+        const ImVec4& combo_gradient_top = held ? style.ComboActiveGradientTop
+            : hovered ? style.ComboHoveredGradientTop : style.ComboGradientTop;
+        const ImVec4& combo_gradient_bottom = held ? style.ComboActiveGradientBottom
+            : hovered ? style.ComboHoveredGradientBottom : style.ComboGradientBottom;
+        const ImRect arrow_bb(ImVec2(bb.Max.x - 18.0f, bb.Min.y), bb.Max);
+        if (style.ComboGradient)
+        {
+            draw->AddRectFilledMultiColor(bb.Min, bb.Max,
+                GetColorU32(combo_gradient_top), GetColorU32(combo_gradient_top),
+                GetColorU32(combo_gradient_bottom), GetColorU32(combo_gradient_bottom));
+        }
+        else
+        {
+            draw->AddRectFilled(bb.Min, bb.Max, GetColorU32(combo_color),
+                style.FrameRounding, ImDrawFlags_RoundCornersAll);
+        }
+        if (style.FrameBorderSize > 0.0f)
+        {
+            draw->AddRect(bb.Min, bb.Max, GetColorU32(ImGuiCol_Border),
+                style.FrameRounding, ImDrawFlags_RoundCornersAll, style.FrameBorderSize);
+        }
 
-    // arrow area
-    const ImU32 arrow_color = GetColorU32(held ? ImGuiCol_ButtonActive
-        : hovered ? ImGuiCol_ButtonHovered : ImGuiCol_Button);
-    if (style.ComboGradient)
-    {
-        draw->AddRectFilledMultiColor(arrow_bb.Min, arrow_bb.Max,
-            GetColorU32(combo_gradient_top), GetColorU32(combo_gradient_top),
-            GetColorU32(combo_gradient_bottom), GetColorU32(combo_gradient_bottom));
-    }
-    else
-    {
-        draw->AddRectFilled(arrow_bb.Min, arrow_bb.Max, arrow_color,
-            style.FrameRounding, ImDrawFlags_RoundCornersRight);
-    }
-    draw->AddLine(arrow_bb.Min, ImVec2(arrow_bb.Min.x, arrow_bb.Max.y),
-        GetColorU32(ImGuiCol_Border));
+        const ImU32 arrow_color = GetColorU32(held ? ImGuiCol_ButtonActive
+            : hovered ? ImGuiCol_ButtonHovered : ImGuiCol_Button);
+        if (style.ComboGradient)
+        {
+            draw->AddRectFilledMultiColor(arrow_bb.Min, arrow_bb.Max,
+                GetColorU32(combo_gradient_top), GetColorU32(combo_gradient_top),
+                GetColorU32(combo_gradient_bottom), GetColorU32(combo_gradient_bottom));
+        }
+        else
+        {
+            draw->AddRectFilled(arrow_bb.Min, arrow_bb.Max, arrow_color,
+                style.FrameRounding, ImDrawFlags_RoundCornersRight);
+        }
+        draw->AddLine(arrow_bb.Min, ImVec2(arrow_bb.Min.x, arrow_bb.Max.y),
+            GetColorU32(ImGuiCol_Border));
 
-    const ImVec2 center = (arrow_bb.Min + arrow_bb.Max) * 0.5f;
-    draw->AddTriangleFilled(
-        ImVec2(center.x - 4, center.y - 2),
-        ImVec2(center.x + 4, center.y - 2),
-        ImVec2(center.x, center.y + 3),
-        GetColorU32(ImGuiCol_Text)
-    );
+        const ImVec2 center = (arrow_bb.Min + arrow_bb.Max) * 0.5f;
+        draw->AddTriangleFilled(
+            ImVec2(center.x - 4, center.y - 2),
+            ImVec2(center.x + 4, center.y - 2),
+            ImVec2(center.x, center.y + 3),
+            GetColorU32(ImGuiCol_Text));
 
-    if (preview)
-    {
-        draw->AddText(
-            ImVec2(bb.Min.x + 6, bb.Min.y + (height - CalcTextSize(preview).y) * 0.5f),
-            GetColorU32(ImGuiCol_Text),
-            preview
-        );
+        if (preview)
+        {
+            draw->AddText(
+                ImVec2(bb.Min.x + 6, bb.Min.y + (height - CalcTextSize(preview).y) * 0.5f),
+                GetColorU32(ImGuiCol_Text),
+                preview);
+        }
     }
 
     if (pressed)
@@ -2337,6 +2473,22 @@ bool ImGui::Combo(const char* label, int* current_item,
 
     ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(2, 2));
     ImGui::PushStyleVar(ImGuiStyleVar_ItemSpacing, ImVec2(0, 0));
+    if (style.QuarkLegacyWidgetStyle)
+    {
+        const bool light_theme = style.Colors[ImGuiCol_WindowBg].x > 0.5f;
+        ImGui::PushStyleColor(ImGuiCol_PopupBg,
+            light_theme ? IM_COL32(255, 255, 255, 255) : IM_COL32(37, 40, 43, 255));
+        ImGui::PushStyleColor(ImGuiCol_Border,
+            light_theme ? IM_COL32(170, 182, 202, 255) : IM_COL32(72, 77, 82, 255));
+        ImGui::PushStyleColor(ImGuiCol_Header,
+            light_theme ? IM_COL32(205, 220, 240, 255) : IM_COL32(44, 142, 199, 255));
+        ImGui::PushStyleColor(ImGuiCol_HeaderHovered,
+            light_theme ? IM_COL32(182, 205, 235, 255) : IM_COL32(44, 111, 199, 255));
+        ImGui::PushStyleColor(ImGuiCol_HeaderActive,
+            light_theme ? IM_COL32(155, 185, 222, 255) : IM_COL32(38, 102, 166, 255));
+        ImGui::PushStyleColor(ImGuiCol_Text,
+            light_theme ? IM_COL32(18, 27, 42, 255) : IM_COL32(220, 224, 228, 255));
+    }
 
     ImGui::SetNextWindowPos(
         ImVec2(bb.Min.x, bb.Max.y),
@@ -2380,6 +2532,8 @@ bool ImGui::Combo(const char* label, int* current_item,
         EndPopup();
     }
 
+    if (style.QuarkLegacyWidgetStyle)
+        ImGui::PopStyleColor(6);
     ImGui::PopStyleVar(2);
 
     if (value_changed)

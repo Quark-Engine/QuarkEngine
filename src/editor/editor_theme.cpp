@@ -4,10 +4,13 @@
 #include "language_manager.h"
 
 #include "nlohmann/json.hpp"
+#include <algorithm>
+#include <array>
 #include <cctype>
 #include <cmath>
 #include <filesystem>
 #include <fstream>
+#include <initializer_list>
 #include <iostream>
 #include <string>
 #include <unordered_map>
@@ -20,17 +23,47 @@ namespace
 using json = nlohmann::json;
 namespace fs = std::filesystem;
 
+struct SComponentStateOverride
+{
+    bool hasColor = false;
+    ImVec4 color;
+    bool hasGradient = false;
+    ImVec4 gradientTop;
+    ImVec4 gradientBottom;
+    bool hasAlpha = false;
+    float alpha = 1.0f;
+};
+
+struct SComponentVariantOverride
+{
+    std::string component;
+    std::string variant;
+    std::array<SComponentStateOverride, 4> aStates;
+};
+
 struct SThemeOverrides
 {
     bool lightBase = false;
     std::string fontPath;
     float fontSize = 16.0f;
     float fontScale = 1.0f;
+    std::vector<SComponentVariantOverride> vComponents;
     std::vector<std::pair<ImGuiCol, ImVec4>> vColors;
     std::vector<std::pair<float ImGuiStyle::*, float>> vFloatStyle;
     std::vector<std::pair<ImVec2 ImGuiStyle::*, ImVec2>> vVectorStyle;
     std::vector<std::pair<bool ImGuiStyle::*, bool>> vBoolStyle;
     std::vector<std::pair<ImVec4 ImGuiStyle::*, ImVec4>> vStyleColors;
+};
+
+struct SThemeVariantRestore
+{
+    int colorPushCount = 0;
+    bool hasAlpha = false;
+    bool legacyWidgetStyle = false;
+    bool hasButtonGradient = false;
+    bool buttonGradient = false;
+    std::array<ImVec4, 3> aButtonGradientTop;
+    std::array<ImVec4, 3> aButtonGradientBottom;
 };
 
 using TColorNames = std::unordered_map<std::string, ImGuiCol>;
@@ -240,6 +273,346 @@ bool ParseColor(const json& value, ImVec4& color)
     return true;
 }
 
+using TSemanticColors = std::unordered_map<std::string, ImVec4>;
+
+bool ParseThemeColor(const json& value, const TSemanticColors& semanticColors,
+    ImVec4& color)
+{
+    if (!value.is_string())
+    {
+        return false;
+    }
+
+    const std::string valueText = value.get<std::string>();
+    if (!valueText.empty() && valueText[0] == '@')
+    {
+        const auto semantic = semanticColors.find(valueText.substr(1));
+        if (semantic == semanticColors.end())
+        {
+            return false;
+        }
+        color = semantic->second;
+        return true;
+    }
+
+    return ParseColor(value, color);
+}
+
+ImVec4 ScaleColor(const ImVec4& color, float scale)
+{
+    return ImVec4(
+        std::min(color.x * scale, 1.0f),
+        std::min(color.y * scale, 1.0f),
+        std::min(color.z * scale, 1.0f),
+        color.w);
+}
+
+void AddSemanticColorOverrides(const TSemanticColors& semanticColors,
+    SThemeOverrides& overrides)
+{
+    const auto addColors = [&semanticColors, &overrides](
+        const std::string& role, std::initializer_list<ImGuiCol> aTargets)
+    {
+        const auto semantic = semanticColors.find(role);
+        if (semantic == semanticColors.end())
+        {
+            return;
+        }
+        for (const ImGuiCol target : aTargets)
+        {
+            overrides.vColors.emplace_back(target, semantic->second);
+        }
+    };
+    const auto addStyleColors = [&semanticColors, &overrides](
+        const std::string& role, std::initializer_list<const char*> aTargets)
+    {
+        const auto semantic = semanticColors.find(role);
+        if (semantic == semanticColors.end())
+        {
+            return;
+        }
+        for (const char* pTarget : aTargets)
+        {
+            const auto styleColor = GetStyleColorNames().find(pTarget);
+            if (styleColor != GetStyleColorNames().end())
+            {
+                overrides.vStyleColors.emplace_back(styleColor->second, semantic->second);
+            }
+        }
+    };
+
+    addColors("accent", {
+        ImGuiCol_CheckMark, ImGuiCol_SliderGrab, ImGuiCol_SliderGrabActive,
+        ImGuiCol_HeaderActive, ImGuiCol_TextLink, ImGuiCol_NavCursor,
+        ImGuiCol_TabSelectedOverline, ImGuiCol_ResizeGripActive
+    });
+    addColors("accent_hovered", {
+        ImGuiCol_SeparatorHovered, ImGuiCol_ResizeGripHovered
+    });
+    addStyleColors("accent", {"hub_card_selected_border"});
+    addColors("surface", {
+        ImGuiCol_WindowBg, ImGuiCol_ChildBg, ImGuiCol_DockingEmptyBg
+    });
+    addColors("surface_raised", {
+        ImGuiCol_PopupBg, ImGuiCol_FrameBg, ImGuiCol_TitleBg
+    });
+    addColors("surface_overlay", {
+        ImGuiCol_NavWindowingDimBg, ImGuiCol_ModalWindowDimBg
+    });
+    addColors("text", {ImGuiCol_Text});
+    addColors("text_muted", {ImGuiCol_TextDisabled});
+    addColors("border", {
+        ImGuiCol_Border, ImGuiCol_Separator, ImGuiCol_TableBorderStrong,
+        ImGuiCol_TableBorderLight
+    });
+}
+
+bool GetComponentColorSlots(const std::string& component,
+    std::array<ImGuiCol, 3>& aColorSlots)
+{
+    if (component == "button")
+    {
+        aColorSlots = {ImGuiCol_Button, ImGuiCol_ButtonHovered, ImGuiCol_ButtonActive};
+    }
+    else if (component == "header")
+    {
+        aColorSlots = {ImGuiCol_Header, ImGuiCol_HeaderHovered, ImGuiCol_HeaderActive};
+    }
+    else if (component == "input")
+    {
+        aColorSlots = {ImGuiCol_FrameBg, ImGuiCol_FrameBgHovered, ImGuiCol_FrameBgActive};
+    }
+    else if (component == "tab")
+    {
+        aColorSlots = {ImGuiCol_Tab, ImGuiCol_TabHovered, ImGuiCol_TabActive};
+    }
+    else
+    {
+        return false;
+    }
+    return true;
+}
+
+bool ParseComponentState(const json& value, const std::string& component,
+    const std::string& stateName, const TSemanticColors& semanticColors,
+    SComponentStateOverride& state, std::string& error)
+{
+    if (stateName == "disabled")
+    {
+        if (!value.is_object())
+        {
+            error = "components." + component +
+                ".disabled must be an object with an alpha value between 0 and 1";
+            return false;
+        }
+        for (const auto& [property, propertyValue] : value.items())
+        {
+            (void)propertyValue;
+            if (property != "alpha")
+            {
+                error = "unknown theme parameter: components." + component +
+                    ".disabled." + property;
+                return false;
+            }
+        }
+        if (!value.contains("alpha") || !value["alpha"].is_number())
+        {
+            error = "components." + component +
+                ".disabled.alpha must be a number between 0 and 1";
+            return false;
+        }
+        state.alpha = value["alpha"].get<float>();
+        if (!std::isfinite(state.alpha) || state.alpha < 0.0f || state.alpha > 1.0f)
+        {
+            error = "components." + component +
+                ".disabled.alpha must be between 0 and 1";
+            return false;
+        }
+        state.hasAlpha = true;
+        return true;
+    }
+
+    if (value.is_string())
+    {
+        if (!ParseThemeColor(value, semanticColors, state.color))
+        {
+            error = "invalid color in components." + component + "." +
+                stateName + ": " + value.get<std::string>();
+            return false;
+        }
+        state.hasColor = true;
+        return true;
+    }
+
+    if (!value.is_object())
+    {
+        error = "components." + component + "." + stateName +
+            " must be a color or an object";
+        return false;
+    }
+
+    for (const auto& [property, propertyValue] : value.items())
+    {
+        if (property == "color")
+        {
+            if (!ParseThemeColor(propertyValue, semanticColors, state.color))
+            {
+                error = "invalid color in components." + component + "." +
+                    stateName + ".color";
+                return false;
+            }
+            state.hasColor = true;
+        }
+        else if (property == "gradient")
+        {
+            if (component != "button")
+            {
+                error = "gradient is not supported for component: " + component;
+                return false;
+            }
+            if (!propertyValue.is_object())
+            {
+                error = "components." + component + "." + stateName +
+                    ".gradient must be an object";
+                return false;
+            }
+            for (const auto& [gradientName, gradientValue] : propertyValue.items())
+            {
+                ImVec4 parsedColor;
+                if (gradientName != "top" && gradientName != "bottom")
+                {
+                    error = "unknown theme parameter: components." + component +
+                        "." + stateName + ".gradient." + gradientName;
+                    return false;
+                }
+                if (!ParseThemeColor(gradientValue, semanticColors, parsedColor))
+                {
+                    error = "invalid color in components." + component + "." +
+                        stateName + ".gradient." + gradientName;
+                    return false;
+                }
+                if (gradientName == "top")
+                {
+                    state.gradientTop = parsedColor;
+                }
+                else
+                {
+                    state.gradientBottom = parsedColor;
+                }
+            }
+            if (!propertyValue.contains("top") || !propertyValue.contains("bottom"))
+            {
+                error = "components." + component + "." + stateName +
+                    ".gradient requires both top and bottom colors";
+                return false;
+            }
+            state.hasGradient = true;
+        }
+        else
+        {
+            error = "unknown theme parameter: components." + component + "." +
+                stateName + "." + property;
+            return false;
+        }
+    }
+
+    if (!state.hasColor && !state.hasGradient)
+    {
+        error = "components." + component + "." + stateName +
+            " must define a color or gradient";
+        return false;
+    }
+    return true;
+}
+
+bool ParseComponents(const json& data, const TSemanticColors& semanticColors,
+    SThemeOverrides& overrides, std::string& error)
+{
+    if (!data.is_object())
+    {
+        error = "'components' must be an object";
+        return false;
+    }
+
+    for (const auto& [component, variants] : data.items())
+    {
+        std::array<ImGuiCol, 3> aColorSlots;
+        if (!GetComponentColorSlots(component, aColorSlots))
+        {
+            error = "unknown theme component: components." + component;
+            return false;
+        }
+        if (!variants.is_object())
+        {
+            error = "components." + component + " must be an object of variants";
+            return false;
+        }
+        for (const auto& [variant, states] : variants.items())
+        {
+            if (variant.empty() || !std::all_of(variant.begin(), variant.end(),
+                [](const unsigned char c)
+                {
+                    return std::isalnum(c) || c == '_' || c == '-';
+                }))
+            {
+                error = "invalid component variant name: components." + component +
+                    "." + variant;
+                return false;
+            }
+            if (!states.is_object())
+            {
+                error = "components." + component + "." + variant +
+                    " must be an object of states";
+                return false;
+            }
+            if (states.empty())
+            {
+                error = "components." + component + "." + variant +
+                    " must define at least one state";
+                return false;
+            }
+
+            SComponentVariantOverride componentOverride;
+            componentOverride.component = component;
+            componentOverride.variant = variant;
+            for (const auto& [stateName, stateValue] : states.items())
+            {
+                size_t stateIndex = 0;
+                if (stateName == "normal")
+                {
+                    stateIndex = 0;
+                }
+                else if (stateName == "hovered")
+                {
+                    stateIndex = 1;
+                }
+                else if (stateName == "active")
+                {
+                    stateIndex = 2;
+                }
+                else if (stateName == "disabled")
+                {
+                    stateIndex = 3;
+                }
+                else
+                {
+                    error = "unknown theme state: components." + component + "." +
+                        variant + "." + stateName;
+                    return false;
+                }
+                if (!ParseComponentState(stateValue, component, stateName,
+                    semanticColors, componentOverride.aStates[stateIndex], error))
+                {
+                    error = "components." + component + "." + variant + ": " + error;
+                    return false;
+                }
+            }
+            overrides.vComponents.push_back(std::move(componentOverride));
+        }
+    }
+    return true;
+}
+
 bool ParseThemeOverrides(const json& data, SThemeOverrides& overrides, std::string& error)
 {
     if (!data.is_object())
@@ -247,6 +620,93 @@ bool ParseThemeOverrides(const json& data, SThemeOverrides& overrides, std::stri
         error = "theme root must be an object";
         return false;
     }
+
+    for (const auto& [name, value] : data.items())
+    {
+        (void)value;
+        if (name != "schema_version" && name != "name" && name != "base" &&
+            name != "font" && name != "semantic" && name != "components" &&
+            name != "style" && name != "colors")
+        {
+            error = "unknown theme parameter: " + name;
+            return false;
+        }
+    }
+
+    if (data.contains("schema_version"))
+    {
+        if (!data["schema_version"].is_number_integer() ||
+            data["schema_version"].get<int>() != 1)
+        {
+            error = "'schema_version' must be the integer 1";
+            return false;
+        }
+    }
+
+    if (data.contains("name") &&
+        (!data["name"].is_string() || data["name"].get<std::string>().empty()))
+    {
+        error = "'name' must be a non-empty string";
+        return false;
+    }
+
+    TSemanticColors semanticColors;
+    if (data.contains("semantic"))
+    {
+        if (!data["semantic"].is_object())
+        {
+            error = "'semantic' must be an object";
+            return false;
+        }
+        static const std::array<const char*, 21> aSemanticRoles = {
+            "accent", "accent_hovered", "accent_active", "surface", "surface_raised",
+            "text", "text_muted", "border", "success", "warning", "danger", "info",
+            "surface_overlay", "success_hovered", "success_active", "warning_hovered",
+            "warning_active", "danger_hovered", "danger_active", "info_hovered",
+            "info_active"
+        };
+        for (const auto& [role, value] : data["semantic"].items())
+        {
+            const bool knownRole = std::any_of(aSemanticRoles.begin(), aSemanticRoles.end(),
+                [&role](const char* pKnownRole) { return role == pKnownRole; });
+            ImVec4 parsedColor;
+            if (!knownRole)
+            {
+                error = "unknown semantic color role: semantic." + role;
+                return false;
+            }
+            if (!ParseColor(value, parsedColor))
+            {
+                error = "semantic." + role + " must be a HEX color";
+                return false;
+            }
+            semanticColors.emplace(role, parsedColor);
+        }
+    }
+    static const std::array<const char*, 5> aDerivableRoles = {
+        "accent", "success", "warning", "danger", "info"
+    };
+    for (const char* pRole : aDerivableRoles)
+    {
+        const auto role = semanticColors.find(pRole);
+        if (role == semanticColors.end())
+        {
+            continue;
+        }
+
+        const ImVec4 baseColor = role->second;
+        const std::string hoveredRole = std::string(pRole) + "_hovered";
+        const std::string activeRole = std::string(pRole) + "_active";
+        if (semanticColors.find(hoveredRole) == semanticColors.end())
+        {
+            semanticColors.emplace(hoveredRole, ScaleColor(baseColor, 1.12f));
+        }
+        if (semanticColors.find(activeRole) == semanticColors.end())
+        {
+            semanticColors.emplace(activeRole, ScaleColor(baseColor, 0.86f));
+        }
+    }
+    AddSemanticColorOverrides(semanticColors, overrides);
 
     if (data.contains("base"))
     {
@@ -332,13 +792,24 @@ bool ParseThemeOverrides(const json& data, SThemeOverrides& overrides, std::stri
         {
             const auto color = GetColorNames().find(name);
             ImVec4 parsed;
-            if (color == GetColorNames().end() || !ParseColor(value, parsed))
+            if (color == GetColorNames().end())
             {
-                error = "unknown color or invalid HEX value: " + name;
+                error = "unknown theme color: colors." + name;
+                return false;
+            }
+            if (!ParseThemeColor(value, semanticColors, parsed))
+            {
+                error = "invalid color or unknown semantic reference: colors." + name;
                 return false;
             }
             overrides.vColors.emplace_back(color->second, parsed);
         }
+    }
+
+    if (data.contains("components") &&
+        !ParseComponents(data["components"], semanticColors, overrides, error))
+    {
+        return false;
     }
 
     if (data.contains("style"))
@@ -407,9 +878,10 @@ bool ParseThemeOverrides(const json& data, SThemeOverrides& overrides, std::stri
             else if (styleColor != GetStyleColorNames().end())
             {
                 ImVec4 parsed;
-                if (!ParseColor(value, parsed))
+                if (!ParseThemeColor(value, semanticColors, parsed))
                 {
-                    error = "style color must be a HEX value: " + name;
+                    error = "style color must be a HEX value or known semantic reference: " +
+                        name;
                     return false;
                 }
                 overrides.vStyleColors.emplace_back(styleColor->second, parsed);
@@ -567,11 +1039,41 @@ void ReportThemeError(const std::string& themeId, const std::string& reason)
     std::cerr << "Failed to load editor theme '" << themeId << "': " << reason << '\n';
 }
 
+bool ReadThemeJson(std::istream& input, json& data, std::string& error)
+{
+    try
+    {
+        data = json::parse(input, nullptr, true, true);
+    }
+    catch (const std::exception& exception)
+    {
+        error = exception.what();
+        return false;
+    }
+    return true;
+}
+
 } // namespace
+
+struct SThemeRuntimeState
+{
+    std::vector<SComponentVariantOverride> vActiveComponents;
+    std::vector<SThemeVariantRestore> vVariantRestoreStack;
+};
+
+SThemeRuntimeState& CThemeManager::GetRuntimeState()
+{
+    static SThemeRuntimeState s_State;
+    return s_State;
+}
 
 void CThemeManager::Apply(bool lightTheme)
 {
+    GetRuntimeState().vActiveComponents.clear();
+
     ImGuiStyle& style = ImGui::GetStyle();
+    style = ImGuiStyle();
+    style.QuarkLegacyWidgetStyle = true;
     style.ButtonGradient = true;
     style.ComboGradient = false;
     style.DockingTabGradient = false;
@@ -773,18 +1275,14 @@ bool CThemeManager::Apply(const std::string& themeId)
     }
 
     json data;
-    try
+    std::string error;
+    if (!ReadThemeJson(input, data, error))
     {
-        input >> data;
-    }
-    catch (const std::exception& exception)
-    {
-        ReportThemeError(themeId, exception.what());
+        ReportThemeError(themeId, error);
         return false;
     }
 
     SThemeOverrides overrides;
-    std::string error;
     if (!ParseThemeOverrides(data, overrides, error))
     {
         ReportThemeError(themeId, error);
@@ -799,6 +1297,7 @@ bool CThemeManager::Apply(const std::string& themeId)
 
     Apply(overrides.lightBase);
     ImGuiStyle& style = ImGui::GetStyle();
+    style.QuarkLegacyWidgetStyle = false;
     for (const auto& [color, value] : overrides.vColors)
     {
         style.Colors[color] = value;
@@ -819,6 +1318,7 @@ bool CThemeManager::Apply(const std::string& themeId)
     {
         style.*pStyleField = value;
     }
+    GetRuntimeState().vActiveComponents = overrides.vComponents;
     g_AppliedFontScale = overrides.fontScale;
     return true;
 }
@@ -844,13 +1344,9 @@ bool CThemeManager::ReloadFonts(const std::string& themeId)
         }
 
         json data;
-        try
+        if (!ReadThemeJson(input, data, error))
         {
-            input >> data;
-        }
-        catch (const std::exception& exception)
-        {
-            ReportThemeError(themeId, exception.what());
+            ReportThemeError(themeId, error);
             return false;
         }
         if (!ParseThemeOverrides(data, overrides, error))
@@ -871,6 +1367,115 @@ bool CThemeManager::ReloadFonts(const std::string& themeId)
 float CThemeManager::GetAppliedFontScale()
 {
     return g_AppliedFontScale;
+}
+
+bool CThemeManager::PushVariant(const std::string& component, const std::string& variant,
+    bool disabled)
+{
+    SThemeRuntimeState& runtime = GetRuntimeState();
+    const auto found = std::find_if(runtime.vActiveComponents.begin(),
+        runtime.vActiveComponents.end(),
+        [&component, &variant](const SComponentVariantOverride& value)
+        {
+            return value.component == component && value.variant == variant;
+        });
+    if (found == runtime.vActiveComponents.end())
+    {
+        return false;
+    }
+
+    std::array<ImGuiCol, 3> aColorSlots;
+    if (!GetComponentColorSlots(component, aColorSlots))
+    {
+        return false;
+    }
+
+    SThemeVariantRestore restore;
+    ImGuiStyle& style = ImGui::GetStyle();
+    restore.legacyWidgetStyle = style.QuarkLegacyWidgetStyle;
+    style.QuarkLegacyWidgetStyle = false;
+    std::array<ImVec4 ImGuiStyle::*, 3> aGradientTop = {
+        &ImGuiStyle::ButtonGradientTop,
+        &ImGuiStyle::ButtonHoveredGradientTop,
+        &ImGuiStyle::ButtonActiveGradientTop
+    };
+    std::array<ImVec4 ImGuiStyle::*, 3> aGradientBottom = {
+        &ImGuiStyle::ButtonGradientBottom,
+        &ImGuiStyle::ButtonHoveredGradientBottom,
+        &ImGuiStyle::ButtonActiveGradientBottom
+    };
+
+    for (size_t stateIndex = 0; stateIndex < 3; ++stateIndex)
+    {
+        const SComponentStateOverride& state = found->aStates[stateIndex];
+        if (state.hasColor)
+        {
+            ImGui::PushStyleColor(aColorSlots[stateIndex], state.color);
+            ++restore.colorPushCount;
+        }
+        if (state.hasGradient && component == "button")
+        {
+            if (!restore.hasButtonGradient)
+            {
+                restore.hasButtonGradient = true;
+                restore.buttonGradient = style.ButtonGradient;
+                for (size_t gradientIndex = 0; gradientIndex < 3; ++gradientIndex)
+                {
+                    restore.aButtonGradientTop[gradientIndex] =
+                        style.*aGradientTop[gradientIndex];
+                    restore.aButtonGradientBottom[gradientIndex] =
+                        style.*aGradientBottom[gradientIndex];
+                }
+            }
+            style.*aGradientTop[stateIndex] = state.gradientTop;
+            style.*aGradientBottom[stateIndex] = state.gradientBottom;
+            style.ButtonGradient = true;
+        }
+    }
+
+    const SComponentStateOverride& disabledState = found->aStates[3];
+    if (disabled && disabledState.hasAlpha)
+    {
+        ImGui::PushStyleVar(ImGuiStyleVar_Alpha, style.Alpha * disabledState.alpha);
+        restore.hasAlpha = true;
+    }
+
+    runtime.vVariantRestoreStack.push_back(restore);
+    return true;
+}
+
+void CThemeManager::PopVariant()
+{
+    SThemeRuntimeState& runtime = GetRuntimeState();
+    if (runtime.vVariantRestoreStack.empty())
+    {
+        ReportThemeError("variant", "PopVariant called without a matching PushVariant");
+        return;
+    }
+
+    const SThemeVariantRestore restore = runtime.vVariantRestoreStack.back();
+    runtime.vVariantRestoreStack.pop_back();
+    ImGui::GetStyle().QuarkLegacyWidgetStyle = restore.legacyWidgetStyle;
+    if (restore.hasAlpha)
+    {
+        ImGui::PopStyleVar();
+    }
+    if (restore.colorPushCount > 0)
+    {
+        ImGui::PopStyleColor(restore.colorPushCount);
+    }
+
+    if (restore.hasButtonGradient)
+    {
+        ImGuiStyle& style = ImGui::GetStyle();
+        style.ButtonGradient = restore.buttonGradient;
+        style.ButtonGradientTop = restore.aButtonGradientTop[0];
+        style.ButtonHoveredGradientTop = restore.aButtonGradientTop[1];
+        style.ButtonActiveGradientTop = restore.aButtonGradientTop[2];
+        style.ButtonGradientBottom = restore.aButtonGradientBottom[0];
+        style.ButtonHoveredGradientBottom = restore.aButtonGradientBottom[1];
+        style.ButtonActiveGradientBottom = restore.aButtonGradientBottom[2];
+    }
 }
 
 void CThemeManager::ProcessPendingFonts()
@@ -942,8 +1547,19 @@ std::vector<SEditorTheme> CThemeManager::GetAvailableThemes()
             try
             {
                 json data;
-                input >> data;
-                if (data.is_object() && data.contains("name") && data["name"].is_string())
+                std::string parseError;
+                if (!ReadThemeJson(input, data, parseError))
+                {
+                    ReportThemeError(id, parseError);
+                    continue;
+                }
+                SThemeOverrides overrides;
+                if (!ParseThemeOverrides(data, overrides, parseError))
+                {
+                    ReportThemeError(id, parseError);
+                    continue;
+                }
+                if (data.contains("name") && data["name"].is_string())
                 {
                     const std::string configuredName = data["name"].get<std::string>();
                     if (!configuredName.empty())
@@ -955,7 +1571,13 @@ std::vector<SEditorTheme> CThemeManager::GetAvailableThemes()
             catch (const std::exception& exception)
             {
                 ReportThemeError(id, exception.what());
+                continue;
             }
+        }
+        else
+        {
+            ReportThemeError(id, "could not open theme file");
+            continue;
         }
         vThemes.push_back({id, name});
     }
