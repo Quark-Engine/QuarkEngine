@@ -271,25 +271,12 @@ void CComponentUIHelper::DrawTransformComponent(CEditor& editor, CEntity& entity
 
     if (ImGui::DragFloat3(lang.Word("scale"), aScale, 0.1f))
     {
-        auto countNeg = [](float x, float y, float z)
-        {
-            return (x < 0.0f ? 1 : 0) + (y < 0.0f ? 1 : 0) + (z < 0.0f ? 1 : 0);
-        };
-
-        bool wasFlipped = countNeg(pTransform->m_Scale.x, pTransform->m_Scale.y, pTransform->m_Scale.z) % 2 != 0;
-        bool willFlip = countNeg(aScale[0], aScale[1], aScale[2]) % 2 != 0;
-
         pTransform->ClearLocalMatrixOverride();
         pTransform->m_Scale = Vec3(aScale[0], aScale[1], aScale[2]);
         DispatchPluginEvent(PLUGIN_EVENT_TRANSFORM_CHANGED,
             static_cast<int>(&entity - editor.m_Scene.m_vEntities.data()));
         CEntityTextureService::MarkEntityBoundsDirty(&entity);
         CEntityTextureService::MarkEntityUVDirty(&entity);
-
-        if (wasFlipped != willFlip)
-        {
-            CModelService::UpdateModel(&entity, editor.m_Text);
-        }
     }
     trackTransformEdit();
 }

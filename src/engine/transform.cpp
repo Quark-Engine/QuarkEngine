@@ -152,6 +152,15 @@ bool TryInvertAffine(const Mat4& matrix, Mat4& inverse)
     return true;
 }
 
+bool HasNegativeDeterminant(const Mat4& matrix)
+{
+    const float determinant =
+        matrix.m[0] * (matrix.m[5] * matrix.m[10] - matrix.m[9] * matrix.m[6]) -
+        matrix.m[4] * (matrix.m[1] * matrix.m[10] - matrix.m[9] * matrix.m[2]) +
+        matrix.m[8] * (matrix.m[1] * matrix.m[6] - matrix.m[5] * matrix.m[2]);
+    return determinant < 0.0f;
+}
+
 void DecomposeLocal(const Mat4& parentWorld, const Mat4& world, CTransformComponent& out)
 {
     Mat4 inverseParent;

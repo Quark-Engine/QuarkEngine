@@ -1,5 +1,6 @@
 #include "tex.h"
 #include "engine/material_texture_restore.h"
+#include "engine/transform.h"
 #include "models.h"
 #include "editor/editor_preferences.h"
 #include <fstream>
@@ -521,8 +522,10 @@ void CEntityTextureService::DrawEntityWithTexture(CEntity& entity, const Mat4& w
     PushMatrix();
     MultMatrix(worldTransform);
 
-    const bool editedMeshIsDoubleSided = CMeshOverrideService::Has(entity) || pMesh->m_MeshTrianglesDetached;
-    if (editedMeshIsDoubleSided)
+    const bool disableBackfaceCulling = CMeshOverrideService::Has(entity) ||
+        pMesh->m_MeshTrianglesDetached ||
+        quark::HasNegativeDeterminant(worldTransform * pMesh->m_Model.transform);
+    if (disableBackfaceCulling)
     {
         DisableBackfaceCulling();
     }
@@ -538,7 +541,7 @@ void CEntityTextureService::DrawEntityWithTexture(CEntity& entity, const Mat4& w
         DrawModelWires(pMesh->m_Model, {0,0,0}, 1.0f, wireframeColor);
     }
 
-    if (editedMeshIsDoubleSided)
+    if (disableBackfaceCulling)
     {
         EnableBackfaceCulling();
     }

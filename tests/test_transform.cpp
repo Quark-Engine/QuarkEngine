@@ -86,6 +86,13 @@ TEST(ComposeLocal, translation_lands_in_the_last_column)
     CHECK_NEAR(result.m[14], 30.0f, 1e-5);
 }
 
+TEST(HasNegativeDeterminant, detects_mirrored_transforms)
+{
+    CHECK(quark::HasNegativeDeterminant(Mat4::scale(-1.0f, 1.0f, 1.0f)));
+    CHECK(quark::HasNegativeDeterminant(Mat4::scale(1.0f, -1.0f, -1.0f)) == false);
+    CHECK(quark::HasNegativeDeterminant(Mat4::scale(0.0f, 1.0f, 1.0f)) == false);
+}
+
 TEST(ComposeLocal, entity_overload_reads_the_transform_component)
 {
     CEntity target;

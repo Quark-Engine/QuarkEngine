@@ -201,9 +201,18 @@ void RenderSceneShadowMaps(CScene& scene, Shader shadowShader,
                 pMesh->m_Model.meshCount <= 0 || !pMesh->m_Model.meshes) continue;
 
             const Mat4 entityTransform = quark::ComposeWorld(scene, sourceIndex) * pMesh->m_Model.transform;
+            const bool mirroredTransform = quark::HasNegativeDeterminant(entityTransform);
+            if (mirroredTransform)
+            {
+                DisableBackfaceCulling();
+            }
             for (int meshIndex = 0; meshIndex < pMesh->m_Model.meshCount; ++meshIndex)
             {
                 DrawMesh(pMesh->m_Model.meshes[meshIndex], shadowMaterial, entityTransform);
+            }
+            if (mirroredTransform)
+            {
+                EnableBackfaceCulling();
             }
         }
 

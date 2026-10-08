@@ -20,6 +20,7 @@ Mat4 ComposeMeshWorld(const CScene& scene, const CEntity& entity);
 Mat4 ParentWorld(const CScene& scene, const CEntity& entity);
 
 bool TryInvertAffine(const Mat4& matrix, Mat4& inverse);
+bool HasNegativeDeterminant(const Mat4& matrix);
 
 void DecomposeLocal(const Mat4& parentWorld, const Mat4& world, CTransformComponent& out);
 void DecomposeWorld(const Mat4& world, CTransformComponent& out);
