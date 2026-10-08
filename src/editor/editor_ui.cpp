@@ -1295,7 +1295,8 @@ bool CEditor::DrawPreferencesInterfaceTab()
                 m_Preferences.m_ThemeName = theme.id;
                 m_Preferences.m_LightTheme = theme.id == "quark-light";
                 ImGui::GetStyle().ScaleAllSizes(m_Preferences.m_InterfaceScale);
-                ImGui::GetStyle().FontScaleMain = m_Preferences.m_InterfaceScale;
+                ImGui::GetStyle().FontScaleMain = m_Preferences.m_InterfaceScale *
+                    CThemeManager::GetAppliedFontScale();
                 iface.BaseStyle = ImGui::GetStyle();
                 iface.BaseScale = m_Preferences.m_InterfaceScale;
                 changed = true;
@@ -1377,7 +1378,8 @@ bool CEditor::DrawPreferencesInterfaceTab()
         {
             ImGui::GetStyle().WindowMinSize.y = 1.0f;
         }
-        ImGui::GetStyle().FontScaleMain = m_Preferences.m_InterfaceScale;
+        ImGui::GetStyle().FontScaleMain = m_Preferences.m_InterfaceScale *
+            CThemeManager::GetAppliedFontScale();
         changed = true;
     }
 

@@ -1,5 +1,6 @@
 #include "qcImGui.h"
 
+#include "editor/editor_theme.h"
 #include "imgui.h"
 #if defined(_WIN32)
 #include "imgui_impl_dx11.h"
@@ -305,6 +306,7 @@ void CImGuiHost::Begin()
         return;
     }
 
+    CThemeManager::ProcessPendingFonts();
     ImGui_ImplSDL3_NewFrame();
     if (m_Backend == EBackend::OPENGL)
     {

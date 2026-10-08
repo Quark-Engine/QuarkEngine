@@ -1,6 +1,7 @@
 #include "editor/editor_theme.h"
 
 #include "imgui.h"
+#include "language_manager.h"
 
 #include "nlohmann/json.hpp"
 #include <cctype>
@@ -22,6 +23,9 @@ namespace fs = std::filesystem;
 struct SThemeOverrides
 {
     bool lightBase = false;
+    std::string fontPath;
+    float fontSize = 16.0f;
+    float fontScale = 1.0f;
     std::vector<std::pair<ImGuiCol, ImVec4>> vColors;
     std::vector<std::pair<float ImGuiStyle::*, float>> vFloatStyle;
     std::vector<std::pair<ImVec2 ImGuiStyle::*, ImVec2>> vVectorStyle;
@@ -34,6 +38,11 @@ using TFloatStyleNames = std::unordered_map<std::string, float ImGuiStyle::*>;
 using TVectorStyleNames = std::unordered_map<std::string, ImVec2 ImGuiStyle::*>;
 using TBoolStyleNames = std::unordered_map<std::string, bool ImGuiStyle::*>;
 using TStyleColorNames = std::unordered_map<std::string, ImVec4 ImGuiStyle::*>;
+
+float g_AppliedFontScale = 1.0f;
+SThemeOverrides g_PendingFontOverrides;
+std::string g_PendingFontThemeId;
+bool g_HasPendingFonts = false;
 
 const TColorNames& GetColorNames()
 {
@@ -102,8 +111,13 @@ const TFloatStyleNames& GetFloatStyleNames()
         {"grab_rounding", &ImGuiStyle::GrabRounding},
         {"image_rounding", &ImGuiStyle::ImageRounding},
         {"image_border_size", &ImGuiStyle::ImageBorderSize},
+        {"scrollbar_padding", &ImGuiStyle::ScrollbarPadding},
+        {"columns_min_spacing", &ImGuiStyle::ColumnsMinSpacing},
+        {"log_slider_deadzone", &ImGuiStyle::LogSliderDeadzone},
         {"tab_rounding", &ImGuiStyle::TabRounding},
         {"tab_border_size", &ImGuiStyle::TabBorderSize},
+        {"tab_close_button_min_width_selected", &ImGuiStyle::TabCloseButtonMinWidthSelected},
+        {"tab_close_button_min_width_unselected", &ImGuiStyle::TabCloseButtonMinWidthUnselected},
         {"hub_card_rounding", &ImGuiStyle::HubCardRounding},
         {"hub_card_border_size", &ImGuiStyle::HubCardBorderSize},
         {"tab_min_width_base", &ImGuiStyle::TabMinWidthBase},
@@ -114,7 +128,15 @@ const TFloatStyleNames& GetFloatStyleNames()
         {"tree_lines_rounding", &ImGuiStyle::TreeLinesRounding},
         {"separator_size", &ImGuiStyle::SeparatorSize},
         {"separator_text_border_size", &ImGuiStyle::SeparatorTextBorderSize},
-        {"docking_separator_size", &ImGuiStyle::DockingSeparatorSize}
+        {"docking_separator_size", &ImGuiStyle::DockingSeparatorSize},
+        {"drag_drop_target_rounding", &ImGuiStyle::DragDropTargetRounding},
+        {"drag_drop_target_border_size", &ImGuiStyle::DragDropTargetBorderSize},
+        {"drag_drop_target_padding", &ImGuiStyle::DragDropTargetPadding},
+        {"color_marker_size", &ImGuiStyle::ColorMarkerSize},
+        {"mouse_cursor_scale", &ImGuiStyle::MouseCursorScale},
+        {"curve_tessellation_tol", &ImGuiStyle::CurveTessellationTol},
+        {"circle_tessellation_max_error", &ImGuiStyle::CircleTessellationMaxError},
+        {"table_angled_headers_angle", &ImGuiStyle::TableAngledHeadersAngle}
     };
     return s_Styles;
 }
@@ -129,8 +151,14 @@ const TVectorStyleNames& GetVectorStyleNames()
         {"item_spacing", &ImGuiStyle::ItemSpacing},
         {"item_inner_spacing", &ImGuiStyle::ItemInnerSpacing},
         {"cell_padding", &ImGuiStyle::CellPadding},
+        {"touch_extra_padding", &ImGuiStyle::TouchExtraPadding},
         {"button_text_align", &ImGuiStyle::ButtonTextAlign},
-        {"selectable_text_align", &ImGuiStyle::SelectableTextAlign}
+        {"selectable_text_align", &ImGuiStyle::SelectableTextAlign},
+        {"table_angled_headers_text_align", &ImGuiStyle::TableAngledHeadersTextAlign},
+        {"separator_text_align", &ImGuiStyle::SeparatorTextAlign},
+        {"separator_text_padding", &ImGuiStyle::SeparatorTextPadding},
+        {"display_window_padding", &ImGuiStyle::DisplayWindowPadding},
+        {"display_safe_area_padding", &ImGuiStyle::DisplaySafeAreaPadding}
     };
     return s_Styles;
 }
@@ -140,7 +168,11 @@ const TBoolStyleNames& GetBoolStyleNames()
     static const TBoolStyleNames s_Styles = {
         {"button_gradient", &ImGuiStyle::ButtonGradient},
         {"combo_gradient", &ImGuiStyle::ComboGradient},
-        {"docking_tab_gradient", &ImGuiStyle::DockingTabGradient}
+        {"docking_tab_gradient", &ImGuiStyle::DockingTabGradient},
+        {"docking_node_has_close_button", &ImGuiStyle::DockingNodeHasCloseButton},
+        {"anti_aliased_lines", &ImGuiStyle::AntiAliasedLines},
+        {"anti_aliased_lines_use_tex", &ImGuiStyle::AntiAliasedLinesUseTex},
+        {"anti_aliased_fill", &ImGuiStyle::AntiAliasedFill}
     };
     return s_Styles;
 }
@@ -232,6 +264,63 @@ bool ParseThemeOverrides(const json& data, SThemeOverrides& overrides, std::stri
         overrides.lightBase = base == "light";
     }
 
+    if (data.contains("font"))
+    {
+        const json& font = data["font"];
+        if (!font.is_object())
+        {
+            error = "'font' must be an object";
+            return false;
+        }
+        for (const auto& [name, value] : font.items())
+        {
+            if (name == "path")
+            {
+                if (!value.is_string() || value.get<std::string>().empty())
+                {
+                    error = "font path must be a non-empty string";
+                    return false;
+                }
+                overrides.fontPath = value.get<std::string>();
+            }
+            else if (name == "size")
+            {
+                if (!value.is_number())
+                {
+                    error = "font size must be a number";
+                    return false;
+                }
+                overrides.fontSize = value.get<float>();
+                if (!std::isfinite(overrides.fontSize) ||
+                    overrides.fontSize < 6.0f || overrides.fontSize > 64.0f)
+                {
+                    error = "font size must be between 6 and 64 pixels";
+                    return false;
+                }
+            }
+            else if (name == "scale")
+            {
+                if (!value.is_number())
+                {
+                    error = "font scale must be a number";
+                    return false;
+                }
+                overrides.fontScale = value.get<float>();
+                if (!std::isfinite(overrides.fontScale) ||
+                    overrides.fontScale < 0.5f || overrides.fontScale > 3.0f)
+                {
+                    error = "font scale must be between 0.5 and 3.0";
+                    return false;
+                }
+            }
+            else
+            {
+                error = "unknown font property: " + name;
+                return false;
+            }
+        }
+    }
+
     if (data.contains("colors"))
     {
         if (!data["colors"].is_object())
@@ -273,7 +362,15 @@ bool ParseThemeOverrides(const json& data, SThemeOverrides& overrides, std::stri
                     return false;
                 }
                 const float parsed = value.get<float>();
-                if (!std::isfinite(parsed) || parsed < 0.0f || parsed > 1000.0f)
+                const bool isNegativeAngle = name == "table_angled_headers_angle";
+                const bool isTabCloseWidth = name == "tab_close_button_min_width_selected" ||
+                    name == "tab_close_button_min_width_unselected";
+                const bool outsideRange = isNegativeAngle
+                    ? parsed < -50.0f || parsed > 50.0f
+                    : isTabCloseWidth
+                        ? parsed < -1.0f || parsed > 1000.0f
+                        : parsed < 0.0f || parsed > 1000.0f;
+                if (!std::isfinite(parsed) || outsideRange)
                 {
                     error = "style value is outside the supported range: " + name;
                     return false;
@@ -324,6 +421,116 @@ bool ParseThemeOverrides(const json& data, SThemeOverrides& overrides, std::stri
             }
         }
     }
+    return true;
+}
+
+bool LanguageUsesMsPgothic(const std::string& languageCode)
+{
+    return languageCode == "japanese" ||
+        languageCode == "korean" ||
+        languageCode == "simplified_chinese" ||
+        languageCode == "traditional_chinese";
+}
+
+const ImWchar* GetMsPgothicGlyphRanges(ImGuiIO& io, const std::string& languageCode)
+{
+    if (languageCode == "japanese")
+    {
+        return io.Fonts->GetGlyphRangesJapanese();
+    }
+    if (languageCode == "korean")
+    {
+        return io.Fonts->GetGlyphRangesKorean();
+    }
+    if (languageCode == "simplified_chinese")
+    {
+        return io.Fonts->GetGlyphRangesChineseSimplifiedCommon();
+    }
+    if (languageCode == "traditional_chinese")
+    {
+        return io.Fonts->GetGlyphRangesChineseFull();
+    }
+    return nullptr;
+}
+
+bool ReloadEditorFonts(const SThemeOverrides& overrides, std::string& error)
+{
+    const std::string languageCode = CLanguageManager::Get().m_Current;
+    const std::string languageFontPath = CLanguageManager::Get().EditorFontPath();
+    const std::string fontPath = overrides.fontPath.empty() ? languageFontPath : overrides.fontPath;
+    std::error_code fileError;
+    if (!fs::is_regular_file(fontPath, fileError))
+    {
+        error = "font file not found: " + fontPath;
+        return false;
+    }
+
+    ImGuiIO& io = ImGui::GetIO();
+    io.Fonts->Clear();
+    ImFont* pDefaultFont = io.Fonts->AddFontFromFileTTF(fontPath.c_str(), overrides.fontSize);
+    if (!pDefaultFont)
+    {
+        error = "failed to load font: " + fontPath;
+        io.Fonts->Clear();
+        pDefaultFont = io.Fonts->AddFontFromFileTTF(languageFontPath.c_str(), 16.0f);
+        if (!pDefaultFont)
+        {
+            pDefaultFont = io.Fonts->AddFontDefault();
+        }
+        io.FontDefault = pDefaultFont;
+        io.Fonts->Build();
+        return false;
+    }
+
+    const auto mergeFont = [&io, &overrides](const std::string& path, const ImWchar* pGlyphRanges)
+    {
+        if (path.empty() || path == overrides.fontPath)
+        {
+            return;
+        }
+        ImFontConfig config = {};
+        config.MergeMode = true;
+        config.PixelSnapH = true;
+        io.Fonts->AddFontFromFileTTF(path.c_str(), overrides.fontSize, &config, pGlyphRanges);
+    };
+
+    const std::string mergeFontPath = CLanguageManager::Get().EditorFontMergePath();
+    if (!mergeFontPath.empty())
+    {
+        mergeFont(mergeFontPath, nullptr);
+    }
+    if (LanguageUsesMsPgothic(languageCode) &&
+        fontPath != "assets/MS-Pgothic-Regular.ttf")
+    {
+        mergeFont("assets/MS-Pgothic-Regular.ttf",
+            GetMsPgothicGlyphRanges(io, languageCode));
+    }
+
+    io.FontDefault = pDefaultFont;
+    if (!io.Fonts->Build())
+    {
+        error = "failed to build the font atlas";
+        return false;
+    }
+    return true;
+}
+
+bool QueueEditorFonts(const std::string& themeId, const SThemeOverrides& overrides,
+    std::string& error)
+{
+    const std::string fontPath = overrides.fontPath.empty()
+        ? CLanguageManager::Get().EditorFontPath()
+        : overrides.fontPath;
+    std::error_code fileError;
+    if (!fs::is_regular_file(fontPath, fileError))
+    {
+        error = "font file not found: " + fontPath;
+        return false;
+    }
+
+    g_PendingFontOverrides = overrides;
+    g_PendingFontThemeId = themeId;
+    g_HasPendingFonts = true;
     return true;
 }
 
@@ -539,7 +746,15 @@ bool CThemeManager::Apply(const std::string& themeId)
 {
     if (themeId == "quark-dark" || themeId == "quark-light")
     {
+        SThemeOverrides overrides;
+        std::string error;
+        if (!QueueEditorFonts(themeId, overrides, error))
+        {
+            ReportThemeError(themeId, error);
+            return false;
+        }
         Apply(themeId == "quark-light");
+        g_AppliedFontScale = 1.0f;
         return true;
     }
 
@@ -576,6 +791,12 @@ bool CThemeManager::Apply(const std::string& themeId)
         return false;
     }
 
+    if (!QueueEditorFonts(themeId, overrides, error))
+    {
+        ReportThemeError(themeId, error);
+        return false;
+    }
+
     Apply(overrides.lightBase);
     ImGuiStyle& style = ImGui::GetStyle();
     for (const auto& [color, value] : overrides.vColors)
@@ -598,7 +819,74 @@ bool CThemeManager::Apply(const std::string& themeId)
     {
         style.*pStyleField = value;
     }
+    g_AppliedFontScale = overrides.fontScale;
     return true;
+}
+
+bool CThemeManager::ReloadFonts(const std::string& themeId)
+{
+    SThemeOverrides overrides;
+    std::string error;
+    if (themeId != "quark-dark" && themeId != "quark-light")
+    {
+        if (!IsThemeId(themeId))
+        {
+            ReportThemeError(themeId, "invalid theme id");
+            return false;
+        }
+
+        const fs::path themePath = fs::path("assets") / "themes" / (themeId + ".json");
+        std::ifstream input(themePath);
+        if (!input.is_open())
+        {
+            ReportThemeError(themeId, "file not found: " + themePath.string());
+            return false;
+        }
+
+        json data;
+        try
+        {
+            input >> data;
+        }
+        catch (const std::exception& exception)
+        {
+            ReportThemeError(themeId, exception.what());
+            return false;
+        }
+        if (!ParseThemeOverrides(data, overrides, error))
+        {
+            ReportThemeError(themeId, error);
+            return false;
+        }
+    }
+
+    if (!QueueEditorFonts(themeId, overrides, error))
+    {
+        ReportThemeError(themeId, error);
+        return false;
+    }
+    return true;
+}
+
+float CThemeManager::GetAppliedFontScale()
+{
+    return g_AppliedFontScale;
+}
+
+void CThemeManager::ProcessPendingFonts()
+{
+    if (!g_HasPendingFonts)
+    {
+        return;
+    }
+
+    std::string error;
+    if (!ReloadEditorFonts(g_PendingFontOverrides, error))
+    {
+        ReportThemeError(g_PendingFontThemeId, error);
+    }
+    g_HasPendingFonts = false;
+    g_PendingFontThemeId.clear();
 }
 
 std::vector<SEditorTheme> CThemeManager::GetAvailableThemes()

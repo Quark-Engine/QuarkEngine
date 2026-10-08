@@ -19,73 +19,6 @@
 #include <SDL3/SDL_video.h>
 namespace fs = std::filesystem;
 
-static bool LanguageUsesMsPgothic(const std::string& languageCode)
-{
-    return languageCode == "japanese" ||
-        languageCode == "korean" ||
-        languageCode == "simplified_chinese" ||
-        languageCode == "traditional_chinese";
-}
-
-static const ImWchar* GetMsPgothicGlyphRanges(ImGuiIO& io, const std::string& languageCode)
-{
-    if (languageCode == "japanese")
-    {
-        return io.Fonts->GetGlyphRangesJapanese();
-    }
-    if (languageCode == "korean")
-    {
-        return io.Fonts->GetGlyphRangesKorean();
-    }
-    if (languageCode == "simplified_chinese")
-    {
-        return io.Fonts->GetGlyphRangesChineseSimplifiedCommon();
-    }
-    if (languageCode == "traditional_chinese")
-    {
-        return io.Fonts->GetGlyphRangesChineseFull();
-    }
-    return nullptr;
-}
-
-static void ReloadEditorFonts(const std::string& languageCode)
-{
-    ImGuiIO& io = ImGui::GetIO();
-    io.Fonts->Clear();
-
-    const std::string baseFontPath = CLanguageManager::Get().EditorFontPath();
-    const std::string mergeFontPath = CLanguageManager::Get().EditorFontMergePath();
-    ImFont* pDefaultFont = io.Fonts->AddFontFromFileTTF(baseFontPath.c_str(), 16.0f);
-
-    if (!mergeFontPath.empty())
-    {
-        ImFontConfig mergeConfig = {};
-        mergeConfig.MergeMode = true;
-        mergeConfig.PixelSnapH = true;
-        io.Fonts->AddFontFromFileTTF(
-            mergeFontPath.c_str(),
-            16.0f,
-            &mergeConfig,
-            nullptr
-        );
-    }
-    else if (LanguageUsesMsPgothic(languageCode) && baseFontPath != "assets/MS-Pgothic-Regular.ttf")
-    {
-        ImFontConfig mergeConfig = {};
-        mergeConfig.MergeMode = true;
-        mergeConfig.PixelSnapH = true;
-        io.Fonts->AddFontFromFileTTF(
-            "assets/MS-Pgothic-Regular.ttf",
-            16.0f,
-            &mergeConfig,
-            GetMsPgothicGlyphRanges(io, languageCode)
-        );
-    }
-
-    io.FontDefault = pDefaultFont;
-    io.Fonts->Build();
-}
-
 CApplication::CApplication(const SCommandLineOptions& options)
     : m_Options(options)
 {
@@ -187,7 +120,6 @@ void CApplication::Initialize()
     {
         m_Editor.m_Text.Init();
         QcImGuiSetup(false);
-        ReloadEditorFonts(CLanguageManager::Get().m_Current);
         if (!CThemeManager::Apply(m_Editor.m_Preferences.m_ThemeName))
         {
             m_Editor.m_Preferences.m_ThemeName = "quark-dark";
@@ -195,7 +127,8 @@ void CApplication::Initialize()
             CThemeManager::Apply(m_Editor.m_Preferences.m_ThemeName);
         }
         ImGui::GetStyle().ScaleAllSizes(m_Editor.m_Preferences.m_InterfaceScale);
-        ImGui::GetStyle().FontScaleMain = m_Editor.m_Preferences.m_InterfaceScale;
+        ImGui::GetStyle().FontScaleMain = m_Editor.m_Preferences.m_InterfaceScale *
+            CThemeManager::GetAppliedFontScale();
         if (ImGui::GetStyle().WindowBorderHoverPadding <= 0.0f)
         {
             ImGui::GetStyle().WindowBorderHoverPadding = 1.0f;
@@ -298,7 +231,7 @@ void CApplication::UpdateFrame()
     if (m_ActiveFontLanguage != CLanguageManager::Get().m_Current)
     {
         m_ActiveFontLanguage = CLanguageManager::Get().m_Current;
-        ReloadEditorFonts(m_ActiveFontLanguage);
+        CThemeManager::ReloadFonts(m_Editor.m_Preferences.m_ThemeName);
     }
 
     m_Camera.m_Speed = m_Editor.m_Preferences.m_CameraSpeed;

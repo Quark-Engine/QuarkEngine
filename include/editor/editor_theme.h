@@ -15,6 +15,9 @@ class CThemeManager
 public:
     static void Apply(bool lightTheme);
     static bool Apply(const std::string& themeId);
+    static bool ReloadFonts(const std::string& themeId);
+    static float GetAppliedFontScale();
+    static void ProcessPendingFonts();
     static std::vector<SEditorTheme> GetAvailableThemes();
 };
 
