@@ -1278,15 +1278,35 @@ bool CEditor::DrawPreferencesInterfaceTab()
     changed |= ImGui::Checkbox("Scene", &m_Preferences.m_ShowScene);
     changed |= ImGui::Checkbox("VSync (restart required)", &m_Preferences.m_VsyncEnabled);
 
-    const bool lightThemeChanged = ImGui::Checkbox("Light theme", &m_Preferences.m_LightTheme);
-    changed |= lightThemeChanged;
-    if (lightThemeChanged)
+    static const std::vector<SEditorTheme> s_vThemes = CThemeManager::GetAvailableThemes();
+    const auto selectedTheme = std::find_if(s_vThemes.begin(), s_vThemes.end(),
+        [this](const SEditorTheme& theme) { return theme.id == m_Preferences.m_ThemeName; });
+    const std::string preview = selectedTheme != s_vThemes.end()
+        ? selectedTheme->name : "Missing theme: " + m_Preferences.m_ThemeName;
+    if (ImGui::BeginCombo("Theme", preview.c_str()))
     {
-        CThemeManager::Apply(m_Preferences.m_LightTheme);
-        ImGui::GetStyle().ScaleAllSizes(m_Preferences.m_InterfaceScale);
-        ImGui::GetStyle().FontScaleMain = m_Preferences.m_InterfaceScale;
-        iface.BaseStyle = ImGui::GetStyle();
-        iface.BaseScale = m_Preferences.m_InterfaceScale;
+        for (const SEditorTheme& theme : s_vThemes)
+        {
+            const bool isSelected = theme.id == m_Preferences.m_ThemeName;
+            ImGui::PushID(theme.id.c_str());
+            if (ImGui::Selectable(theme.name.c_str(), isSelected) &&
+                CThemeManager::Apply(theme.id))
+            {
+                m_Preferences.m_ThemeName = theme.id;
+                m_Preferences.m_LightTheme = theme.id == "quark-light";
+                ImGui::GetStyle().ScaleAllSizes(m_Preferences.m_InterfaceScale);
+                ImGui::GetStyle().FontScaleMain = m_Preferences.m_InterfaceScale;
+                iface.BaseStyle = ImGui::GetStyle();
+                iface.BaseScale = m_Preferences.m_InterfaceScale;
+                changed = true;
+            }
+            if (isSelected)
+            {
+                ImGui::SetItemDefaultFocus();
+            }
+            ImGui::PopID();
+        }
+        ImGui::EndCombo();
     }
 
     changed |= ImGui::Checkbox("Show light helpers", &m_Preferences.m_ShowLightHelpers);

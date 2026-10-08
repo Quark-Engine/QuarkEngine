@@ -52,6 +52,7 @@ public:
     bool m_VsyncEnabled = true;
     float m_InterfaceScale = 1.0f;
     bool m_LightTheme = false;
+    std::string m_ThemeName = "quark-dark";
     bool m_ShowLightHelpers = false;
     bool m_ShowCameras = false;
     int m_RendererBackend = 1;

@@ -77,6 +77,16 @@ std::string ReadMetaLine(const fs::path& metaPath, const char* pKey)
     return "";
 }
 
+Color ToQuarkColor(const ImVec4& color)
+{
+    return Color{
+        static_cast<unsigned char>(std::clamp(color.x, 0.0f, 1.0f) * 255.0f),
+        static_cast<unsigned char>(std::clamp(color.y, 0.0f, 1.0f) * 255.0f),
+        static_cast<unsigned char>(std::clamp(color.z, 0.0f, 1.0f) * 255.0f),
+        static_cast<unsigned char>(std::clamp(color.w, 0.0f, 1.0f) * 255.0f)
+    };
+}
+
 } // anonymous
 
 CHubApp::~CHubApp()
@@ -98,36 +108,6 @@ const char* CHubApp::ProjectsRoot()
 const char* CHubApp::RegistryFile()
 {
     return HUB_REGISTRY_FILE;
-}
-
-ImU32 CHubApp::CardColor(bool selected) const
-{
-    if (UsesLightTheme())
-    {
-        return selected ? IM_COL32(190, 214, 245, 255) : IM_COL32(239, 242, 247, 255);
-    }
-    return selected ? IM_COL32(30, 80, 140, 255) : IM_COL32(26, 28, 31, 255);
-}
-
-ImU32 CHubApp::CardBorderColor(bool selected) const
-{
-    if (UsesLightTheme())
-    {
-        return selected ? IM_COL32(75, 130, 205, 255) : IM_COL32(190, 198, 210, 255);
-    }
-    return selected ? IM_COL32(50, 130, 220, 255) : IM_COL32(50, 52, 56, 255);
-}
-
-ImU32 CHubApp::CardHoverColor() const
-{
-    return UsesLightTheme()
-        ? IM_COL32(215, 226, 242, 220)
-        : IM_COL32(40, 42, 46, 180);
-}
-
-bool CHubApp::UsesLightTheme() const
-{
-    return m_pPreferences != nullptr && m_pPreferences->m_LightTheme;
 }
 
 ImVec4 CHubApp::PluginBadgeColor(const std::string& name)
@@ -500,25 +480,23 @@ void CHubApp::DrawProjectCard(int index)
     const ImVec2 cardPos = ImGui::GetCursorScreenPos();
     const float cardWidth = ImGui::GetContentRegionAvail().x;
     const float cardHeight = 62.0f;
-
-    ImGui::GetWindowDrawList()->AddRectFilled(
-        cardPos,
-        ImVec2(cardPos.x + cardWidth, cardPos.y + cardHeight),
-        CardColor(isSelected));
-
-    ImGui::GetWindowDrawList()->AddRect(
-        cardPos,
-        ImVec2(cardPos.x + cardWidth, cardPos.y + cardHeight),
-        CardBorderColor(isSelected));
+    const ImVec2 cardMax = ImVec2(cardPos.x + cardWidth, cardPos.y + cardHeight);
 
     ImGui::InvisibleButton("##card", ImVec2(cardWidth, cardHeight));
+    const bool isHovered = ImGui::IsItemHovered() && !isSelected;
+    const ImGuiStyle& style = ImGui::GetStyle();
+    ImDrawList* pDrawList = ImGui::GetWindowDrawList();
+    const ImVec4& fill = isSelected ? style.HubCardSelected :
+        (isHovered ? style.HubCardHovered : style.HubCard);
+    const ImVec4& border = isSelected ? style.HubCardSelectedBorder : style.HubCardBorder;
 
-    if (ImGui::IsItemHovered() && !isSelected)
+    pDrawList->AddRectFilled(
+        cardPos, cardMax, ImGui::ColorConvertFloat4ToU32(fill), style.HubCardRounding);
+    if (style.HubCardBorderSize > 0.0f)
     {
-        ImGui::GetWindowDrawList()->AddRectFilled(
-            cardPos,
-            ImVec2(cardPos.x + cardWidth, cardPos.y + cardHeight),
-            CardHoverColor());
+        pDrawList->AddRect(
+            cardPos, cardMax, ImGui::ColorConvertFloat4ToU32(border),
+            style.HubCardRounding, 0, style.HubCardBorderSize);
     }
 
     if (ImGui::IsItemClicked(ImGuiMouseButton_Left))
@@ -915,16 +893,25 @@ void CHubApp::DrawPluginManager()
                 const ImVec2 cardPos = ImGui::GetCursorScreenPos();
                 const float cardWidth = ImGui::GetContentRegionAvail().x;
                 const float cardHeight = 46.0f;
+                const ImVec2 cardMax = ImVec2(cardPos.x + cardWidth, cardPos.y + cardHeight);
 
-                ImGui::GetWindowDrawList()->AddRectFilled(
-                    cardPos,
-                    ImVec2(cardPos.x + cardWidth, cardPos.y + cardHeight),
-                    CardColor(isSelected));
-
-                ImGui::GetWindowDrawList()->AddRect(
-                    cardPos,
-                    ImVec2(cardPos.x + cardWidth, cardPos.y + cardHeight),
-                    CardBorderColor(isSelected));
+                ImGui::SetCursorScreenPos(cardPos);
+                ImGui::InvisibleButton("##card", ImVec2(cardWidth, cardHeight));
+                const bool isHovered = ImGui::IsItemHovered() && !isSelected;
+                const bool isClicked = ImGui::IsItemClicked();
+                const ImGuiStyle& style = ImGui::GetStyle();
+                ImDrawList* pDrawList = ImGui::GetWindowDrawList();
+                const ImVec4& fill = isSelected ? style.HubCardSelected :
+                    (isHovered ? style.HubCardHovered : style.HubCard);
+                const ImVec4& border = isSelected ? style.HubCardSelectedBorder : style.HubCardBorder;
+                pDrawList->AddRectFilled(
+                    cardPos, cardMax, ImGui::ColorConvertFloat4ToU32(fill), style.HubCardRounding);
+                if (style.HubCardBorderSize > 0.0f)
+                {
+                    pDrawList->AddRect(
+                        cardPos, cardMax, ImGui::ColorConvertFloat4ToU32(border),
+                        style.HubCardRounding, 0, style.HubCardBorderSize);
+                }
 
                 const ImVec4 badge = PluginBadgeColor(plugin.Name);
                 const ImVec2 badgeMin = ImVec2(cardPos.x + 8, cardPos.y + 10);
@@ -964,9 +951,7 @@ void CHubApp::DrawPluginManager()
                     ImGui::Text("%s", plugin.Name.c_str());
                 }
 
-                ImGui::SetCursorScreenPos(cardPos);
-                ImGui::InvisibleButton("##card", ImVec2(cardWidth, cardHeight));
-                if (ImGui::IsItemClicked())
+                if (isClicked)
                 {
                     m_State.SelectedPlugin = index;
                 }
@@ -1196,9 +1181,7 @@ std::string CHubApp::Run(CPreferences& preferences)
     while (!WindowShouldClose() && !m_ShouldExit)
     {
         BeginDrawing();
-        ClearBackground(UsesLightTheme()
-            ? Color{ 238, 241, 246, 255 }
-            : Color{ 33, 35, 38, 255 });
+        ClearBackground(ToQuarkColor(ImGui::GetStyle().Colors[ImGuiCol_WindowBg]));
         QcImGuiBegin();
 
         ImGui::SetNextWindowPos(ImVec2(0, 0));

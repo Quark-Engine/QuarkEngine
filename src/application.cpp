@@ -188,7 +188,12 @@ void CApplication::Initialize()
         m_Editor.m_Text.Init();
         QcImGuiSetup(false);
         ReloadEditorFonts(CLanguageManager::Get().m_Current);
-        CThemeManager::Apply(m_Editor.m_Preferences.m_LightTheme);
+        if (!CThemeManager::Apply(m_Editor.m_Preferences.m_ThemeName))
+        {
+            m_Editor.m_Preferences.m_ThemeName = "quark-dark";
+            m_Editor.m_Preferences.m_LightTheme = false;
+            CThemeManager::Apply(m_Editor.m_Preferences.m_ThemeName);
+        }
         ImGui::GetStyle().ScaleAllSizes(m_Editor.m_Preferences.m_InterfaceScale);
         ImGui::GetStyle().FontScaleMain = m_Editor.m_Preferences.m_InterfaceScale;
         if (ImGui::GetStyle().WindowBorderHoverPadding <= 0.0f)

@@ -2420,6 +2420,34 @@ struct ImGuiStyle
     float       ColorMarkerSize;            // Size of R/G/B/A color markers for ColorEdit4() and for Drags/Sliders when using ImGuiSliderFlags_ColorMarkers.
     ImGuiDir    ColorButtonPosition;        // Side of the color button in the ColorEdit4 widget (left/right). Defaults to ImGuiDir_Right.
     ImVec2      ButtonTextAlign;            // Alignment of button text when button is larger than text. Defaults to (0.5f, 0.5f) (centered).
+    bool        ButtonGradient;             // Enable Quark Engine's custom button gradient and bevel.
+    ImVec4      ButtonGradientTop;
+    ImVec4      ButtonGradientBottom;
+    ImVec4      ButtonHoveredGradientTop;
+    ImVec4      ButtonHoveredGradientBottom;
+    ImVec4      ButtonActiveGradientTop;
+    ImVec4      ButtonActiveGradientBottom;
+    bool        ComboGradient;
+    ImVec4      ComboGradientTop;
+    ImVec4      ComboGradientBottom;
+    ImVec4      ComboHoveredGradientTop;
+    ImVec4      ComboHoveredGradientBottom;
+    ImVec4      ComboActiveGradientTop;
+    ImVec4      ComboActiveGradientBottom;
+    bool        DockingTabGradient;
+    ImVec4      DockingTabGradientTop;
+    ImVec4      DockingTabGradientBottom;
+    ImVec4      DockingTabSelectedGradientTop;
+    ImVec4      DockingTabSelectedGradientBottom;
+    ImVec4      DockingTabHoveredGradientTop;
+    ImVec4      DockingTabHoveredGradientBottom;
+    ImVec4      HubCard;
+    ImVec4      HubCardSelected;
+    ImVec4      HubCardHovered;
+    ImVec4      HubCardBorder;
+    ImVec4      HubCardSelectedBorder;
+    float       HubCardRounding;
+    float       HubCardBorderSize;
     ImVec2      SelectableTextAlign;        // Alignment of selectable text. Defaults to (0.0f, 0.0f) (top-left aligned). It's generally important to keep this left-aligned if you want to lay multiple items on a same line.
     float       SeparatorSize;              // Thickness of border in Separator()
     float       SeparatorTextBorderSize;    // Thickness of border in SeparatorText()

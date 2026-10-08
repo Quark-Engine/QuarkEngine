@@ -69,11 +69,6 @@ private:
     static const char* ProjectsRoot();
     static const char* RegistryFile();
 
-    ImU32 CardColor(bool selected) const;
-    ImU32 CardBorderColor(bool selected) const;
-    ImU32 CardHoverColor() const;
-
-    bool UsesLightTheme() const;
     static ImVec4 PluginBadgeColor(const std::string& name);
 
     static std::filesystem::path PluginDisabledSentinel(const std::string& pluginPath);

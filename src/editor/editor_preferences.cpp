@@ -54,6 +54,14 @@ static void ReadPreferences(CPreferences& preferences, const json& data)
     if (pPreferences->contains("vsync_enabled")) preferences.m_VsyncEnabled = (*pPreferences)["vsync_enabled"].get<bool>();
     if (pPreferences->contains("interface_scale")) preferences.m_InterfaceScale = (*pPreferences)["interface_scale"].get<float>();
     if (pPreferences->contains("light_theme")) preferences.m_LightTheme = (*pPreferences)["light_theme"].get<bool>();
+    if (pPreferences->contains("theme") && (*pPreferences)["theme"].is_string())
+    {
+        preferences.m_ThemeName = (*pPreferences)["theme"].get<std::string>();
+    }
+    else
+    {
+        preferences.m_ThemeName = preferences.m_LightTheme ? "quark-light" : "quark-dark";
+    }
     if (pPreferences->contains("show_light_helpers")) preferences.m_ShowLightHelpers = (*pPreferences)["show_light_helpers"].get<bool>();
     if (pPreferences->contains("show_cameras")) preferences.m_ShowCameras = (*pPreferences)["show_cameras"].get<bool>();
     if (pPreferences->contains("renderer_backend")) preferences.m_RendererBackend = (*pPreferences)["renderer_backend"].get<int>();
@@ -147,6 +155,7 @@ void CPreferences::Save() const
         {"vsync_enabled", m_VsyncEnabled},
         {"interface_scale", m_InterfaceScale},
         {"light_theme", m_LightTheme},
+        {"theme", m_ThemeName},
         {"show_light_helpers", m_ShowLightHelpers},
         {"show_cameras", m_ShowCameras},
         {"renderer_backend", m_RendererBackend},
