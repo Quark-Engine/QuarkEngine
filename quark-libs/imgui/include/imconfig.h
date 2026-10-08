@@ -14,6 +14,54 @@
 
 #pragma once
 
+#include <cstdarg>
+#include <cstdio>
+#include <cstdlib>
+#include <mutex>
+
+inline void ImGuiLogWriteV(const char* format, va_list args)
+{
+    static std::mutex mutex;
+    const std::lock_guard<std::mutex> lock(mutex);
+    FILE* file = nullptr;
+#if defined(_MSC_VER)
+    if (fopen_s(&file, "imgui_log.txt", "a") != 0)
+        file = nullptr;
+#else
+    file = std::fopen("imgui_log.txt", "a");
+#endif
+    if (!file)
+    {
+        std::fputs("ImGui: failed to open imgui_log.txt for writing\n", stderr);
+        return;
+    }
+
+    std::vfprintf(file, format, args);
+    std::fclose(file);
+}
+
+inline void ImGuiLogWrite(const char* format, ...)
+{
+    va_list args;
+    va_start(args, format);
+    ImGuiLogWriteV(format, args);
+    va_end(args);
+}
+
+[[noreturn]] inline void ImGuiLogAssertFailure(const char* expression, const char* file, int line)
+{
+    ImGuiLogWrite("[ImGui assert] %s (%s:%d)\n", expression, file, line);
+    std::abort();
+}
+
+// Route Dear ImGui diagnostics to the same file in every translation unit.
+#ifndef NDEBUG
+#define IM_ASSERT(_EXPR) ((_EXPR) ? (void)0 : ImGuiLogAssertFailure(#_EXPR, __FILE__, __LINE__))
+#else
+#define IM_ASSERT(_EXPR) ((void)0)
+#endif
+#define IMGUI_DEBUG_PRINTF(...) ImGuiLogWrite(__VA_ARGS__)
+
 //---- Define assertion handler. Defaults to calling assert().
 // - If your macro uses multiple statements, make sure is enclosed in a 'do { .. } while (0)' block so it can be used as a single statement.
 // - Compiling with NDEBUG will usually strip out assert() to nothing, which is NOT recommended because we use asserts to notify of programmer mistakes.

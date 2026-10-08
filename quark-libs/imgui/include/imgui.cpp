@@ -11758,6 +11758,8 @@ bool    ImGui::ErrorLog(const char* msg)
     // Output to debug log
 #ifndef IMGUI_DISABLE_DEBUG_TOOLS
     ImGuiWindow* window = g.CurrentWindow;
+    const bool error_logged_to_debug = g.IO.ConfigErrorRecoveryEnableDebugLog &&
+        (g.DebugLogFlags & ImGuiDebugLogFlags_EventError) != 0;
 
     if (g.IO.ConfigErrorRecoveryEnableDebugLog)
     {
@@ -11767,7 +11769,20 @@ bool    ImGui::ErrorLog(const char* msg)
         IMGUI_DEBUG_LOG_ERROR("[imgui-error] In window '%s': %s\n", window ? window->Name : "NULL", msg);
     }
     g.ErrorFirst = false;
+#else
+    const bool error_logged_to_debug = false;
+#endif
 
+    if (!error_logged_to_debug)
+        ImGuiLogWrite("[imgui-error] In window '%s': %s\n",
+#ifndef IMGUI_DISABLE_DEBUG_TOOLS
+            window ? window->Name : "NULL",
+#else
+            "unknown",
+#endif
+            msg);
+
+#ifndef IMGUI_DISABLE_DEBUG_TOOLS
     // Output to tooltip
     if (g.IO.ConfigErrorRecoveryEnableTooltip)
     {
@@ -16001,14 +16016,7 @@ void ImGui::LogSetNextTextDecoration(const char* prefix, const char* suffix)
 
 void ImGui::LogToTTY(int auto_open_depth)
 {
-    ImGuiContext& g = *GImGui;
-    if (g.LogEnabled)
-        return;
-    IM_UNUSED(auto_open_depth);
-#ifndef IMGUI_DISABLE_TTY_FUNCTIONS
-    LogBegin(ImGuiLogFlags_OutputTTY, auto_open_depth);
-    g.LogFile = stdout;
-#endif
+    LogToFile(auto_open_depth, "imgui_log.txt");
 }
 
 // Start logging/capturing text output to given file
@@ -23716,6 +23724,8 @@ void ImGui::DebugLogV(const char* fmt, va_list args)
     const char* str = g.DebugLogBuf.begin() + old_size;
     if (g.DebugLogFlags & ImGuiDebugLogFlags_OutputToTTY)
         IMGUI_DEBUG_PRINTF("%s", str);
+    else
+        ImGuiLogWrite("%s", str);
 #if defined(_WIN32) && !defined(IMGUI_DISABLE_WIN32_FUNCTIONS)
     if (g.DebugLogFlags & ImGuiDebugLogFlags_OutputToDebugger)
     {
