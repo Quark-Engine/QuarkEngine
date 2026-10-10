@@ -1204,6 +1204,7 @@ bool CEditor::DrawPreferencesRenderingTab(CFlyCamera& camera)
     changed |= ImGui::SliderFloat(lang.Word("camera_speed"), &m_Preferences.m_CameraSpeed, 0.1f, 20.0f, "%.1f");
     changed |= ImGui::SliderFloat(lang.Word("camera_sensitivity"), &m_Preferences.m_CameraSensitivity, 0.0005f, 0.02f, "%.4f");
     changed |= ImGui::SliderFloat(lang.Word("zoom_sensitivity"), &m_Preferences.m_CameraZoomSensitivity, 0.1f, 5.0f, "%.1f");
+    changed |= ImGui::Checkbox(lang.Word("orbit_camera_controls"), &m_Preferences.m_OrbitCamera);
     changed |= ImGui::SliderFloat(lang.Word("camera_fov"), &m_Preferences.m_CameraFov, 20.0f, 120.0f, "%.0f deg");
     changed |= ImGui::SliderFloat(lang.Word("shadow_bias"), &m_Preferences.m_ShadowBias, 0.0001f, 0.05f, "%.4f");
 

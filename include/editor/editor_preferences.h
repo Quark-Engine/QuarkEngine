@@ -20,6 +20,7 @@ public:
     float m_CameraSpeed = 2.0f;
     float m_CameraSensitivity = 0.003f;
     float m_CameraZoomSensitivity = 1.0f;
+    bool m_OrbitCamera = false;
     float m_CameraFov = 45.0f;
     int m_BackgroundRed = 36;
     int m_BackgroundGreen = 38;

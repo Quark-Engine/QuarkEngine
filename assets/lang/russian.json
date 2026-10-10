@@ -50,6 +50,7 @@
     "camera_speed": "Скорость камеры",
     "camera_sensitivity": "Чувствительность камеры",
     "zoom_sensitivity": "Чувствительность масштабирования",
+    "orbit_camera_controls": "Орбитальное управление камерой (ПКМ + колесо)",
     "camera_fov": "Угол обзора камеры",
     "shadow_bias": "Теневой уклон",
     "shadow_filtering": "Фильтрация теней",

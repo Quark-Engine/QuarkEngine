@@ -53,6 +53,7 @@
     "camera_speed": "Camera speed",
     "camera_sensitivity": "Camera sensitivity",
     "zoom_sensitivity": "Zoom sensitivity",
+    "orbit_camera_controls": "Orbit camera controls (RMB + wheel)",
     "camera_fov": "Camera FOV",
     "shadow_bias": "Shadow bias",
     "shadow_filtering": "Shadow filtering",

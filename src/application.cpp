@@ -90,6 +90,7 @@ void CApplication::Initialize()
 
     InitWindow(1280, 720, "Quark Engine", rendererType);
     m_WindowOpen = true;
+    m_Camera.InitializeCursors();
 
     if (m_Options.FpsOverride >= 0)
     {
@@ -253,8 +254,9 @@ void CApplication::UpdateFrame()
     }
     m_LastSelectedEntity = m_Editor.m_Scene.m_Selected;
 
-    if (!ImGuizmo::IsOver() && !ImGuizmo::IsUsing() &&
-        (IsCursorHidden() || m_Editor.m_Ui.m_Viewport.m_Hovered))
+    if (m_Camera.m_Active ||
+        (!ImGuizmo::IsOver() && !ImGuizmo::IsUsing() &&
+            (IsCursorHidden() || m_Editor.m_Ui.m_Viewport.m_Hovered)))
     {
         m_Camera.Update(m_Editor.m_Scene, m_Editor.m_Preferences);
     }
@@ -478,6 +480,7 @@ void CApplication::RenderFrame()
         }
 
         QcImGuiBegin();
+        m_Camera.ApplyActiveCursor();
 
         const bool gizmoBusy = ImGuizmo::IsOver() || ImGuizmo::IsUsing();
         if (!gizmoBusy && (IsCursorHidden() || m_Editor.m_Ui.m_Viewport.m_Hovered))

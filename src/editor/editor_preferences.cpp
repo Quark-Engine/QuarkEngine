@@ -22,6 +22,7 @@ static void ReadPreferences(CPreferences& preferences, const json& data)
     if (pPreferences->contains("camera_speed")) preferences.m_CameraSpeed = (*pPreferences)["camera_speed"].get<float>();
     if (pPreferences->contains("camera_sensitivity")) preferences.m_CameraSensitivity = (*pPreferences)["camera_sensitivity"].get<float>();
     if (pPreferences->contains("camera_zoom_sensitivity")) preferences.m_CameraZoomSensitivity = (*pPreferences)["camera_zoom_sensitivity"].get<float>();
+    if (pPreferences->contains("orbit_camera")) preferences.m_OrbitCamera = (*pPreferences)["orbit_camera"].get<bool>();
     if (pPreferences->contains("camera_fov")) preferences.m_CameraFov = (*pPreferences)["camera_fov"].get<float>();
     if (pPreferences->contains("background_red")) preferences.m_BackgroundRed = (*pPreferences)["background_red"].get<int>();
     if (pPreferences->contains("background_green")) preferences.m_BackgroundGreen = (*pPreferences)["background_green"].get<int>();
@@ -123,6 +124,7 @@ void CPreferences::Save() const
         {"camera_speed", m_CameraSpeed},
         {"camera_sensitivity", m_CameraSensitivity},
         {"camera_zoom_sensitivity", m_CameraZoomSensitivity},
+        {"orbit_camera", m_OrbitCamera},
         {"camera_fov", m_CameraFov},
         {"background_red", m_BackgroundRed},
         {"background_green", m_BackgroundGreen},
