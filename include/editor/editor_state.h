@@ -181,6 +181,7 @@ struct SLocalEntry
 {
     std::string FileName;
     bool IsDirectory = false;
+    bool IsDirectoryEmpty = false;
     bool IsImage = false;
     bool IsModel = false;
     bool IsMaterial = false;

@@ -403,7 +403,12 @@ static Texture GetMaterialPreview(CEditor& editor, const std::string& mtlPath)
 
 void DrawAssetsUi(CEditor& editor)
 {
-    ImGui::Begin(lang.Word("assets"), &editor.m_Preferences.m_ShowAssets, ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoMove);
+    if (!ImGui::Begin(lang.Word("assets"), &editor.m_Preferences.m_ShowAssets,
+        ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoMove))
+    {
+        ImGui::End();
+        return;
+    }
 
     editor.m_Previews.EnsureIcons();
 
@@ -534,6 +539,7 @@ void DrawAssetsUi(CEditor& editor)
             SLocalEntry entry = {};
             entry.FileName = path.path().filename().string();
             entry.IsDirectory = path.is_directory();
+            entry.IsDirectoryEmpty = entry.IsDirectory && fs::is_empty(path.path(), dirError);
             entry.IsImage = CTextureMetadataStore::IsImageFile(path.path());
             entry.IsModel = CModelService::IsModelFile(path.path());
 
@@ -681,13 +687,23 @@ void DrawAssetsUi(CEditor& editor)
         }
     }
 
-    const float windowVisibleX2 = ImGui::GetWindowPos().x + ImGui::GetWindowContentRegionMax().x;
-
     editor.m_Ui.m_Layout.DraggedTargetFolderIndex = -1;
 
     bool navigated = false;
-    for (int i = 0; i < static_cast<int>(vEntries.size()); i++)
+    const float itemSpacingX = ImGui::GetStyle().ItemSpacing.x;
+    const float itemSpacingY = ImGui::GetStyle().ItemSpacing.y;
+    const float itemWidth = kIconSize + itemSpacingX;
+    const float contentWidth = std::max(ImGui::GetContentRegionAvail().x, kIconSize);
+    const int columnCount = std::max(1, static_cast<int>((contentWidth + itemSpacingX) / itemWidth));
+    const int rowCount = (static_cast<int>(vEntries.size()) + columnCount - 1) / columnCount;
+    ImGuiListClipper clipper;
+    clipper.Begin(rowCount, kIconSize + 20.0f + itemSpacingY);
+    while (clipper.Step())
     {
+        const int firstItem = clipper.DisplayStart * columnCount;
+        const int lastItem = std::min(clipper.DisplayEnd * columnCount, static_cast<int>(vEntries.size()));
+        for (int i = firstItem; i < lastItem; ++i)
+        {
         auto& entry = vEntries[i];
         ImGui::PushID(i);
         ImGui::BeginGroup();
@@ -789,6 +805,7 @@ void DrawAssetsUi(CEditor& editor)
                 browser.AssetListCacheDirty = true;
                 editor.m_SelectedAssetIndex = -1;
                 editor.m_SelectedAssetName.clear();
+                navigated = true;
 
                 ImGui::EndPopup();
                 ImGui::EndGroup();
@@ -842,7 +859,7 @@ void DrawAssetsUi(CEditor& editor)
         ImGui::SetCursorScreenPos(pos);
         if (entry.IsDirectory)
         {
-            const Texture texture = fs::is_empty(editor.m_CurrentAssetPath / entry.FileName) ? editor.m_Previews.IconFolder() : editor.m_Previews.IconFullFolder();
+            const Texture texture = entry.IsDirectoryEmpty ? editor.m_Previews.IconFolder() : editor.m_Previews.IconFullFolder();
             if (texture.id != 0)
             {
                 QcImGuiImage(&texture, ImVec2(kIconSize, kIconSize));
@@ -1016,13 +1033,14 @@ void DrawAssetsUi(CEditor& editor)
             }
         }
 
-        if (!entry.IsDirectory && (CModelService::IsModelFile(fs::path(entry.FileName)) || entry.IsMaterial))
+        if (editor.m_Ui.m_Layout.SceneAssetDragging &&
+            !entry.IsDirectory && (entry.IsModel || entry.IsMaterial))
         {
             const std::string assetName = CAssetLibrary::AssetNameForPath(fs::path(editor.m_ProjectPath), editor.m_CurrentAssetPath / entry.FileName);
 
             if (editor.m_Ui.m_Layout.SceneAssetDragging && editor.m_Ui.m_Layout.DraggedSceneAssetName == assetName)
             {
-                if (CModelService::IsModelFile(fs::path(entry.FileName)))
+                if (entry.IsModel)
                 {
                     ImGui::SetTooltip(lang.Word("spawn"), editor.m_Ui.m_Layout.DraggedSceneAssetName.c_str());
                 }
@@ -1039,13 +1057,19 @@ void DrawAssetsUi(CEditor& editor)
         ImGui::TextUnformatted(label.c_str());
         ImGui::EndGroup();
 
-        const float nextX2 = ImGui::GetItemRectMax().x + ImGui::GetStyle().ItemSpacing.x + kIconSize;
-        if (i + 1 < static_cast<int>(vEntries.size()) && nextX2 < windowVisibleX2)
+        if (i + 1 < lastItem)
         {
             ImGui::SameLine();
         }
         ImGui::PopID();
+        }
+
+        if (navigated)
+        {
+            break;
+        }
     }
+    clipper.End();
 
     ImGui::SetNextItemAllowOverlap();
     ImGui::SetCursorPos(ImVec2(0, 0));
