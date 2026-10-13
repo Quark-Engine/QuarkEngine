@@ -37,7 +37,8 @@ void HashValue(std::uint64_t& hash, const T& value)
     HashBytes(hash, &value, sizeof(value));
 }
 
-std::uint64_t ComputeSceneGeometrySignature(const CScene& scene)
+std::uint64_t ComputeSceneGeometrySignature(const CScene& scene,
+    const std::vector<SSceneEntityFrameData>& vFrameData)
 {
     std::uint64_t hash = 1469598103934665603ull;
     for (int entityIndex = 0; entityIndex < static_cast<int>(scene.m_vEntities.size()); ++entityIndex)
@@ -56,8 +57,10 @@ std::uint64_t ComputeSceneGeometrySignature(const CScene& scene)
         HashValue(hash, pMesh->m_Model.meshCount);
         HashValue(hash, pMesh->m_Model.meshes);
         HashValue(hash, pMesh->m_Model.transform.m);
-        const Mat4 world = quark::ComposeWorld(scene, entityIndex);
-        HashValue(hash, world.m);
+        if (entityIndex < static_cast<int>(vFrameData.size()))
+        {
+            HashValue(hash, vFrameData[entityIndex].worldTransform.m);
+        }
     }
     return hash;
 }
@@ -151,7 +154,8 @@ void ExpandBoundsWithPoint(BoundingBox& bounds, const Vec3& point)
     bounds.max.z = fmaxf(bounds.max.z, point.z);
 }
 
-BoundingBox ComputeSceneBounds(const CScene& scene)
+BoundingBox ComputeSceneBounds(const CScene& scene,
+    const std::vector<SSceneEntityFrameData>& vFrameData)
 {
     BoundingBox bounds = {
         { FLT_MAX, FLT_MAX, FLT_MAX },
@@ -167,32 +171,15 @@ BoundingBox ComputeSceneBounds(const CScene& scene)
             continue;
         }
 
-        CEntity& mutableEntity = const_cast<CEntity&>(entity);
-        CMeshComponent* pMutableMesh = mutableEntity.GetMeshComponent();
-        if (pMutableMesh->m_BoundsDirty)
-        {
-            pMutableMesh->m_CachedLocalBounds = GetModelBoundingBox(pMesh->m_Model);
-            pMutableMesh->m_BoundsDirty = false;
-        }
-        BoundingBox localBounds = pMutableMesh->m_CachedLocalBounds;
         const int entityIndex = static_cast<int>(&entity - scene.m_vEntities.data());
-        Mat4 transform = quark::ComposeMeshWorld(scene, entity);
-
-        const Vec3 aCorners[8] = {
-            { localBounds.min.x, localBounds.min.y, localBounds.min.z },
-            { localBounds.max.x, localBounds.min.y, localBounds.min.z },
-            { localBounds.min.x, localBounds.max.y, localBounds.min.z },
-            { localBounds.max.x, localBounds.max.y, localBounds.min.z },
-            { localBounds.min.x, localBounds.min.y, localBounds.max.z },
-            { localBounds.max.x, localBounds.min.y, localBounds.max.z },
-            { localBounds.min.x, localBounds.max.y, localBounds.max.z },
-            { localBounds.max.x, localBounds.max.y, localBounds.max.z }
-        };
-
-        for (const Vec3& corner : aCorners)
+        if (entityIndex >= static_cast<int>(vFrameData.size()) || !vFrameData[entityIndex].hasMesh)
         {
-            ExpandBoundsWithPoint(bounds, Vec3(transform * corner));
+            continue;
         }
+
+        const BoundingBox& worldBounds = vFrameData[entityIndex].worldBounds;
+        ExpandBoundsWithPoint(bounds, worldBounds.min);
+        ExpandBoundsWithPoint(bounds, worldBounds.max);
         hasBounds = true;
     }
 
@@ -228,7 +215,8 @@ void DisableAllShaderLights(Shader shader, const std::array<int, QC_MAX_LIGHTS>&
 }
 
 bool PrepareSceneLightUniforms(CScene& scene, CLightRegistry& lights, Shader shader,
-    const std::array<int, QC_MAX_LIGHTS>& aLightEnabledLocations, const Vec3& sceneCenter)
+    const std::array<int, QC_MAX_LIGHTS>& aLightEnabledLocations, const Vec3& sceneCenter,
+    const std::vector<SSceneEntityFrameData>& vFrameData)
 {
     DisableAllShaderLights(shader, aLightEnabledLocations);
 
@@ -256,7 +244,7 @@ bool PrepareSceneLightUniforms(CScene& scene, CLightRegistry& lights, Shader sha
         }
 
         pLight->m_Light.m_Enabled = true;
-        const Mat4 worldTransform = quark::ComposeWorld(scene, entityIndex);
+        const Mat4& worldTransform = vFrameData[entityIndex].worldTransform;
         const Vec3 worldPosition = Vec3(worldTransform * Vec3{0.0f, 0.0f, 0.0f});
 
         if (!pLight->m_Created)
@@ -302,7 +290,8 @@ void RenderSceneShadowMaps(CScene& scene, Shader shadowShader,
     Shader lightingShader,
     std::array<int, QC_MAX_LIGHTS>& aLightViewLocations,
     std::array<int, QC_MAX_LIGHTS>& aLightProjectionLocations,
-    const std::array<bool, QC_MAX_LIGHTS>& aRenderSlots)
+    const std::array<bool, QC_MAX_LIGHTS>& aRenderSlots,
+    const std::vector<SSceneEntityFrameData>& vFrameData)
     {
     std::array<bool, QC_MAX_LIGHTS> aRendered = {};
     Material shadowMaterial = {};
@@ -322,7 +311,7 @@ void RenderSceneShadowMaps(CScene& scene, Shader shadowShader,
             continue;
         }
         const int lightEntityIndex = static_cast<int>(&entity - scene.m_vEntities.data());
-        const Mat4 lightTransform = quark::ComposeWorld(scene, lightEntityIndex);
+        const Mat4& lightTransform = vFrameData[lightEntityIndex].worldTransform;
         aShadowCameras[slot].position = Vec3(lightTransform * Vec3{0.0f, 0.0f, 0.0f});
         aShadowCameras[slot].target = pLight->m_Light.m_Target;
         if ((aShadowCameras[slot].position - aShadowCameras[slot].target).length() <= 0.000001f)
@@ -350,9 +339,9 @@ void RenderSceneShadowMaps(CScene& scene, Shader shadowShader,
             if (!pMesh || !pMesh->m_Enabled || !pSourceTransform ||
                 pMesh->m_Model.meshCount <= 0 || !pMesh->m_Model.meshes) continue;
 
-            const Mat4 entityTransform = quark::ComposeWorld(scene, sourceIndex) * pMesh->m_Model.transform;
+            const Mat4& entityTransform = vFrameData[sourceIndex].meshWorldTransform;
             if (pLight->m_Light.m_Light.type != LIGHT_TYPE_DIRECTIONAL &&
-                !IsBoundsVisible(GetWorldBounds(pMesh, entityTransform), aShadowCameras[slot], 1.0f))
+                !IsBoundsVisible(vFrameData[sourceIndex].worldBounds, aShadowCameras[slot], 1.0f))
             {
                 continue;
             }
@@ -465,13 +454,67 @@ bool CSceneRenderer::IsMeshVisible(CMeshComponent* pMesh, const Mat4& worldTrans
     return IsBoundsVisible(GetWorldBounds(pMesh, worldTransform), camera, aspectRatio);
 }
 
+void CSceneRenderer::PrepareFrameCache(CScene& scene)
+{
+    m_vFrameData.clear();
+    m_vFrameData.resize(scene.m_vEntities.size());
+
+    for (int entityIndex = 0; entityIndex < static_cast<int>(scene.m_vEntities.size()); ++entityIndex)
+    {
+        CEntity& entity = scene.m_vEntities[entityIndex];
+        SSceneEntityFrameData& frameData = m_vFrameData[entityIndex];
+        frameData.worldTransform = quark::ComposeWorld(scene, entityIndex);
+
+        CMeshComponent* pMesh = entity.GetMeshComponent();
+        if (!pMesh || !pMesh->m_Enabled || pMesh->m_Model.meshCount <= 0 || !pMesh->m_Model.meshes)
+        {
+            continue;
+        }
+
+        frameData.hasMesh = true;
+        frameData.meshWorldTransform = frameData.worldTransform * pMesh->m_Model.transform;
+        frameData.worldBounds = GetWorldBounds(pMesh, frameData.meshWorldTransform);
+    }
+}
+
+bool CSceneRenderer::IsMeshVisible(int entityIndex, const Camera3D& camera, float aspectRatio) const
+{
+    if (entityIndex < 0 || entityIndex >= static_cast<int>(m_vFrameData.size()) ||
+        !m_vFrameData[entityIndex].hasMesh)
+    {
+        return false;
+    }
+    return IsBoundsVisible(m_vFrameData[entityIndex].worldBounds, camera, aspectRatio);
+}
+
+const Mat4& CSceneRenderer::GetCachedWorldTransform(int entityIndex) const
+{
+    static const Mat4 identity = Mat4::identity();
+    if (entityIndex < 0 || entityIndex >= static_cast<int>(m_vFrameData.size()))
+    {
+        return identity;
+    }
+    return m_vFrameData[entityIndex].worldTransform;
+}
+
+const Mat4& CSceneRenderer::GetCachedMeshWorldTransform(int entityIndex) const
+{
+    static const Mat4 identity = Mat4::identity();
+    if (entityIndex < 0 || entityIndex >= static_cast<int>(m_vFrameData.size()) ||
+        !m_vFrameData[entityIndex].hasMesh)
+    {
+        return identity;
+    }
+    return m_vFrameData[entityIndex].meshWorldTransform;
+}
+
 void CSceneRenderer::Update(CScene& scene, CLightRegistry& lights, const Vec3& cameraPosition,
     bool shadowsEnabled, float shadowBias, int shadowFilterQuality)
 {
     const auto updateStart = std::chrono::steady_clock::now();
     m_Timings = {};
-    const std::uint64_t geometrySignature = ComputeSceneGeometrySignature(scene);
-    const BoundingBox sceneBounds = ComputeSceneBounds(scene);
+    const std::uint64_t geometrySignature = ComputeSceneGeometrySignature(scene, m_vFrameData);
+    const BoundingBox sceneBounds = ComputeSceneBounds(scene, m_vFrameData);
     const Vec3 sceneCenter = {
         (sceneBounds.min.x + sceneBounds.max.x) * 0.5f,
         (sceneBounds.min.y + sceneBounds.max.y) * 0.5f,
@@ -483,7 +526,8 @@ void CSceneRenderer::Update(CScene& scene, CLightRegistry& lights, const Vec3& c
     SetShaderValue(m_LightingShader, m_ShadowsEnabledLoc, &runtimeShadowsEnabled, SHADER_UNIFORM_INT);
     SetShaderValue(m_LightingShader, m_ShadowBiasLoc, shadowBias);
     SetShaderValue(m_LightingShader, m_ShadowFilterLoc, shadowFilterQuality);
-    PrepareSceneLightUniforms(scene, lights, m_LightingShader, m_aLightEnabledLocations, sceneCenter);
+    PrepareSceneLightUniforms(scene, lights, m_LightingShader, m_aLightEnabledLocations, sceneCenter,
+        m_vFrameData);
     if (shadowsEnabled)
     {
         const auto shadowStart = std::chrono::steady_clock::now();
@@ -514,7 +558,8 @@ void CSceneRenderer::Update(CScene& scene, CLightRegistry& lights, const Vec3& c
         }
 
         RenderSceneShadowMaps(scene, m_ShadowShader, m_aShadowMaps, m_aShadowCameras, sceneCenter,
-            m_LightingShader, m_aLightViewLocations, m_aLightProjectionLocations, aRenderSlots);
+            m_LightingShader, m_aLightViewLocations, m_aLightProjectionLocations, aRenderSlots,
+            m_vFrameData);
         m_Timings.shadowPassMs = ElapsedMilliseconds(shadowStart);
         m_aShadowSignatures = aNextSignatures;
         m_ShadowCacheValid = true;

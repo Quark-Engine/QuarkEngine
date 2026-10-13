@@ -272,6 +272,8 @@ void CApplication::UpdateFrame()
         return;
     }
 
+    m_SceneRenderer.PrepareFrameCache(m_Editor.m_Scene);
+
     if (m_ActiveFontLanguage != CLanguageManager::Get().m_Current)
     {
         m_ActiveFontLanguage = CLanguageManager::Get().m_Current;
@@ -290,7 +292,7 @@ void CApplication::UpdateFrame()
             const int selectedIndex = m_Editor.m_Scene.m_Selected;
             const Vec3 worldPosition = Vec3Transform(
                 Vec3{0.0f, 0.0f, 0.0f},
-                quark::ComposeWorld(m_Editor.m_Scene, selectedIndex)
+                m_SceneRenderer.GetCachedWorldTransform(selectedIndex)
             );
             m_Camera.FocusOn(worldPosition);
         }
@@ -381,8 +383,8 @@ void CApplication::RenderFrame()
                         continue;
                     }
 
-                    const Mat4 worldTransform = quark::ComposeWorld(m_Editor.m_Scene, entityIndex);
-                    if (!m_SceneRenderer.IsMeshVisible(pMesh, worldTransform,
+                    const Mat4& worldTransform = m_SceneRenderer.GetCachedWorldTransform(entityIndex);
+                    if (!m_SceneRenderer.IsMeshVisible(entityIndex,
                         m_Camera.GetCamera(), aspectRatio))
                     {
                         continue;
@@ -396,7 +398,7 @@ void CApplication::RenderFrame()
                         m_Editor.m_Scene.IsSelected(entityIndex) && pMesh->m_Model.meshCount > 0)
                         {
                         PushMatrix();
-                        MultMatrix(quark::ComposeMeshWorld(m_Editor.m_Scene, e));
+                        MultMatrix(m_SceneRenderer.GetCachedMeshWorldTransform(entityIndex));
                         const bool primarySelection = entityIndex == m_Editor.m_Scene.m_Selected;
                         DrawBoundingBox(GetModelBoundingBox(pMesh->m_Model), Color
                         {
@@ -410,7 +412,7 @@ void CApplication::RenderFrame()
                     if (m_Editor.m_Preferences.m_ShowBoundingBoxes && pMesh->m_Model.meshCount > 0)
                     {
                         PushMatrix();
-                        MultMatrix(quark::ComposeMeshWorld(m_Editor.m_Scene, e));
+                        MultMatrix(m_SceneRenderer.GetCachedMeshWorldTransform(entityIndex));
                         DrawBoundingBox(GetModelBoundingBox(pMesh->m_Model), Color
                         {
                             static_cast<unsigned char>(m_Editor.m_Preferences.m_BoundsRed),
@@ -431,7 +433,7 @@ void CApplication::RenderFrame()
                         {
                             continue;
                         }
-                        const Mat4 worldTransform = quark::ComposeWorld(m_Editor.m_Scene, entityIndex);
+                        const Mat4& worldTransform = m_SceneRenderer.GetCachedWorldTransform(entityIndex);
                         const Vec3 worldPosition = Vec3(worldTransform * Vec3{0.0f, 0.0f, 0.0f});
                         DrawLine3D(worldPosition, pLight->m_Light.m_Target, pLight->m_Light.m_Color);
                     }
@@ -489,7 +491,7 @@ void CApplication::RenderFrame()
                         {
                             continue;
                         }
-                        const Mat4 worldTransform = quark::ComposeWorld(m_Editor.m_Scene, entityIndex);
+                        const Mat4& worldTransform = m_SceneRenderer.GetCachedWorldTransform(entityIndex);
                         const Vec3 worldPos = Vec3(worldTransform * Vec3{0.0f, 0.0f, 0.0f});
 
                         const Vec4 clip = projection * (view * Vec4{worldPos.x, worldPos.y, worldPos.z, 1.0f});

@@ -418,6 +418,7 @@ void DrawAssetsUi(CEditor& editor)
     if (editor.m_CurrentAssetPath.empty() && !editor.m_ProjectPath.empty())
     {
         editor.m_CurrentAssetPath = fs::path(editor.m_ProjectPath) / "resources";
+        browser.AssetListCacheDirty = true;
         std::error_code ec;
         fs::create_directories(editor.m_CurrentAssetPath, ec);
     }
@@ -481,6 +482,7 @@ void DrawAssetsUi(CEditor& editor)
                         fs::rename(drag.FilePath.string() + ".meta", dest.string() + ".meta", ec);
                     }
                     editor.m_Assets.RequestRefresh(editor.m_ProjectPath);
+                    browser.AssetListCacheDirty = true;
                     editor.m_SelectedAssetIndex = -1;
                 }
             }
@@ -493,6 +495,7 @@ void DrawAssetsUi(CEditor& editor)
         if (clicked)
         {
             editor.m_CurrentAssetPath = rebuilt;
+            browser.AssetListCacheDirty = true;
             editor.m_SelectedAssetIndex = -1;
             editor.m_SelectedAssetName.clear();
 
@@ -519,54 +522,65 @@ void DrawAssetsUi(CEditor& editor)
     ImGui::InputTextWithHint("##asset_search", lang.Word("search_assets"), browser.aSearchBuffer,
         IM_ARRAYSIZE(browser.aSearchBuffer));
 
-    std::vector<SLocalEntry> vDirectories;
-    std::vector<SLocalEntry> vFiles;
     const std::string search = Lowercase(browser.aSearchBuffer);
-    std::error_code dirError;
-    for (const auto& path : fs::directory_iterator(editor.m_CurrentAssetPath, dirError))
+    if (browser.AssetListCacheDirty || browser.CachedPath != editor.m_CurrentAssetPath ||
+        browser.CachedFilter != editor.m_Preferences.m_AssetFilter || browser.CachedSearch != search)
     {
-        SLocalEntry entry = {};
-        entry.FileName = path.path().filename().string();
-        entry.IsDirectory = path.is_directory();
-        entry.IsImage = CTextureMetadataStore::IsImageFile(path.path());
-        entry.IsModel = CModelService::IsModelFile(path.path());
+        std::vector<SLocalEntry> vDirectories;
+        std::vector<SLocalEntry> vFiles;
+        std::error_code dirError;
+        for (const auto& path : fs::directory_iterator(editor.m_CurrentAssetPath, dirError))
+        {
+            SLocalEntry entry = {};
+            entry.FileName = path.path().filename().string();
+            entry.IsDirectory = path.is_directory();
+            entry.IsImage = CTextureMetadataStore::IsImageFile(path.path());
+            entry.IsModel = CModelService::IsModelFile(path.path());
 
-        std::string ext = path.path().extension().string();
-        if (!ext.empty() && ext[0] == '.')
-        {
-            ext.erase(ext.begin());
-        }
-        ext = Lowercase(std::move(ext));
-        entry.Extension = ext;
-        entry.IsMaterial = entry.Extension == "mtl";
-        entry.IsTextureMeta = entry.Extension == "meta" && CTextureMetadataStore::IsImageFile(path.path().stem());
-        if (entry.IsTextureMeta && !fs::exists(path.path().parent_path() / path.path().stem()))
-        {
-            continue;
-        }
-        entry.isPrefab = entry.Extension == "prefab";
-        if (entry.Extension == "meta" && !entry.IsTextureMeta)
-        {
-            continue;
-        }
-        if (!MatchesAssetFilter(entry, editor.m_Preferences.m_AssetFilter, search))
-        {
-            continue;
+            std::string ext = path.path().extension().string();
+            if (!ext.empty() && ext[0] == '.')
+            {
+                ext.erase(ext.begin());
+            }
+            ext = Lowercase(std::move(ext));
+            entry.Extension = ext;
+            entry.IsMaterial = entry.Extension == "mtl";
+            entry.IsTextureMeta = entry.Extension == "meta" && CTextureMetadataStore::IsImageFile(path.path().stem());
+            if (entry.IsTextureMeta && !fs::exists(path.path().parent_path() / path.path().stem()))
+            {
+                continue;
+            }
+            entry.isPrefab = entry.Extension == "prefab";
+            if (entry.Extension == "meta" && !entry.IsTextureMeta)
+            {
+                continue;
+            }
+            if (!MatchesAssetFilter(entry, editor.m_Preferences.m_AssetFilter, search))
+            {
+                continue;
+            }
+
+            if (entry.IsDirectory)
+            {
+                vDirectories.push_back(entry);
+            }
+            else
+            {
+                vFiles.push_back(entry);
+            }
         }
 
-        if (entry.IsDirectory)
-        {
-            vDirectories.push_back(entry);
-        }
-        else
-        {
-            vFiles.push_back(entry);
-        }
+        browser.vCachedEntries.clear();
+        browser.vCachedEntries.reserve(vDirectories.size() + vFiles.size());
+        browser.vCachedEntries.insert(browser.vCachedEntries.end(), vDirectories.begin(), vDirectories.end());
+        browser.vCachedEntries.insert(browser.vCachedEntries.end(), vFiles.begin(), vFiles.end());
+        browser.CachedPath = editor.m_CurrentAssetPath;
+        browser.CachedFilter = editor.m_Preferences.m_AssetFilter;
+        browser.CachedSearch = search;
+        browser.AssetListCacheDirty = false;
     }
 
-    std::vector<SLocalEntry> vEntries;
-    vEntries.insert(vEntries.end(), vDirectories.begin(), vDirectories.end());
-    vEntries.insert(vEntries.end(), vFiles.begin(), vFiles.end());
+    const std::vector<SLocalEntry>& vEntries = browser.vCachedEntries;
 
     if (!editor.m_SelectedAssetName.empty())
     {
@@ -699,6 +713,7 @@ void DrawAssetsUi(CEditor& editor)
         if (entry.IsDirectory && itemHovered && ImGui::IsMouseDoubleClicked(0))
         {
             editor.m_CurrentAssetPath /= entry.FileName;
+            browser.AssetListCacheDirty = true;
             editor.m_SelectedAssetIndex = -1;
             editor.m_SelectedAssetName.clear();
             editor.m_Previews.InvalidateModelPreviews();
@@ -771,6 +786,7 @@ void DrawAssetsUi(CEditor& editor)
                 }
 
                 editor.m_Assets.RequestRefresh(editor.m_ProjectPath);
+                browser.AssetListCacheDirty = true;
                 editor.m_SelectedAssetIndex = -1;
                 editor.m_SelectedAssetName.clear();
 
@@ -1099,6 +1115,7 @@ void DrawAssetsUi(CEditor& editor)
                         fs::rename(sourcePath.string() + ".meta", destPath.string() + ".meta", ec);
                     }
                     editor.m_Assets.RequestRefresh(editor.m_ProjectPath);
+                    browser.AssetListCacheDirty = true;
                     editor.m_SelectedAssetIndex = -1;
                 }
             }
@@ -1143,6 +1160,7 @@ void DrawAssetsUi(CEditor& editor)
                                 fs::rename(oldPath.string() + ".meta", newPath.string() + ".meta");
                             }
                             editor.m_Assets.RequestRefresh(editor.m_ProjectPath);
+                            browser.AssetListCacheDirty = true;
                             editor.m_SelectedAssetIndex = -1;
                             editor.m_SelectedAssetName.clear();
                         } catch (...)
@@ -1273,6 +1291,7 @@ void DrawAssetsUi(CEditor& editor)
                 }
 
                 editor.m_Assets.RequestRefresh(editor.m_ProjectPath);
+                browser.AssetListCacheDirty = true;
             }
 
             ImGui::CloseCurrentPopup();

@@ -6,6 +6,7 @@
 
 #include <array>
 #include <cstdint>
+#include <vector>
 
 class CScene;
 class CLightRegistry;
@@ -17,6 +18,14 @@ struct SSceneRendererTimings
     float shadowPassMs = 0.0f;
 };
 
+struct SSceneEntityFrameData
+{
+    Mat4 worldTransform{};
+    Mat4 meshWorldTransform{};
+    BoundingBox worldBounds{};
+    bool hasMesh = false;
+};
+
 class CSceneRenderer
 {
 public:
@@ -26,10 +35,16 @@ public:
     void Update(CScene& scene, CLightRegistry& lights, const Vec3& cameraPosition,
         bool shadowsEnabled, float shadowBias, int shadowFilterQuality);
 
+    void PrepareFrameCache(CScene& scene);
+
     void EnsureLightingShader(CMeshComponent* pMesh);
 
     bool IsMeshVisible(CMeshComponent* pMesh, const Mat4& worldTransform,
         const Camera3D& camera, float aspectRatio) const;
+    bool IsMeshVisible(int entityIndex, const Camera3D& camera, float aspectRatio) const;
+
+    const Mat4& GetCachedWorldTransform(int entityIndex) const;
+    const Mat4& GetCachedMeshWorldTransform(int entityIndex) const;
 
     void SetUseTexture(bool useTexture);
 
@@ -61,6 +76,7 @@ private:
     std::array<std::uint64_t, QC_MAX_LIGHTS> m_aShadowSignatures{};
     bool m_ShadowCacheValid = false;
     bool m_ShadowBindingsAssigned = false;
+    std::vector<SSceneEntityFrameData> m_vFrameData;
     SSceneRendererTimings m_Timings{};
 };
 

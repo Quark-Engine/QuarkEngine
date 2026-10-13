@@ -177,6 +177,19 @@ struct SAssetBrowserCreatePopup
     char aNewItemName[128] = "";
 };
 
+struct SLocalEntry
+{
+    std::string FileName;
+    bool IsDirectory = false;
+    bool IsImage = false;
+    bool IsModel = false;
+    bool IsMaterial = false;
+    bool IsTextureMeta = false;
+    bool isPrefab = false;
+    Texture Texture = {};
+    std::string Extension;
+};
+
 struct SAssetBrowserState
 {
     SAssetBrowserMarquee Marquee;
@@ -191,6 +204,12 @@ struct SAssetBrowserState
 
     bool DuplicatePopupOpen = false;
     std::string DuplicateName;
+
+    std::filesystem::path CachedPath;
+    std::string CachedSearch;
+    int CachedFilter = -1;
+    bool AssetListCacheDirty = true;
+    std::vector<SLocalEntry> vCachedEntries;
 
     SAssetBrowserCreatePopup Create;
 };

@@ -8,20 +8,6 @@
 
 namespace fs = std::filesystem;
 
-struct SLocalEntry
-{
-    std::string FileName;
-    bool IsDirectory;
-    bool IsImage;
-    bool IsModel;
-    bool IsMaterial;
-    bool IsTextureMeta;
-    bool isPrefab;
-    struct Texture Texture;
-    std::string Extension;
-};
-
-
 void DrawAssetsUi(CEditor& editor);
 void DrawSelectedTextureInspector(CEditor& editor);
 
