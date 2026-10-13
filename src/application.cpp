@@ -367,6 +367,9 @@ void CApplication::RenderFrame()
                     DrawLine3D({0, 0, 0}, {0, 3, 0}, GREEN);
                     DrawLine3D({0, 0, 0}, {0, 0, 3}, BLUE);
                 }
+                const float viewportWidth = m_Editor.m_Ui.m_Viewport.m_WindowSize.x;
+                const float viewportHeight = m_Editor.m_Ui.m_Viewport.m_WindowSize.y;
+                const float aspectRatio = viewportHeight > 0.0f ? viewportWidth / viewportHeight : 1.0f;
                 for (int entityIndex = 0; entityIndex < static_cast<int>(m_Editor.m_Scene.m_vEntities.size()); ++entityIndex)
                 {
                     auto& e = m_Editor.m_Scene.m_vEntities[entityIndex];
@@ -378,20 +381,16 @@ void CApplication::RenderFrame()
                         continue;
                     }
 
-                    m_SceneRenderer.EnsureLightingShader(pMesh);
-
-                    int use = (pMat && pMat->m_Texture.id != 0) ? 1 : 0;
-                    m_SceneRenderer.SetUseTexture(use != 0);
                     const Mat4 worldTransform = quark::ComposeWorld(m_Editor.m_Scene, entityIndex);
-                    const float viewportWidth = m_Editor.m_Ui.m_Viewport.m_WindowSize.x;
-                    const float viewportHeight = m_Editor.m_Ui.m_Viewport.m_WindowSize.y;
-                    const float aspectRatio = viewportHeight > 0.0f ? viewportWidth / viewportHeight : 1.0f;
                     if (!m_SceneRenderer.IsMeshVisible(pMesh, worldTransform,
                         m_Camera.GetCamera(), aspectRatio))
                     {
                         continue;
                     }
 
+                    m_SceneRenderer.EnsureLightingShader(pMesh);
+                    const int use = (pMat && pMat->m_Texture.id != 0) ? 1 : 0;
+                    m_SceneRenderer.SetUseTexture(use != 0);
                     CEntityTextureService::DrawEntityWithTexture(e, worldTransform, m_Editor.m_Preferences);
                     if (m_Editor.m_Preferences.m_ShowSelectionVisualization &&
                         m_Editor.m_Scene.IsSelected(entityIndex) && pMesh->m_Model.meshCount > 0)

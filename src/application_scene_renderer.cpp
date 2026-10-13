@@ -98,25 +98,43 @@ bool IsBoundsVisible(const BoundingBox& bounds, const Camera3D& camera, float as
     const Vec3 center = (bounds.min + bounds.max) * 0.5f;
     const Vec3 half = (bounds.max - bounds.min) * 0.5f;
     const float radius = half.length();
-    const Vec3 forward = (camera.target - camera.position).normalized();
-    const Vec3 right = forward.cross(camera.up).normalized();
+    const Vec3 forwardVector = camera.target - camera.position;
+    if (forwardVector.length() <= 0.000001f || camera.up.length() <= 0.000001f)
+    {
+        return true;
+    }
+
+    const Vec3 forward = forwardVector.normalized();
+    const Vec3 rightVector = forward.cross(camera.up);
+    if (rightVector.length() <= 0.000001f)
+    {
+        return true;
+    }
+
+    const Vec3 right = rightVector.normalized();
     const Vec3 up = right.cross(forward).normalized();
     const Vec3 relative = center - camera.position;
     const float depth = relative.dot(forward);
-    const float maxDepth = depth + radius;
 
-    if (maxDepth < 0.01f || depth - radius > 1000.0f)
+    constexpr float nearPlane = 0.01f;
+    constexpr float farPlane = 1000.0f;
+    if (depth + radius < nearPlane || depth - radius > farPlane)
     {
         return false;
     }
 
     const float tanHalfFov = tanf(camera.fovy * DEG2RAD * 0.5f);
     const float safeAspect = std::max(aspectRatio, 0.01f);
-    if (std::fabs(relative.dot(up)) - radius > maxDepth * tanHalfFov)
+    const float tanHalfHorizontalFov = tanHalfFov * safeAspect;
+    const float verticalPlaneRadius = radius * sqrtf(1.0f + tanHalfFov * tanHalfFov);
+    const float horizontalPlaneRadius = radius * sqrtf(
+        1.0f + tanHalfHorizontalFov * tanHalfHorizontalFov);
+
+    if (std::fabs(relative.dot(up)) - depth * tanHalfFov > verticalPlaneRadius)
     {
         return false;
     }
-    if (std::fabs(relative.dot(right)) - radius > maxDepth * tanHalfFov * safeAspect)
+    if (std::fabs(relative.dot(right)) - depth * tanHalfHorizontalFov > horizontalPlaneRadius)
     {
         return false;
     }
