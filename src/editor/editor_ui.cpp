@@ -195,7 +195,7 @@ void CEditor::DrawMainMenuBar(SPluginContext* pPluginCtx, ImGuiID dockspaceId)
                 }
                 else
                 {
-                    CloseWindow();
+                    RequestWindowClose();
                 }
             }
             ImGui::EndMenu();
@@ -1450,13 +1450,13 @@ void CEditor::DrawConfirmationModals()
             CProjectService::Save(m_ProjectPath, m_Scene);
             DispatchPluginEvent(PLUGIN_EVENT_SCENE_SAVED);
             m_SceneDirty = false;
-            CloseWindow();
+            RequestWindowClose();
             ImGui::CloseCurrentPopup();
         }
         ImGui::SameLine();
         if (ImGui::Button(lang.Word("exit_without_saving")))
         {
-            CloseWindow();
+            RequestWindowClose();
             ImGui::CloseCurrentPopup();
         }
         ImGui::SameLine();

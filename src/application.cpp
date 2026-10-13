@@ -15,9 +15,42 @@
 #include "engine/transform.h"
 #include <cfloat>
 #include <chrono>
+#include <fstream>
 #include <iostream>
+#include <mutex>
 #include <SDL3/SDL_video.h>
 namespace fs = std::filesystem;
+
+namespace
+{
+    std::ofstream s_EngineLogFile;
+    std::mutex s_EngineLogMutex;
+
+    void WriteEngineLog(LogLevel, const char* pMessage)
+    {
+        if (pMessage == nullptr)
+        {
+            return;
+        }
+
+        std::lock_guard<std::mutex> lock(s_EngineLogMutex);
+        if (s_EngineLogFile.is_open())
+        {
+            s_EngineLogFile << pMessage << '\n';
+            s_EngineLogFile.flush();
+        }
+    }
+
+    void InitializeEngineLog()
+    {
+        s_EngineLogFile.open("engine_log.txt", std::ios::out | std::ios::trunc);
+        if (!s_EngineLogFile.is_open())
+        {
+            std::cerr << "Failed to open engine_log.txt for writing\n";
+        }
+        SetTraceLogCallback(WriteEngineLog);
+    }
+} // anonymous
 
 CApplication::CApplication(const SCommandLineOptions& options)
     : m_Options(options)
@@ -39,6 +72,8 @@ static void ApplyLogLevel(const std::string& level)
 
 void CApplication::Initialize()
 {
+    InitializeEngineLog();
+
     if (m_Options.HelpRequested || m_Options.VersionRequested)
     {
         return;
