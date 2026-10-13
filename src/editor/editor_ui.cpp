@@ -48,6 +48,7 @@
 #include "qcImGui.h"
 
 #include <algorithm>
+#include <chrono>
 #include <cmath>
 #include <cstdio>
 #include <cstring>
@@ -58,6 +59,16 @@
 #include <vector>
 
 #define lang CLanguageManager::Get()
+
+namespace
+{
+float ElapsedMilliseconds(const std::chrono::steady_clock::time_point& start)
+{
+    return std::chrono::duration<float, std::milli>(
+        std::chrono::steady_clock::now() - start).count();
+}
+}
+
 void CViewportState::Release()
 {
     if (m_RenderTexture.id != 0)
@@ -74,6 +85,7 @@ void CViewportState::Unload()
 
 void CEditor::DrawUi(Shader shader, CFlyCamera& camera, SPluginContext* pPluginCtx)
 {
+    m_UiTimings = {};
     const bool rtl = CLanguageManager::Get().m_Current == "arabic";
     if (rtl)
     {
@@ -130,25 +142,35 @@ void CEditor::DrawUi(Shader shader, CFlyCamera& camera, SPluginContext* pPluginC
 
     if (m_Preferences.m_ShowHierarchy)
     {
+        const auto panelStart = std::chrono::steady_clock::now();
         DrawHierarchyPanel(pPluginCtx);
+        m_UiTimings.hierarchyMs = ElapsedMilliseconds(panelStart);
     }
     if (m_Preferences.m_ShowInspector)
     {
+        const auto panelStart = std::chrono::steady_clock::now();
         DrawInspectorPanel(shader, pPluginCtx);
+        m_UiTimings.inspectorMs = ElapsedMilliseconds(panelStart);
     }
     if (m_Preferences.m_ShowScene)
     {
+        const auto panelStart = std::chrono::steady_clock::now();
         DrawScenePanel(camera, pPluginCtx);
+        m_UiTimings.scenePanelMs = ElapsedMilliseconds(panelStart);
     }
 
     DrawRenameModal();
 
     if (m_Preferences.m_ShowAssets)
     {
+        const auto panelStart = std::chrono::steady_clock::now();
         DrawAssetsUi();
+        m_UiTimings.assetsMs = ElapsedMilliseconds(panelStart);
     }
+    const auto viewerStart = std::chrono::steady_clock::now();
     DrawModelViewerWindow(m_Ui.m_ModelViewer);
     DrawMaterialViewerWindow(*this, m_Ui.m_MaterialViewer, m_Scene.GetSelected());
+    m_UiTimings.modelViewerMs = ElapsedMilliseconds(viewerStart);
 
     DrawAboutModal();
     DrawPreferencesUi(camera, pPluginCtx);

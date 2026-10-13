@@ -6,8 +6,123 @@
 #include "engine/transform.h"
 
 #include <cfloat>
+#include <cstdint>
+#include <cstring>
+#include <cmath>
+#include <algorithm>
+#include <chrono>
 namespace
 {
+float ElapsedMilliseconds(const std::chrono::steady_clock::time_point& start)
+{
+    return std::chrono::duration<float, std::milli>(
+        std::chrono::steady_clock::now() - start).count();
+}
+
+void ExpandBoundsWithPoint(BoundingBox& bounds, const Vec3& point);
+
+void HashBytes(std::uint64_t& hash, const void* data, std::size_t size)
+{
+    const auto* bytes = static_cast<const unsigned char*>(data);
+    for (std::size_t i = 0; i < size; ++i)
+    {
+        hash ^= bytes[i];
+        hash *= 1099511628211ull;
+    }
+}
+
+template <typename T>
+void HashValue(std::uint64_t& hash, const T& value)
+{
+    HashBytes(hash, &value, sizeof(value));
+}
+
+std::uint64_t ComputeSceneGeometrySignature(const CScene& scene)
+{
+    std::uint64_t hash = 1469598103934665603ull;
+    for (int entityIndex = 0; entityIndex < static_cast<int>(scene.m_vEntities.size()); ++entityIndex)
+    {
+        const CEntity& entity = scene.m_vEntities[entityIndex];
+        const CMeshComponent* pMesh = entity.GetMeshComponent();
+        const CTransformComponent* pTransform = entity.GetTransformComponent();
+        if (!pMesh || !pTransform)
+        {
+            continue;
+        }
+
+        HashValue(hash, entityIndex);
+        HashValue(hash, pMesh->m_Enabled);
+        HashValue(hash, pMesh->m_BoundsDirty);
+        HashValue(hash, pMesh->m_Model.meshCount);
+        HashValue(hash, pMesh->m_Model.meshes);
+        HashValue(hash, pMesh->m_Model.transform.m);
+        const Mat4 world = quark::ComposeWorld(scene, entityIndex);
+        HashValue(hash, world.m);
+    }
+    return hash;
+}
+
+std::uint64_t CombineHash(std::uint64_t hash, const void* data, std::size_t size)
+{
+    HashBytes(hash, data, size);
+    return hash;
+}
+
+BoundingBox GetWorldBounds(CMeshComponent* pMesh, const Mat4& worldTransform)
+{
+    if (pMesh->m_BoundsDirty)
+    {
+        pMesh->m_CachedLocalBounds = GetModelBoundingBox(pMesh->m_Model);
+        pMesh->m_BoundsDirty = false;
+    }
+
+    const BoundingBox local = pMesh->m_CachedLocalBounds;
+    const Vec3 corners[8] = {
+        {local.min.x, local.min.y, local.min.z}, {local.max.x, local.min.y, local.min.z},
+        {local.min.x, local.max.y, local.min.z}, {local.max.x, local.max.y, local.min.z},
+        {local.min.x, local.min.y, local.max.z}, {local.max.x, local.min.y, local.max.z},
+        {local.min.x, local.max.y, local.max.z}, {local.max.x, local.max.y, local.max.z}
+    };
+
+    BoundingBox world = {Vec3{FLT_MAX, FLT_MAX, FLT_MAX}, Vec3{-FLT_MAX, -FLT_MAX, -FLT_MAX}};
+    for (const Vec3& corner : corners)
+    {
+        const Vec3 point = Vec3(worldTransform * corner);
+        ExpandBoundsWithPoint(world, point);
+    }
+    return world;
+}
+
+bool IsBoundsVisible(const BoundingBox& bounds, const Camera3D& camera, float aspectRatio)
+{
+    const Vec3 center = (bounds.min + bounds.max) * 0.5f;
+    const Vec3 half = (bounds.max - bounds.min) * 0.5f;
+    const float radius = half.length();
+    const Vec3 forward = (camera.target - camera.position).normalized();
+    const Vec3 right = forward.cross(camera.up).normalized();
+    const Vec3 up = right.cross(forward).normalized();
+    const Vec3 relative = center - camera.position;
+    const float depth = relative.dot(forward);
+    const float maxDepth = depth + radius;
+
+    if (maxDepth < 0.01f || depth - radius > 1000.0f)
+    {
+        return false;
+    }
+
+    const float tanHalfFov = tanf(camera.fovy * DEG2RAD * 0.5f);
+    const float safeAspect = std::max(aspectRatio, 0.01f);
+    if (std::fabs(relative.dot(up)) - radius > maxDepth * tanHalfFov)
+    {
+        return false;
+    }
+    if (std::fabs(relative.dot(right)) - radius > maxDepth * tanHalfFov * safeAspect)
+    {
+        return false;
+    }
+    return true;
+}
+
 void ExpandBoundsWithPoint(BoundingBox& bounds, const Vec3& point)
 {
     bounds.min.x = fminf(bounds.min.x, point.x);
@@ -80,24 +195,24 @@ void SetModelShader(Model& model, Shader& shader)
     }
 }
 
-void SetShaderLightEnabled(Shader shader, int slot, bool enabled)
+void SetShaderLightEnabled(Shader shader, int location, bool enabled)
 {
-    int enabledLoc = GetShaderLocation(shader, TextFormat("lights[%i].enabled", slot));
     int enabledValue = enabled ? 1 : 0;
-    SetShaderValue(shader, enabledLoc, &enabledValue, SHADER_UNIFORM_INT);
+    SetShaderValue(shader, location, &enabledValue, SHADER_UNIFORM_INT);
 }
 
-void DisableAllShaderLights(Shader shader)
+void DisableAllShaderLights(Shader shader, const std::array<int, QC_MAX_LIGHTS>& aLocations)
 {
     for (int slot = 0; slot < QC_MAX_LIGHTS; slot++)
     {
-        SetShaderLightEnabled(shader, slot, false);
+        SetShaderLightEnabled(shader, aLocations[slot], false);
     }
 }
 
-bool PrepareSceneLightUniforms(CScene& scene, CLightRegistry& lights, Shader shader, const Vec3& sceneCenter)
+bool PrepareSceneLightUniforms(CScene& scene, CLightRegistry& lights, Shader shader,
+    const std::array<int, QC_MAX_LIGHTS>& aLightEnabledLocations, const Vec3& sceneCenter)
 {
-    DisableAllShaderLights(shader);
+    DisableAllShaderLights(shader, aLightEnabledLocations);
 
     bool hasActiveSceneLight = false;
     for (int entityIndex = 0; entityIndex < static_cast<int>(scene.m_vEntities.size()); ++entityIndex)
@@ -168,7 +283,8 @@ void RenderSceneShadowMaps(CScene& scene, Shader shadowShader,
     const Vec3& sceneCenter,
     Shader lightingShader,
     std::array<int, QC_MAX_LIGHTS>& aLightViewLocations,
-    std::array<int, QC_MAX_LIGHTS>& aLightProjectionLocations)
+    std::array<int, QC_MAX_LIGHTS>& aLightProjectionLocations,
+    const std::array<bool, QC_MAX_LIGHTS>& aRenderSlots)
     {
     std::array<bool, QC_MAX_LIGHTS> aRendered = {};
     Material shadowMaterial = {};
@@ -183,6 +299,10 @@ void RenderSceneShadowMaps(CScene& scene, Shader shadowShader,
             aRendered[pLight->m_Light.m_Id]) continue;
 
         const int slot = pLight->m_Light.m_Id;
+        if (!aRenderSlots[slot])
+        {
+            continue;
+        }
         const int lightEntityIndex = static_cast<int>(&entity - scene.m_vEntities.data());
         const Mat4 lightTransform = quark::ComposeWorld(scene, lightEntityIndex);
         aShadowCameras[slot].position = Vec3(lightTransform * Vec3{0.0f, 0.0f, 0.0f});
@@ -213,6 +333,11 @@ void RenderSceneShadowMaps(CScene& scene, Shader shadowShader,
                 pMesh->m_Model.meshCount <= 0 || !pMesh->m_Model.meshes) continue;
 
             const Mat4 entityTransform = quark::ComposeWorld(scene, sourceIndex) * pMesh->m_Model.transform;
+            if (pLight->m_Light.m_Light.type != LIGHT_TYPE_DIRECTIONAL &&
+                !IsBoundsVisible(GetWorldBounds(pMesh, entityTransform), aShadowCameras[slot], 1.0f))
+            {
+                continue;
+            }
             const bool mirroredTransform = quark::HasNegativeDeterminant(entityTransform);
             if (mirroredTransform)
             {
@@ -241,24 +366,6 @@ void RenderSceneShadowMaps(CScene& scene, Shader shadowShader,
         EndTextureMode();
     }
 
-    const Mat4 identity = Mat4::identity();
-    for (int slot = 0; slot < QC_MAX_LIGHTS; ++slot)
-    {
-        if (aRendered[slot])
-        {
-            continue;
-        }
-
-        if (aShadowMaps[slot].id != 0)
-        {
-            BeginTextureMode(aShadowMaps[slot]);
-            ClearBackground(WHITE);
-            EndTextureMode();
-        }
-
-        SetShaderValueMatrix(lightingShader, aLightViewLocations[slot], identity.m);
-        SetShaderValueMatrix(lightingShader, aLightProjectionLocations[slot], identity.m);
-    }
 }
 
 void AssignShadowMaps(CScene& scene,
@@ -312,6 +419,8 @@ void CSceneRenderer::Initialize(bool vulkanBackend, int shadowMapSize, bool shad
         m_aShadowMaps[i] = LoadRenderTexture(shadowMapSize, shadowMapSize);
         m_aShadowCameras[i] = CreateCamera3D();
         m_aShadowCameras[i].fovy = 55.0f;
+        m_aLightEnabledLocations[i] = GetShaderLocation(m_LightingShader,
+            TextFormat("lights[%i].enabled", i));
         m_aLightViewLocations[i] = GetShaderLocation(m_LightingShader, TextFormat("lightViews[%i]", i));
         m_aLightProjectionLocations[i] = GetShaderLocation(m_LightingShader, TextFormat("lightProjections[%i]", i));
     }
@@ -323,11 +432,27 @@ void CSceneRenderer::Initialize(bool vulkanBackend, int shadowMapSize, bool shad
     SetShaderValue(m_LightingShader, m_AmbientLoc, Vec4{0.025f, 0.025f, 0.025f, 1.0f});
     SetShaderValue(m_LightingShader, m_EmissionColorLoc, Vec3{0.0f, 0.0f, 0.0f});
     SetShaderValue(m_LightingShader, m_EmissionPowerLoc, 0.0f);
+    m_aShadowSignatures.fill(0);
+    m_ShadowCacheValid = false;
+    m_ShadowBindingsAssigned = false;
+}
+
+bool CSceneRenderer::IsMeshVisible(CMeshComponent* pMesh, const Mat4& worldTransform,
+    const Camera3D& camera, float aspectRatio) const
+{
+    if (!pMesh || !pMesh->m_Enabled || pMesh->m_Model.meshCount <= 0 || !pMesh->m_Model.meshes)
+    {
+        return false;
+    }
+    return IsBoundsVisible(GetWorldBounds(pMesh, worldTransform), camera, aspectRatio);
 }
 
 void CSceneRenderer::Update(CScene& scene, CLightRegistry& lights, const Vec3& cameraPosition,
     bool shadowsEnabled, float shadowBias, int shadowFilterQuality)
 {
+    const auto updateStart = std::chrono::steady_clock::now();
+    m_Timings = {};
+    const std::uint64_t geometrySignature = ComputeSceneGeometrySignature(scene);
     const BoundingBox sceneBounds = ComputeSceneBounds(scene);
     const Vec3 sceneCenter = {
         (sceneBounds.min.x + sceneBounds.max.x) * 0.5f,
@@ -340,13 +465,53 @@ void CSceneRenderer::Update(CScene& scene, CLightRegistry& lights, const Vec3& c
     SetShaderValue(m_LightingShader, m_ShadowsEnabledLoc, &runtimeShadowsEnabled, SHADER_UNIFORM_INT);
     SetShaderValue(m_LightingShader, m_ShadowBiasLoc, shadowBias);
     SetShaderValue(m_LightingShader, m_ShadowFilterLoc, shadowFilterQuality);
-    PrepareSceneLightUniforms(scene, lights, m_LightingShader, sceneCenter);
+    PrepareSceneLightUniforms(scene, lights, m_LightingShader, m_aLightEnabledLocations, sceneCenter);
     if (shadowsEnabled)
     {
+        const auto shadowStart = std::chrono::steady_clock::now();
+        std::array<bool, QC_MAX_LIGHTS> aRenderSlots = {};
+        std::array<std::uint64_t, QC_MAX_LIGHTS> aNextSignatures = {};
+        for (const auto& entity : scene.m_vEntities)
+        {
+            const CLightComponent* pLight = entity.GetLightComponent();
+            if (!pLight || !pLight->m_Enabled || !pLight->m_Created ||
+                pLight->m_Light.m_Id < 0 || pLight->m_Light.m_Id >= QC_MAX_LIGHTS)
+            {
+                continue;
+            }
+
+            const int slot = pLight->m_Light.m_Id;
+            std::uint64_t signature = geometrySignature;
+            signature = CombineHash(signature, &pLight->m_Light.m_Light.type,
+                sizeof(pLight->m_Light.m_Light.type));
+            signature = CombineHash(signature, &pLight->m_Light.m_Position, sizeof(Vec3));
+            signature = CombineHash(signature, &pLight->m_Light.m_Target, sizeof(Vec3));
+            aNextSignatures[slot] = signature;
+        }
+
+        for (int slot = 0; slot < QC_MAX_LIGHTS; ++slot)
+        {
+            aRenderSlots[slot] = aNextSignatures[slot] != 0 &&
+                (!m_ShadowCacheValid || aNextSignatures[slot] != m_aShadowSignatures[slot]);
+        }
+
         RenderSceneShadowMaps(scene, m_ShadowShader, m_aShadowMaps, m_aShadowCameras, sceneCenter,
-            m_LightingShader, m_aLightViewLocations, m_aLightProjectionLocations);
+            m_LightingShader, m_aLightViewLocations, m_aLightProjectionLocations, aRenderSlots);
+        m_Timings.shadowPassMs = ElapsedMilliseconds(shadowStart);
+        m_aShadowSignatures = aNextSignatures;
+        m_ShadowCacheValid = true;
     }
-    AssignShadowMaps(scene, m_aShadowMaps, m_LightingShader);
+    else
+    {
+        m_ShadowCacheValid = false;
+    }
+
+    if (!m_ShadowBindingsAssigned)
+    {
+        AssignShadowMaps(scene, m_aShadowMaps, m_LightingShader);
+        m_ShadowBindingsAssigned = true;
+    }
+    m_Timings.updateMs = ElapsedMilliseconds(updateStart);
 }
 
 void CSceneRenderer::EnsureLightingShader(CMeshComponent* pMesh)
@@ -364,6 +529,18 @@ void CSceneRenderer::EnsureLightingShader(CMeshComponent* pMesh)
     if (!pMesh->m_ShaderAssigned || shaderMissing)
     {
         SetModelShader(pMesh->m_Model, m_LightingShader);
+        for (int materialIndex = 0; materialIndex < pMesh->m_Model.materialCount; ++materialIndex)
+        {
+            Material& material = pMesh->m_Model.materials[materialIndex];
+            if (!material.maps)
+            {
+                continue;
+            }
+            for (int shadowIndex = 0; shadowIndex < QC_MAX_LIGHTS; ++shadowIndex)
+            {
+                material.maps[MATERIAL_MAP_HEIGHT + shadowIndex].texture = m_aShadowMaps[shadowIndex].texture;
+            }
+        }
     }
     pMesh->m_ShaderAssigned = true;
 }

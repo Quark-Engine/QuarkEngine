@@ -50,6 +50,12 @@ namespace
         }
         SetTraceLogCallback(WriteEngineLog);
     }
+
+    float ElapsedMilliseconds(const std::chrono::steady_clock::time_point& start)
+    {
+        return std::chrono::duration<float, std::milli>(
+            std::chrono::steady_clock::now() - start).count();
+    }
 } // anonymous
 
 CApplication::CApplication(const SCommandLineOptions& options)
@@ -253,6 +259,8 @@ void CApplication::Initialize()
     m_LastAutosaveTime = GetTime();
     m_LastSelectedEntity = m_Editor.m_Scene.m_Selected;
 
+    EnableDebugInterface();
+
     m_ReadyToRun = true;
 }
 
@@ -341,6 +349,7 @@ void CApplication::RenderFrame()
                 static_cast<unsigned char>(m_Editor.m_Preferences.m_BackgroundBlue),
                 255
             });
+            const auto main3dStart = std::chrono::steady_clock::now();
             BeginMode3D(m_Camera.GetCamera());
                 if (m_Editor.m_Preferences.m_ShowGrid)
                 {
@@ -373,7 +382,17 @@ void CApplication::RenderFrame()
 
                     int use = (pMat && pMat->m_Texture.id != 0) ? 1 : 0;
                     m_SceneRenderer.SetUseTexture(use != 0);
-                    CEntityTextureService::DrawEntityWithTexture(e, quark::ComposeWorld(m_Editor.m_Scene, entityIndex), m_Editor.m_Preferences);
+                    const Mat4 worldTransform = quark::ComposeWorld(m_Editor.m_Scene, entityIndex);
+                    const float viewportWidth = m_Editor.m_Ui.m_Viewport.m_WindowSize.x;
+                    const float viewportHeight = m_Editor.m_Ui.m_Viewport.m_WindowSize.y;
+                    const float aspectRatio = viewportHeight > 0.0f ? viewportWidth / viewportHeight : 1.0f;
+                    if (!m_SceneRenderer.IsMeshVisible(pMesh, worldTransform,
+                        m_Camera.GetCamera(), aspectRatio))
+                    {
+                        continue;
+                    }
+
+                    CEntityTextureService::DrawEntityWithTexture(e, worldTransform, m_Editor.m_Preferences);
                     if (m_Editor.m_Preferences.m_ShowSelectionVisualization &&
                         m_Editor.m_Scene.IsSelected(entityIndex) && pMesh->m_Model.meshCount > 0)
                         {
@@ -440,6 +459,7 @@ void CApplication::RenderFrame()
                     }
                 }
             EndMode3D();
+            m_FrameTimings.main3dPassMs = ElapsedMilliseconds(main3dStart);
 
             if (m_Editor.m_Preferences.m_ShowLightHelpers && m_Editor.m_Ui.m_Viewport.m_WindowSize.x > 0.0f && m_Editor.m_Ui.m_Viewport.m_WindowSize.y > 0.0f)
             {
@@ -514,6 +534,7 @@ void CApplication::RenderFrame()
             EndTextureMode();
         }
 
+        const auto imguiStart = std::chrono::steady_clock::now();
         QcImGuiBegin();
         m_Camera.ApplyActiveCursor();
 
@@ -543,16 +564,29 @@ void CApplication::RenderFrame()
 
         m_Editor.DrawUi(m_SceneRenderer.GetLightingShader(), m_Camera, m_PluginBridge.GetContext());
 
+        const SEditorUiTimings editorUiTimings = m_Editor.GetUiTimings();
+        m_FrameTimings.hierarchyMs = editorUiTimings.hierarchyMs;
+        m_FrameTimings.inspectorMs = editorUiTimings.inspectorMs;
+        m_FrameTimings.scenePanelMs = editorUiTimings.scenePanelMs;
+        m_FrameTimings.assetsMs = editorUiTimings.assetsMs;
+        m_FrameTimings.modelViewerMs = editorUiTimings.modelViewerMs;
+
         if (!m_Editor.IsHistoryRestorePending())
         {
+            const auto pluginUpdateStart = std::chrono::steady_clock::now();
             m_PluginBridge.Update(m_Editor, m_PluginManager);
+            m_FrameTimings.pluginUpdateMs = ElapsedMilliseconds(pluginUpdateStart);
         }
 
         QcImGuiEnd();
+        m_FrameTimings.imguiEditorMs = ElapsedMilliseconds(imguiStart);
         m_Editor.m_CpuTaskPool.RecordMainThreadBusy(
             CTaskPool::CurrentThreadCpuTime() - renderStart);
         m_Editor.m_CpuTaskPool.SetMainThreadTask("");
+    const auto endDrawingStart = std::chrono::steady_clock::now();
     EndDrawing();
+    m_FrameTimings.endDrawingMs = ElapsedMilliseconds(endDrawingStart);
+    m_PluginBridge.SetFrameTimings(m_FrameTimings);
 }
 
 void CApplication::Run()
@@ -567,8 +601,13 @@ void CApplication::Run()
     while (!WindowShouldClose())
     {
         m_Editor.m_CpuTaskPool.SetMainThreadTask("Update editor and scene");
+        const auto updateFrameStart = std::chrono::steady_clock::now();
         const auto frameStart = CTaskPool::CurrentThreadCpuTime();
         UpdateFrame();
+        m_FrameTimings.updateFrameMs = ElapsedMilliseconds(updateFrameStart);
+        const SSceneRendererTimings rendererTimings = m_SceneRenderer.GetTimings();
+        m_FrameTimings.sceneRendererUpdateMs = rendererTimings.updateMs;
+        m_FrameTimings.shadowPassMs = rendererTimings.shadowPassMs;
         m_Editor.m_CpuTaskPool.RecordMainThreadBusy(
             CTaskPool::CurrentThreadCpuTime() - frameStart);
         m_Editor.m_CpuTaskPool.SetMainThreadTask("");

@@ -18,6 +18,7 @@ public:
     void Initialize(CEditor& editor, CPluginManager& pluginManager);
 
     void SetCamera(CFlyCamera& camera);
+    void SetFrameTimings(const SPluginFrameTimings& timings);
 
     void Update(CEditor& editor, CPluginManager& pluginManager);
 

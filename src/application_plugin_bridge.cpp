@@ -2873,6 +2873,14 @@ void CPluginBridge::SetCamera(CFlyCamera& camera)
     s_pCamera = &camera;
 }
 
+void CPluginBridge::SetFrameTimings(const SPluginFrameTimings& timings)
+{
+    if (m_pContext)
+    {
+        m_pContext->frameTimings = timings;
+    }
+}
+
 void CPluginBridge::Update(CEditor& editor, CPluginManager& pluginManager)
 {
     if (!m_pContext)

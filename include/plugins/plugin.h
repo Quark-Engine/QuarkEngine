@@ -360,6 +360,29 @@ struct SPluginThreadUsage
 };
 
 /**
+ * @struct SPluginFrameTimings
+ * @brief CPU wall-clock timings for the major editor frame stages.
+ *
+ * Values are measured in milliseconds. Render timings describe time spent
+ * submitting work on the CPU; they are not GPU timestamp queries.
+ */
+struct SPluginFrameTimings
+{
+    float updateFrameMs = 0.0f;
+    float sceneRendererUpdateMs = 0.0f;
+    float shadowPassMs = 0.0f;
+    float main3dPassMs = 0.0f;
+    float imguiEditorMs = 0.0f;
+    float endDrawingMs = 0.0f;
+    float hierarchyMs = 0.0f;
+    float inspectorMs = 0.0f;
+    float scenePanelMs = 0.0f;
+    float assetsMs = 0.0f;
+    float modelViewerMs = 0.0f;
+    float pluginUpdateMs = 0.0f;
+};
+
+/**
  * @struct SPluginContext
  * @brief Per-frame host state passed into every plugin callback.
  *
@@ -383,6 +406,9 @@ struct SPluginContext
      *       refreshed for each frame callback and should not be cached.
      */
     float deltaTime;
+
+    /** @brief CPU timings for the previous completed editor frame. */
+    SPluginFrameTimings frameTimings;
 
     /**
      * @brief Number of entities in the scene associated with this context.

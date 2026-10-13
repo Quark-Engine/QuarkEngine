@@ -28,11 +28,8 @@ void UpdateLighting(Shader shader, CLightState& l)
         SetShaderValue(shader, l.m_Light.attenuationLoc, &l.m_Light.attenuation, SHADER_UNIFORM_FLOAT);
     }
 
-    int intensityLoc = GetShaderLocation(shader, TextFormat("lights[%i].intensity", l.m_Id));
-    int rangeLoc = GetShaderLocation(shader, TextFormat("lights[%i].range", l.m_Id));
-
-    SetShaderValue(shader, intensityLoc, &intensity, SHADER_UNIFORM_FLOAT);
-    SetShaderValue(shader, rangeLoc, &range, SHADER_UNIFORM_FLOAT);
+    SetShaderValue(shader, l.m_IntensityLoc, &intensity, SHADER_UNIFORM_FLOAT);
+    SetShaderValue(shader, l.m_RangeLoc, &range, SHADER_UNIFORM_FLOAT);
 
     if (l.m_SpotAngleLoc == -1)
     {

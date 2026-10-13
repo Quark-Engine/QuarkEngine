@@ -28,6 +28,15 @@ class CPluginManager;
 
 struct SPluginContext;
 
+struct SEditorUiTimings
+{
+    float hierarchyMs = 0.0f;
+    float inspectorMs = 0.0f;
+    float scenePanelMs = 0.0f;
+    float assetsMs = 0.0f;
+    float modelViewerMs = 0.0f;
+};
+
 class CEditor
 {
 public:
@@ -38,6 +47,7 @@ public:
     CEditor& operator=(const CEditor&) = delete;
 
     void DrawUi(Shader shader, CFlyCamera& camera, SPluginContext* pCtx);
+    SEditorUiTimings GetUiTimings() const { return m_UiTimings; }
     void DrawAssetsUi();
     void HandleInput();
     void SaveState();
@@ -75,6 +85,7 @@ public:
     bool m_PluginCommandActive = false;
     bool m_SceneRedrawRequested = false;
     std::string m_StatusMessage;
+    SEditorUiTimings m_UiTimings{};
 
     std::stack<quark::SSceneSnapshot> m_UndoStack;
     std::stack<quark::SSceneSnapshot> m_RedoStack;

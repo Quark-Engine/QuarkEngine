@@ -50,6 +50,7 @@ private:
     bool m_Headless = false;
     bool m_ReadyToRun = false;
     bool m_WindowOpen = false;
+    SPluginFrameTimings m_FrameTimings{};
 };
 
 #endif // __APPLICATION_H__
