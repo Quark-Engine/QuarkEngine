@@ -3,6 +3,7 @@
 #include "editor/editor.h"
 #include "application_plugin_bridge.h"
 #include "editor/editor_entity.h"
+#include "editor/editor_entity_commands.h"
 #include "models.h"
 
 #include <memory>
@@ -27,6 +28,8 @@ void CEntityClipboard::Paste(CEditor& editor)
     {
         editor.SaveState();
         CEntity pasted = CEntityFactory::FromAsset(editor.m_Scene, *pAsset);
+        pasted.m_Name = CSceneEntityCommands::MakeDuplicateName(
+            editor.m_Scene, editor.m_Ui.m_MeshEdit.ClipboardData.m_Name);
         if (auto pPastedTransform = pasted.GetTransformComponent(); pPastedTransform && pClipboardTransform)
         {
             pPastedTransform->m_Position = pClipboardTransform->m_Position;

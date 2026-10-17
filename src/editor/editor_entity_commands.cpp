@@ -173,10 +173,10 @@ void CSceneEntityCommands::Delete(CEditor& editor, CEntity* pEntity)
     {
         modal.PendingDelete.pEditor = &editor;
         modal.PendingDelete.pEntity = pEntity;
-        ImGui::OpenPopup("Confirm Delete");
         return;
     }
 
     const int index = static_cast<int>(pEntity - editor.m_Scene.m_vEntities.data());
+    editor.SaveState();
     Erase(editor, index);
 }

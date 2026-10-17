@@ -1433,7 +1433,13 @@ void CEditor::DrawConfirmationModals()
 
     if (modal.PendingDelete.pEditor && modal.PendingDelete.pEntity)
     {
-        if (ImGui::BeginPopupModal(lang.Word("confirm_delete_title"), nullptr, ImGuiWindowFlags_AlwaysAutoResize))
+        std::string popupName = lang.Word("confirm_delete_title");
+        popupName += "###ConfirmDelete";
+        if (!ImGui::IsPopupOpen(popupName.c_str()))
+        {
+            ImGui::OpenPopup(popupName.c_str());
+        }
+        if (ImGui::BeginPopupModal(popupName.c_str(), nullptr, ImGuiWindowFlags_AlwaysAutoResize))
         {
             ImGui::TextUnformatted(lang.Word("delete_selected_entity"));
             if (ImGui::Button(lang.Word("delete")))

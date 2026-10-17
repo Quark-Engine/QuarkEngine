@@ -11,13 +11,11 @@ class CSceneEntityCommands
 {
 public:
     static CEntity CloneInstance(const CEntity& source, CScene& scene);
+    static std::string MakeDuplicateName(const CScene& scene, const std::string& name);
 
     static void Duplicate(CEditor& editor, CEntity* pEntity);
     static void Erase(CEditor& editor, int index);
     static void Delete(CEditor& editor, CEntity* pEntity);
-
-private:
-    static std::string MakeDuplicateName(const CScene& scene, const std::string& name);
 };
 
 #endif // __EDITOR_EDITOR_ENTITY_COMMANDS_H__
