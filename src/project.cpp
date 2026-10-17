@@ -222,15 +222,37 @@ void CProjectService::SaveScene(const std::string& sceneFilePath, const CScene& 
     }
     fs::create_directories(rootPath / "resources");
 
+    if (!SaveSceneDocument(scenePath.string(), scene))
+    {
+        return;
+    }
+    WriteProjectManifest(rootPath, scenePath.filename().string());
+}
+
+bool CProjectService::SaveSceneDocument(const std::string& sceneFilePath, const CScene& scene)
+{
+    const fs::path scenePath = fs::absolute(fs::path(sceneFilePath));
+    const fs::path rootPath = scenePath.parent_path();
+    if (rootPath.empty())
+    {
+        TraceLog(LogLevel::Error, "PROJECT", "Failed to save scene: empty parent directory");
+        return false;
+    }
+
     std::ofstream f(scenePath);
     if (!f.is_open())
     {
         TraceLog(LogLevel::Error, "PROJECT", TextFormat("Failed to open scene file for writing: %s", sceneFilePath.c_str()));
-        return;
+        return false;
     }
     f << quark::CSceneDocument::Serialize(scene);
     f.close();
-    WriteProjectManifest(rootPath, scenePath.filename().string());
+    if (!f)
+    {
+        TraceLog(LogLevel::Error, "PROJECT", TextFormat("Failed to write scene file: %s", sceneFilePath.c_str()));
+        return false;
+    }
+    return true;
 }
 
 bool CProjectService::Load(const std::string& folderPath, CScene& scene, CAssetLibrary& assets,
