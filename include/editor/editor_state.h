@@ -187,7 +187,7 @@ struct SLocalEntry
     bool IsMaterial = false;
     bool IsTextureMeta = false;
     bool isPrefab = false;
-    Texture Texture = {};
+    Texture PreviewTexture = {};
     std::string Extension;
 };
 

@@ -259,7 +259,9 @@ void CApplication::Initialize()
     m_LastAutosaveTime = GetTime();
     m_LastSelectedEntity = m_Editor.m_Scene.m_Selected;
 
+#ifdef _DEBUG
     EnableDebugInterface();
+#endif
 
     m_ReadyToRun = true;
 }

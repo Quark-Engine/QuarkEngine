@@ -28,7 +28,12 @@ void CDesktopIntegration::OpenUrl(const char* pUrl)
 #elif defined(__APPLE__)
     system((std::string("open ") + pUrl).c_str());
 #elif defined(__linux__)
-    system((std::string("xdg-open ") + pUrl).c_str());
+    const std::string command = "xdg-open " + std::string(pUrl);
+    const int result = system(command.c_str());
+    if (result != 0)
+    {
+        TraceLog(LogLevel::Error, "EDITOR", TextFormat("Failed to open URL: %s", pUrl));
+    }
 #else
     TraceLog(LogLevel::Error, "EDITOR", TextFormat("Cannot open URL: %s", pUrl));
 #endif

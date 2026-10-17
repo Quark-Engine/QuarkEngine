@@ -103,10 +103,20 @@ void OpenInSystemFileExplorer(const fs::path& path, bool bIsDirectory)
     }
 #elif defined(__APPLE__)
     const std::string command = "open \"" + path.string() + "\"";
-    std::system(command.c_str());
+    const int result = std::system(command.c_str());
+    if (result != 0)
+    {
+        TraceLog(LogLevel::Error, "EDITOR", TextFormat("Failed to open file explorer for: %s",
+            path.string().c_str()));
+    }
 #elif defined(__linux__)
     const std::string command = "xdg-open \"" + path.string() + "\"";
-    std::system(command.c_str());
+    const int result = std::system(command.c_str());
+    if (result != 0)
+    {
+        TraceLog(LogLevel::Error, "EDITOR", TextFormat("Failed to open file explorer for: %s",
+            path.string().c_str()));
+    }
 #endif
 }
 
@@ -761,10 +771,20 @@ void DrawAssetsUi(CEditor& editor)
                     ShellExecuteA(nullptr, "open", fullPath.string().c_str(), nullptr, nullptr, 1);
                 #elif defined(__APPLE__)
                     std::string cmd = "open \"" + fullPath.string() + "\"";
-                    std::system(cmd.c_str());
+                    const int result = std::system(cmd.c_str());
+                    if (result != 0)
+                    {
+                        TraceLog(LogLevel::Error, "EDITOR", TextFormat("Failed to open file: %s",
+                            fullPath.string().c_str()));
+                    }
                 #elif defined(__linux__)
                     std::string cmd = "xdg-open \"" + fullPath.string() + "\"";
-                    std::system(cmd.c_str());
+                    const int result = std::system(cmd.c_str());
+                    if (result != 0)
+                    {
+                        TraceLog(LogLevel::Error, "EDITOR", TextFormat("Failed to open file: %s",
+                            fullPath.string().c_str()));
+                    }
                 #endif
             }
         }

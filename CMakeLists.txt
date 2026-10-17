@@ -50,6 +50,19 @@ include_directories(
 
 add_subdirectory(quark-libs/QuarkCore)
 
+if(UNIX AND NOT APPLE AND CMAKE_CXX_COMPILER_ID STREQUAL "GNU")
+    foreach(QUARKCORE_TARGET IN ITEMS QuarkCore QuarkCore-OpenGL QuarkCore-Vulkan QuarkCore-Combined)
+        if(TARGET ${QUARKCORE_TARGET})
+            target_compile_options(${QUARKCORE_TARGET} PRIVATE
+                -Wno-format-truncation
+                -Wno-missing-field-initializers
+                -Wno-unused-parameter
+                -Wno-unused-variable
+            )
+        endif()
+    endforeach()
+endif()
+
 add_library(imgui SHARED
     quark-libs/imgui/include/imgui.cpp
     quark-libs/imgui/include/imgui_draw.cpp
