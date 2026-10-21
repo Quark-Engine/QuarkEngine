@@ -3,7 +3,7 @@ name: Run (Windows, Linux & macOS)
 on:
   push:
     branches:
-      - main
+      - map-editor
   pull_request:
   workflow_dispatch:
 
