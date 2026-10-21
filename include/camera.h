@@ -22,6 +22,7 @@ public:
     void InitializeCursors();
     void Update(CScene& scene, CPreferences& preferences);
     void ApplyActiveCursor();
+    void ReleaseCapture();
     void FocusOn(const Vec3& point);
     Camera3D& GetCamera();
 

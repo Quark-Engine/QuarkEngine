@@ -50,6 +50,8 @@ private:
     bool m_Headless = false;
     bool m_ReadyToRun = false;
     bool m_WindowOpen = false;
+    bool m_GameCursorCaptured = false;
+    bool m_PreviousGameCursorChangeDisabled = false;
     SPluginFrameTimings m_FrameTimings{};
 };
 

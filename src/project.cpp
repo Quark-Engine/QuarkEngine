@@ -191,14 +191,39 @@ void CProjectService::CreateNew(const std::string& folderPath, CScene& scene)
     fs::create_directories(rootPath);
     fs::create_directories(rootPath / "resources");
 
-    json j;
-    j["entities"] = json::array();
+    scene.ReleaseResources();
+    scene.m_vEntities.clear();
+
+    CEntity cube;
+    cube.m_Id = 0;
+    cube.m_Name = "Cube";
+    cube.GetMeshComponent()->m_Type = OBJECT_CUBE;
+    cube.GetMeshComponent()->m_AssetName = "Cube";
+    cube.GetComponents()->AddComponent(std::make_shared<CMaterialComponent>());
+    scene.m_vEntities.push_back(std::move(cube));
+
+    CEntity light;
+    light.m_Id = 1;
+    light.m_Name = "Light";
+    light.GetComponents()->RemoveComponent(1);
+    light.GetTransformComponent()->m_Position = { -3.0f, 4.0f, 2.0f };
+    light.GetComponents()->AddComponent(std::make_shared<CLightComponent>());
+    scene.m_vEntities.push_back(std::move(light));
+
+    CEntity camera;
+    camera.m_Id = 2;
+    camera.m_Name = "Camera";
+    camera.GetComponents()->RemoveComponent(1);
+    camera.GetTransformComponent()->m_Position = { 0.0f, 1.5f, 6.0f };
+    camera.GetTransformComponent()->m_Rotation = { -12.0f, 0.0f, 0.0f };
+    camera.GetComponents()->AddComponent(std::make_shared<CCameraComponent>());
+    scene.m_vEntities.push_back(std::move(camera));
+    scene.m_Selected = 0;
+    scene.m_vSelectedEntities = { 0 };
 
     std::ofstream f(rootPath / "scene.json");
-    f << j.dump(4);
+    f << quark::CSceneDocument::Serialize(scene);
     WriteProjectManifest(rootPath);
-
-    scene.ReleaseResources();
 }
 
 void CProjectService::Save(const std::string& folderPath, const CScene& scene)
@@ -320,7 +345,7 @@ bool CProjectService::Load(const std::string& folderPath, CScene& scene, CAssetL
         {
             e.GetComponents()->AddComponent(std::make_shared<CTransformComponent>());
         }
-        if (e.GetLightComponent())
+        if (e.GetLightComponent() || e.GetCameraComponent())
         {
             continue;
         }

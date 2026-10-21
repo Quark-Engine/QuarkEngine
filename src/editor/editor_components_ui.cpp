@@ -68,6 +68,20 @@ void CComponentUIHelper::DrawEntityInspector(CEditor& editor, CEntity& entity, S
                 {
                     DrawCollisionComponent(editor, entity, pCollision.get());
                 }
+                else if (auto pCamera = std::dynamic_pointer_cast<CCameraComponent>(pComp))
+                {
+                    float fieldOfView = pCamera->m_FieldOfView;
+                    const bool fieldOfViewChanged =
+                        ImGui::SliderFloat("Field of View", &fieldOfView, 20.0f, 120.0f, "%.0f deg");
+                    if (ImGui::IsItemActivated())
+                    {
+                        editor.SaveState();
+                    }
+                    if (fieldOfViewChanged)
+                    {
+                        pCamera->m_FieldOfView = fieldOfView;
+                    }
+                }
                 else if (auto pText = std::dynamic_pointer_cast<CText3DComponent>(pComp))
                 {
                     Draw3dTextComponent(editor, entity, pText.get());
@@ -166,6 +180,27 @@ void CComponentUIHelper::DrawEntityInspector(CEditor& editor, CEntity& entity, S
                 }
                 return false;
             }();
+            const bool hasCamera = [&]()
+            {
+                for (size_t j = 0; j < pComponentsManager->GetComponentCount(); ++j)
+                {
+                    auto pExisting = pComponentsManager->GetComponent(j);
+                    if (pExisting && pExisting->GetType() == COMPONENT_CAMERA)
+                    {
+                        return true;
+                    }
+                }
+                return false;
+            }();
+            if (ImGui::MenuItem("Camera"))
+            {
+                if (!hasCamera)
+                {
+                    editor.SaveState();
+                    pComponentsManager->AddComponent(std::make_shared<CCameraComponent>());
+                }
+            }
+
             if (ImGui::MenuItem(lang.Word("light")))
             {
                 if (!hasLight)

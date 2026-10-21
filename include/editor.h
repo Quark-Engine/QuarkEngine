@@ -57,6 +57,8 @@ public:
     void RequestSceneRedraw();
     void PollHistoryRestore();
     bool IsHistoryRestorePending() const;
+    bool BeginPlayMode();
+    bool StopPlayMode();
     void Undo();
     void Redo();
 
@@ -84,6 +86,12 @@ public:
     bool m_SceneDirty = false;
     bool m_PluginCommandActive = false;
     bool m_SceneRedrawRequested = false;
+    bool m_IsPlaying = false;
+    bool m_PendingPlayRestore = false;
+    bool m_GameViewActive = false;
+    bool m_SelectGameTab = false;
+    bool m_ShowGameView = true;
+    bool m_GameCameraAvailable = false;
     std::string m_StatusMessage;
     SEditorUiTimings m_UiTimings{};
 
@@ -101,14 +109,18 @@ public:
     std::vector<std::optional<SEditableMeshBuildData>> m_vPendingGeometryResults;
     std::optional<quark::SSceneSnapshot> m_PendingHistorySnapshot;
     std::optional<quark::SSceneSnapshot> m_PendingCurrentSnapshot;
+    std::optional<quark::SSceneSnapshot> m_PlayModeSnapshot;
     bool m_PendingHistoryIsUndo = false;
 
 private:
+    void StartSnapshotRestore(const quark::SSceneSnapshot& snapshot, bool playRestore);
     void StartHistoryRestore(bool undo);
     void DrawMainMenuBar(SPluginContext* pCtx, ImGuiID dockspaceId);
     void DrawHierarchyPanel(SPluginContext* pCtx);
     void DrawInspectorPanel(Shader shader, SPluginContext* pCtx);
     void DrawScenePanel(CFlyCamera& camera, SPluginContext* pCtx);
+    void DrawGamePanel(CFlyCamera& camera);
+    void DrawSceneViewport(CViewportState& viewport, CFlyCamera& camera, bool sceneView);
     void DrawRenameModal();
     void DrawAboutModal();
     void DrawPreferencesUi(CFlyCamera& camera, SPluginContext* pPluginCtx);

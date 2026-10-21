@@ -343,6 +343,23 @@ void CFlyCamera::ApplyActiveCursor()
     }
 }
 
+void CFlyCamera::ReleaseCapture()
+{
+    SetImGuiCursorOverride(false);
+    SetCameraCapture(false);
+    if (SDL_Window* pWindow = GetNativeWindow())
+    {
+        SDL_SetWindowMouseRect(pWindow, nullptr);
+    }
+    if (!SDL_SetCursor(SDL_GetDefaultCursor()))
+    {
+        TraceLog(LogLevel::Error, "CAMERA", TextFormat(
+            "Failed to restore default cursor: %s", SDL_GetError()));
+    }
+    m_Active = false;
+    m_ActiveMouseControl = EMouseControl::NONE;
+}
+
 void CFlyCamera::UpdateOrbitCamera(float wheel)
 {
     if (fabsf(wheel) <= 0.001f)

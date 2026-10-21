@@ -61,6 +61,8 @@ public:
     const CMaterialComponent* GetMaterialComponent() const;
     CCollisionComponent* GetCollisionComponent();
     const CCollisionComponent* GetCollisionComponent() const;
+    CCameraComponent* GetCameraComponent();
+    const CCameraComponent* GetCameraComponent() const;
 
     int m_Id = 0;
     std::string m_Name;

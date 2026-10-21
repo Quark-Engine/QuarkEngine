@@ -36,6 +36,10 @@ void CComponentFactoryRegistry::SeedBuiltIns()
     {
         return std::make_shared<CCollisionComponent>();
     });
+    seed("Camera", []()
+    {
+        return std::make_shared<CCameraComponent>();
+    });
 
     const FComponentFactory textFactory = []()
     {

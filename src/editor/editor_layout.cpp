@@ -26,6 +26,7 @@ void CEditorLayout::Reset(ImGuiID dockspaceId, CPreferences& preferences)
     ImGui::DockBuilderDockWindow(lang.Word("hierarchy"), dockIdLeft);
     ImGui::DockBuilderDockWindow(lang.Word("inspector"), dockIdRight);
     ImGui::DockBuilderDockWindow(lang.Word("assets"), dockIdBottom);
+    ImGui::DockBuilderDockWindow("Game", dockMainId);
     ImGui::DockBuilderDockWindow(lang.Word("scene"), dockMainId);
 
     ImGui::DockBuilderFinish(dockspaceId);

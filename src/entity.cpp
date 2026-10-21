@@ -206,3 +206,13 @@ const CCollisionComponent* CEntity::GetCollisionComponent() const
 {
     return m_pComponents ? m_pComponents->GetCollision() : nullptr;
 }
+
+CCameraComponent* CEntity::GetCameraComponent()
+{
+    return m_pComponents ? m_pComponents->GetCamera() : nullptr;
+}
+
+const CCameraComponent* CEntity::GetCameraComponent() const
+{
+    return m_pComponents ? m_pComponents->GetCamera() : nullptr;
+}

@@ -117,6 +117,24 @@ TEST(SceneSnapshot, round_trips_tags)
     CHECK(restored.m_vEntities[0].m_vTags[1] == "beta");
 }
 
+TEST(SceneSnapshot, round_trips_camera_component)
+{
+    CComponentFactoryRegistry registry;
+    CScene source;
+    const int index = AddEntity(source, "camera", -1);
+    auto pCamera = std::make_shared<CCameraComponent>();
+    pCamera->m_FieldOfView = 75.0f;
+    source.m_vEntities[index].GetComponents()->AddComponent(pCamera);
+
+    CScene restored;
+    CHECK(quark::CSceneDocument::Deserialize(
+        quark::CSceneDocument::Serialize(source), restored, registry));
+
+    const CCameraComponent* pRestoredCamera = restored.m_vEntities[0].GetCameraComponent();
+    CHECK(pRestoredCamera != nullptr);
+    CHECK_NEAR(pRestoredCamera->m_FieldOfView, 75.0f, 0.001);
+}
+
 TEST(SceneSnapshot, round_trips_transform)
 {
     CComponentFactoryRegistry registry;
@@ -721,9 +739,10 @@ TEST(ComponentFactory, TypeNames_lists_built_ins_and_registrations_in_a_stable_o
 {
     CComponentFactoryRegistry registry;
     const std::vector<std::string> vBuiltIns = registry.TypeNames();
-    CHECK(vBuiltIns.size() == 7);
+    CHECK(vBuiltIns.size() == 8);
     CHECK(vBuiltIns.front() == "3D Text");
     CHECK(vBuiltIns.back() == "Transform");
+    CHECK(std::find(vBuiltIns.begin(), vBuiltIns.end(), "Camera") != vBuiltIns.end());
 
     registry.Register(s_GaugeTypeName, []()
     {

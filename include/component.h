@@ -40,7 +40,8 @@ enum EComponentType
     COMPONENT_MATERIAL,
     COMPONENT_LIGHT,
     COMPONENT_COLLISION,
-    COMPONENT_CUSTOM
+    COMPONENT_CUSTOM,
+    COMPONENT_CAMERA
 };
 
 enum EColliderType
@@ -458,6 +459,39 @@ public:
     void OnEntityTransformChanged() override;
 };
 
+class CCameraComponent : public IComponent
+{
+public:
+    float m_FieldOfView = 60.0f;
+
+    CCameraComponent()
+        : IComponent(COMPONENT_CAMERA, "Camera")
+    {
+    }
+
+    EComponentType GetType() const override
+    {
+        return COMPONENT_CAMERA;
+    }
+    std::string GetTypeName() const override
+    {
+        return "Camera";
+    }
+
+    void Serialize(nlohmann::json& json) const override
+    {
+        json["field_of_view"] = m_FieldOfView;
+    }
+
+    void Deserialize(const nlohmann::json& json) override
+    {
+        if (json.contains("field_of_view") && json["field_of_view"].is_number())
+        {
+            m_FieldOfView = json["field_of_view"].get<float>();
+        }
+    }
+};
+
 class CComponentManager
 {
 private:
@@ -529,6 +563,12 @@ public:
     CCollisionComponent* GetCollision()
     {
         auto pComp = GetComponentOfType<CCollisionComponent>();
+        return pComp ? pComp.get() : nullptr;
+    }
+
+    CCameraComponent* GetCamera()
+    {
+        auto pComp = GetComponentOfType<CCameraComponent>();
         return pComp ? pComp.get() : nullptr;
     }
 

@@ -4,6 +4,7 @@
 #include "engine/component_factory_registry.h"
 #include "entity.h"
 #include "nlohmann/json.hpp"
+
 void CMeshComponent::Serialize(nlohmann::json& json) const
 {
     json["segments"] = m_Segments;
@@ -258,6 +259,11 @@ void CComponentManager::CloneInto(const CComponentManager& source)
         case COMPONENT_COLLISION:
             pCloned = std::make_shared<CCollisionComponent>(
                 *std::dynamic_pointer_cast<CCollisionComponent>(pComponent));
+            break;
+
+        case COMPONENT_CAMERA:
+            pCloned = std::make_shared<CCameraComponent>(
+                *std::dynamic_pointer_cast<CCameraComponent>(pComponent));
             break;
 
         default:

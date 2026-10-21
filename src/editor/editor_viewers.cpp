@@ -21,6 +21,7 @@ static void RebuildMaterialPreviewMesh(CMaterialViewerState& state);
 void CEditorUiState::Unload()
 {
     m_Viewport.Unload();
+    m_GameViewport.Unload();
     m_ModelViewer.Unload();
     m_MaterialViewer.Unload();
 }

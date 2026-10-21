@@ -49,6 +49,7 @@
 
 #include <algorithm>
 #include <chrono>
+#include <cfloat>
 #include <cmath>
 #include <cstdio>
 #include <cstring>
@@ -157,6 +158,16 @@ void CEditor::DrawUi(Shader shader, CFlyCamera& camera, SPluginContext* pPluginC
         const auto panelStart = std::chrono::steady_clock::now();
         DrawScenePanel(camera, pPluginCtx);
         m_UiTimings.scenePanelMs = ElapsedMilliseconds(panelStart);
+    }
+    if (m_ShowGameView)
+    {
+        const auto panelStart = std::chrono::steady_clock::now();
+        DrawGamePanel(camera);
+        m_UiTimings.scenePanelMs += ElapsedMilliseconds(panelStart);
+    }
+    else
+    {
+        m_GameViewActive = false;
     }
 
     DrawRenameModal();
@@ -280,6 +291,7 @@ void CEditor::DrawMainMenuBar(SPluginContext* pPluginCtx, ImGuiID dockspaceId)
             ImGui::MenuItem(lang.Word("inspector"), nullptr, &m_Preferences.m_ShowInspector);
             ImGui::MenuItem(lang.Word("assets"), nullptr, &m_Preferences.m_ShowAssets);
             ImGui::MenuItem(lang.Word("scene"), nullptr, &m_Preferences.m_ShowScene);
+            ImGui::MenuItem("Game", nullptr, &m_ShowGameView);
             ImGui::EndMenu();
         }
 
@@ -475,6 +487,15 @@ void CEditor::HierarchyDrawCreateMenu(int parentIndex)
         {
             SaveState();
             CEntity entity = CEntityFactory::Light(m_Scene, parentIndex);
+            m_Scene.m_vEntities.push_back(std::move(entity));
+            const int entityIndex = static_cast<int>(m_Scene.m_vEntities.size()) - 1;
+            DispatchPluginEvent(PLUGIN_EVENT_ENTITY_CREATED, entityIndex);
+            m_Scene.SelectEntity(entityIndex, false);
+        }
+        if (ImGui::MenuItem("Camera"))
+        {
+            SaveState();
+            CEntity entity = CEntityFactory::Camera(m_Scene, parentIndex);
             m_Scene.m_vEntities.push_back(std::move(entity));
             const int entityIndex = static_cast<int>(m_Scene.m_vEntities.size()) - 1;
             DispatchPluginEvent(PLUGIN_EVENT_ENTITY_CREATED, entityIndex);
@@ -786,45 +807,139 @@ void CEditor::DrawScenePanel(CFlyCamera& camera, SPluginContext* pPluginCtx)
     if (ImGui::Begin(lang.Word("scene"), &m_Preferences.m_ShowScene))
     {
         m_pPluginManager->DrawUiRegion(UI_INSPECTOR, *pPluginCtx);
-        viewport.m_WindowPos = ImGui::GetCursorScreenPos();
-        viewport.m_WindowSize = ImGui::GetContentRegionAvail();
-
-        if (viewport.m_WindowSize.x > 0 && viewport.m_WindowSize.y > 0)
+        if (m_IsPlaying)
         {
-            if (viewport.m_RenderTexture.id == 0 ||
-                viewport.m_RenderTexture.texture.width  != (int)viewport.m_WindowSize.x ||
-                viewport.m_RenderTexture.texture.height != (int)viewport.m_WindowSize.y)
+            if (ImGui::Button("Stop", ImVec2(48.0f, 24.0f)))
             {
-                viewport.Release();
-                viewport.m_RenderTexture = LoadRenderTexture((int)viewport.m_WindowSize.x, (int)viewport.m_WindowSize.y);
+                camera.ReleaseCapture();
+                StopPlayMode();
             }
-
-            if (viewport.m_RenderTexture.id > 0)
-            {
-                const bool topLeftTextureBackend =
-                    GetCurrentBackend() == RendererType::Vulkan ||
-                    GetCurrentBackend() == RendererType::D3D11;
-                QcImGuiAddImage(
-                    ImGui::GetWindowDrawList(),
-                    &viewport.m_RenderTexture.texture,
-                    viewport.m_WindowPos,
-                    ImVec2(viewport.m_WindowPos.x + viewport.m_WindowSize.x,
-                        viewport.m_WindowPos.y + viewport.m_WindowSize.y),
-                    topLeftTextureBackend ? ImVec2(0, 0) : ImVec2(0, 1),
-                    topLeftTextureBackend ? ImVec2(1, 1) : ImVec2(1, 0)
-                );
-            }
-
-            viewport.m_Hovered = ImGui::IsWindowHovered();
-            viewport.m_Focused  = ImGui::IsWindowFocused();
-
-            CGizmoController::Draw(*this, camera);
-            CPolygonEditor::Draw(*this, camera.GetCamera());
-            CSceneAssetDrop::Handle(*this, camera.GetCamera());
         }
+        else if (m_PlayModeSnapshot.has_value())
+        {
+            if (ImGui::Button("Restore", ImVec2(64.0f, 24.0f)))
+            {
+                StopPlayMode();
+            }
+        }
+        else if (ImGui::Button("Play", ImVec2(48.0f, 24.0f)))
+        {
+            if (BeginPlayMode())
+            {
+                camera.ReleaseCapture();
+            }
+        }
+
+        DrawSceneViewport(viewport, camera, true);
     }
     ImGui::End();
     ImGui::PopStyleVar();
+}
+
+void CEditor::DrawGamePanel(CFlyCamera& camera)
+{
+    if (m_SelectGameTab)
+    {
+        ImGui::SetNextWindowFocus();
+    }
+
+    ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(0, 0));
+    const bool isOpen = ImGui::Begin("Game", &m_ShowGameView);
+    m_SelectGameTab = false;
+    if (isOpen)
+    {
+        m_GameViewActive = ImGui::IsWindowFocused(ImGuiFocusedFlags_RootAndChildWindows);
+        if (!m_IsPlaying && m_GameViewActive)
+        {
+            camera.ReleaseCapture();
+        }
+        DrawSceneViewport(m_Ui.m_GameViewport, camera, false);
+    }
+    else
+    {
+        m_GameViewActive = false;
+    }
+    ImGui::End();
+    ImGui::PopStyleVar();
+}
+
+void CEditor::DrawSceneViewport(CViewportState& viewport, CFlyCamera& camera,
+    bool sceneView)
+{
+    viewport.m_WindowPos = ImGui::GetCursorScreenPos();
+    viewport.m_WindowSize = ImGui::GetContentRegionAvail();
+
+    if (viewport.m_WindowSize.x > 0 && viewport.m_WindowSize.y > 0)
+    {
+        if (viewport.m_RenderTexture.id == 0 ||
+            viewport.m_RenderTexture.texture.width != static_cast<int>(viewport.m_WindowSize.x) ||
+            viewport.m_RenderTexture.texture.height != static_cast<int>(viewport.m_WindowSize.y))
+        {
+            viewport.Release();
+            viewport.m_RenderTexture = LoadRenderTexture(
+                static_cast<int>(viewport.m_WindowSize.x),
+                static_cast<int>(viewport.m_WindowSize.y));
+        }
+
+        if (viewport.m_RenderTexture.id > 0)
+        {
+            const bool topLeftTextureBackend =
+                GetCurrentBackend() == RendererType::Vulkan ||
+                GetCurrentBackend() == RendererType::D3D11;
+            QcImGuiAddImage(
+                ImGui::GetWindowDrawList(),
+                &viewport.m_RenderTexture.texture,
+                viewport.m_WindowPos,
+                ImVec2(viewport.m_WindowPos.x + viewport.m_WindowSize.x,
+                    viewport.m_WindowPos.y + viewport.m_WindowSize.y),
+                topLeftTextureBackend ? ImVec2(0, 0) : ImVec2(0, 1),
+                topLeftTextureBackend ? ImVec2(1, 1) : ImVec2(1, 0)
+            );
+        }
+
+        if (!sceneView && !m_GameCameraAvailable)
+        {
+            const float textFontSize = ImGui::GetFontSize() * 2.5f;
+            const char* pCameraMessage = "No cameras found";
+            const char* pFaceMessage = ":(";
+            const ImVec2 cameraMessageSize = ImGui::GetFont()->CalcTextSizeA(
+                textFontSize, FLT_MAX, 0.0f, pCameraMessage);
+            const ImVec2 faceMessageSize = ImGui::GetFont()->CalcTextSizeA(
+                textFontSize, FLT_MAX, 0.0f, pFaceMessage);
+            const float textHeight = cameraMessageSize.y + faceMessageSize.y;
+            const ImVec2 cameraMessagePosition(
+                viewport.m_WindowPos.x + (viewport.m_WindowSize.x - cameraMessageSize.x) * 0.5f,
+                viewport.m_WindowPos.y + (viewport.m_WindowSize.y - textHeight) * 0.5f);
+            const ImVec2 faceMessagePosition(
+                viewport.m_WindowPos.x + (viewport.m_WindowSize.x - faceMessageSize.x) * 0.5f,
+                cameraMessagePosition.y + cameraMessageSize.y);
+            ImDrawList* pDrawList = ImGui::GetWindowDrawList();
+            pDrawList->AddRectFilled(
+                viewport.m_WindowPos,
+                ImVec2(viewport.m_WindowPos.x + viewport.m_WindowSize.x,
+                    viewport.m_WindowPos.y + viewport.m_WindowSize.y),
+                IM_COL32(0, 0, 0, 255));
+            pDrawList->AddText(
+                ImGui::GetFont(), textFontSize, cameraMessagePosition,
+                IM_COL32(230, 230, 230, 255), pCameraMessage);
+            pDrawList->AddText(
+                ImGui::GetFont(), textFontSize, faceMessagePosition,
+                IM_COL32(230, 230, 230, 255), pFaceMessage);
+        }
+
+        viewport.m_Hovered = sceneView && ImGui::IsWindowHovered();
+        viewport.m_Focused = sceneView && ImGui::IsWindowFocused();
+
+        if (sceneView)
+        {
+            CGizmoController::Draw(*this, camera);
+            if (!m_IsPlaying)
+            {
+                CPolygonEditor::Draw(*this, camera.GetCamera());
+                CSceneAssetDrop::Handle(*this, camera.GetCamera());
+            }
+        }
+    }
 }
 
 void CEditor::DrawRenameModal()

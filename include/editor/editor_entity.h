@@ -16,6 +16,7 @@ public:
     static CEntity FromAsset(CScene& scene, CModelAsset& asset);
 
     static CEntity Light(CScene& scene, int parentIndex);
+    static CEntity Camera(CScene& scene, int parentIndex);
 
     static void AssignName(CEntity& entity, const char* pNewName);
 

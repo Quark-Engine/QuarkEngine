@@ -119,6 +119,30 @@ CEntity CEntityFactory::Light(CScene& scene, int parentIndex)
     return entity;
 }
 
+CEntity CEntityFactory::Camera(CScene& scene, int parentIndex)
+{
+    CEntity entity;
+    entity.m_Name = scene.MakeUniqueName("Camera");
+    entity.m_Id = static_cast<int>(scene.m_vEntities.size());
+    entity.m_ParentId = parentIndex;
+    entity.GetTransformComponent()->m_Position = { 0.0f, 1.5f, 6.0f };
+    entity.GetTransformComponent()->m_Rotation = { -12.0f, 0.0f, 0.0f };
+
+    CComponentManager* pCm = entity.GetComponents();
+    for (size_t componentIndex = 0; componentIndex < pCm->GetComponentCount(); ++componentIndex)
+    {
+        if (pCm->GetComponent(componentIndex)->GetType() == COMPONENT_MESH)
+        {
+            pCm->RemoveComponent(componentIndex);
+            break;
+        }
+    }
+
+    auto pCamera = std::make_shared<CCameraComponent>();
+    pCm->AddComponent(pCamera);
+    return entity;
+}
+
 void CEntityFactory::SavePrefab(CEntity entity, const fs::path path)
 {
     nlohmann::json j;

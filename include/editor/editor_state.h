@@ -340,6 +340,7 @@ public:
     SGizmoState m_Gizmo;
 
     CViewportState m_Viewport;
+    CViewportState m_GameViewport;
     CModelViewerState m_ModelViewer;
     CMaterialViewerState m_MaterialViewer;
 };
