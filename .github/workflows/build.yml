@@ -3,7 +3,7 @@ name: Build (Windows, Linux & macOS)
 on:
   push:
     branches:
-      - main
+      - map-editor
   pull_request:
 
 jobs:
