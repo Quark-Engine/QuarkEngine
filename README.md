@@ -1,6 +1,7 @@
-# Quark Engine
+# Quark Map Editor
 
-A light-weight engine in C++ and QuarkCore.
+A light-weight map editor in C++ and QuarkCore.
+This is a separate branch for maintaining an older version of the engine (1.0.2), which is geared toward map creation.
 
 ## Features
 
