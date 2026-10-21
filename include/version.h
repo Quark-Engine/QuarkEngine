@@ -1,7 +1,7 @@
 #ifndef __VERSION_H__
 #define __VERSION_H__
 
-static inline constexpr const char* QUARK_ENGINE_VERSION = "v1.0.2";
+static inline constexpr const char* QUARK_ENGINE_VERSION = "v1.0.2-LTS";
 
 #ifndef QUARK_ENGINE_BUILD
 #define QUARK_ENGINE_BUILD "unknown"
