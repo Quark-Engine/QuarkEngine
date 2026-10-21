@@ -50,6 +50,39 @@ include_directories(
 
 add_subdirectory(quark-libs/QuarkCore)
 
+if(WIN32)
+    target_compile_definitions(QuarkCore PRIVATE QUARKCORE_BUILD_DLL)
+endif()
+
+add_library(QuarkCoreRuntime SHARED src/engine/quark_core_exports.cpp)
+target_include_directories(QuarkCoreRuntime PRIVATE
+    ${CMAKE_SOURCE_DIR}/quark-libs/QuarkCore/include
+)
+target_compile_definitions(QuarkCoreRuntime PRIVATE QUARKCORE_BUILD_DLL)
+target_link_libraries(QuarkCoreRuntime PRIVATE QuarkCore-Combined)
+if(MSVC)
+    target_link_options(QuarkCoreRuntime PRIVATE
+        "/WHOLEARCHIVE:$<TARGET_FILE:QuarkCore-Combined>"
+        "/WHOLEARCHIVE:$<TARGET_FILE:QuarkCore>"
+    )
+elseif(UNIX AND CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang")
+    target_link_libraries(QuarkCoreRuntime PRIVATE
+        "-Wl,--whole-archive"
+        "$<TARGET_FILE:QuarkCore-Combined>"
+        "$<TARGET_FILE:QuarkCore>"
+        "-Wl,--no-whole-archive"
+    )
+    add_dependencies(QuarkCoreRuntime QuarkCore-Combined)
+endif()
+
+set_target_properties(QuarkCoreRuntime PROPERTIES
+    PREFIX ""
+    OUTPUT_NAME "QuarkCore"
+    RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/bin/$<CONFIG>
+    LIBRARY_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/bin/$<CONFIG>
+    ARCHIVE_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/bin/$<CONFIG>
+)
+
 if(UNIX AND NOT APPLE AND CMAKE_CXX_COMPILER_ID STREQUAL "GNU")
     foreach(QUARKCORE_TARGET IN ITEMS QuarkCore QuarkCore-OpenGL QuarkCore-Vulkan QuarkCore-Combined)
         if(TARGET ${QUARKCORE_TARGET})
@@ -70,6 +103,85 @@ add_library(imgui SHARED
     quark-libs/imgui/include/imgui_tables.cpp
     imgui/imgui_impl_sdl3.cpp
     src/ImGuizmo.cpp
+)
+
+add_library(QuarkEngineRuntime SHARED
+    quark-libs/imgui/include/imgui.cpp
+    quark-libs/imgui/include/imgui_draw.cpp
+    quark-libs/imgui/include/imgui_widgets.cpp
+    quark-libs/imgui/include/imgui_tables.cpp
+    imgui/imgui_impl_sdl3.cpp
+    imgui/imgui_impl_opengl3.cpp
+    imgui/imgui_impl_vulkan.cpp
+    src/ImGuizmo.cpp
+    src/application_scene_renderer.cpp
+    src/assets/asset_library.cpp
+    src/assets/preview_cache.cpp
+    src/assets/texture_cache.cpp
+    src/component.cpp
+    src/editable_mesh.cpp
+    src/engine/component_factory_registry.cpp
+    src/engine/cpu_task_pool.cpp
+    src/engine/material_texture_restore.cpp
+    src/engine/material_loader.cpp
+    src/engine/runtime_application.cpp
+    src/engine/runtime_plugin_bridge.cpp
+    src/engine/scene_document.cpp
+    src/engine/scene_package.cpp
+    src/engine/scene_runtime.cpp
+    src/engine/transform.cpp
+    src/entity.cpp
+    src/lighting.cpp
+    src/models.cpp
+    src/project.cpp
+    src/scene.cpp
+    src/tex.cpp
+    src/text_mesh.cpp
+    src/editor/editor_preferences.cpp
+    src/editor/editor_utils.cpp
+)
+if(WIN32)
+    target_sources(QuarkEngineRuntime PRIVATE imgui/imgui_impl_dx11.cpp)
+    target_link_libraries(QuarkEngineRuntime PRIVATE d3d11)
+endif()
+target_include_directories(QuarkEngineRuntime PRIVATE
+    ${CMAKE_SOURCE_DIR}/quark-libs/imgui/include
+    ${CMAKE_SOURCE_DIR}/imgui
+    ${CMAKE_SOURCE_DIR}/src
+    ${CMAKE_SOURCE_DIR}/include
+)
+target_compile_definitions(QuarkEngineRuntime PRIVATE QC_ENABLE_OPENGL QC_ENABLE_VULKAN)
+if(WIN32)
+    target_compile_definitions(QuarkEngineRuntime PRIVATE QC_ENABLE_D3D11)
+endif()
+target_link_libraries(QuarkEngineRuntime PRIVATE
+    QuarkCoreRuntime
+    SDL3::SDL3
+    Vulkan::Vulkan
+    assimp::assimp
+    freetype
+    OpenAL::OpenAL
+)
+if(WIN32)
+    target_compile_definitions(QuarkEngineRuntime PRIVATE
+        BUILD_LIBTYPE_SHARED
+        IMGUI_API=__declspec\(dllexport\)
+        IMGUI_IMPL_API=__declspec\(dllexport\)
+    )
+else()
+    target_compile_definitions(QuarkEngineRuntime PRIVATE
+        BUILD_LIBTYPE_SHARED
+        "IMGUI_API=__attribute__((visibility(\"default\")))"
+        "IMGUI_IMPL_API=__attribute__((visibility(\"default\")))"
+    )
+endif()
+set_target_properties(QuarkEngineRuntime PROPERTIES
+    PREFIX ""
+    OUTPUT_NAME "QuarkEngine"
+    ARCHIVE_OUTPUT_NAME "QuarkEngineRuntime"
+    RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/bin/$<CONFIG>
+    LIBRARY_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/bin/$<CONFIG>
+    ARCHIVE_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/bin/$<CONFIG>
 )
 
 add_library(imgui-opengl SHARED imgui/imgui_impl_opengl3.cpp)
@@ -195,6 +307,7 @@ if(BUILD_ENGINE)
         src/editor/editor_hierarchy_utils.cpp
         src/editor/editor_preferences.cpp
         src/editor/editor_file_utils.cpp
+        src/editor/runtime_builder.cpp
     )
 
     set(SOURCE_FILES
@@ -213,8 +326,10 @@ if(BUILD_ENGINE)
         src/engine/cpu_task_pool.cpp
         src/engine/component_factory_registry.cpp
         src/engine/scene_document.cpp
+        src/engine/scene_package.cpp
         src/engine/scene_runtime.cpp
         src/engine/material_texture_restore.cpp
+        src/engine/material_loader.cpp
         src/entity.cpp
         src/hub.cpp
         src/language_manager.cpp
@@ -230,6 +345,7 @@ if(BUILD_ENGINE)
     )
 
     add_executable(${PROJECT_NAME} ${SOURCE_FILES} ${EDITOR_FILES})
+    add_dependencies(${PROJECT_NAME} QuarkCoreRuntime QuarkEngineRuntime)
 
     set_target_properties(${PROJECT_NAME} PROPERTIES
         RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/bin/$<CONFIG>
@@ -279,6 +395,7 @@ if(BUILD_ENGINE)
     target_compile_definitions(${PROJECT_NAME} PRIVATE
         QUARKENGINE_BUILD
         QUARKCORE_STATIC
+        QUARK_ENGINE_CONFIGURATION="$<CONFIG>"
         QUARK_ENGINE_BUILD="${QUARK_ENGINE_BUILD}"
         QUARK_ENGINE_BUILD_DATE="${QUARK_ENGINE_BUILD_DATE}"
     )
@@ -354,12 +471,37 @@ if(BUILD_ENGINE)
         )
         add_custom_command(TARGET ${PROJECT_NAME} POST_BUILD
             COMMAND ${CMAKE_COMMAND} -E copy_if_different
+                $<TARGET_LINKER_FILE:SDL3::SDL3>
+                $<TARGET_LINKER_FILE:freetype>
+                $<TARGET_FILE_DIR:${PROJECT_NAME}>
+        )
+        add_custom_command(TARGET ${PROJECT_NAME} POST_BUILD
+            COMMAND ${CMAKE_COMMAND} -E copy_if_different
                 $<IF:$<CONFIG:Debug>,${CMAKE_SOURCE_DIR}/quark-libs/QuarkCore/external/Vulkan/lib/SPIRV-Toolsd.dll,${CMAKE_SOURCE_DIR}/quark-libs/QuarkCore/external/Vulkan/lib/SPIRV-Tools.dll>
                 $<TARGET_FILE_DIR:${PROJECT_NAME}>/SPIRV-Tools.dll
             COMMAND ${CMAKE_COMMAND} -E copy_if_different
                 $<IF:$<CONFIG:Debug>,${CMAKE_SOURCE_DIR}/quark-libs/QuarkCore/external/Vulkan/lib/SPIRV-Tools-optd.dll,${CMAKE_SOURCE_DIR}/quark-libs/QuarkCore/external/Vulkan/lib/SPIRV-Tools-opt.dll>
                 $<TARGET_FILE_DIR:${PROJECT_NAME}>/SPIRV-Tools-opt.dll
         )
+        if(TARGET CURL::libcurl)
+            add_custom_command(TARGET ${PROJECT_NAME} POST_BUILD
+                COMMAND ${CMAKE_COMMAND} -E copy_if_different
+                    "$<TARGET_FILE:CURL::libcurl>" $<TARGET_FILE_DIR:${PROJECT_NAME}>
+            )
+        endif()
+        if(TARGET OpenSSL::SSL)
+            add_custom_command(TARGET ${PROJECT_NAME} POST_BUILD
+                COMMAND ${CMAKE_COMMAND} -E copy_if_different
+                    "$<TARGET_FILE:OpenSSL::SSL>" "$<TARGET_FILE:OpenSSL::Crypto>"
+                    $<TARGET_FILE_DIR:${PROJECT_NAME}>
+            )
+        endif()
+        if(TARGET nghttp2::nghttp2)
+            add_custom_command(TARGET ${PROJECT_NAME} POST_BUILD
+                COMMAND ${CMAKE_COMMAND} -E copy_if_different
+                    "$<TARGET_FILE:nghttp2::nghttp2>" $<TARGET_FILE_DIR:${PROJECT_NAME}>
+            )
+        endif()
     endif()
 
     if(UNIX)

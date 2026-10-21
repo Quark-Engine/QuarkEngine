@@ -6,6 +6,7 @@
 
 #include <array>
 #include <cstdint>
+#include <filesystem>
 #include <vector>
 
 class CScene;
@@ -30,7 +31,8 @@ class CSceneRenderer
 {
 public:
     void Initialize(bool vulkanBackend, int shadowMapSize, bool shadowsEnabled,
-        float shadowBias, int shadowFilterQuality);
+        float shadowBias, int shadowFilterQuality,
+        const std::filesystem::path& shaderDirectory = {});
 
     void Update(CScene& scene, CLightRegistry& lights, const Vec3& cameraPosition,
         bool shadowsEnabled, float shadowBias, int shadowFilterQuality);

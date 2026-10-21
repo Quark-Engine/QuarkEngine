@@ -247,3 +247,24 @@ void CPreferences::Load()
 
     Save();
 }
+
+void CPreferences::LoadFromPath(const std::filesystem::path& configPath)
+{
+    std::ifstream configFile(configPath);
+    if (!configFile.is_open())
+    {
+        return;
+    }
+    try
+    {
+        json config;
+        configFile >> config;
+        if (config.contains("editor_preferences"))
+        {
+            ReadPreferences(*this, config);
+        }
+    }
+    catch (...)
+    {
+    }
+}

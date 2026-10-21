@@ -1,6 +1,7 @@
 #ifndef __EDITOR_PREFERENCES_H__
 #define __EDITOR_PREFERENCES_H__
 
+#include <filesystem>
 #include <string>
 #include <vector>
 
@@ -8,6 +9,7 @@ class CPreferences
 {
 public:
     void Load();
+    void LoadFromPath(const std::filesystem::path& configPath);
 
     void Save() const;
 

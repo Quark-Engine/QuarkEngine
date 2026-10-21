@@ -32,6 +32,7 @@
 #include "editor/editor_preferences.h"
 #include "editor/editor_scene_drop.h"
 #include "editor/editor_scene_file.h"
+#include "editor/runtime_builder.h"
 #include "editor/editor_state.h"
 #include "editor/editor_status_bar.h"
 #include "editor/editor_theme.h"
@@ -135,7 +136,7 @@ void CEditor::DrawUi(Shader shader, CFlyCamera& camera, SPluginContext* pPluginC
     CEditorLayout::EnsureInitialized(*this, dockspaceId);
 
     ImGui::BeginDisabled(IsHistoryRestorePending());
-    DrawMainMenuBar(pPluginCtx, dockspaceId);
+    DrawMainMenuBar(pPluginCtx, dockspaceId, camera);
     ImGui::EndDisabled();
 
     ImGui::BeginDisabled(IsHistoryRestorePending());
@@ -199,7 +200,8 @@ void CEditor::DrawUi(Shader shader, CFlyCamera& camera, SPluginContext* pPluginC
     }
 }
 
-void CEditor::DrawMainMenuBar(SPluginContext* pPluginCtx, ImGuiID dockspaceId)
+void CEditor::DrawMainMenuBar(SPluginContext* pPluginCtx, ImGuiID dockspaceId,
+                              CFlyCamera& camera)
 {
     SModalState& modal = m_Ui.m_Modal;
 
@@ -218,6 +220,43 @@ void CEditor::DrawMainMenuBar(SPluginContext* pPluginCtx, ImGuiID dockspaceId)
             if (ImGui::MenuItem(lang.Word("save_as"), "Ctrl+Shift+S"))
             {
                 CSceneFileService::SaveAs(*this);
+            }
+            ImGui::Separator();
+            if (ImGui::MenuItem("Build"))
+            {
+                camera.ReleaseCapture();
+                std::string outputPath;
+                std::string errorMessage;
+                const bool buildSucceeded = CRuntimeBuilder::Build(
+                    m_ProjectPath, m_Scene, m_Preferences,
+                    outputPath, errorMessage);
+                camera.ReleaseCapture();
+                if (buildSucceeded)
+                {
+                    SetStatusMessage(TextFormat("Build completed: %s", outputPath.c_str()));
+                }
+                else
+                {
+                    SetStatusMessage(TextFormat("Build failed: %s", errorMessage.c_str()));
+                }
+            }
+            if (ImGui::MenuItem("Build & Run"))
+            {
+                camera.ReleaseCapture();
+                std::string outputPath;
+                std::string errorMessage;
+                const bool buildSucceeded = CRuntimeBuilder::BuildAndRun(
+                    m_ProjectPath, m_Scene, m_Preferences,
+                    outputPath, errorMessage);
+                camera.ReleaseCapture();
+                if (buildSucceeded)
+                {
+                    SetStatusMessage(TextFormat("Game launched: %s", outputPath.c_str()));
+                }
+                else
+                {
+                    SetStatusMessage(TextFormat("Build or launch failed: %s", errorMessage.c_str()));
+                }
             }
             ImGui::Separator();
             if (ImGui::MenuItem(lang.Word("exit")))

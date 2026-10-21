@@ -1,9 +1,9 @@
 #include "engine/scene_runtime.h"
 
 #include "engine/material_texture_restore.h"
+#include "engine/material_loader.h"
 #include "models.h"
 #include "tex.h"
-#include "editor/editor_viewers.h"
 namespace quark
 {
 

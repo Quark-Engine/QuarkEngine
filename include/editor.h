@@ -115,7 +115,8 @@ public:
 private:
     void StartSnapshotRestore(const quark::SSceneSnapshot& snapshot, bool playRestore);
     void StartHistoryRestore(bool undo);
-    void DrawMainMenuBar(SPluginContext* pCtx, ImGuiID dockspaceId);
+    void DrawMainMenuBar(SPluginContext* pCtx, ImGuiID dockspaceId,
+                         CFlyCamera& camera);
     void DrawHierarchyPanel(SPluginContext* pCtx);
     void DrawInspectorPanel(Shader shader, SPluginContext* pCtx);
     void DrawScenePanel(CFlyCamera& camera, SPluginContext* pCtx);

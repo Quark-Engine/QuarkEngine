@@ -11,6 +11,7 @@
 #include <cmath>
 #include <algorithm>
 #include <chrono>
+#include <string>
 namespace
 {
 float ElapsedMilliseconds(const std::chrono::steady_clock::time_point& start)
@@ -406,12 +407,21 @@ void AssignShadowMaps(CScene& scene,
 }
 
 void CSceneRenderer::Initialize(bool vulkanBackend, int shadowMapSize, bool shadowsEnabled,
-    float shadowBias, int shadowFilterQuality)
+    float shadowBias, int shadowFilterQuality,
+    const std::filesystem::path& shaderDirectory)
 {
-    m_LightingShader = LoadShader(vulkanBackend ? "assets/shader/vulkan_lighting.vs" : "assets/shader/lighting.vs",
-        vulkanBackend ? "assets/shader/vulkan_lighting.fs" : "assets/shader/lighting.fs");
-    m_ShadowShader = LoadShader(vulkanBackend ? "assets/shader/vulkan_shadow_depth.vs" : "assets/shader/shadow_depth.vs",
-        vulkanBackend ? "assets/shader/vulkan_shadow_depth.fs" : "assets/shader/shadow_depth.fs");
+    const std::filesystem::path shaderRoot = shaderDirectory.empty()
+        ? std::filesystem::path("assets/shader") : shaderDirectory;
+    const std::string lightingVertex = vulkanBackend ? "vulkan_lighting.vs" : "lighting.vs";
+    const std::string lightingFragment = vulkanBackend ? "vulkan_lighting.fs" : "lighting.fs";
+    const std::string shadowVertex = vulkanBackend
+        ? "vulkan_shadow_depth.vs" : "shadow_depth.vs";
+    const std::string shadowFragment = vulkanBackend
+        ? "vulkan_shadow_depth.fs" : "shadow_depth.fs";
+    m_LightingShader = LoadShader((shaderRoot / lightingVertex).string().c_str(),
+        (shaderRoot / lightingFragment).string().c_str());
+    m_ShadowShader = LoadShader((shaderRoot / shadowVertex).string().c_str(),
+        (shaderRoot / shadowFragment).string().c_str());
     m_LightingShader.locs[SHADER_LOC_VECTOR_VIEW] = GetShaderLocation(m_LightingShader, "viewPos");
     m_ShadowsEnabledLoc = GetShaderLocation(m_LightingShader, "shadowsEnabled");
     m_ShadowBiasLoc = GetShaderLocation(m_LightingShader, "shadowBias");
