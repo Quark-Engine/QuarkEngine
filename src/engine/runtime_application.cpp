@@ -8,9 +8,11 @@
 #include "scene.h"
 #include "text_mesh.h"
 #include "tex.h"
+#include "nlohmann/json.hpp"
 
 #include <filesystem>
 #include <chrono>
+#include <fstream>
 #include <iostream>
 #include <string>
 #include <SDL3/SDL_video.h>
@@ -151,6 +153,49 @@ int QuarkEngineRunGame()
         return 1;
     }
 
+    nlohmann::json runtimeSettings;
+    std::ifstream settingsFile(settingsPath / "settings.json");
+    try
+    {
+        settingsFile >> runtimeSettings;
+    }
+    catch (...)
+    {
+        std::cerr << "Could not read packaged runtime settings\n";
+        fs::remove_all(projectPath, error);
+        return 1;
+    }
+    std::string startScene = "scene.json";
+    if (runtimeSettings.is_object() && runtimeSettings.contains("start_scene") &&
+        runtimeSettings["start_scene"].is_string())
+    {
+        startScene = runtimeSettings["start_scene"].get<std::string>();
+    }
+    const fs::path startSceneRelativePath(startScene);
+    if (startSceneRelativePath.empty() || startSceneRelativePath.is_absolute() ||
+        startSceneRelativePath.has_root_name())
+    {
+        std::cerr << "Invalid packaged start scene path\n";
+        fs::remove_all(projectPath, error);
+        return 1;
+    }
+    for (const fs::path& component : startSceneRelativePath)
+    {
+        if (component == ".." || component == ".")
+        {
+            std::cerr << "Invalid packaged start scene path\n";
+            fs::remove_all(projectPath, error);
+            return 1;
+        }
+    }
+    const fs::path startScenePath = projectPath / startSceneRelativePath;
+    if (!fs::is_regular_file(startScenePath, error) || error)
+    {
+        std::cerr << "Packaged start scene is missing\n";
+        fs::remove_all(projectPath, error);
+        return 1;
+    }
+
     CPreferences preferences;
     preferences.LoadFromPath(settingsPath / "settings.json");
     SetMSAASamples(preferences.m_MsaaSamples);
@@ -168,6 +213,29 @@ int QuarkEngineRunGame()
     }
 #endif
     InitWindow(1280, 720, dataPath.parent_path().filename().string().c_str(), rendererType);
+#ifdef _WIN32
+    HICON pGameIcon = nullptr;
+    const fs::path gameIconPath = settingsPath / "game.ico";
+    if (fs::is_regular_file(gameIconPath))
+    {
+        pGameIcon = static_cast<HICON>(LoadImageW(nullptr, gameIconPath.c_str(), IMAGE_ICON,
+            0, 0, LR_LOADFROMFILE | LR_DEFAULTSIZE));
+        if (pGameIcon != nullptr)
+        {
+            const SDL_PropertiesID windowProperties =
+                SDL_GetWindowProperties(GetNativeWindow());
+            HWND pWindowHandle = static_cast<HWND>(SDL_GetPointerProperty(
+                windowProperties, SDL_PROP_WINDOW_WIN32_HWND_POINTER, nullptr));
+            if (pWindowHandle != nullptr)
+            {
+                SendMessageW(pWindowHandle, WM_SETICON, ICON_SMALL,
+                    reinterpret_cast<LPARAM>(pGameIcon));
+                SendMessageW(pWindowHandle, WM_SETICON, ICON_BIG,
+                    reinterpret_cast<LPARAM>(pGameIcon));
+            }
+        }
+    }
+#endif
     if (!preferences.m_VsyncEnabled && rendererType != RendererType::Vulkan)
     {
         SDL_GL_SetSwapInterval(0);
@@ -185,11 +253,17 @@ int QuarkEngineRunGame()
     CScene scene;
     CLightRegistry lights;
     CComponentFactoryRegistry factories;
-    if (!CProjectService::Load(projectPath.string(), scene, assets, lights, factories))
+    if (!CProjectService::Load(startScenePath.string(), scene, assets, lights, factories))
     {
         std::cerr << "Could not load the packaged scene\n";
         assets.Unload();
         textMesh.Unload();
+#ifdef _WIN32
+        if (pGameIcon != nullptr)
+        {
+            DestroyIcon(pGameIcon);
+        }
+#endif
         fs::remove_all(projectPath, error);
         CloseWindow();
         return 1;
@@ -242,6 +316,12 @@ int QuarkEngineRunGame()
     assets.Unload();
     textMesh.Unload();
     CloseWindow();
+#ifdef _WIN32
+    if (pGameIcon != nullptr)
+    {
+        DestroyIcon(pGameIcon);
+    }
+#endif
     fs::remove_all(projectPath, error);
     return 0;
 }

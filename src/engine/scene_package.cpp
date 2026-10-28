@@ -39,15 +39,16 @@ bool IsSafeRelativePath(const std::filesystem::path& path)
 bool CScenePackage::Write(const std::filesystem::path& packagePath,
                           const std::string& activeScene,
                           const std::filesystem::path& projectRoot,
+                          const std::filesystem::path& activeScenePath,
                           std::string& errorMessage)
 {
-    if (activeScene.size() > MAX_ENTRY_SIZE)
+    if (activeScene.size() > MAX_ENTRY_SIZE || !IsSafeRelativePath(activeScenePath))
     {
-        errorMessage = "Active scene is too large to package";
+        errorMessage = "Active scene path or data is invalid";
         return false;
     }
     std::vector<std::pair<std::string, std::string>> vEntries;
-    vEntries.emplace_back("scene.json", activeScene);
+    vEntries.emplace_back(activeScenePath.generic_string(), activeScene);
     std::error_code error;
     std::filesystem::recursive_directory_iterator iterator(projectRoot, error);
     const std::filesystem::recursive_directory_iterator end;
@@ -72,7 +73,7 @@ bool CScenePackage::Write(const std::filesystem::path& packagePath,
             continue;
         }
         if (!entry.is_regular_file() || entry.path().extension() != ".json" ||
-            relativePath == "scene.json")
+            relativePath == activeScenePath)
         {
             iterator.increment(error);
             continue;

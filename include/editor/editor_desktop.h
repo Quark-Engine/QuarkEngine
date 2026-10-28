@@ -7,6 +7,7 @@ class CDesktopIntegration
 {
 public:
     static void OpenUrl(const char* pUrl);
+    static std::string OpenFileDialog(const char* pFilterLabel, const char* pFilter);
 
     static std::string SaveFileDialog(const char* pFilterLabel, const char* pFilter,
         const char* pDefExt, const std::string& defaultName);

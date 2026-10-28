@@ -87,6 +87,7 @@ void CViewportState::Unload()
 
 void CEditor::DrawUi(Shader shader, CFlyCamera& camera, SPluginContext* pPluginCtx)
 {
+    PollBuild();
     m_UiTimings = {};
     const bool rtl = CLanguageManager::Get().m_Current == "arabic";
     if (rtl)
@@ -187,6 +188,8 @@ void CEditor::DrawUi(Shader shader, CFlyCamera& camera, SPluginContext* pPluginC
     DrawAboutModal();
     DrawPreferencesUi(camera, pPluginCtx);
     DrawConfirmationModals();
+    DrawBuildSettingsModal();
+    DrawBuildConsole();
     ImGui::EndDisabled();
 
     if (IsHistoryRestorePending())
@@ -222,42 +225,29 @@ void CEditor::DrawMainMenuBar(SPluginContext* pPluginCtx, ImGuiID dockspaceId,
                 CSceneFileService::SaveAs(*this);
             }
             ImGui::Separator();
+            if (ImGui::MenuItem("Build Settings..."))
+            {
+                camera.ReleaseCapture();
+                m_BuildSettingsError.clear();
+                if (!CProjectService::LoadBuildSettings(m_ProjectPath, m_BuildSettings))
+                {
+                    m_BuildSettingsError = "Could not load project build settings";
+                }
+                m_ShowBuildSettings = true;
+                m_BuildSettingsModalOpen = true;
+            }
+            ImGui::BeginDisabled(m_BuildInProgress);
             if (ImGui::MenuItem("Build"))
             {
                 camera.ReleaseCapture();
-                std::string outputPath;
-                std::string errorMessage;
-                const bool buildSucceeded = CRuntimeBuilder::Build(
-                    m_ProjectPath, m_Scene, m_Preferences,
-                    outputPath, errorMessage);
-                camera.ReleaseCapture();
-                if (buildSucceeded)
-                {
-                    SetStatusMessage(TextFormat("Build completed: %s", outputPath.c_str()));
-                }
-                else
-                {
-                    SetStatusMessage(TextFormat("Build failed: %s", errorMessage.c_str()));
-                }
+                StartBuild(false);
             }
             if (ImGui::MenuItem("Build & Run"))
             {
                 camera.ReleaseCapture();
-                std::string outputPath;
-                std::string errorMessage;
-                const bool buildSucceeded = CRuntimeBuilder::BuildAndRun(
-                    m_ProjectPath, m_Scene, m_Preferences,
-                    outputPath, errorMessage);
-                camera.ReleaseCapture();
-                if (buildSucceeded)
-                {
-                    SetStatusMessage(TextFormat("Game launched: %s", outputPath.c_str()));
-                }
-                else
-                {
-                    SetStatusMessage(TextFormat("Build or launch failed: %s", errorMessage.c_str()));
-                }
+                StartBuild(true);
             }
+            ImGui::EndDisabled();
             ImGui::Separator();
             if (ImGui::MenuItem(lang.Word("exit")))
             {
@@ -331,6 +321,7 @@ void CEditor::DrawMainMenuBar(SPluginContext* pPluginCtx, ImGuiID dockspaceId,
             ImGui::MenuItem(lang.Word("assets"), nullptr, &m_Preferences.m_ShowAssets);
             ImGui::MenuItem(lang.Word("scene"), nullptr, &m_Preferences.m_ShowScene);
             ImGui::MenuItem("Game", nullptr, &m_ShowGameView);
+            ImGui::MenuItem("Build Console", nullptr, &m_ShowBuildConsole);
             ImGui::EndMenu();
         }
 
@@ -1648,4 +1639,271 @@ void CEditor::DrawConfirmationModals()
         }
         ImGui::EndPopup();
     }
+}
+
+void CEditor::DrawBuildSettingsModal()
+{
+    if (m_ShowBuildSettings)
+    {
+        ImGui::OpenPopup("Build Settings");
+        m_ShowBuildSettings = false;
+    }
+
+    if (!ImGui::BeginPopupModal("Build Settings", nullptr,
+        ImGuiWindowFlags_AlwaysAutoResize))
+    {
+        return;
+    }
+
+    const std::vector<std::string> vSceneFiles = CProjectService::GetSceneFiles(m_ProjectPath);
+    ImGui::TextUnformatted("Start Scene");
+    const char* pSelectedScene = m_BuildSettings.startScene.c_str();
+    if (ImGui::BeginCombo("##build_start_scene", pSelectedScene))
+    {
+        for (const std::string& sceneFile : vSceneFiles)
+        {
+            const bool selected = sceneFile == m_BuildSettings.startScene;
+            if (ImGui::Selectable(sceneFile.c_str(), selected))
+            {
+                m_BuildSettings.startScene = sceneFile;
+            }
+            if (selected)
+            {
+                ImGui::SetItemDefaultFocus();
+            }
+        }
+        ImGui::EndCombo();
+    }
+
+    ImGui::Spacing();
+    ImGui::TextUnformatted("Build Profile");
+    const char* pProfileName = m_BuildSettings.profile == EProjectBuildProfile::DEBUG
+        ? "Debug" : "Release";
+    if (ImGui::BeginCombo("##build_profile", pProfileName))
+    {
+        if (ImGui::Selectable("Debug", m_BuildSettings.profile == EProjectBuildProfile::DEBUG))
+        {
+            m_BuildSettings.profile = EProjectBuildProfile::DEBUG;
+        }
+        if (ImGui::Selectable("Release", m_BuildSettings.profile == EProjectBuildProfile::RELEASE))
+        {
+            m_BuildSettings.profile = EProjectBuildProfile::RELEASE;
+        }
+        ImGui::EndCombo();
+    }
+
+    ImGui::Spacing();
+    ImGui::TextUnformatted("Game Icon (.ico)");
+    ImGui::SameLine();
+    if (m_BuildSettings.iconPath.empty())
+    {
+        ImGui::TextDisabled("None");
+    }
+    else
+    {
+        ImGui::TextDisabled("%s", m_BuildSettings.iconPath.c_str());
+    }
+    if (ImGui::Button("Choose Icon..."))
+    {
+        static constexpr char aIconFilter[] =
+            "ICO Files\0*.ico\0All Files\0*.*\0\0";
+        const std::string selectedIcon = CDesktopIntegration::OpenFileDialog(
+            "ICO Files", aIconFilter);
+        if (!selectedIcon.empty())
+        {
+            const std::filesystem::path projectRoot = CProjectService::ResolveRoot(m_ProjectPath);
+            const std::filesystem::path iconDestination = projectRoot / "game_icon.ico";
+            std::error_code error;
+            if (std::filesystem::absolute(selectedIcon).lexically_normal() !=
+                std::filesystem::absolute(iconDestination).lexically_normal())
+            {
+                std::filesystem::copy_file(selectedIcon, iconDestination,
+                    std::filesystem::copy_options::overwrite_existing, error);
+            }
+            if (error)
+            {
+                m_BuildSettingsError = "Could not copy the game icon: " + error.message();
+            }
+            else
+            {
+                m_BuildSettings.iconPath = "game_icon.ico";
+                m_BuildSettingsError.clear();
+            }
+        }
+    }
+    ImGui::SameLine();
+    if (ImGui::Button("Clear Icon"))
+    {
+        m_BuildSettings.iconPath.clear();
+        m_BuildSettingsError.clear();
+    }
+
+    if (!m_BuildSettingsError.empty())
+    {
+        ImGui::Spacing();
+        ImGui::TextWrapped("%s", m_BuildSettingsError.c_str());
+    }
+
+    ImGui::Spacing();
+    ImGui::Separator();
+    ImGui::Spacing();
+    if (ImGui::Button("Save", ImVec2(100, 0)))
+    {
+        if (CProjectService::SaveBuildSettings(m_ProjectPath, m_BuildSettings))
+        {
+            m_BuildSettingsError.clear();
+            SetStatusMessage("Project build settings saved");
+            m_BuildSettingsModalOpen = false;
+            ImGui::CloseCurrentPopup();
+        }
+        else
+        {
+            m_BuildSettingsError = "Could not save project build settings";
+        }
+    }
+    ImGui::SameLine();
+    if (ImGui::Button("Cancel", ImVec2(100, 0)))
+    {
+        m_BuildSettingsError.clear();
+        m_BuildSettingsModalOpen = false;
+        ImGui::CloseCurrentPopup();
+    }
+    ImGui::EndPopup();
+}
+
+void CEditor::StartBuild(bool runAfterBuild)
+{
+    if (m_BuildInProgress)
+    {
+        return;
+    }
+    {
+        std::lock_guard<std::mutex> lock(m_BuildConsoleMutex);
+        m_vBuildConsoleLines.clear();
+    }
+    m_ShowBuildConsole = true;
+    if (!CProjectService::LoadBuildSettings(m_ProjectPath, m_BuildSettings))
+    {
+        m_StatusMessage = "Build failed: could not load project build settings";
+        std::lock_guard<std::mutex> lock(m_BuildConsoleMutex);
+        m_vBuildConsoleLines.emplace_back(m_StatusMessage);
+        return;
+    }
+
+    const std::string projectPath = m_ProjectPath;
+    const std::string sceneDocument = quark::CSceneDocument::Serialize(m_Scene);
+    const CPreferences preferences = m_Preferences;
+    const SProjectBuildSettings buildSettings = m_BuildSettings;
+    m_BuildInProgress = true;
+    m_StatusMessage = runAfterBuild ? "Building and launching game..." : "Building game...";
+    {
+        std::lock_guard<std::mutex> lock(m_BuildConsoleMutex);
+        m_vBuildConsoleLines.emplace_back("Build started");
+    }
+
+    try
+    {
+        m_BuildFuture = std::async(std::launch::async,
+            [this, runAfterBuild, projectPath, sceneDocument, preferences, buildSettings]()
+            {
+                SBuildTaskResult result;
+                const CRuntimeBuilder::FProgressCallback progressCallback =
+                    [this](const std::string& line)
+                    {
+                        std::lock_guard<std::mutex> lock(m_BuildConsoleMutex);
+                        m_vBuildConsoleLines.push_back(line);
+                    };
+                result.succeeded = runAfterBuild
+                    ? CRuntimeBuilder::BuildAndRun(projectPath, sceneDocument,
+                        preferences, buildSettings, result.outputPath,
+                        result.errorMessage, progressCallback)
+                    : CRuntimeBuilder::Build(projectPath, sceneDocument,
+                        preferences, buildSettings, result.outputPath,
+                        result.errorMessage, progressCallback);
+                return result;
+            });
+    }
+    catch (const std::exception& exception)
+    {
+        m_BuildInProgress = false;
+        m_StatusMessage = std::string("Could not start build: ") + exception.what();
+        std::lock_guard<std::mutex> lock(m_BuildConsoleMutex);
+        m_vBuildConsoleLines.push_back(m_StatusMessage);
+    }
+}
+
+void CEditor::PollBuild()
+{
+    if (!m_BuildFuture.valid() ||
+        m_BuildFuture.wait_for(std::chrono::seconds(0)) != std::future_status::ready)
+    {
+        return;
+    }
+
+    SBuildTaskResult result;
+    try
+    {
+        result = m_BuildFuture.get();
+    }
+    catch (const std::exception& exception)
+    {
+        result.errorMessage = exception.what();
+    }
+    m_BuildInProgress = false;
+    if (result.succeeded)
+    {
+        m_StatusMessage = "Build completed: " + result.outputPath;
+    }
+    else
+    {
+        m_StatusMessage = "Build failed: " + result.errorMessage;
+    }
+    {
+        std::lock_guard<std::mutex> lock(m_BuildConsoleMutex);
+        m_vBuildConsoleLines.push_back(m_StatusMessage);
+    }
+}
+
+void CEditor::DrawBuildConsole()
+{
+    if (!m_ShowBuildConsole)
+    {
+        return;
+    }
+
+    if (ImGui::Begin("Build Console", &m_ShowBuildConsole))
+    {
+        if (m_BuildInProgress)
+        {
+            ImGui::TextUnformatted("Build in progress...");
+        }
+        else
+        {
+            ImGui::TextUnformatted("Build finished");
+        }
+        ImGui::SameLine();
+        if (ImGui::SmallButton("Clear"))
+        {
+            std::lock_guard<std::mutex> lock(m_BuildConsoleMutex);
+            m_vBuildConsoleLines.clear();
+        }
+        ImGui::Separator();
+        ImGui::BeginChild("##build_console_output", ImVec2(0, 0), false,
+            ImGuiWindowFlags_HorizontalScrollbar);
+        std::vector<std::string> vConsoleLines;
+        {
+            std::lock_guard<std::mutex> lock(m_BuildConsoleMutex);
+            vConsoleLines = m_vBuildConsoleLines;
+        }
+        for (const std::string& line : vConsoleLines)
+        {
+            ImGui::TextUnformatted(line.c_str());
+        }
+        if (ImGui::GetScrollY() >= ImGui::GetScrollMaxY())
+        {
+            ImGui::SetScrollHereY(1.0f);
+        }
+        ImGui::EndChild();
+    }
+    ImGui::End();
 }

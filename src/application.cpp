@@ -322,6 +322,7 @@ void CApplication::UpdateFrame()
     const ImVec2 mousePosition = ImGui::GetIO().MousePos;
     const ImVec2 viewportPosition = m_Editor.m_Ui.m_Viewport.m_WindowPos;
     const ImVec2 viewportSize = m_Editor.m_Ui.m_Viewport.m_WindowSize;
+    const bool buildSettingsOpen = m_Editor.m_BuildSettingsModalOpen;
     const bool cursorOverSceneViewport =
         mousePosition.x >= viewportPosition.x &&
         mousePosition.x <= viewportPosition.x + viewportSize.x &&
@@ -343,8 +344,8 @@ void CApplication::UpdateFrame()
     }
     m_LastSelectedEntity = m_Editor.m_Scene.m_Selected;
 
-    if (!m_Editor.m_IsPlaying && !m_Editor.m_GameViewActive && (m_Camera.m_Active ||
-        (!ImGuizmo::IsOver() && !ImGuizmo::IsUsing() &&
+    if (!buildSettingsOpen && !m_Editor.m_IsPlaying && !m_Editor.m_GameViewActive &&
+        (m_Camera.m_Active || (!ImGuizmo::IsOver() && !ImGuizmo::IsUsing() &&
             cursorOverSceneViewport)))
     {
         m_Camera.Update(m_Editor.m_Scene, m_Editor.m_Preferences);
@@ -650,6 +651,7 @@ void CApplication::RenderFrame()
         const auto imguiStart = std::chrono::steady_clock::now();
         QcImGuiBegin();
         const bool gameViewRunning = m_Editor.m_IsPlaying && m_Editor.m_GameViewActive;
+        const bool buildSettingsOpen = m_Editor.m_BuildSettingsModalOpen;
         const bool wasGameCursorCaptured = m_GameCursorCaptured;
         const CViewportState& cursorViewport = m_Editor.m_Ui.m_GameViewport;
         const ImVec2 mousePosition = ImGui::GetIO().MousePos;
@@ -658,7 +660,11 @@ void CApplication::RenderFrame()
             mousePosition.x <= cursorViewport.m_WindowPos.x + cursorViewport.m_WindowSize.x &&
             mousePosition.y >= cursorViewport.m_WindowPos.y &&
             mousePosition.y <= cursorViewport.m_WindowPos.y + cursorViewport.m_WindowSize.y;
-        if (gameViewRunning && !m_GameCursorCaptured && mouseOverGameViewport &&
+        if (buildSettingsOpen)
+        {
+            m_GameCursorCaptured = false;
+        }
+        else if (gameViewRunning && !m_GameCursorCaptured && mouseOverGameViewport &&
             IsMouseButtonPressed(MOUSE_BUTTON_LEFT))
         {
             m_GameCursorCaptured = true;

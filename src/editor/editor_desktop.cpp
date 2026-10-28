@@ -39,6 +39,30 @@ void CDesktopIntegration::OpenUrl(const char* pUrl)
 #endif
 }
 
+std::string CDesktopIntegration::OpenFileDialog(const char* pFilterLabel,
+                                                const char* pFilter)
+{
+#ifdef _WIN32
+    static_cast<void>(pFilterLabel);
+    char aPath[MAX_PATH] = {};
+    OPENFILENAMEA ofn = {};
+    ofn.lStructSize = sizeof(ofn);
+    ofn.lpstrFilter = pFilter;
+    ofn.lpstrFile = aPath;
+    ofn.nMaxFile = MAX_PATH;
+    ofn.Flags = OFN_FILEMUSTEXIST | OFN_PATHMUSTEXIST | OFN_NOCHANGEDIR |
+        OFN_ENABLESIZING;
+    if (GetOpenFileNameA(&ofn))
+    {
+        return aPath;
+    }
+#else
+    static_cast<void>(pFilterLabel);
+    static_cast<void>(pFilter);
+#endif
+    return {};
+}
+
 std::string CDesktopIntegration::SaveFileDialog(const char* pFilterLabel, const char* pFilter,
     const char* pDefExt, const std::string& defaultName)
 {

@@ -7,6 +7,7 @@
 #include "engine/scene_runtime.h"
 #include "QuarkCore/QuarkCore.hpp"
 #include "nlohmann/json.hpp"
+#include <algorithm>
 #include <filesystem>
 #include <fstream>
 #include <memory>
@@ -60,6 +61,32 @@ fs::path FindProjectManifest(const fs::path& rootPath)
     return {};
 }
 
+json ReadProjectManifest(const fs::path& rootPath)
+{
+    const fs::path manifestPath = FindProjectManifest(rootPath);
+    if (manifestPath.empty())
+    {
+        return json::object();
+    }
+
+    std::ifstream manifestFile(manifestPath);
+    if (!manifestFile.is_open())
+    {
+        return json::object();
+    }
+
+    try
+    {
+        json manifest;
+        manifestFile >> manifest;
+        return manifest.is_object() ? manifest : json::object();
+    }
+    catch (...)
+    {
+        return json::object();
+    }
+}
+
 fs::path ResolveProjectRootPath(const fs::path& inputPath)
 {
     if (inputPath.empty())
@@ -93,7 +120,7 @@ bool WriteProjectManifest(const fs::path& rootPath, const std::string& sceneFile
 {
     fs::create_directories(rootPath);
 
-    json manifest;
+    json manifest = ReadProjectManifest(rootPath);
     manifest["format"] = "quark-project";
     manifest["version"] = QUARK_ENGINE_VERSION;
     manifest["name"] = rootPath.filename().string();
@@ -116,6 +143,11 @@ fs::path ResolveSceneJsonPath(const fs::path& inputPath)
     if (rootPath.empty())
     {
         return {};
+    }
+
+    if (fs::is_regular_file(inputPath) && inputPath.extension() == ".json")
+    {
+        return fs::absolute(inputPath);
     }
 
     if (fs::is_regular_file(inputPath) && inputPath.extension() == QUARK_PROJECT_EXTENSION)
@@ -183,6 +215,147 @@ bool CProjectService::IsValid(const std::string& path)
         return false;
     }
     return fs::exists(ResolveSceneJsonPath(inputPath));
+}
+
+std::string CProjectService::GetActiveScenePath(const std::string& projectPath)
+{
+    const fs::path rootPath = ResolveProjectRootPath(fs::path(projectPath));
+    if (rootPath.empty())
+    {
+        return {};
+    }
+    return ResolveSceneJsonPath(rootPath).string();
+}
+
+std::vector<std::string> CProjectService::GetSceneFiles(const std::string& projectPath)
+{
+    const fs::path rootPath = ResolveProjectRootPath(fs::path(projectPath));
+    std::vector<std::string> vSceneFiles;
+    if (rootPath.empty())
+    {
+        return vSceneFiles;
+    }
+
+    std::error_code error;
+    fs::recursive_directory_iterator iterator(rootPath, error);
+    const fs::recursive_directory_iterator end;
+    while (!error && iterator != end)
+    {
+        const fs::path relativePath = fs::relative(iterator->path(), rootPath, error);
+        if (error)
+        {
+            break;
+        }
+        if (iterator->is_directory(error) &&
+            (relativePath == "Build" || relativePath == "resources" || relativePath == ".git"))
+        {
+            iterator.disable_recursion_pending();
+        }
+        else if (iterator->is_regular_file(error) && iterator->path().extension() == ".json" &&
+                 relativePath != "build_settings.json")
+        {
+            vSceneFiles.push_back(relativePath.generic_string());
+        }
+        iterator.increment(error);
+    }
+    std::sort(vSceneFiles.begin(), vSceneFiles.end());
+    return vSceneFiles;
+}
+
+bool CProjectService::LoadBuildSettings(const std::string& projectPath,
+                                       SProjectBuildSettings& settings)
+{
+    const fs::path rootPath = ResolveProjectRootPath(fs::path(projectPath));
+    if (rootPath.empty())
+    {
+        return false;
+    }
+
+    const json manifest = ReadProjectManifest(rootPath);
+    settings.startScene = fs::relative(
+        ResolveSceneJsonPath(rootPath), rootPath).generic_string();
+    settings.iconPath.clear();
+    std::string profile = "Release";
+    if (manifest.contains("build_start_scene") && manifest["build_start_scene"].is_string())
+    {
+        settings.startScene = manifest["build_start_scene"].get<std::string>();
+    }
+    if (manifest.contains("build_icon") && manifest["build_icon"].is_string())
+    {
+        settings.iconPath = manifest["build_icon"].get<std::string>();
+    }
+    if (manifest.contains("build_profile") && manifest["build_profile"].is_string())
+    {
+        profile = manifest["build_profile"].get<std::string>();
+    }
+    settings.profile = profile == "Debug"
+        ? EProjectBuildProfile::DEBUG : EProjectBuildProfile::RELEASE;
+
+    const std::vector<std::string> vSceneFiles = GetSceneFiles(rootPath.string());
+    if (std::find(vSceneFiles.begin(), vSceneFiles.end(), settings.startScene) == vSceneFiles.end())
+    {
+        settings.startScene = "scene.json";
+        if (std::find(vSceneFiles.begin(), vSceneFiles.end(), settings.startScene) == vSceneFiles.end() &&
+            !vSceneFiles.empty())
+        {
+            settings.startScene = vSceneFiles.front();
+        }
+    }
+    return true;
+}
+
+bool CProjectService::SaveBuildSettings(const std::string& projectPath,
+                                       const SProjectBuildSettings& settings)
+{
+    const fs::path rootPath = ResolveProjectRootPath(fs::path(projectPath));
+    if (rootPath.empty())
+    {
+        return false;
+    }
+
+    const std::vector<std::string> vSceneFiles = GetSceneFiles(rootPath.string());
+    if (std::find(vSceneFiles.begin(), vSceneFiles.end(), settings.startScene) == vSceneFiles.end())
+    {
+        return false;
+    }
+    if (!settings.iconPath.empty())
+    {
+        const fs::path iconPath(settings.iconPath);
+        if (iconPath.is_absolute() || iconPath.has_root_name())
+        {
+            return false;
+        }
+        for (const fs::path& component : iconPath)
+        {
+            if (component == ".." || component == ".")
+            {
+                return false;
+            }
+        }
+        if (!fs::is_regular_file(rootPath / iconPath))
+        {
+            return false;
+        }
+    }
+
+    json manifest = ReadProjectManifest(rootPath);
+    manifest["format"] = "quark-project";
+    manifest["version"] = QUARK_ENGINE_VERSION;
+    manifest["name"] = rootPath.filename().string();
+    manifest["scene"] = fs::relative(ResolveSceneJsonPath(rootPath), rootPath).generic_string();
+    manifest["resources"] = "resources";
+    manifest["build_start_scene"] = settings.startScene;
+    manifest["build_icon"] = settings.iconPath;
+    manifest["build_profile"] = settings.profile == EProjectBuildProfile::DEBUG
+        ? "Debug" : "Release";
+
+    std::ofstream manifestFile(ProjectManifestPathForRoot(rootPath), std::ios::trunc);
+    if (!manifestFile.is_open())
+    {
+        return false;
+    }
+    manifestFile << manifest.dump(4);
+    return static_cast<bool>(manifestFile);
 }
 
 void CProjectService::CreateNew(const std::string& folderPath, CScene& scene)

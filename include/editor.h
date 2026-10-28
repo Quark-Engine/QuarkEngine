@@ -12,11 +12,13 @@
 #include "engine/cpu_task_pool.h"
 #include "engine/scene_document.h"
 #include "lighting.h"
+#include "project.h"
 #include "scene.h"
 #include "text_mesh.h"
 
 #include <filesystem>
 #include <future>
+#include <mutex>
 #include <optional>
 #include <stack>
 #include <string>
@@ -35,6 +37,13 @@ struct SEditorUiTimings
     float scenePanelMs = 0.0f;
     float assetsMs = 0.0f;
     float modelViewerMs = 0.0f;
+};
+
+struct SBuildTaskResult
+{
+    bool succeeded = false;
+    std::string outputPath;
+    std::string errorMessage;
 };
 
 class CEditor
@@ -73,6 +82,7 @@ public:
     CComponentFactoryRegistry m_ComponentFactories;
 
     CPreferences m_Preferences;
+    SProjectBuildSettings m_BuildSettings;
 
     CFreetypeTextMesh m_Text;
 
@@ -111,6 +121,14 @@ public:
     std::optional<quark::SSceneSnapshot> m_PendingCurrentSnapshot;
     std::optional<quark::SSceneSnapshot> m_PlayModeSnapshot;
     bool m_PendingHistoryIsUndo = false;
+    bool m_ShowBuildSettings = false;
+    bool m_BuildSettingsModalOpen = false;
+    std::string m_BuildSettingsError;
+    bool m_ShowBuildConsole = false;
+    bool m_BuildInProgress = false;
+    std::mutex m_BuildConsoleMutex;
+    std::vector<std::string> m_vBuildConsoleLines;
+    std::future<SBuildTaskResult> m_BuildFuture;
 
 private:
     void StartSnapshotRestore(const quark::SSceneSnapshot& snapshot, bool playRestore);
@@ -126,6 +144,10 @@ private:
     void DrawAboutModal();
     void DrawPreferencesUi(CFlyCamera& camera, SPluginContext* pPluginCtx);
     void DrawConfirmationModals();
+    void DrawBuildSettingsModal();
+    void DrawBuildConsole();
+    void StartBuild(bool runAfterBuild);
+    void PollBuild();
 
     void HierarchyAcceptEntityDrop(int targetIndex);
     void HierarchyDrawCreateMenu(int parentIndex);
