@@ -30,7 +30,7 @@ struct SSceneEntityFrameData
 class CSceneRenderer
 {
 public:
-    void Initialize(bool vulkanBackend, int shadowMapSize, bool shadowsEnabled,
+    void Initialize(int shadowMapSize, bool shadowsEnabled,
         float shadowBias, int shadowFilterQuality,
         const std::filesystem::path& shaderDirectory = {});
 
@@ -50,6 +50,9 @@ public:
 
     void SetUseTexture(bool useTexture);
 
+    void BeginLightingPass();
+    void EndLightingPass();
+
     Shader GetLightingShader() const { return m_LightingShader; }
     SSceneRendererTimings GetTimings() const { return m_Timings; }
 
@@ -58,10 +61,14 @@ public:
 private:
     void UnloadShaders();
     void UnloadShadowMaps();
+    void WriteVulkanGlobals(CScene& scene, bool shadowsEnabled,
+        float shadowBias, int shadowFilterQuality);
 
     Shader m_LightingShader{};
     Shader m_ShadowShader{};
 
+    bool m_VulkanBackend = false;
+    int m_GlobalParamsLoc = -1;
     int m_ShadowsEnabledLoc = -1;
     int m_ShadowBiasLoc = -1;
     int m_ShadowFilterLoc = -1;
@@ -73,6 +80,8 @@ private:
 
     std::array<RenderTexture2D, QC_MAX_LIGHTS> m_aShadowMaps{};
     std::array<Camera3D, QC_MAX_LIGHTS> m_aShadowCameras{};
+    std::array<Mat4, QC_MAX_LIGHTS> m_aCachedLightViews{};
+    std::array<Mat4, QC_MAX_LIGHTS> m_aCachedLightProjections{};
     std::array<int, QC_MAX_LIGHTS> m_aLightViewLocations{};
     std::array<int, QC_MAX_LIGHTS> m_aLightProjectionLocations{};
     std::array<std::uint64_t, QC_MAX_LIGHTS> m_aShadowSignatures{};

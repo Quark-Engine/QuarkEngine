@@ -99,7 +99,6 @@
     "linear": "Линейный",
     "auto": "Авто",
     "opengl": "OpenGL",
-    "vulkan": "Вулкан",
     "direct3d11": "Директ3Д 11",
     "language": "Язык",
 

@@ -102,8 +102,9 @@ void CFlyCamera::InitializeCursors()
     m_pPanCursor = SDL_CreateSystemCursor(SDL_SYSTEM_CURSOR_POINTER);
     if (m_pPanCursor == nullptr)
     {
-        TraceLog(LogLevel::Error, "CAMERA", TextFormat(
-            "Failed to create pan cursor: %s", SDL_GetError()));
+        TraceLog(LogLevel::Warn, "CAMERA", TextFormat(
+            "System pan cursor is unavailable; using the default cursor: %s", SDL_GetError()));
+        m_pPanCursor = SDL_GetDefaultCursor();
     }
 }
 
@@ -125,7 +126,7 @@ CFlyCamera::~CFlyCamera()
     {
         SDL_DestroyCursor(m_pOrbitCursor);
     }
-    if (m_pPanCursor != nullptr)
+    if (m_pPanCursor != nullptr && m_pPanCursor != SDL_GetDefaultCursor())
     {
         SDL_DestroyCursor(m_pPanCursor);
     }

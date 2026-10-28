@@ -98,7 +98,6 @@
     "linear": "Γραμμική",
     "auto": "Αυτόματο",
     "opengl": "OpenGL",
-    "vulkan": "Vulkan",
     "direct3d11": "Direct3D 11",
     "_meta": {"editor_font": "OpenSans-Regular.ttf"},
     "language": "Γλώσσα",

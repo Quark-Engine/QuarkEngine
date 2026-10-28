@@ -98,7 +98,6 @@
     "linear": "Lineair",
     "auto": "Automatisch",
     "opengl": "OpenGL",
-    "vulkan": "Vulkaan",
     "direct3d11": "Direct3D 11",
     "language": "Taal",
 

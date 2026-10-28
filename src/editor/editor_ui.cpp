@@ -913,9 +913,9 @@ void CEditor::DrawSceneViewport(CViewportState& viewport, CFlyCamera& camera,
 
         if (viewport.m_RenderTexture.id > 0)
         {
+            const RendererType backend = GetCurrentBackend();
             const bool topLeftTextureBackend =
-                GetCurrentBackend() == RendererType::Vulkan ||
-                GetCurrentBackend() == RendererType::D3D11;
+                backend == RendererType::D3D11 || backend == RendererType::Vulkan;
             QcImGuiAddImage(
                 ImGui::GetWindowDrawList(),
                 &viewport.m_RenderTexture.texture,
@@ -1033,7 +1033,6 @@ void CEditor::DrawAboutModal()
             QUARK_ENGINE_VERSION,
             QUARK_ENGINE_BUILD_NUMBER,
             QUARK_ENGINE_BUILD_DATE_STRING,
-            backend == RendererType::Vulkan ? "Vulkan" :
             backend == RendererType::OpenGL ? "OpenGL" :
             backend == RendererType::Auto ? "Auto" :
             "Unknown"
@@ -1381,10 +1380,24 @@ bool CEditor::DrawPreferencesRenderingTab(CFlyCamera& camera)
     camera.m_Cam.fovy = m_Preferences.m_CameraFov;
 
     const char* apBackendNames[] = {
-        lang.Word("auto"), lang.Word("opengl"), lang.Word("vulkan"), lang.Word("direct3d11")
+        lang.Word("auto"), lang.Word("opengl"), "Vulkan", lang.Word("direct3d11")
     };
+    const int aBackendValues[] = { 0, 1, 2, 3 };
+    int backendIndex = 1;
+    for (int i = 0; i < 4; ++i)
+    {
+        if (m_Preferences.m_RendererBackend == aBackendValues[i])
+        {
+            backendIndex = i;
+            break;
+        }
+    }
     ImGui::TextUnformatted(lang.Word("renderer_backend_restart"));
-    changed |= ImGui::Combo("##renderer_backend", &m_Preferences.m_RendererBackend, apBackendNames, 4);
+    if (ImGui::Combo("##renderer_backend", &backendIndex, apBackendNames, 4))
+    {
+        m_Preferences.m_RendererBackend = aBackendValues[backendIndex];
+        changed = true;
+    }
 
     const char* apMsaaNames[] = { lang.Word("off"), "2x", "4x", "8x" };
     int msaaIndex = m_Preferences.m_MsaaSamples == 2 ? 1 : m_Preferences.m_MsaaSamples == 4 ? 2 : m_Preferences.m_MsaaSamples == 8 ? 3 : 0;

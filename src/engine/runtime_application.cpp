@@ -201,13 +201,17 @@ int QuarkEngineRunGame()
     SetMSAASamples(preferences.m_MsaaSamples);
     SetTextureFilterMode(preferences.m_TextureFilter == 0
         ? TEXTURE_FILTER_POINT : TEXTURE_FILTER_BILINEAR);
-    RendererType rendererType = RendererType::OpenGL;
-    if (preferences.m_RendererBackend == 2)
+    RendererType rendererType = RendererType::Auto;
+    if (preferences.m_RendererBackend == 1)
+    {
+        rendererType = RendererType::OpenGL;
+    }
+    else if (preferences.m_RendererBackend == 2)
     {
         rendererType = RendererType::Vulkan;
     }
 #ifdef _WIN32
-    else if (preferences.m_RendererBackend == 3)
+    if (preferences.m_RendererBackend == 3)
     {
         rendererType = RendererType::D3D11;
     }
@@ -236,10 +240,7 @@ int QuarkEngineRunGame()
         }
     }
 #endif
-    if (!preferences.m_VsyncEnabled && rendererType != RendererType::Vulkan)
-    {
-        SDL_GL_SetSwapInterval(0);
-    }
+    SetVSync(preferences.m_VsyncEnabled);
     SetTargetFPS(preferences.m_LimitFps ? preferences.m_TargetFps : 0);
 
     CFreetypeTextMesh textMesh;
@@ -270,8 +271,7 @@ int QuarkEngineRunGame()
     }
 
     CSceneRenderer renderer;
-    renderer.Initialize(GetCurrentBackend() == RendererType::Vulkan,
-        preferences.m_ShadowMapSize, preferences.m_ShadowsEnabled,
+    renderer.Initialize(preferences.m_ShadowMapSize, preferences.m_ShadowsEnabled,
         preferences.m_ShadowBias, preferences.m_ShadowFilterQuality, shaderPath);
     Camera3D camera{};
     camera.position = { 0.0f, 2.0f, 6.0f };
@@ -284,9 +284,9 @@ int QuarkEngineRunGame()
     {
         FindSceneCamera(scene, camera);
         renderer.PrepareFrameCache(scene);
+        BeginDrawing();
         renderer.Update(scene, lights, camera.position, preferences.m_ShadowsEnabled,
             preferences.m_ShadowBias, preferences.m_ShadowFilterQuality);
-        BeginDrawing();
         ClearBackground({
             static_cast<unsigned char>(preferences.m_BackgroundRed),
             static_cast<unsigned char>(preferences.m_BackgroundGreen),
@@ -304,8 +304,10 @@ int QuarkEngineRunGame()
             renderer.EnsureLightingShader(pMesh);
             CMaterialComponent* pMaterial = entity.GetMaterialComponent();
             renderer.SetUseTexture(pMaterial && pMaterial->m_Texture.id != 0);
+            renderer.BeginLightingPass();
             CEntityTextureService::DrawEntityWithTexture(
                 entity, renderer.GetCachedWorldTransform(entityIndex), preferences);
+            renderer.EndLightingPass();
         }
         EndMode3D();
         EndDrawing();

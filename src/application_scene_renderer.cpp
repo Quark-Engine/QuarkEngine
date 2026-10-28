@@ -289,6 +289,8 @@ void RenderSceneShadowMaps(CScene& scene, Shader shadowShader,
     std::array<Camera3D, QC_MAX_LIGHTS>& aShadowCameras,
     const Vec3& sceneCenter,
     Shader lightingShader,
+    std::array<Mat4, QC_MAX_LIGHTS>& aCachedLightViews,
+    std::array<Mat4, QC_MAX_LIGHTS>& aCachedLightProjections,
     std::array<int, QC_MAX_LIGHTS>& aLightViewLocations,
     std::array<int, QC_MAX_LIGHTS>& aLightProjectionLocations,
     const std::array<bool, QC_MAX_LIGHTS>& aRenderSlots,
@@ -366,6 +368,8 @@ void RenderSceneShadowMaps(CScene& scene, Shader shadowShader,
             lightView.m[i] = GetMatrixModelview()[i];
             lightProjection.m[i] = GetMatrixProjection()[i];
         }
+        aCachedLightViews[slot] = lightView;
+        aCachedLightProjections[slot] = lightProjection;
         SetShaderValueMatrix(lightingShader, aLightViewLocations[slot], lightView.m);
         SetShaderValueMatrix(lightingShader, aLightProjectionLocations[slot], lightProjection.m);
 
@@ -406,23 +410,24 @@ void AssignShadowMaps(CScene& scene,
 }
 }
 
-void CSceneRenderer::Initialize(bool vulkanBackend, int shadowMapSize, bool shadowsEnabled,
+void CSceneRenderer::Initialize(int shadowMapSize, bool shadowsEnabled,
     float shadowBias, int shadowFilterQuality,
     const std::filesystem::path& shaderDirectory)
 {
     const std::filesystem::path shaderRoot = shaderDirectory.empty()
         ? std::filesystem::path("assets/shader") : shaderDirectory;
-    const std::string lightingVertex = vulkanBackend ? "vulkan_lighting.vs" : "lighting.vs";
-    const std::string lightingFragment = vulkanBackend ? "vulkan_lighting.fs" : "lighting.fs";
-    const std::string shadowVertex = vulkanBackend
-        ? "vulkan_shadow_depth.vs" : "shadow_depth.vs";
-    const std::string shadowFragment = vulkanBackend
-        ? "vulkan_shadow_depth.fs" : "shadow_depth.fs";
+    m_VulkanBackend = GetCurrentBackend() == RendererType::Vulkan;
+    const std::string lightingVertex = m_VulkanBackend ? "lighting_vulkan.vs" : "lighting.vs";
+    const std::string lightingFragment = m_VulkanBackend ? "lighting_vulkan.fs" : "lighting.fs";
+    const std::string shadowVertex = m_VulkanBackend ? "shadow_depth_vulkan.vs" : "shadow_depth.vs";
+    const std::string shadowFragment = m_VulkanBackend ? "shadow_depth_vulkan.fs" : "shadow_depth.fs";
     m_LightingShader = LoadShader((shaderRoot / lightingVertex).string().c_str(),
         (shaderRoot / lightingFragment).string().c_str());
     m_ShadowShader = LoadShader((shaderRoot / shadowVertex).string().c_str(),
         (shaderRoot / shadowFragment).string().c_str());
     m_LightingShader.locs[SHADER_LOC_VECTOR_VIEW] = GetShaderLocation(m_LightingShader, "viewPos");
+    m_GlobalParamsLoc = m_VulkanBackend
+        ? GetShaderLocation(m_LightingShader, "lights[3].type") : -1;
     m_ShadowsEnabledLoc = GetShaderLocation(m_LightingShader, "shadowsEnabled");
     m_ShadowBiasLoc = GetShaderLocation(m_LightingShader, "shadowBias");
     m_ShadowFilterLoc = GetShaderLocation(m_LightingShader, "shadowFilterQuality");
@@ -436,6 +441,8 @@ void CSceneRenderer::Initialize(bool vulkanBackend, int shadowMapSize, bool shad
         m_aShadowMaps[i] = LoadRenderTexture(shadowMapSize, shadowMapSize);
         m_aShadowCameras[i] = CreateCamera3D();
         m_aShadowCameras[i].fovy = 55.0f;
+        m_aCachedLightViews[i] = Mat4::identity();
+        m_aCachedLightProjections[i] = Mat4::identity();
         m_aLightEnabledLocations[i] = GetShaderLocation(m_LightingShader,
             TextFormat("lights[%i].enabled", i));
         m_aLightViewLocations[i] = GetShaderLocation(m_LightingShader, TextFormat("lightViews[%i]", i));
@@ -538,6 +545,10 @@ void CSceneRenderer::Update(CScene& scene, CLightRegistry& lights, const Vec3& c
     SetShaderValue(m_LightingShader, m_ShadowFilterLoc, shadowFilterQuality);
     PrepareSceneLightUniforms(scene, lights, m_LightingShader, m_aLightEnabledLocations, sceneCenter,
         m_vFrameData);
+    if (m_VulkanBackend)
+    {
+        WriteVulkanGlobals(scene, shadowsEnabled, shadowBias, shadowFilterQuality);
+    }
     if (shadowsEnabled)
     {
         const auto shadowStart = std::chrono::steady_clock::now();
@@ -568,7 +579,9 @@ void CSceneRenderer::Update(CScene& scene, CLightRegistry& lights, const Vec3& c
         }
 
         RenderSceneShadowMaps(scene, m_ShadowShader, m_aShadowMaps, m_aShadowCameras, sceneCenter,
-            m_LightingShader, m_aLightViewLocations, m_aLightProjectionLocations, aRenderSlots,
+            m_LightingShader, m_aCachedLightViews, m_aCachedLightProjections,
+            m_aLightViewLocations,
+            m_aLightProjectionLocations, aRenderSlots,
             m_vFrameData);
         m_Timings.shadowPassMs = ElapsedMilliseconds(shadowStart);
         m_aShadowSignatures = aNextSignatures;
@@ -579,12 +592,75 @@ void CSceneRenderer::Update(CScene& scene, CLightRegistry& lights, const Vec3& c
         m_ShadowCacheValid = false;
     }
 
+    if (shadowsEnabled)
+    {
+        for (int slot = 0; slot < QC_MAX_LIGHTS; ++slot)
+        {
+            if (m_aShadowSignatures[slot] == 0)
+            {
+                continue;
+            }
+            SetShaderValueMatrix(m_LightingShader, m_aLightViewLocations[slot],
+                m_aCachedLightViews[slot].m);
+            SetShaderValueMatrix(m_LightingShader, m_aLightProjectionLocations[slot],
+                m_aCachedLightProjections[slot].m);
+        }
+    }
+
     if (!m_ShadowBindingsAssigned)
     {
         AssignShadowMaps(scene, m_aShadowMaps, m_LightingShader);
         m_ShadowBindingsAssigned = true;
     }
     m_Timings.updateMs = ElapsedMilliseconds(updateStart);
+}
+
+void CSceneRenderer::WriteVulkanGlobals(CScene& scene, bool shadowsEnabled,
+    float shadowBias, int shadowFilterQuality)
+{
+    if (m_GlobalParamsLoc < 0)
+    {
+        return;
+    }
+
+    int lightType = 0;
+    for (const auto& entity : scene.m_vEntities)
+    {
+        const CLightComponent* pLight = entity.GetLightComponent();
+        if (pLight && pLight->m_Created && pLight->m_Light.m_Id == 3)
+        {
+            lightType = pLight->m_Light.m_Light.type;
+            break;
+        }
+    }
+
+    std::uint32_t globals = 0;
+    globals |= shadowsEnabled ? 1u : 0u;
+    globals |= (static_cast<std::uint32_t>(std::clamp(shadowFilterQuality, 0, 3)) & 3u) << 1;
+    const std::uint32_t bias = static_cast<std::uint32_t>(
+        std::lround(std::max(shadowBias, 0.0f) * 100000.0f)) & 0xFFFFu;
+    globals |= bias << 3;
+    globals |= 1u << 20;
+
+    const int packed = static_cast<int>(
+        (globals << 2) | (static_cast<std::uint32_t>(lightType) & 3u));
+    SetShaderValue(m_LightingShader, m_GlobalParamsLoc, &packed, SHADER_UNIFORM_INT);
+}
+
+void CSceneRenderer::BeginLightingPass()
+{
+    if (m_VulkanBackend && m_LightingShader.id != 0)
+    {
+        BeginShaderMode(m_LightingShader);
+    }
+}
+
+void CSceneRenderer::EndLightingPass()
+{
+    if (m_VulkanBackend)
+    {
+        EndShaderMode();
+    }
 }
 
 void CSceneRenderer::EnsureLightingShader(CMeshComponent* pMesh)
@@ -620,6 +696,10 @@ void CSceneRenderer::EnsureLightingShader(CMeshComponent* pMesh)
 
 void CSceneRenderer::SetUseTexture(bool useTexture)
 {
+    if (m_VulkanBackend)
+    {
+        return;
+    }
     int use = useTexture ? 1 : 0;
     SetShaderValue(m_LightingShader, m_UseTexLoc, &use, SHADER_UNIFORM_INT);
 }

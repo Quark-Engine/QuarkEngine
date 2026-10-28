@@ -1,4 +1,5 @@
 #include "lighting.h"
+#include <algorithm>
 #include <cstring>
 void UpdateLighting(Shader shader, CLightState& l)
 {
@@ -7,11 +8,32 @@ void UpdateLighting(Shader shader, CLightState& l)
     l.m_Light.color    = l.m_Color;
     l.m_Light.enabled  = l.m_Enabled;
 
+    const bool vulkanBackend = GetCurrentBackend() == RendererType::Vulkan;
+
     int enabledInt = l.m_Enabled ? 1 : 0;
     int type = l.m_Light.type;
     float aPosition[3] = { l.m_Position.x, l.m_Position.y, l.m_Position.z };
     float aTarget[3] = { l.m_Target.x, l.m_Target.y, l.m_Target.z };
     float aColor[4] = {l.m_Color.r / 255.f, l.m_Color.g / 255.f, l.m_Color.b / 255.f, l.m_Color.a / 255.f};
+
+    float intensity = l.m_Intensity;
+    float range = l.m_Range;
+
+    if (vulkanBackend)
+    {
+        const float lightEnergy = std::min(intensity, 4.0f);
+        aColor[0] *= lightEnergy;
+        aColor[1] *= lightEnergy;
+        aColor[2] *= lightEnergy;
+
+        const float packedRange = std::clamp(range, 0.0f, 1000.0f);
+        const float packedAngle = std::clamp(l.m_SpotAngle, 0.0f, 999.0f);
+        l.m_Light.attenuation = (packedRange + 1.0f) * 1000.0f + packedAngle;
+    }
+    else
+    {
+        l.m_Light.attenuation = 1.0f / (range * range > 0.0001f ? range * range : 0.0001f);
+    }
 
     SetShaderValue(shader, l.m_Light.enabledLoc, &enabledInt, SHADER_UNIFORM_INT);
     SetShaderValue(shader, l.m_Light.typeLoc, &type, SHADER_UNIFORM_INT);
@@ -19,10 +41,6 @@ void UpdateLighting(Shader shader, CLightState& l)
     SetShaderValue(shader, l.m_Light.targetLoc, aTarget, SHADER_UNIFORM_VEC3);
     SetShaderValue(shader, l.m_Light.colorLoc, aColor, SHADER_UNIFORM_VEC4);
 
-    float intensity = l.m_Intensity;
-    float range = l.m_Range;
-
-    l.m_Light.attenuation = 1.0f / (range * range > 0.0001f ? range * range : 0.0001f);
     if (l.m_Light.attenuationLoc >= 0)
     {
         SetShaderValue(shader, l.m_Light.attenuationLoc, &l.m_Light.attenuation, SHADER_UNIFORM_FLOAT);
@@ -115,6 +133,7 @@ Light CreateLightAtSlot(int slot, int type, Vec3 position, Vec3 target, Color co
     light.positionLoc = GetShaderLocation(shader, TextFormat("lights[%i].position", slot));
     light.targetLoc   = GetShaderLocation(shader, TextFormat("lights[%i].target",   slot));
     light.colorLoc    = GetShaderLocation(shader, TextFormat("lights[%i].color",    slot));
+    light.attenuationLoc = GetShaderLocation(shader, TextFormat("lights[%i].attenuation", slot));
     return light;
 }
 
@@ -123,5 +142,7 @@ void InitializeLightingUniformCache(CLightState& lighting, Shader shader, int sl
     lighting.m_IntensityLoc  = GetShaderLocation(shader, TextFormat("lights[%i].intensity", slot));
     lighting.m_RangeLoc      = GetShaderLocation(shader, TextFormat("lights[%i].range", slot));
     lighting.m_SpotAngleLoc = GetShaderLocation(shader, TextFormat("lights[%i].spotAngle", slot));
+    lighting.m_Light.attenuationLoc = GetShaderLocation(shader,
+        TextFormat("lights[%i].attenuation", slot));
 }
 

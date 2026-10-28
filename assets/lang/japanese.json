@@ -98,7 +98,6 @@
     "linear": "リニア",
     "auto": "自動",
     "opengl": "OpenGL",
-    "vulkan": "バルカン",
     "direct3d11": "ダイレクト 3D 11",
     "_meta": {"editor_font": "MS-Pgothic-Regular.ttf", "editor_font_merge": "Rubik-Regular.ttf"},
     "language": "言語",

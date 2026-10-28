@@ -166,8 +166,8 @@ bool PackageRuntimeShaders(const fs::path& dataPath,
 {
     const std::vector<std::string> vShaderNames = {
         "lighting.vs", "lighting.fs", "shadow_depth.vs", "shadow_depth.fs",
-        "vulkan_lighting.vs", "vulkan_lighting.fs",
-        "vulkan_shadow_depth.vs", "vulkan_shadow_depth.fs"
+        "lighting_vulkan.vs", "lighting_vulkan.fs",
+        "shadow_depth_vulkan.vs", "shadow_depth_vulkan.fs"
     };
     std::vector<std::pair<std::string, std::string>> vShaderEntries;
     const fs::path shaderDirectory = executableDirectory / "assets" / "shader";

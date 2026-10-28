@@ -98,7 +98,6 @@
     "linear": "선형",
     "auto": "자동",
     "opengl": "OpenGL",
-    "vulkan": "불칸",
     "direct3d11": "다이렉트3D 11",
     "_meta": {"editor_font": "MS-Pgothic-Regular.ttf", "editor_font_merge": "Rubik-Regular.ttf"},
     "language": "언어",

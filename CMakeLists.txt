@@ -118,7 +118,6 @@ add_library(QuarkEngineRuntime SHARED
     quark-libs/imgui/include/imgui_tables.cpp
     imgui/imgui_impl_sdl3.cpp
     imgui/imgui_impl_opengl3.cpp
-    imgui/imgui_impl_vulkan.cpp
     src/ImGuizmo.cpp
     src/application_scene_renderer.cpp
     src/assets/asset_library.cpp
@@ -156,14 +155,13 @@ target_include_directories(QuarkEngineRuntime PRIVATE
     ${CMAKE_SOURCE_DIR}/src
     ${CMAKE_SOURCE_DIR}/include
 )
-target_compile_definitions(QuarkEngineRuntime PRIVATE QC_ENABLE_OPENGL QC_ENABLE_VULKAN)
+target_compile_definitions(QuarkEngineRuntime PRIVATE QC_ENABLE_OPENGL)
 if(WIN32)
     target_compile_definitions(QuarkEngineRuntime PRIVATE QC_ENABLE_D3D11)
 endif()
 target_link_libraries(QuarkEngineRuntime PRIVATE
     QuarkCoreRuntime
     SDL3::SDL3
-    Vulkan::Vulkan
     assimp::assimp
     freetype
     OpenAL::OpenAL
@@ -460,7 +458,6 @@ if(BUILD_ENGINE)
             COMMAND ${CMAKE_COMMAND} -E copy_if_different
                 $<TARGET_FILE:QuarkCore>
                 $<TARGET_FILE:QuarkCore-OpenGL>
-                $<TARGET_FILE:QuarkCore-Vulkan>
                 $<TARGET_FILE:QuarkCore-D3D11>
                 $<TARGET_FILE:imgui>
                 $<TARGET_FILE:imgui-opengl>
@@ -515,7 +512,6 @@ if(BUILD_ENGINE)
             COMMAND ${CMAKE_COMMAND} -E copy_if_different
                 $<TARGET_FILE:QuarkCore>
                 $<TARGET_FILE:QuarkCore-OpenGL>
-                $<TARGET_FILE:QuarkCore-Vulkan>
                 $<TARGET_FILE:imgui>
                 $<TARGET_FILE:imgui-opengl>
                 $<TARGET_FILE:imgui-vulkan>
@@ -631,7 +627,6 @@ if(QUARK_BUILD_TESTS)
         add_custom_command(TARGET QuarkEngineTests POST_BUILD
             COMMAND ${CMAKE_COMMAND} -E copy_if_different
                 $<TARGET_FILE:QuarkCore-OpenGL>
-                $<TARGET_FILE:QuarkCore-Vulkan>
                 $<TARGET_FILE:QuarkCore-D3D11>
                 $<TARGET_FILE:SDL3::SDL3>
                 $<TARGET_FILE:assimp::assimp>
@@ -651,7 +646,6 @@ if(QUARK_BUILD_TESTS)
             COMMAND ${CMAKE_COMMAND} -E copy_if_different
                 $<TARGET_FILE:QuarkCore>
                 $<TARGET_FILE:QuarkCore-OpenGL>
-                $<TARGET_FILE:QuarkCore-Vulkan>
                 $<TARGET_FILE:assimp::assimp>
                 $<TARGET_FILE:freetype>
                 $<TARGET_FILE:SDL3::SDL3>

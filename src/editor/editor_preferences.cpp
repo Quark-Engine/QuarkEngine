@@ -88,7 +88,9 @@ static void ReadPreferences(CPreferences& preferences, const json& data)
     preferences.m_CameraSensitivity = std::clamp(preferences.m_CameraSensitivity, 0.0005f, 0.02f);
     preferences.m_CameraZoomSensitivity = std::clamp(preferences.m_CameraZoomSensitivity, 0.1f, 5.0f);
     preferences.m_CameraFov = std::clamp(preferences.m_CameraFov, 20.0f, 120.0f);
-    if (preferences.m_RendererBackend < 0 || preferences.m_RendererBackend > 3) preferences.m_RendererBackend = 0;
+    if (preferences.m_RendererBackend != 0 && preferences.m_RendererBackend != 1 &&
+        preferences.m_RendererBackend != 2 &&
+        preferences.m_RendererBackend != 3) preferences.m_RendererBackend = 1;
     if (preferences.m_MsaaSamples != 1 && preferences.m_MsaaSamples != 2 && preferences.m_MsaaSamples != 4 && preferences.m_MsaaSamples != 8) preferences.m_MsaaSamples = 1;
     if (preferences.m_TextureFilter < 0 || preferences.m_TextureFilter > 1) preferences.m_TextureFilter = 1;
     preferences.m_InterfaceScale = std::clamp(preferences.m_InterfaceScale, 0.75f, 2.0f);

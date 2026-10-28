@@ -135,19 +135,13 @@ void CApplication::Initialize()
     m_Editor.m_Preferences.Load();
     CLanguageManager::Get().SetLang(langCode);
 
-    RendererType rendererType = RendererType::OpenGL;
+    RendererType rendererType = RendererType::Auto;
     if (m_Editor.m_Preferences.m_RendererBackend == 1)
-    {
         rendererType = RendererType::OpenGL;
-    }
     else if (m_Editor.m_Preferences.m_RendererBackend == 2)
-    {
         rendererType = RendererType::Vulkan;
-    }
     else if (m_Editor.m_Preferences.m_RendererBackend == 3)
-    {
         rendererType = RendererType::D3D11;
-    }
     if (m_Options.RendererOverride == ERendererOverride::OPENGL)
     {
         rendererType = RendererType::OpenGL;
@@ -165,22 +159,25 @@ void CApplication::Initialize()
     m_WindowOpen = true;
     m_Camera.InitializeCursors();
 
+    if (m_Options.FpsOverride < 0 && m_Editor.m_Preferences.m_TargetFps <= 0)
+    {
+        m_Editor.m_Preferences.m_TargetFps = static_cast<int>(GetCurrentMonitorRefreshRate());
+    }
+
+    const bool vsyncEnabled = m_Options.VsyncOverride == ETriState::ON ? true
+        : m_Options.VsyncOverride == ETriState::OFF ? false
+        : m_Editor.m_Preferences.m_VsyncEnabled;
+    SetVSync(vsyncEnabled);
+
     if (m_Options.FpsOverride >= 0)
     {
         SetTargetFPS(m_Options.FpsOverride);
     }
     else
     {
-        if (m_Editor.m_Preferences.m_TargetFps <= 0)
-        {
-            m_Editor.m_Preferences.m_TargetFps = static_cast<int>(GetCurrentMonitorRefreshRate());
-        }
         SetTargetFPS(m_Editor.m_Preferences.m_LimitFps ? m_Editor.m_Preferences.m_TargetFps : 0);
     }
 
-    const bool vsyncEnabled = m_Options.VsyncOverride == ETriState::ON ? true
-        : m_Options.VsyncOverride == ETriState::OFF ? false
-        : m_Editor.m_Preferences.m_VsyncEnabled;
     if (!vsyncEnabled)
     {
         SDL_GL_SetSwapInterval(0);
@@ -250,8 +247,7 @@ void CApplication::Initialize()
     m_Camera.m_ZoomSensitivity = m_Editor.m_Preferences.m_CameraZoomSensitivity;
     m_Camera.m_Cam.fovy = m_Editor.m_Preferences.m_CameraFov;
 
-    const bool vulkanBackend = GetCurrentBackend() == RendererType::Vulkan;
-    m_SceneRenderer.Initialize(vulkanBackend,
+    m_SceneRenderer.Initialize(
         m_Editor.m_Preferences.m_ShadowMapSize,
         m_Editor.m_Preferences.m_ShadowsEnabled,
         m_Editor.m_Preferences.m_ShadowBias,
@@ -375,14 +371,6 @@ void CApplication::UpdateFrame()
 
     Camera3D gameCamera = m_Camera.GetCamera();
     m_Editor.m_GameCameraAvailable = FindSceneCamera(m_Editor.m_Scene, gameCamera);
-    const bool useSceneCamera = m_Editor.m_GameViewActive &&
-        m_Editor.m_GameCameraAvailable;
-    const Vec3& renderCameraPosition = useSceneCamera
-        ? gameCamera.position : m_Camera.GetCamera().position;
-    m_SceneRenderer.Update(m_Editor.m_Scene, m_Editor.m_Lights, renderCameraPosition,
-        m_Editor.m_Preferences.m_ShadowsEnabled,
-        m_Editor.m_Preferences.m_ShadowBias,
-        m_Editor.m_Preferences.m_ShadowFilterQuality);
 }
 
 void CApplication::RenderFrame()
@@ -393,6 +381,12 @@ void CApplication::RenderFrame()
     m_Editor.m_GameCameraAvailable = FindSceneCamera(m_Editor.m_Scene, gameCamera);
     const Camera3D& renderCamera = m_Camera.GetCamera();
     BeginDrawing();
+        const Vec3& renderCameraPosition = m_Editor.m_GameViewActive &&
+            m_Editor.m_GameCameraAvailable ? gameCamera.position : renderCamera.position;
+        m_SceneRenderer.Update(m_Editor.m_Scene, m_Editor.m_Lights, renderCameraPosition,
+            m_Editor.m_Preferences.m_ShadowsEnabled,
+            m_Editor.m_Preferences.m_ShadowBias,
+            m_Editor.m_Preferences.m_ShadowFilterQuality);
         ClearBackground(DARKGRAY);
 
         if (m_Editor.m_Ui.m_Viewport.m_RenderTexture.id > 0 && IsRenderTextureValid(m_Editor.m_Ui.m_Viewport.m_RenderTexture))
@@ -447,7 +441,9 @@ void CApplication::RenderFrame()
                     m_SceneRenderer.EnsureLightingShader(pMesh);
                     const int use = (pMat && pMat->m_Texture.id != 0) ? 1 : 0;
                     m_SceneRenderer.SetUseTexture(use != 0);
+                    m_SceneRenderer.BeginLightingPass();
                     CEntityTextureService::DrawEntityWithTexture(e, worldTransform, m_Editor.m_Preferences);
+                    m_SceneRenderer.EndLightingPass();
                     if (m_Editor.m_Preferences.m_ShowSelectionVisualization &&
                         m_Editor.m_Scene.IsSelected(entityIndex) && pMesh->m_Model.meshCount > 0)
                         {
@@ -639,8 +635,10 @@ void CApplication::RenderFrame()
                     m_SceneRenderer.EnsureLightingShader(pMesh);
                     m_SceneRenderer.SetUseTexture(
                         pMaterial != nullptr && pMaterial->m_Texture.id != 0);
+                    m_SceneRenderer.BeginLightingPass();
                     CEntityTextureService::DrawEntityWithTexture(
                         entity, worldTransform, m_Editor.m_Preferences);
+                    m_SceneRenderer.EndLightingPass();
                 }
                 EndMode3D();
             }

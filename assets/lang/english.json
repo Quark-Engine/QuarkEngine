@@ -102,7 +102,6 @@
     "linear": "Linear",
     "auto": "Auto",
     "opengl": "OpenGL",
-    "vulkan": "Vulkan",
     "direct3d11": "Direct3D 11",
     "search_assets": "Search assets...",
     "dependencies": "Dependencies",
