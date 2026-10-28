@@ -65,6 +65,12 @@ if(MSVC)
         "/WHOLEARCHIVE:$<TARGET_FILE:QuarkCore-Combined>"
         "/WHOLEARCHIVE:$<TARGET_FILE:QuarkCore>"
     )
+elseif(APPLE)
+    target_link_libraries(QuarkCoreRuntime PRIVATE
+        "-Wl,-force_load,$<TARGET_FILE:QuarkCore-Combined>"
+        "-Wl,-force_load,$<TARGET_FILE:QuarkCore>"
+    )
+    add_dependencies(QuarkCoreRuntime QuarkCore-Combined)
 elseif(UNIX AND CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang")
     target_link_libraries(QuarkCoreRuntime PRIVATE
         "-Wl,--whole-archive"
