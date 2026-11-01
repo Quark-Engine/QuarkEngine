@@ -423,6 +423,40 @@ void CEditor::DrawHierarchyPanel(SPluginContext* pPluginCtx)
             }
             ImGui::EndDragDropTarget();
         }
+
+        if (m_Ui.m_Layout.SceneAssetDragging &&
+            std::filesystem::path(m_Ui.m_Layout.DraggedSceneAssetName).extension() == ".prefab" &&
+            ImGui::IsWindowHovered(ImGuiHoveredFlags_AllowWhenBlockedByActiveItem))
+        {
+            ImGui::GetWindowDrawList()->AddRect(
+                dropZone.Min,
+                dropZone.Max,
+                IM_COL32(80, 180, 255, 255),
+                2.0f,
+                0,
+                2.0f
+            );
+            if (ImGui::IsMouseReleased(ImGuiMouseButton_Left))
+            {
+                SaveState();
+                const std::vector<int> vCreatedIndices = CEntityFactory::InstantiatePrefab(
+                    m_Scene,
+                    m_Assets,
+                    m_Ui.m_Layout.DraggedSceneAssetName,
+                    m_ComponentFactories,
+                    -1);
+                if (!vCreatedIndices.empty())
+                {
+                    for (int createdIdx : vCreatedIndices)
+                    {
+                        DispatchPluginEvent(PLUGIN_EVENT_ENTITY_CREATED, createdIdx);
+                    }
+                    m_Scene.SelectEntity(vCreatedIndices[0], false);
+                }
+                m_Ui.m_Layout.SceneAssetDragging = false;
+                m_Ui.m_Layout.DraggedSceneAssetName.clear();
+            }
+        }
     }
 
     if (ImGui::BeginPopupContextWindow("HierarchyContext", ImGuiPopupFlags_NoOpenOverItems))
@@ -455,6 +489,40 @@ void CEditor::DrawHierarchyPanel(SPluginContext* pPluginCtx)
 
 void CEditor::HierarchyAcceptEntityDrop(int targetIndex)
 {
+    if (m_Ui.m_Layout.SceneAssetDragging &&
+        std::filesystem::path(m_Ui.m_Layout.DraggedSceneAssetName).extension() == ".prefab" &&
+        ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenBlockedByActiveItem))
+    {
+        ImGui::GetWindowDrawList()->AddRect(
+            ImGui::GetItemRectMin(),
+            ImGui::GetItemRectMax(),
+            IM_COL32(80, 180, 255, 255),
+            2.0f,
+            0,
+            2.0f
+        );
+        if (ImGui::IsMouseReleased(ImGuiMouseButton_Left))
+        {
+            SaveState();
+            const std::vector<int> vCreatedIndices = CEntityFactory::InstantiatePrefab(
+                m_Scene,
+                m_Assets,
+                m_Ui.m_Layout.DraggedSceneAssetName,
+                m_ComponentFactories,
+                targetIndex);
+            if (!vCreatedIndices.empty())
+            {
+                for (int createdIdx : vCreatedIndices)
+                {
+                    DispatchPluginEvent(PLUGIN_EVENT_ENTITY_CREATED, createdIdx);
+                }
+                m_Scene.SelectEntity(vCreatedIndices[0], false);
+            }
+            m_Ui.m_Layout.SceneAssetDragging = false;
+            m_Ui.m_Layout.DraggedSceneAssetName.clear();
+        }
+    }
+
     if (!ImGui::BeginDragDropTarget())
     {
         return;
@@ -593,6 +661,21 @@ void CEditor::HierarchyDrawEntityItem(int entityIndex)
                 static_cast<int>(m_Scene.m_vEntities.size()) - 1);
         }
 
+        if (ImGui::MenuItem(lang.Word("save_prefab")))
+        {
+            const std::filesystem::path targetDir = !m_CurrentAssetPath.empty()
+                ? m_CurrentAssetPath
+                : (std::filesystem::path(m_ProjectPath) / "resources");
+            std::filesystem::path savedPath;
+            if (CEntityFactory::SavePrefab(m_Scene, entityIndex, targetDir, &savedPath))
+            {
+                m_Ui.m_AssetBrowser.AssetListCacheDirty = true;
+                m_Assets.RequestRefresh(m_ProjectPath);
+                const std::string status = "Saved prefab: " + savedPath.filename().string();
+                SetStatusMessage(status.c_str());
+            }
+        }
+
         ImGui::Separator();
         HierarchyDrawCreateMenu(entityIndex);
 
@@ -658,6 +741,21 @@ void CEditor::HierarchyDrawEntityTree(int parentId)
                     m_Scene.m_vEntities.push_back(std::move(copy));
                     DispatchPluginEvent(PLUGIN_EVENT_ENTITY_CREATED,
                         static_cast<int>(m_Scene.m_vEntities.size()) - 1);
+                }
+
+                if (ImGui::MenuItem(lang.Word("save_prefab")))
+                {
+                    const std::filesystem::path targetDir = !m_CurrentAssetPath.empty()
+                        ? m_CurrentAssetPath
+                        : (std::filesystem::path(m_ProjectPath) / "resources");
+                    std::filesystem::path savedPath;
+                    if (CEntityFactory::SavePrefab(m_Scene, childIndex, targetDir, &savedPath))
+                    {
+                        m_Ui.m_AssetBrowser.AssetListCacheDirty = true;
+                        m_Assets.RequestRefresh(m_ProjectPath);
+                        const std::string status = "Saved prefab: " + savedPath.filename().string();
+                        SetStatusMessage(status.c_str());
+                    }
                 }
 
                 ImGui::Separator();

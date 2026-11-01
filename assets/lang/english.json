@@ -19,6 +19,7 @@
     "create_group": "Create Group",
     "rename": "Rename",
     "dublicate": "Dublicate",
+    "save_prefab": "Save as Prefab",
     "delete": "Delete",
 
     "ok": "OK",

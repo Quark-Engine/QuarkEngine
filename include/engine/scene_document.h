@@ -42,6 +42,18 @@ public:
 
     static bool Deserialize(const std::string& document, CScene& scene, const CComponentFactoryRegistry& factories);
 
+    static std::string SerializePrefab(const CScene& scene, int rootEntityIndex, int indent = 4);
+
+    static SParsedSceneDocument ParsePrefab(const std::string& document);
+
+    static bool InstantiatePrefab(const SParsedSceneDocument& parsedPrefab, CScene& scene,
+        const CComponentFactoryRegistry& factories, int parentEntityIndex = -1,
+        std::vector<int>* pvOutCreatedIndices = nullptr);
+
+    static bool InstantiatePrefab(const std::string& document, CScene& scene,
+        const CComponentFactoryRegistry& factories, int parentEntityIndex = -1,
+        std::vector<int>* pvOutCreatedIndices = nullptr);
+
     static SSceneSnapshot CaptureSnapshot(const CScene& scene);
 };
 

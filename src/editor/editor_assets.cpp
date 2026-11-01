@@ -1,15 +1,18 @@
 #include "editor/editor_assets.h"
 
+#include "application_plugin_bridge.h"
 #include "editor/editor.h"
 #include "editor/editor_entity.h"
 #include "editor/editor_utils.h"
 #include "editor/editor_viewers.h"
+#include "engine/scene_document.h"
 #include "qcImGui.h"
 #include "project.h"
 #include "tex.h"
 #include "language_manager.h"
 #include "editor/editor_preferences.h"
 #include "imgui.h"
+#include "imgui_internal.h"
 #include <algorithm>
 #include <fstream>
 #include <cfloat>
@@ -48,6 +51,57 @@ std::string Lowercase(std::string value)
         return static_cast<char>(std::tolower(character));
     });
     return value;
+}
+
+bool SaveEntityBranchToDirectory(CEditor& editor, int entityIndex, const fs::path& targetDir)
+{
+    if (entityIndex < 0 || entityIndex >= static_cast<int>(editor.m_Scene.m_vEntities.size()))
+    {
+        return false;
+    }
+
+    fs::path savedPath;
+    if (!CEntityFactory::SavePrefab(editor.m_Scene, entityIndex, targetDir, &savedPath))
+    {
+        return false;
+    }
+
+    editor.m_Ui.m_AssetBrowser.AssetListCacheDirty = true;
+    editor.m_Assets.RequestRefresh(editor.m_ProjectPath);
+    editor.SetStatusMessage(TextFormat("Saved prefab: %s", savedPath.filename().string().c_str()));
+    return true;
+}
+
+bool SpawnPrefabInScene(CEditor& editor, const fs::path& prefabPath)
+{
+    std::ifstream file(prefabPath);
+    if (!file.is_open())
+    {
+        return false;
+    }
+    std::stringstream buffer;
+    buffer << file.rdbuf();
+    if (!quark::CSceneDocument::ParsePrefab(buffer.str()).IsValid)
+    {
+        return false;
+    }
+
+    editor.SaveState();
+    const std::vector<int> vCreatedIndices = CEntityFactory::InstantiatePrefab(
+        editor.m_Scene, editor.m_Assets, prefabPath, editor.m_ComponentFactories, -1);
+    if (vCreatedIndices.empty())
+    {
+        return false;
+    }
+
+    editor.m_Scene.SelectEntity(vCreatedIndices.front(), false);
+    for (int createdIndex : vCreatedIndices)
+    {
+        DispatchPluginEvent(PLUGIN_EVENT_ENTITY_CREATED, createdIndex);
+    }
+    editor.m_SceneDirty = true;
+    editor.RequestSceneRedraw();
+    return true;
 }
 
 bool MatchesAssetFilter(const SLocalEntry& entry, int filter, const std::string& search)
@@ -463,6 +517,19 @@ void DrawAssetsUi(CEditor& editor)
             btnMin.y + ImGui::GetItemRectSize().y
         );
 
+        if (ImGui::BeginDragDropTarget())
+        {
+            if (const ImGuiPayload* pPayload = ImGui::AcceptDragDropPayload("ENTITY_INDEX"))
+            {
+                if (pPayload->IsDelivery() && pPayload->DataSize == sizeof(int))
+                {
+                    const int entityIdx = *static_cast<const int*>(pPayload->Data);
+                    SaveEntityBranchToDirectory(editor, entityIdx, rebuilt);
+                }
+            }
+            ImGui::EndDragDropTarget();
+        }
+
         ImGui::PopID();
 
         if (editor.m_Ui.m_Layout.FileDragging && ImGui::IsMouseHoveringRect(btnMin, btnMax))
@@ -617,6 +684,7 @@ void DrawAssetsUi(CEditor& editor)
         }
     }
 
+    bool navigated = false;
     if (vEntries.empty())
     {
         ImGui::BeginChild("AssetScrollEmpty", ImVec2(0, 0), false, ImGuiWindowFlags_AlwaysVerticalScrollbar);
@@ -636,10 +704,22 @@ void DrawAssetsUi(CEditor& editor)
         {
             if (const ImGuiPayload* pPayload = ImGui::AcceptDragDropPayload("ENTITY_INDEX"))
             {
-                int idx = *(const int*)pPayload->Data;
-                CEntity e = editor.m_Scene.m_vEntities[idx];
-
-                CEntityFactory::SavePrefab(e, editor.m_CurrentAssetPath);
+                if (pPayload->IsDelivery() && pPayload->DataSize == sizeof(int))
+                {
+                    const int idx = *static_cast<const int*>(pPayload->Data);
+                    SaveEntityBranchToDirectory(editor, idx, editor.m_CurrentAssetPath);
+                }
+            }
+            if (ImGui::IsDragDropPayloadBeingAccepted())
+            {
+                ImGui::GetWindowDrawList()->AddRect(
+                    ImGui::GetItemRectMin(),
+                    ImGui::GetItemRectMax(),
+                    IM_COL32(80, 180, 255, 255),
+                    2.0f,
+                    0,
+                    2.0f
+                );
             }
 
             ImGui::EndDragDropTarget();
@@ -676,7 +756,8 @@ void DrawAssetsUi(CEditor& editor)
 
         ImGui::EndChild();
     }
-
+    else
+    {
     ImGui::BeginChild("AssetScroll", ImVec2(0, 0), false, ImGuiWindowFlags_AlwaysVerticalScrollbar);
 
     if (ImGui::IsWindowHovered() && !editor.m_Ui.m_Layout.FileDragging)
@@ -698,8 +779,7 @@ void DrawAssetsUi(CEditor& editor)
     }
 
     editor.m_Ui.m_Layout.DraggedTargetFolderIndex = -1;
-
-    bool navigated = false;
+    bool entityDroppedOnSubfolder = false;
     const float itemSpacingX = ImGui::GetStyle().ItemSpacing.x;
     const float itemSpacingY = ImGui::GetStyle().ItemSpacing.y;
     const float itemWidth = kIconSize + itemSpacingX;
@@ -721,6 +801,31 @@ void DrawAssetsUi(CEditor& editor)
         const ImVec2 pos = ImGui::GetCursorScreenPos();
         const ImVec2 size(kIconSize, kIconSize + 20.0f);
         ImGui::InvisibleButton("asset_btn", size);
+
+        if (entry.IsDirectory && ImGui::BeginDragDropTarget())
+        {
+            if (const ImGuiPayload* pPayload = ImGui::AcceptDragDropPayload("ENTITY_INDEX"))
+            {
+                if (pPayload->IsDelivery() && pPayload->DataSize == sizeof(int))
+                {
+                    const int entityIdx = *static_cast<const int*>(pPayload->Data);
+                    SaveEntityBranchToDirectory(editor, entityIdx, editor.m_CurrentAssetPath / entry.FileName);
+                    entityDroppedOnSubfolder = true;
+                }
+            }
+            if (ImGui::IsDragDropPayloadBeingAccepted())
+            {
+                ImGui::GetWindowDrawList()->AddRect(
+                    pos,
+                    ImVec2(pos.x + size.x, pos.y + size.y),
+                    IM_COL32(80, 180, 255, 255),
+                    2.0f,
+                    0,
+                    2.0f
+                );
+            }
+            ImGui::EndDragDropTarget();
+        }
 
         const bool itemActive = ImGui::IsItemActive();
         const bool itemHovered = ImGui::IsItemHovered();
@@ -765,6 +870,10 @@ void DrawAssetsUi(CEditor& editor)
             {
                 OpenMaterialViewerForPath(editor, editor.m_Ui.m_MaterialViewer, fullPath);
             }
+            else if (entry.isPrefab)
+            {
+                SpawnPrefabInScene(editor, fullPath);
+            }
             else
             {
                 #ifdef _WIN32
@@ -791,6 +900,15 @@ void DrawAssetsUi(CEditor& editor)
 
         if (ImGui::BeginPopupContextItem("AssetContext"))
         {
+            if (entry.isPrefab)
+            {
+                if (ImGui::MenuItem(TextFormat(lang.Word("spawn"), entry.FileName.c_str())))
+                {
+                    SpawnPrefabInScene(editor, editor.m_CurrentAssetPath / entry.FileName);
+                }
+                ImGui::Separator();
+            }
+
             if (ImGui::MenuItem(lang.Word("open_file_explorer")))
             {
                 OpenInSystemFileExplorer(editor.m_CurrentAssetPath / entry.FileName, entry.IsDirectory);
@@ -987,14 +1105,15 @@ void DrawAssetsUi(CEditor& editor)
         if (!entry.IsDirectory && !entry.FileName.empty())
         {
             ImDrawList* pDrawList = ImGui::GetWindowDrawList();
-            std::string extDisplay = entry.Extension;
+            std::string extDisplay = entry.isPrefab ? "PFB" : entry.Extension;
             if (extDisplay.size() > 3)
             {
                 extDisplay.resize(3);
             }
             const ImVec2 extTextSize = ImGui::CalcTextSize(extDisplay.c_str());
             const ImVec2 extPos(pos.x + kIconSize - extTextSize.x - 2.0f, pos.y + kIconSize - extTextSize.y - 2.0f);
-            pDrawList->AddRectFilled(ImVec2(extPos.x - 2.0f, extPos.y - 1.0f), ImVec2(pos.x + kIconSize, pos.y + kIconSize), IM_COL32(0, 0, 0, 180));
+            const ImU32 badgeBg = entry.isPrefab ? IM_COL32(30, 120, 200, 220) : IM_COL32(0, 0, 0, 180);
+            pDrawList->AddRectFilled(ImVec2(extPos.x - 2.0f, extPos.y - 1.0f), ImVec2(pos.x + kIconSize, pos.y + kIconSize), badgeBg);
             pDrawList->AddText(extPos, IM_COL32(255, 255, 255, 255), extDisplay.c_str());
         }
 
@@ -1054,15 +1173,26 @@ void DrawAssetsUi(CEditor& editor)
         }
 
         if (editor.m_Ui.m_Layout.SceneAssetDragging &&
-            !entry.IsDirectory && (entry.IsModel || entry.IsMaterial))
+            !entry.IsDirectory && (entry.IsModel || entry.IsMaterial || entry.isPrefab))
         {
-            const std::string assetName = CAssetLibrary::AssetNameForPath(fs::path(editor.m_ProjectPath), editor.m_CurrentAssetPath / entry.FileName);
-
-            if (editor.m_Ui.m_Layout.SceneAssetDragging && editor.m_Ui.m_Layout.DraggedSceneAssetName == assetName)
+            if (entry.isPrefab)
             {
-                if (entry.IsModel)
+                const std::string fullPrefabPath = (editor.m_CurrentAssetPath / entry.FileName).string();
+                if (editor.m_Ui.m_Layout.DraggedSceneAssetName == fullPrefabPath)
                 {
-                    ImGui::SetTooltip(lang.Word("spawn"), editor.m_Ui.m_Layout.DraggedSceneAssetName.c_str());
+                    ImGui::SetTooltip(lang.Word("spawn"), entry.FileName.c_str());
+                }
+            }
+            else
+            {
+                const std::string assetName = CAssetLibrary::AssetNameForPath(fs::path(editor.m_ProjectPath), editor.m_CurrentAssetPath / entry.FileName);
+
+                if (editor.m_Ui.m_Layout.SceneAssetDragging && editor.m_Ui.m_Layout.DraggedSceneAssetName == assetName)
+                {
+                    if (entry.IsModel)
+                    {
+                        ImGui::SetTooltip(lang.Word("spawn"), editor.m_Ui.m_Layout.DraggedSceneAssetName.c_str());
+                    }
                 }
             }
         }
@@ -1091,6 +1221,36 @@ void DrawAssetsUi(CEditor& editor)
     }
     clipper.End();
 
+    const ImVec2 scrollWindowPos = ImGui::GetWindowPos();
+    const ImVec2 scrollWindowSize = ImGui::GetWindowSize();
+    const ImRect assetDropZone(
+        scrollWindowPos,
+        ImVec2(scrollWindowPos.x + scrollWindowSize.x, scrollWindowPos.y + scrollWindowSize.y));
+    if (!entityDroppedOnSubfolder &&
+        ImGui::BeginDragDropTargetCustom(assetDropZone, ImGui::GetID("##AssetBrowserEntityDropZone")))
+    {
+        if (const ImGuiPayload* pPayload = ImGui::AcceptDragDropPayload("ENTITY_INDEX"))
+        {
+            if (pPayload->IsDelivery() && pPayload->DataSize == sizeof(int))
+            {
+                const int idx = *static_cast<const int*>(pPayload->Data);
+                SaveEntityBranchToDirectory(editor, idx, editor.m_CurrentAssetPath);
+            }
+        }
+        if (ImGui::IsDragDropPayloadBeingAccepted())
+        {
+            ImGui::GetWindowDrawList()->AddRect(
+                assetDropZone.Min,
+                assetDropZone.Max,
+                IM_COL32(80, 180, 255, 255),
+                2.0f,
+                0,
+                2.0f
+            );
+        }
+        ImGui::EndDragDropTarget();
+    }
+
     ImGui::SetNextItemAllowOverlap();
     ImGui::SetCursorPos(ImVec2(0, 0));
 
@@ -1106,14 +1266,15 @@ void DrawAssetsUi(CEditor& editor)
 
     ImGui::InvisibleButton("##bg_drop_zone", bgSize);
 
-    if (ImGui::BeginDragDropTarget())
+    if (!entityDroppedOnSubfolder && ImGui::BeginDragDropTarget())
     {
         if (const ImGuiPayload* pPayload = ImGui::AcceptDragDropPayload("ENTITY_INDEX"))
         {
-            int idx = *(const int*)pPayload->Data;
-            CEntity e = editor.m_Scene.m_vEntities[idx];
-
-            CEntityFactory::SavePrefab(e, editor.m_CurrentAssetPath);
+            if (pPayload->IsDelivery() && pPayload->DataSize == sizeof(int))
+            {
+                const int idx = *static_cast<const int*>(pPayload->Data);
+                SaveEntityBranchToDirectory(editor, idx, editor.m_CurrentAssetPath);
+            }
         }
         ImGui::EndDragDropTarget();
     }
@@ -1282,6 +1443,7 @@ void DrawAssetsUi(CEditor& editor)
     }
 
     ImGui::EndChild();
+    }
 
     if (create.Open && !navigated)
     {
@@ -1383,6 +1545,7 @@ static void DrawAssetDependencies(CEditor& editor, const fs::path& selected)
 
     const bool isMaterial = Lowercase(selected.extension().string()) == ".mtl";
     const bool isObjModel = Lowercase(selected.extension().string()) == ".obj";
+    const bool isPrefab = Lowercase(selected.extension().string()) == ".prefab";
     const bool isTexture = CTextureMetadataStore::IsImageFile(selected);
     unsigned int textureId = 0;
     if (isTexture && !relativeError)
@@ -1427,7 +1590,60 @@ static void DrawAssetDependencies(CEditor& editor, const fs::path& selected)
         }
     }
 
-    if (!browser.dependencyCacheReady && isObjModel)
+    if (!browser.dependencyCacheReady && isPrefab)
+    {
+        std::ifstream prefabFile(selected);
+        if (prefabFile.is_open())
+        {
+            std::stringstream buffer;
+            buffer << prefabFile.rdbuf();
+            const quark::SParsedSceneDocument parsed = quark::CSceneDocument::ParsePrefab(buffer.str());
+            if (parsed.IsValid && parsed.Document.contains("entities"))
+            {
+                const auto& entities = parsed.Document["entities"];
+                browser.vCachedFileDependencies.push_back(
+                    "Entities in prefab: " + std::to_string(entities.size()));
+                for (const auto& ej : entities)
+                {
+                    if (!ej.contains("components") || !ej["components"].is_array())
+                    {
+                        continue;
+                    }
+                    for (const auto& comp : ej["components"])
+                    {
+                        if (!comp.contains("type") || !comp.contains("data"))
+                        {
+                            continue;
+                        }
+                        const std::string compType = comp.value("type", "");
+                        const auto& data = comp["data"];
+                        if (compType == "Mesh" && data.contains("asset_name") && data["asset_name"].is_string())
+                        {
+                            const std::string assetName = data["asset_name"].get<std::string>();
+                            if (!assetName.empty())
+                            {
+                                browser.vCachedFileDependencies.push_back("Uses model: " + assetName);
+                            }
+                        }
+                        else if (compType == "Material")
+                        {
+                            const std::string albedo = data.value("albedo_texture_name", "");
+                            const std::string tex = data.value("texture_name", "");
+                            if (!albedo.empty())
+                            {
+                                browser.vCachedFileDependencies.push_back("Uses texture: " + albedo);
+                            }
+                            else if (!tex.empty())
+                            {
+                                browser.vCachedFileDependencies.push_back("Uses material/texture: " + tex);
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+    else if (!browser.dependencyCacheReady && isObjModel)
     {
         std::ifstream modelFile(selected);
         std::string line;

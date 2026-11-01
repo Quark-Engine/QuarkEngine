@@ -770,3 +770,204 @@ TEST(ComponentFactory, separate_registries_do_not_share_registrations)
     CHECK(hostRegistry.Create(s_GaugeTypeName) != nullptr);
     CHECK(pluginRegistry.Create("Transform") != nullptr);
 }
+
+
+TEST(PrefabDocument, serializes_and_instantiates_hierarchy_branch_with_descendants)
+{
+    CComponentFactoryRegistry registry;
+    registry.Register(s_GaugeTypeName, []()
+    {
+        return std::make_shared<CTestGaugeComponent>();
+    });
+
+    CScene source;
+    AddEntity(source, "Unrelated", -1);
+    const int root = AddEntity(source, "Vehicle", -1, true);
+    const int body = AddEntity(source, "Body", root);
+    const int turretGroup = AddEntity(source, "TurretGroup", root, true);
+    const int cannon = AddEntity(source, "Cannon", turretGroup);
+
+    source.m_vEntities[root].GetTransformComponent()->m_Position = { 5.0f, 0.0f, -2.0f };
+    source.m_vEntities[body].GetTransformComponent()->m_Position = { 0.0f, 1.0f, 0.0f };
+    source.m_vEntities[turretGroup].GetTransformComponent()->m_Position = { 0.0f, 2.0f, 0.5f };
+    source.m_vEntities[cannon].GetTransformComponent()->m_Position = { 0.0f, 0.25f, 1.5f };
+    source.m_vEntities[cannon].m_vTags = { "weapon", "primary" };
+
+    auto pGauge = std::make_shared<CTestGaugeComponent>();
+    pGauge->m_Reading = 108;
+    pGauge->m_Label = "ammo";
+    source.m_vEntities[cannon].GetComponents()->AddComponent(pGauge);
+
+    const std::string prefabJson = quark::CSceneDocument::SerializePrefab(source, root);
+    CHECK(!prefabJson.empty());
+
+    const quark::SParsedSceneDocument parsed = quark::CSceneDocument::ParsePrefab(prefabJson);
+    CHECK(parsed.IsValid);
+
+    CScene target;
+    AddEntity(target, "ExistingSceneEntity", -1);
+
+    std::vector<int> vCreatedIndices;
+    CHECK(quark::CSceneDocument::InstantiatePrefab(prefabJson, target, registry, -1, &vCreatedIndices));
+    CHECK(!vCreatedIndices.empty() && vCreatedIndices[0] == 1);
+    CHECK(target.m_vEntities.size() == 5);
+
+    if (target.m_vEntities.size() == 5)
+    {
+        CHECK(target.m_vEntities[1].m_Name == "Vehicle");
+        CHECK(target.m_vEntities[1].m_IsGroup);
+        CHECK(target.m_vEntities[1].m_ParentId == -1);
+        ExpectVecNear(target.m_vEntities[1].GetTransformComponent()->m_Position, Vec3{ 5.0f, 0.0f, -2.0f }, 1e-5);
+
+        CHECK(target.m_vEntities[2].m_Name == "Body");
+        CHECK(target.m_vEntities[2].m_ParentId == 1);
+        ExpectVecNear(target.m_vEntities[2].GetTransformComponent()->m_Position, Vec3{ 0.0f, 1.0f, 0.0f }, 1e-5);
+
+        CHECK(target.m_vEntities[3].m_Name == "TurretGroup");
+        CHECK(target.m_vEntities[3].m_IsGroup);
+        CHECK(target.m_vEntities[3].m_ParentId == 1);
+        ExpectVecNear(target.m_vEntities[3].GetTransformComponent()->m_Position, Vec3{ 0.0f, 2.0f, 0.5f }, 1e-5);
+
+        CHECK(target.m_vEntities[4].m_Name == "Cannon");
+        CHECK(target.m_vEntities[4].m_ParentId == 3);
+        ExpectVecNear(target.m_vEntities[4].GetTransformComponent()->m_Position, Vec3{ 0.0f, 0.25f, 1.5f }, 1e-5);
+        CHECK(target.m_vEntities[4].m_vTags.size() == 2);
+
+        const auto pRestoredGauge = target.m_vEntities[4].GetComponents()->GetComponentOfType<CTestGaugeComponent>();
+        CHECK(pRestoredGauge != nullptr);
+        if (pRestoredGauge)
+        {
+            CHECK(pRestoredGauge->m_Reading == 108);
+            CHECK(pRestoredGauge->m_Label == "ammo");
+        }
+    }
+
+    registry.Unregister(s_GaugeTypeName);
+}
+
+TEST(PrefabDocument, decomposes_world_transform_when_saving_nested_child_as_prefab_root)
+{
+    CComponentFactoryRegistry registry;
+    CScene source;
+    const int parent = AddEntity(source, "ParentContainer", -1);
+    const int subRoot = AddEntity(source, "Module", parent);
+    const int leaf = AddEntity(source, "Sensor", subRoot);
+
+    source.m_vEntities[parent].GetTransformComponent()->m_Position = { 10.0f, 20.0f, 30.0f };
+    source.m_vEntities[subRoot].GetTransformComponent()->m_Position = { 1.0f, 2.0f, 3.0f };
+    source.m_vEntities[leaf].GetTransformComponent()->m_Position = { 4.0f, 5.0f, 6.0f };
+
+    const std::string prefabJson = quark::CSceneDocument::SerializePrefab(source, subRoot);
+    CHECK(!prefabJson.empty());
+
+    CScene target;
+    std::vector<int> vCreatedIndices;
+    CHECK(quark::CSceneDocument::InstantiatePrefab(prefabJson, target, registry, -1, &vCreatedIndices));
+    CHECK(!vCreatedIndices.empty() && vCreatedIndices[0] == 0);
+    CHECK(target.m_vEntities.size() == 2);
+    if (target.m_vEntities.size() == 2)
+    {
+        CHECK(target.m_vEntities[0].m_ParentId == -1);
+        ExpectVecNear(target.m_vEntities[0].GetTransformComponent()->m_Position, Vec3{ 11.0f, 22.0f, 33.0f }, 1e-4);
+        CHECK(target.m_vEntities[1].m_ParentId == 0);
+        ExpectVecNear(target.m_vEntities[1].GetTransformComponent()->m_Position, Vec3{ 4.0f, 5.0f, 6.0f }, 1e-4);
+    }
+}
+
+TEST(PrefabDocument, instantiates_under_target_parent_and_uniquifies_names)
+{
+    CComponentFactoryRegistry registry;
+    CScene source;
+    const int root = AddEntity(source, "Crate", -1);
+    AddEntity(source, "Lid", root);
+
+    const std::string prefabJson = quark::CSceneDocument::SerializePrefab(source, root);
+    CHECK(!prefabJson.empty());
+
+    CScene target;
+    const int folder = AddEntity(target, "Props", -1, true);
+
+    std::vector<int> vFirstCreated;
+    std::vector<int> vSecondCreated;
+    CHECK(quark::CSceneDocument::InstantiatePrefab(prefabJson, target, registry, -1, &vFirstCreated));
+    CHECK(quark::CSceneDocument::InstantiatePrefab(prefabJson, target, registry, folder, &vSecondCreated));
+
+    CHECK(!vFirstCreated.empty() && vFirstCreated[0] == 1);
+    CHECK(!vSecondCreated.empty() && vSecondCreated[0] == 3);
+    CHECK(target.m_vEntities.size() == 5);
+    if (target.m_vEntities.size() == 5)
+    {
+        CHECK(target.m_vEntities[1].m_Name == "Crate");
+        CHECK(target.m_vEntities[1].m_ParentId == -1);
+        CHECK(target.m_vEntities[2].m_Name == "Lid");
+        CHECK(target.m_vEntities[2].m_ParentId == 1);
+
+        CHECK(target.m_vEntities[3].m_Name == "Crate (1)");
+        CHECK(target.m_vEntities[3].m_ParentId == folder);
+        CHECK(target.m_vEntities[4].m_Name == "Lid (1)");
+        CHECK(target.m_vEntities[4].m_ParentId == 3);
+    }
+}
+
+TEST(PrefabDocument, parses_legacy_single_entity_prefab_format)
+{
+    CComponentFactoryRegistry registry;
+    const std::string legacyJson = R"({
+        "name": "LegacyCube",
+        "is_group": false,
+        "tags": ["legacy"],
+        "components": [
+            {
+                "type": "Transform",
+                "data": {
+                    "enabled": true,
+                    "position": [3.0, 4.0, 5.0],
+                    "rotation": [0.0, 0.0, 0.0],
+                    "scale": [1.0, 1.0, 1.0]
+                }
+            },
+            {
+                "type": "Mesh",
+                "data": {
+                    "enabled": true,
+                    "type": 0,
+                    "asset": "",
+                    "segments": 16
+                }
+            }
+        ]
+    })";
+
+    CScene target;
+    std::vector<int> vCreatedIndices;
+    CHECK(quark::CSceneDocument::InstantiatePrefab(legacyJson, target, registry, -1, &vCreatedIndices));
+    CHECK(vCreatedIndices.size() == 1 && vCreatedIndices[0] == 0);
+    CHECK(target.m_vEntities.size() == 1);
+    if (!target.m_vEntities.empty())
+    {
+        CHECK(target.m_vEntities[0].m_Name == "LegacyCube");
+        CHECK(target.m_vEntities[0].m_vTags.size() == 1);
+        ExpectVecNear(target.m_vEntities[0].GetTransformComponent()->m_Position, Vec3{ 3.0f, 4.0f, 5.0f }, 1e-5);
+        CHECK(target.m_vEntities[0].GetMeshComponent() != nullptr);
+        CHECK(target.m_vEntities[0].GetMeshComponent()->m_Type == OBJECT_CUBE);
+    }
+}
+
+TEST(PrefabDocument, rejects_invalid_or_cyclic_prefab_documents)
+{
+    CComponentFactoryRegistry registry;
+    CScene emptyScene;
+    CHECK(quark::CSceneDocument::SerializePrefab(emptyScene, 0).empty());
+    CHECK(quark::CSceneDocument::SerializePrefab(emptyScene, -1).empty());
+
+    const std::string cyclicPrefab = R"({
+        "version": "1",
+        "entities": [
+            { "name": "A", "parent_id": 1, "components": [] },
+            { "name": "B", "parent_id": 0, "components": [] }
+        ]
+    })";
+    CHECK(!quark::CSceneDocument::ParsePrefab(cyclicPrefab).IsValid);
+    CHECK(!quark::CSceneDocument::InstantiatePrefab(cyclicPrefab, emptyScene, registry));
+    CHECK(emptyScene.m_vEntities.empty());
+}

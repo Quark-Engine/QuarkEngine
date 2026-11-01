@@ -1,10 +1,48 @@
 #include "editor/editor_entity.h"
 #include "editor/editor_viewers.h"
+#include "engine/scene_document.h"
+#include "engine/scene_runtime.h"
 #include "models.h"
 #include "nlohmann/json.hpp"
 
 #include <fstream>
 #include <memory>
+#include <sstream>
+
+namespace
+{
+
+std::string SanitizePrefabFileName(const std::string& rawName)
+{
+    std::string sanitized;
+    sanitized.reserve(rawName.size());
+    for (unsigned char ch : rawName)
+    {
+        if (ch < 32 || ch == '<' || ch == '>' || ch == ':' || ch == '"' ||
+            ch == '/' || ch == '\\' || ch == '|' || ch == '?' || ch == '*')
+        {
+            sanitized.push_back('_');
+        }
+        else
+        {
+            sanitized.push_back(static_cast<char>(ch));
+        }
+    }
+
+    while (!sanitized.empty() && (sanitized.back() == ' ' || sanitized.back() == '.'))
+    {
+        sanitized.pop_back();
+    }
+
+    if (sanitized.empty())
+    {
+        return "Prefab";
+    }
+    return sanitized;
+}
+
+} // anonymous
+
 void CEntityFactory::AssignName(CEntity& entity, const char* pNewName)
 {
     if (!pNewName || pNewName[0] == '\0')
@@ -45,7 +83,7 @@ CEntity CEntityFactory::FromAsset(CScene& scene, CModelAsset& asset)
         pMat->m_TextureSource = TEXTURE_NONE;
         pMat->m_TextureName.clear();
 
-        if (asset.m_Name == "Text")
+        if (asset.m_Name == "Text" || asset.m_Name == "3D Text")
         {
             auto pTextComp = std::make_shared<CText3DComponent>();
             entity.GetComponents()->AddComponent(pTextComp);
@@ -57,7 +95,7 @@ CEntity CEntityFactory::FromAsset(CScene& scene, CModelAsset& asset)
         {
             pMesh->m_pAsset = nullptr;
             pMesh->m_AssetName.clear();
-            pMesh->m_Model;
+            pMesh->m_Model = {};
             return entity;
         }
 
@@ -143,30 +181,93 @@ CEntity CEntityFactory::Camera(CScene& scene, int parentIndex)
     return entity;
 }
 
-void CEntityFactory::SavePrefab(CEntity entity, const fs::path path)
+bool CEntityFactory::SavePrefab(const CScene& scene, int rootEntityIndex,
+                                const fs::path& directoryPath, fs::path* pOutFilePath)
 {
-    nlohmann::json j;
-
-    j["name"] = entity.m_Name;
-    j["tags"] = entity.m_vTags;
-    j["is_group"] = entity.m_IsGroup;
-    j["parent_id"] = entity.m_ParentId;
-
-    if (entity.m_pComponents)
+    if (rootEntityIndex < 0 || rootEntityIndex >= static_cast<int>(scene.m_vEntities.size()))
     {
-        entity.m_pComponents->Serialize(j);
+        return false;
     }
 
-    std::ofstream f(path / (entity.m_Name + ".prefab"));
+    const std::string document = quark::CSceneDocument::SerializePrefab(scene, rootEntityIndex, 4);
+    if (document.empty())
+    {
+        return false;
+    }
 
+    std::error_code ec;
+    fs::create_directories(directoryPath, ec);
+
+    const std::string baseFileName = SanitizePrefabFileName(scene.m_vEntities[rootEntityIndex].m_Name);
+    const fs::path filePath = directoryPath / (baseFileName + ".prefab");
+
+    std::ofstream f(filePath);
     if (!f.is_open())
     {
-        TraceLog(LogLevel::Error, "PREFAB", TextFormat("Failed to open %s.prefab ", entity.m_Name.c_str()));
-        return;
+        TraceLog(LogLevel::Error, "PREFAB", TextFormat("Failed to open %s", filePath.string().c_str()));
+        return false;
     }
 
-    f << j.dump(4);
+    f << document;
     f.close();
+    if (!f)
+    {
+        TraceLog(LogLevel::Error, "PREFAB", TextFormat("Failed to write %s", filePath.string().c_str()));
+        return false;
+    }
+
+    if (pOutFilePath)
+    {
+        *pOutFilePath = filePath;
+    }
+
+    TraceLog(LogLevel::Info, "PREFAB", TextFormat("Saved prefab: %s", filePath.string().c_str()));
+    return true;
+}
+
+void CEntityFactory::SavePrefab(CEntity entity, const fs::path path)
+{
+    CScene tempScene;
+    entity.m_Id = 0;
+    entity.m_ParentId = -1;
+    tempScene.m_vEntities.push_back(std::move(entity));
+    SavePrefab(tempScene, 0, path);
+}
+
+std::vector<int> CEntityFactory::InstantiatePrefab(CScene& scene, CAssetLibrary& assets,
+                                                   const fs::path& filename,
+                                                   const CComponentFactoryRegistry& factories,
+                                                   int parentIndex)
+{
+    std::ifstream f(filename);
+    if (!f.is_open())
+    {
+        TraceLog(LogLevel::Error, "PREFAB", TextFormat("Failed to open prefab %s", filename.string().c_str()));
+        return {};
+    }
+
+    std::stringstream buffer;
+    buffer << f.rdbuf();
+
+    std::vector<int> vCreatedIndices;
+    if (!quark::CSceneDocument::InstantiatePrefab(buffer.str(), scene, factories, parentIndex, &vCreatedIndices))
+    {
+        TraceLog(LogLevel::Error, "PREFAB", TextFormat("Failed to parse prefab %s", filename.string().c_str()));
+        return {};
+    }
+
+    for (int createdIndex : vCreatedIndices)
+    {
+        if (createdIndex < 0 || createdIndex >= static_cast<int>(scene.m_vEntities.size()))
+        {
+            continue;
+        }
+        CEntity& entity = scene.m_vEntities[createdIndex];
+        quark::CSceneRuntime::RestoreEntityModel(entity, assets);
+        quark::CSceneRuntime::ResetEntityLightRuntime(entity);
+    }
+
+    return vCreatedIndices;
 }
 
 CEntity CEntityFactory::FromPrefab(CScene& scene, const CAssetLibrary& assets, const fs::path filename,
@@ -179,38 +280,21 @@ CEntity CEntityFactory::FromPrefab(CScene& scene, const CAssetLibrary& assets, c
         return {};
     }
 
-    nlohmann::json j;
-    f >> j;
+    std::stringstream buffer;
+    buffer << f.rdbuf();
 
-    CEntity entity;
-
-    entity.m_Name = j.value("name", "Entity");
-    if (j.contains("tags") && j["tags"].is_array())
+    CScene tempScene;
+    std::vector<int> vCreatedIndices;
+    if (!quark::CSceneDocument::InstantiatePrefab(buffer.str(), tempScene, factories, -1, &vCreatedIndices) ||
+        vCreatedIndices.empty())
     {
-        entity.m_vTags = j["tags"].get<std::vector<std::string>>();
+        return {};
     }
-    entity.m_IsGroup = j.value("is_group", false);
-    entity.m_ParentId = j.value("parent_id", -1);
+
+    CEntity& entity = tempScene.m_vEntities.front();
     entity.m_Id = static_cast<int>(scene.m_vEntities.size());
-
-    if (j.contains("components"))
-    {
-        entity.m_pComponents->Deserialize(j, factories);
-    }
-
-    auto pMesh = entity.GetMeshComponent();
-    if (pMesh && !pMesh->m_AssetName.empty())
-    {
-        CModelService::LoadInstance(*assets.FindModelByName(pMesh->m_AssetName), pMesh->m_Model);
-    }
-
-    auto pMat = entity.GetMaterialComponent();
-    if (pMat && !pMat->m_TextureName.empty())
-    {
-        LoadMaterialToEntity(&entity, pMat->m_TextureName);
-    }
-
-    TraceLog(LogLevel::Info, "PREFAB", TextFormat("[TEXTURE_NAME] %s", pMat->m_TextureName.c_str()));
-
-    return entity;
+    entity.m_Name = scene.MakeUniqueName(entity.m_Name);
+    quark::CSceneRuntime::RestoreEntityModel(entity, const_cast<CAssetLibrary&>(assets));
+    quark::CSceneRuntime::ResetEntityLightRuntime(entity);
+    return std::move(entity);
 }

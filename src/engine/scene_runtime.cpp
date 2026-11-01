@@ -65,6 +65,71 @@ void CSceneRuntime::RestoreEntityMaterial(CEntity& entity, const CAssetLibrary& 
     applyTexture();
 }
 
+void CSceneRuntime::RestoreEntityModel(CEntity& entity, CAssetLibrary& assets,
+    const SEditableMeshBuildData* pEditableMeshBuildData)
+{
+    CMeshComponent* pMesh = entity.GetMeshComponent();
+    if (!pMesh)
+    {
+        return;
+    }
+
+    CEntityTextureService::RestoreModelTextures(&entity);
+    pMesh->m_BoundsDirty = true;
+    pMesh->m_pAsset = pMesh->m_AssetName.empty() ? nullptr : assets.FindModelByName(pMesh->m_AssetName);
+    pMesh->ReleaseOwnedResources();
+
+    if ((pMesh->m_IsEditableMesh || pMesh->m_VertexGizmo) && !pMesh->m_EditableMesh.m_vVertices.empty())
+    {
+        pMesh->m_Model = {};
+        if (pEditableMeshBuildData)
+        {
+            UploadEditableMeshData(pMesh->m_Model, *pEditableMeshBuildData);
+        }
+        else
+        {
+            RebuildMeshFromEditable(pMesh->m_Model, pMesh->m_EditableMesh);
+        }
+        pMesh->m_OwnsModelInstance = true;
+        CEntityTextureService::StoreUV(&entity);
+        CEntityTextureService::StoreMaterialTextures(&entity);
+        CMeshOverrideService::Apply(entity);
+        RestoreEntityMaterial(entity, assets);
+    }
+    else if (!pMesh->m_pAsset)
+    {
+        return;
+    }
+    else if (pMesh->m_pAsset->m_IsProcedural)
+    {
+        pMesh->m_Model = pMesh->m_pAsset->pfnGenerator(pMesh->m_Segments);
+        pMesh->m_OwnsModelInstance = true;
+        CEntityTextureService::StoreUV(&entity);
+        CEntityTextureService::StoreMaterialTextures(&entity);
+        CMeshOverrideService::Apply(entity);
+        RestoreEntityMaterial(entity, assets);
+    }
+    else
+    {
+        if (!CModelService::LoadInstance(*pMesh->m_pAsset, pMesh->m_Model))
+        {
+            pMesh->m_pAsset = nullptr;
+            pMesh->m_AssetName.clear();
+            pMesh->m_Model = {};
+            pMesh->m_OwnsModelInstance = false;
+            return;
+        }
+
+        pMesh->m_OwnsModelInstance = true;
+        CEntityTextureService::StoreUV(&entity);
+        CEntityTextureService::StoreMaterialTextures(&entity);
+        CMeshOverrideService::Apply(entity);
+        RestoreEntityMaterial(entity, assets);
+    }
+
+    pMesh->m_ShaderAssigned = false;
+}
+
 void CSceneRuntime::RestoreSceneEntityModels(CScene& scene, CAssetLibrary& assets,
     CScene* pPreviousScene,
     const std::vector<std::optional<SEditableMeshBuildData>>* pvEditableMeshBuildData)
@@ -124,58 +189,13 @@ void CSceneRuntime::RestoreSceneEntityModels(CScene& scene, CAssetLibrary& asset
             continue;
         }
 
-        pMesh->ReleaseOwnedResources();
-
-        if ((pMesh->m_IsEditableMesh || pMesh->m_VertexGizmo) && !pMesh->m_EditableMesh.m_vVertices.empty())
+        const SEditableMeshBuildData* pEditableData = nullptr;
+        if (pvEditableMeshBuildData && entityIndex < pvEditableMeshBuildData->size() &&
+            (*pvEditableMeshBuildData)[entityIndex])
         {
-            pMesh->m_Model = {};
-            if (pvEditableMeshBuildData && entityIndex < pvEditableMeshBuildData->size() &&
-                (*pvEditableMeshBuildData)[entityIndex])
-            {
-                UploadEditableMeshData(pMesh->m_Model, *(*pvEditableMeshBuildData)[entityIndex]);
-            }
-            else
-            {
-                RebuildMeshFromEditable(pMesh->m_Model, pMesh->m_EditableMesh);
-            }
-            pMesh->m_OwnsModelInstance = true;
-            CEntityTextureService::StoreUV(&entity);
-            CEntityTextureService::StoreMaterialTextures(&entity);
-            CMeshOverrideService::Apply(entity);
-            RestoreEntityMaterial(entity, assets);
+            pEditableData = &(*(*pvEditableMeshBuildData)[entityIndex]);
         }
-        else if (!pMesh->m_pAsset)
-        {
-            continue;
-        }
-        else if (pMesh->m_pAsset->m_IsProcedural)
-        {
-            pMesh->m_Model = pMesh->m_pAsset->pfnGenerator(pMesh->m_Segments);
-            pMesh->m_OwnsModelInstance = true;
-            CEntityTextureService::StoreUV(&entity);
-            CEntityTextureService::StoreMaterialTextures(&entity);
-            CMeshOverrideService::Apply(entity);
-            RestoreEntityMaterial(entity, assets);
-        }
-        else
-        {
-            if (!CModelService::LoadInstance(*pMesh->m_pAsset, pMesh->m_Model))
-            {
-                pMesh->m_pAsset = nullptr;
-                pMesh->m_AssetName.clear();
-                pMesh->m_Model = {};
-                pMesh->m_OwnsModelInstance = false;
-                continue;
-            }
-
-            pMesh->m_OwnsModelInstance = true;
-            CEntityTextureService::StoreUV(&entity);
-            CEntityTextureService::StoreMaterialTextures(&entity);
-            CMeshOverrideService::Apply(entity);
-            RestoreEntityMaterial(entity, assets);
-        }
-
-        pMesh->m_ShaderAssigned = false;
+        RestoreEntityModel(entity, assets, pEditableData);
     }
 
     if (pPreviousScene)
@@ -190,6 +210,27 @@ void CSceneRuntime::RestoreSceneEntityMaterials(CScene& scene, const CAssetLibra
     {
         RestoreEntityMaterial(entity, assets);
     }
+}
+
+void CSceneRuntime::ResetEntityLightRuntime(CEntity& entity)
+{
+    CLightComponent* pLight = entity.GetLightComponent();
+    if (!pLight)
+    {
+        return;
+    }
+
+    pLight->m_Created = false;
+    pLight->m_Light.m_Id = -1;
+    pLight->m_Light.m_Light.enabledLoc = -1;
+    pLight->m_Light.m_Light.typeLoc = -1;
+    pLight->m_Light.m_Light.positionLoc = -1;
+    pLight->m_Light.m_Light.targetLoc = -1;
+    pLight->m_Light.m_Light.colorLoc = -1;
+    pLight->m_Light.m_Light.attenuationLoc = -1;
+    pLight->m_Light.m_SpotAngleLoc = -1;
+    pLight->m_Light.m_IntensityLoc = -1;
+    pLight->m_Light.m_RangeLoc = -1;
 }
 
 void CSceneRuntime::ResetSceneLightRuntime(CScene& scene, CLightRegistry& lights)
@@ -207,17 +248,7 @@ void CSceneRuntime::ResetSceneLightRuntime(CScene& scene, CLightRegistry& lights
             lights.Free(pLight->m_Light.m_Id);
         }
 
-        pLight->m_Created = false;
-        pLight->m_Light.m_Id = -1;
-        pLight->m_Light.m_Light.enabledLoc = -1;
-        pLight->m_Light.m_Light.typeLoc = -1;
-        pLight->m_Light.m_Light.positionLoc = -1;
-        pLight->m_Light.m_Light.targetLoc = -1;
-        pLight->m_Light.m_Light.colorLoc = -1;
-        pLight->m_Light.m_Light.attenuationLoc = -1;
-        pLight->m_Light.m_SpotAngleLoc = -1;
-        pLight->m_Light.m_IntensityLoc = -1;
-        pLight->m_Light.m_RangeLoc = -1;
+        ResetEntityLightRuntime(entity);
     }
     lights.Reset();
 }
