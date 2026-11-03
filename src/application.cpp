@@ -450,8 +450,21 @@ void CApplication::RenderFrame()
                     }
 
                     m_SceneRenderer.EnsureLightingShader(pMesh);
-                    const int use = (pMat && pMat->m_Texture.id != 0) ? 1 : 0;
-                    m_SceneRenderer.SetUseTexture(use != 0);
+                    bool hasTexture = (pMat && pMat->m_Texture.id != 0);
+                    if (!hasTexture && pMesh && pMesh->m_Model.materialCount > 0 && pMesh->m_Model.materials)
+                    {
+                        for (int matIdx = 0; matIdx < pMesh->m_Model.materialCount; ++matIdx)
+                        {
+                            if (pMesh->m_Model.materials[matIdx].maps &&
+                                (pMesh->m_Model.materials[matIdx].maps[MATERIAL_MAP_ALBEDO].texture.valid ||
+                                 pMesh->m_Model.materials[matIdx].maps[MATERIAL_MAP_ALBEDO].texture.id != 0))
+                            {
+                                hasTexture = true;
+                                break;
+                            }
+                        }
+                    }
+                    m_SceneRenderer.SetUseTexture(hasTexture);
                     m_SceneRenderer.BeginLightingPass();
                     CEntityTextureService::DrawEntityWithTexture(e, worldTransform, m_Editor.m_Preferences);
                     m_SceneRenderer.EndLightingPass();

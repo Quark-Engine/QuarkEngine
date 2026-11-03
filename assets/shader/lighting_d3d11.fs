@@ -51,18 +51,12 @@ struct PSInput
     float3 fragTangent  : TANGENT;
 };
 
-float UnpackShadowDepth(float4 rgba)
+float SampleShadowDepth(int index, float2 uv)
 {
-    const float4 bitShift = float4(1.0, 1.0 / 256.0, 1.0 / 65536.0, 1.0 / 16777216.0);
-    return dot(rgba, bitShift);
-}
-
-float4 SampleShadowMap(int index, float2 uv)
-{
-    if (index == 0) return shadowMap0.SampleLevel(mainSampler, uv, 0.0);
-    if (index == 1) return shadowMap1.SampleLevel(mainSampler, uv, 0.0);
-    if (index == 2) return shadowMap2.SampleLevel(mainSampler, uv, 0.0);
-    return shadowMap3.SampleLevel(mainSampler, uv, 0.0);
+    if (index == 0) return shadowMap0.SampleLevel(mainSampler, uv, 0.0).r;
+    if (index == 1) return shadowMap1.SampleLevel(mainSampler, uv, 0.0).r;
+    if (index == 2) return shadowMap2.SampleLevel(mainSampler, uv, 0.0).r;
+    return shadowMap3.SampleLevel(mainSampler, uv, 0.0).r;
 }
 
 float2 GetShadowTexelSize(int index)
@@ -80,55 +74,52 @@ float shadow_factor(int index, float3 fragPosition, float3 normal, float3 lightD
 {
     if (shadowsEnabled == 0)
     {
-        return 1.0;
+        return 0.0;
     }
 
-    float4 lightClip = mul(lightProjections[index], mul(lightViews[index], float4(fragPosition, 1.0)));
+    float NdotL = saturate(dot(normal, lightDir));
+    float2 texelSize = GetShadowTexelSize(index);
+
+    float normalOffset = max(texelSize.x, texelSize.y) * 2.0 * (1.0 - NdotL * 0.5);
+    float3 shadowWorldPos = fragPosition + normal * normalOffset;
+
+    float4 lightClip = mul(lightProjections[index], mul(lightViews[index], float4(shadowWorldPos, 1.0)));
     if (lightClip.w <= 0.0)
     {
-        return 1.0;
+        return 0.0;
     }
 
     float3 projected = lightClip.xyz / lightClip.w;
     projected.x = projected.x * 0.5 + 0.5;
     projected.y = -projected.y * 0.5 + 0.5;
-    if (projected.x <= 0.0 || projected.x >= 1.0 ||
-        projected.y <= 0.0 || projected.y >= 1.0 ||
-        projected.z <= 0.0 || projected.z >= 1.0)
+    if (projected.x < 0.0 || projected.x > 1.0 ||
+        projected.y < 0.0 || projected.y > 1.0 ||
+        projected.z < 0.0 || projected.z > 1.0)
     {
-        return 1.0;
+        return 0.0;
     }
 
-    float2 texelSize = GetShadowTexelSize(index);
-    float baseBias = max(shadowBias, 0.00001);
-    float bias = max(baseBias * (1.0 - dot(normal, lightDir)), baseBias * 0.35);
-    int filterRadius = clamp(shadowFilterQuality, 0, 2);
-    if (filterRadius == 0)
-    {
-        float closestDepth = UnpackShadowDepth(SampleShadowMap(index, projected.xy));
-        return (projected.z - bias > closestDepth) ? 0.22 : 1.0;
-    }
+    float currentDepth = projected.z;
+    float baseBias = max(shadowBias, 0.0045);
+    float bias = max(baseBias * (1.0 - NdotL) * 2.0, baseBias);
+    int radius = clamp(shadowFilterQuality, 0, 2);
+    int sampleWidth = radius * 2 + 1;
+    int samples = sampleWidth * sampleWidth;
 
     float shadow = 0.0;
-    int samples = 0;
     [loop]
-    for (int x = -2; x <= 2; ++x)
+    for (int x = -radius; x <= radius; ++x)
     {
         [loop]
-        for (int y = -2; y <= 2; ++y)
+        for (int y = -radius; y <= radius; ++y)
         {
-            if (abs(x) > filterRadius || abs(y) > filterRadius)
-            {
-                continue;
-            }
             float2 offset = float2(float(x), float(y)) * texelSize;
-            float closestDepth = UnpackShadowDepth(SampleShadowMap(index, projected.xy + offset));
-            shadow += (projected.z - bias > closestDepth) ? 0.22 : 1.0;
-            samples++;
+            float closestDepth = SampleShadowDepth(index, projected.xy + offset);
+            shadow += (currentDepth - bias > closestDepth) ? 1.0 : 0.0;
         }
     }
 
-    return shadow / float(max(samples, 1));
+    return shadow / float(samples);
 }
 
 float3 perturb_normal(float3 geometricNormal, float3 tangent, float2 uv)
@@ -149,16 +140,11 @@ float3 perturb_normal(float3 geometricNormal, float3 tangent, float2 uv)
 float4 main(PSInput input) : SV_TARGET
 {
     float4 texelColor = texture0.Sample(mainSampler, input.fragTexCoord);
-    float4 baseColor = texelColor * input.fragColor;
-    if (baseColor.a <= 0.01)
-    {
-        discard;
-    }
 
     float3 normal = perturb_normal(input.fragNormal, input.fragTangent, input.fragTexCoord);
     float3 viewDir = normalize(viewPos - input.fragPosition);
 
-    float3 totalLight = ambient.rgb * 0.28;
+    float3 lightAccum = float3(0.0, 0.0, 0.0);
     float3 specularSum = float3(0.0, 0.0, 0.0);
 
     [unroll]
@@ -166,63 +152,83 @@ float4 main(PSInput input) : SV_TARGET
     {
         if (lights[i].enabled == 1)
         {
+            int lightType = lights[i].type;
             float3 lightDir = float3(0.0, 0.0, 0.0);
             float attenuation = 1.0;
-            float range = max(lights[i].range, 0.001);
+            float lightEnergy = clamp(lights[i].intensity, 0.0, 4.0);
+            float3 lightColor = lights[i].color.rgb * lightEnergy;
 
-            if (lights[i].type == LIGHT_DIRECTIONAL)
+            if (lightType == LIGHT_DIRECTIONAL)
             {
-                lightDir = -normalize(lights[i].target - lights[i].position);
+                lightDir = normalize(lights[i].position - lights[i].target);
             }
-            else
+            else if (lightType == LIGHT_POINT)
             {
                 float3 toLight = lights[i].position - input.fragPosition;
-                float dist = length(toLight);
-                lightDir = toLight / max(dist, 0.0001);
-                float rangeFactor = clamp(1.0 - dist / range, 0.0, 1.0);
-                attenuation = (rangeFactor * rangeFactor) /
-                    (1.0 + 0.09 * dist + 0.032 * dist * dist);
+                float dist = max(length(toLight), 0.35);
+                lightDir = toLight / dist;
 
-                if (lights[i].type == LIGHT_SPOT)
+                float range = max(lights[i].range, 0.001);
+                attenuation = clamp(1.0 - dist / range, 0.0, 1.0);
+                attenuation *= attenuation;
+            }
+            else if (lightType == LIGHT_SPOT)
+            {
+                float3 toLight = lights[i].position - input.fragPosition;
+                float dist = max(length(toLight), 0.35);
+                lightDir = toLight / dist;
+
+                float range = max(lights[i].range, 0.001);
+                attenuation = clamp(1.0 - dist / range, 0.0, 1.0);
+                attenuation *= attenuation;
+
+                float3 spotDir = normalize(lights[i].position - lights[i].target);
+                float theta = dot(lightDir, spotDir);
+                float cutoff = cos(radians(lights[i].spotAngle));
+
+                if (theta < cutoff)
                 {
-                    float3 spotDir = normalize(lights[i].target - lights[i].position);
-                    float theta = dot(lightDir, -spotDir);
-                    float outerCutoff = cos(radians(clamp(lights[i].spotAngle, 1.0, 89.0)));
-                    float innerCutoff = cos(radians(max(1.0, lights[i].spotAngle * 0.8)));
-                    float epsilon = max(innerCutoff - outerCutoff, 0.0001);
-                    float spotIntensity = clamp((theta - outerCutoff) / epsilon, 0.0, 1.0);
-                    attenuation *= spotIntensity;
+                    attenuation = 0.0;
                 }
-                else if (lights[i].type == LIGHT_AREA)
+                else
                 {
-                    attenuation = rangeFactor;
+                    attenuation *= smoothstep(cutoff, cutoff + 0.05, theta);
                 }
             }
+            else if (lightType == LIGHT_AREA)
+            {
+                float3 toLight = lights[i].position - input.fragPosition;
+                float dist = max(length(toLight), 0.35);
+                lightDir = toLight / dist;
 
-            float NdotL = max(dot(normal, lightDir), 0.0);
-            float wrapped = max((dot(normal, lightDir) + 0.2) / 1.2, 0.0);
-            float diffuseStrength = (lights[i].type == LIGHT_AREA)
-                ? lerp(NdotL, wrapped, 0.65)
-                : lerp(NdotL, wrapped, 0.25);
+                float range = max(lights[i].range, 0.001);
+                attenuation = sqrt(clamp(1.0 - dist / range, 0.0, 1.0));
+            }
 
-            float3 lightColor = lights[i].color.rgb * max(lights[i].intensity, 0.0) * attenuation;
-            float shadow = shadow_factor(i, input.fragPosition, normal, lightDir);
-            float3 diffuse = lightColor * diffuseStrength * shadow;
+            float directLight = max(dot(normal, lightDir), 0.0);
+            float shadow = (shadowsEnabled == 1) ? shadow_factor(i, input.fragPosition, normal, lightDir) : 0.0;
+            float wrappedLight = clamp((dot(normal, lightDir) + 0.28) / 1.28, 0.0, 1.0);
+            float diffuse = max(directLight, wrappedLight * 0.25);
 
-            float bounceStrength = max(dot(-normal, lightDir), 0.0) * 0.025;
-            float3 bounce = lightColor * bounceStrength;
+            float3 bounce = lightColor * attenuation * 0.08;
+            lightAccum += (lightColor * diffuse * attenuation) * (1.0 - shadow) + bounce;
 
-            float3 reflectDir = reflect(-lightDir, normal);
-            float spec = pow(max(dot(viewDir, reflectDir), 0.0), 28.0);
-            float3 specular = lightColor * spec * 0.12 * shadow;
-
-            totalLight += diffuse + bounce;
-            specularSum += specular;
+            if (directLight > 0.0)
+            {
+                float spec = pow(max(dot(viewDir, reflect(-lightDir, normal)), 0.0), 24.0);
+                specularSum += spec * attenuation * 0.2 * lightColor * (1.0 - shadow);
+            }
         }
     }
 
-    float3 litColor = baseColor.rgb * totalLight + specularSum +
-        emissionColor * max(emissionPower, 0.0);
-    litColor = pow(max(litColor, float3(0.0, 0.0, 0.0)), float3(1.0 / 2.2, 1.0 / 2.2, 1.0 / 2.2));
-    return float4(litColor, baseColor.a);
+    float3 color = texelColor.rgb * input.fragColor.rgb * (ambient.rgb + lightAccum) + specularSum;
+    color += emissionColor * max(emissionPower, 0.0);
+    float4 result = float4(color, texelColor.a * input.fragColor.a);
+    result = pow(max(result, float4(0.0, 0.0, 0.0, 0.0)), float4(1.0 / 2.2, 1.0 / 2.2, 1.0 / 2.2, 1.0 / 2.2));
+
+    if (result.a < 0.01)
+    {
+        discard;
+    }
+    return result;
 }
