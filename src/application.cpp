@@ -247,6 +247,7 @@ void CApplication::Initialize()
     m_Camera.m_ZoomSensitivity = m_Editor.m_Preferences.m_CameraZoomSensitivity;
     m_Camera.m_Cam.fovy = m_Editor.m_Preferences.m_CameraFov;
 
+    m_SceneRenderer.SetTaskPool(m_Editor.m_CpuTaskPool);
     m_SceneRenderer.Initialize(
         m_Editor.m_Preferences.m_ShadowMapSize,
         m_Editor.m_Preferences.m_ShadowsEnabled,
@@ -315,11 +316,17 @@ void CApplication::UpdateFrame()
     m_Camera.m_Speed = m_Editor.m_Preferences.m_CameraSpeed;
     m_Camera.m_Sensitivity = m_Editor.m_Preferences.m_CameraSensitivity;
     m_Camera.m_ZoomSensitivity = m_Editor.m_Preferences.m_CameraZoomSensitivity;
-    const ImVec2 mousePosition = ImGui::GetIO().MousePos;
+    const Vec2 mousePosition = GetMousePosition();
     const ImVec2 viewportPosition = m_Editor.m_Ui.m_Viewport.m_WindowPos;
     const ImVec2 viewportSize = m_Editor.m_Ui.m_Viewport.m_WindowSize;
     const bool buildSettingsOpen = m_Editor.m_BuildSettingsModalOpen;
+    const bool anyPopupOpen = ImGui::GetCurrentContext() != nullptr &&
+        ImGui::IsPopupOpen(nullptr, ImGuiPopupFlags_AnyPopupId | ImGuiPopupFlags_AnyPopupLevel);
+    const bool imguiBlockingViewport = ImGui::GetCurrentContext() != nullptr &&
+        (ImGui::IsAnyItemHovered() || ImGui::IsAnyItemActive() || anyPopupOpen);
     const bool cursorOverSceneViewport =
+        m_Editor.m_Ui.m_Viewport.m_Hovered &&
+        !imguiBlockingViewport &&
         mousePosition.x >= viewportPosition.x &&
         mousePosition.x <= viewportPosition.x + viewportSize.x &&
         mousePosition.y >= viewportPosition.y &&
@@ -653,7 +660,13 @@ void CApplication::RenderFrame()
         const bool wasGameCursorCaptured = m_GameCursorCaptured;
         const CViewportState& cursorViewport = m_Editor.m_Ui.m_GameViewport;
         const ImVec2 mousePosition = ImGui::GetIO().MousePos;
+        const bool anyPopupOpen = ImGui::IsPopupOpen(
+            nullptr, ImGuiPopupFlags_AnyPopupId | ImGuiPopupFlags_AnyPopupLevel);
         const bool mouseOverGameViewport =
+            cursorViewport.m_Hovered &&
+            !anyPopupOpen &&
+            !ImGui::IsAnyItemHovered() &&
+            !ImGui::IsAnyItemActive() &&
             mousePosition.x >= cursorViewport.m_WindowPos.x &&
             mousePosition.x <= cursorViewport.m_WindowPos.x + cursorViewport.m_WindowSize.x &&
             mousePosition.y >= cursorViewport.m_WindowPos.y &&
@@ -737,6 +750,13 @@ void CApplication::RenderFrame()
         m_Editor.HandleInput();
 
         m_Editor.DrawUi(m_SceneRenderer.GetLightingShader(), m_Camera, m_PluginBridge.GetContext());
+
+        if (m_Camera.m_Active &&
+            (ImGui::IsAnyItemActive() ||
+                ImGui::IsPopupOpen(nullptr, ImGuiPopupFlags_AnyPopupId | ImGuiPopupFlags_AnyPopupLevel)))
+        {
+            m_Camera.ReleaseCapture();
+        }
 
         if (SDL_Window* pWindow = GetNativeWindow())
         {

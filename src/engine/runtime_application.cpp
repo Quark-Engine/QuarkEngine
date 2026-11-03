@@ -271,6 +271,7 @@ int QuarkEngineRunGame()
     }
 
     CSceneRenderer renderer;
+    renderer.SetTaskPool(taskPool);
     renderer.Initialize(preferences.m_ShadowMapSize, preferences.m_ShadowsEnabled,
         preferences.m_ShadowBias, preferences.m_ShadowFilterQuality, shaderPath);
     Camera3D camera{};

@@ -3,6 +3,7 @@
 #include "component.h"
 #include "lighting.h"
 #include "scene.h"
+#include "engine/cpu_task_pool.h"
 #include "engine/transform.h"
 
 #include <cfloat>
@@ -473,25 +474,60 @@ bool CSceneRenderer::IsMeshVisible(CMeshComponent* pMesh, const Mat4& worldTrans
 
 void CSceneRenderer::PrepareFrameCache(CScene& scene)
 {
+    const int entityCount = static_cast<int>(scene.m_vEntities.size());
     m_vFrameData.clear();
-    m_vFrameData.resize(scene.m_vEntities.size());
+    m_vFrameData.resize(static_cast<std::size_t>(entityCount));
 
-    for (int entityIndex = 0; entityIndex < static_cast<int>(scene.m_vEntities.size()); ++entityIndex)
+    const auto prepareRange = [&](int beginIndex, int endIndex)
     {
-        CEntity& entity = scene.m_vEntities[entityIndex];
-        SSceneEntityFrameData& frameData = m_vFrameData[entityIndex];
-        frameData.worldTransform = quark::ComposeWorld(scene, entityIndex);
-
-        CMeshComponent* pMesh = entity.GetMeshComponent();
-        if (!pMesh || !pMesh->m_Enabled || pMesh->m_Model.meshCount <= 0 || !pMesh->m_Model.meshes)
+        for (int entityIndex = beginIndex; entityIndex < endIndex; ++entityIndex)
         {
-            continue;
-        }
+            CEntity& entity = scene.m_vEntities[entityIndex];
+            SSceneEntityFrameData& frameData = m_vFrameData[entityIndex];
+            frameData.worldTransform = quark::ComposeWorld(scene, entityIndex);
 
-        frameData.hasMesh = true;
-        frameData.meshWorldTransform = frameData.worldTransform * pMesh->m_Model.transform;
-        frameData.worldBounds = GetWorldBounds(pMesh, frameData.meshWorldTransform);
+            CMeshComponent* pMesh = entity.GetMeshComponent();
+            if (!pMesh || !pMesh->m_Enabled || pMesh->m_Model.meshCount <= 0 || !pMesh->m_Model.meshes)
+            {
+                continue;
+            }
+
+            frameData.hasMesh = true;
+            frameData.meshWorldTransform = frameData.worldTransform * pMesh->m_Model.transform;
+            frameData.worldBounds = GetWorldBounds(pMesh, frameData.meshWorldTransform);
+        }
+    };
+
+    const int workerCount = static_cast<int>(CTaskPool::DefaultWorkerCount());
+    if (m_pTaskPool != nullptr && entityCount >= 32 && workerCount > 1)
+    {
+        const int chunkCount = std::min(workerCount, (entityCount + 15) / 16);
+        if (chunkCount > 1)
+        {
+            std::vector<std::future<void>> futures;
+            futures.reserve(static_cast<std::size_t>(chunkCount - 1));
+            for (int c = 1; c < chunkCount; ++c)
+            {
+                const int beginIdx = (c * entityCount) / chunkCount;
+                const int endIdx = ((c + 1) * entityCount) / chunkCount;
+                futures.push_back(m_pTaskPool->Submit("Prepare scene frame cache",
+                    [&, beginIdx, endIdx]()
+                    {
+                        prepareRange(beginIdx, endIdx);
+                    }));
+            }
+
+            prepareRange(0, entityCount / chunkCount);
+
+            for (std::future<void>& future : futures)
+            {
+                future.get();
+            }
+            return;
+        }
     }
+
+    prepareRange(0, entityCount);
 }
 
 bool CSceneRenderer::IsMeshVisible(int entityIndex, const Camera3D& camera, float aspectRatio) const

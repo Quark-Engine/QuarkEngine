@@ -146,8 +146,13 @@ void CFlyCamera::Update(CScene& scene, CPreferences& preferences)
         return;
     }
 
+    const bool imguiBlockingCamera =
+        ImGui::IsAnyItemActive() ||
+        ImGui::IsAnyItemHovered() ||
+        ImGui::IsPopupOpen(nullptr, ImGuiPopupFlags_AnyPopupId | ImGuiPopupFlags_AnyPopupLevel);
+
     const bool orbitCamera = preferences.m_OrbitCamera;
-    const float wheel = GetMouseWheelMove();
+    const float wheel = imguiBlockingCamera ? 0.0f : GetMouseWheelMove();
     if (orbitCamera)
     {
         UpdateOrbitCamera(wheel);
@@ -161,7 +166,7 @@ void CFlyCamera::Update(CScene& scene, CPreferences& preferences)
 
     if (orbitCamera)
     {
-        if (!m_Active && !ImGuizmo::IsOver() && !ImGui::IsAnyItemActive())
+        if (!m_Active && !ImGuizmo::IsOver() && !imguiBlockingCamera)
         {
             if (IsMouseButtonPressed(MOUSE_BUTTON_RIGHT))
             {
@@ -204,7 +209,7 @@ void CFlyCamera::Update(CScene& scene, CPreferences& preferences)
     {
         const MouseButton cameraButton = MOUSE_BUTTON_LEFT;
         if (IsMouseButtonPressed(cameraButton) &&
-            !ImGuizmo::IsOver() && !ImGui::IsAnyItemActive())
+            !ImGuizmo::IsOver() && !imguiBlockingCamera)
         {
             SetImGuiCursorOverride(false);
             SetCameraCapture(true);

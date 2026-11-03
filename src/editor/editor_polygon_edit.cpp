@@ -139,6 +139,7 @@ void CPolygonEditor::Draw(CEditor& editor, const Camera3D& camera)
 
             ImGuizmo::SetDrawlist(ImGui::GetWindowDrawList());
             ImGuizmo::SetRect(viewport.m_WindowPos.x, viewport.m_WindowPos.y, viewport.m_WindowSize.x, viewport.m_WindowSize.y);
+            ImGuizmo::Enable(viewport.m_Hovered || ImGuizmo::IsUsing());
             ImGuizmo::RecomposeMatrixFromComponents(aT, aR, aS, aTransformMat4);
 
             const bool gizmoSnapEnabled = editor.m_Preferences.m_GizmoSnapEnabled ||

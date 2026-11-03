@@ -12,6 +12,7 @@
 class CScene;
 class CLightRegistry;
 class CMeshComponent;
+class CTaskPool;
 
 struct SSceneRendererTimings
 {
@@ -38,6 +39,7 @@ public:
         bool shadowsEnabled, float shadowBias, int shadowFilterQuality);
 
     void PrepareFrameCache(CScene& scene);
+    void SetTaskPool(CTaskPool& taskPool) { m_pTaskPool = &taskPool; }
 
     void EnsureLightingShader(CMeshComponent* pMesh);
 
@@ -89,6 +91,7 @@ private:
     bool m_ShadowBindingsAssigned = false;
     std::vector<SSceneEntityFrameData> m_vFrameData;
     SSceneRendererTimings m_Timings{};
+    CTaskPool* m_pTaskPool = nullptr;
 };
 
 #endif // __APPLICATION_SCENE_RENDERER_H__

@@ -89,6 +89,10 @@ void CEditor::DrawUi(Shader shader, CFlyCamera& camera, SPluginContext* pPluginC
 {
     PollBuild();
     m_UiTimings = {};
+    m_Ui.m_Viewport.m_Hovered = false;
+    m_Ui.m_Viewport.m_Focused = false;
+    m_Ui.m_GameViewport.m_Hovered = false;
+    m_Ui.m_GameViewport.m_Focused = false;
     const bool rtl = CLanguageManager::Get().m_Current == "arabic";
     if (rtl)
     {
@@ -304,6 +308,7 @@ void CEditor::DrawMainMenuBar(SPluginContext* pPluginCtx, ImGuiID dockspaceId,
             ImGui::Separator();
             if (ImGui::MenuItem(lang.Word("preferences")))
             {
+                camera.ReleaseCapture();
                 modal.ShowPreferences = true;
             }
             ImGui::EndMenu();
@@ -1055,8 +1060,21 @@ void CEditor::DrawSceneViewport(CViewportState& viewport, CFlyCamera& camera,
                 IM_COL32(230, 230, 230, 255), pFaceMessage);
         }
 
-        viewport.m_Hovered = sceneView && ImGui::IsWindowHovered();
-        viewport.m_Focused = sceneView && ImGui::IsWindowFocused();
+        const ImVec2 mousePos = ImGui::GetIO().MousePos;
+        const bool mouseInsideViewportRect =
+            mousePos.x >= viewport.m_WindowPos.x &&
+            mousePos.x <= viewport.m_WindowPos.x + viewport.m_WindowSize.x &&
+            mousePos.y >= viewport.m_WindowPos.y &&
+            mousePos.y <= viewport.m_WindowPos.y + viewport.m_WindowSize.y;
+        const bool anyPopupOpen = ImGui::IsPopupOpen(
+            nullptr, ImGuiPopupFlags_AnyPopupId | ImGuiPopupFlags_AnyPopupLevel);
+        viewport.m_Hovered =
+            mouseInsideViewportRect &&
+            ImGui::IsWindowHovered() &&
+            !ImGui::IsAnyItemHovered() &&
+            !ImGui::IsAnyItemActive() &&
+            !anyPopupOpen;
+        viewport.m_Focused = ImGui::IsWindowFocused();
 
         if (sceneView)
         {
@@ -1187,6 +1205,14 @@ void CEditor::DrawPreferencesUi(CFlyCamera& camera, SPluginContext* pPluginCtx)
     }
 
     ImGui::Begin(lang.Word("preferences"), &m_Ui.m_Modal.ShowPreferences);
+    if (camera.m_Active &&
+        (ImGui::IsWindowHovered(ImGuiHoveredFlags_RootAndChildWindows |
+            ImGuiHoveredFlags_AllowWhenBlockedByPopup |
+            ImGuiHoveredFlags_AllowWhenBlockedByActiveItem) ||
+            ImGui::IsWindowFocused(ImGuiFocusedFlags_RootAndChildWindows)))
+    {
+        camera.ReleaseCapture();
+    }
     ImGui::Text("%s", lang.Word("preferences"));
     ImGui::Separator();
 

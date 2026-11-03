@@ -48,6 +48,7 @@ void CGizmoController::Draw(CEditor& editor, CFlyCamera& camera)
     ImGuizmo::SetDrawlist(ImGui::GetWindowDrawList());
     ImGuizmo::SetRect(viewport.m_WindowPos.x, viewport.m_WindowPos.y, viewport.m_WindowSize.x, viewport.m_WindowSize.y);
     ImGuizmo::AllowAxisFlip(false);
+    ImGuizmo::Enable(viewport.m_Hovered || ImGuizmo::IsUsing());
 
     float aTranslationSnap[3] = {
         editor.m_Preferences.m_GizmoTranslationSnap,
