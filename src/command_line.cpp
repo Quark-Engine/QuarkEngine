@@ -34,7 +34,7 @@ void CCommandLineParser::PrintUsage(const char* pProgramName)
         "  --version                 Show the engine version and exit\n"
         "\n"
         "Rendering:\n"
-        "  --renderer <opengl|vulkan> Override the renderer backend from preferences\n"
+        "  --renderer <opengl|vulkan|d3d11> Override the renderer backend from preferences\n"
         "  --vsync <on|off>           Override vsync from preferences\n"
         "  --fps <n>                  Override target FPS (0 = unlimited)\n"
         "\n"
@@ -97,13 +97,17 @@ SCommandLineOptions CCommandLineParser::Parse(int argc, char** ppArgv)
             if (HasValue(argc, ppArgv, argumentIndex))
             {
                 const std::string value = ppArgv[++argumentIndex];
-                if (value == "opengl")
+                if (value == "opengl" || value == "gl")
                 {
                     options.RendererOverride = ERendererOverride::OPENGL;
                 }
-                else if (value == "vulkan")
+                else if (value == "vulkan" || value == "vk")
                 {
                     options.RendererOverride = ERendererOverride::VULKAN;
+                }
+                else if (value == "d3d11" || value == "dx11" || value == "direct3d11")
+                {
+                    options.RendererOverride = ERendererOverride::D3D11;
                 }
                 else
                 {

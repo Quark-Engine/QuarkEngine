@@ -937,7 +937,9 @@ void CEditor::DrawScenePanel(CFlyCamera& camera, SPluginContext* pPluginCtx)
     CViewportState& viewport = m_Ui.m_Viewport;
 
     ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(0, 0));
-    if (ImGui::Begin(lang.Word("scene"), &m_Preferences.m_ShowScene))
+    const ImGuiWindowFlags sceneWindowFlags =
+        (viewport.m_Hovered || camera.m_Active) ? ImGuiWindowFlags_NoMove : ImGuiWindowFlags_None;
+    if (ImGui::Begin(lang.Word("scene"), &m_Preferences.m_ShowScene, sceneWindowFlags))
     {
         m_pPluginManager->DrawUiRegion(UI_INSPECTOR, *pPluginCtx);
         if (m_IsPlaying)
@@ -977,7 +979,9 @@ void CEditor::DrawGamePanel(CFlyCamera& camera)
     }
 
     ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(0, 0));
-    const bool isOpen = ImGui::Begin("Game", &m_ShowGameView);
+    const ImGuiWindowFlags gameWindowFlags =
+        m_Ui.m_GameViewport.m_Hovered ? ImGuiWindowFlags_NoMove : ImGuiWindowFlags_None;
+    const bool isOpen = ImGui::Begin("Game", &m_ShowGameView, gameWindowFlags);
     m_SelectGameTab = false;
     if (isOpen)
     {
@@ -1072,7 +1076,6 @@ void CEditor::DrawSceneViewport(CViewportState& viewport, CFlyCamera& camera,
             mouseInsideViewportRect &&
             ImGui::IsWindowHovered() &&
             !ImGui::IsAnyItemHovered() &&
-            !ImGui::IsAnyItemActive() &&
             !anyPopupOpen;
         viewport.m_Focused = ImGui::IsWindowFocused();
 
@@ -1150,6 +1153,8 @@ void CEditor::DrawAboutModal()
             QUARK_ENGINE_BUILD_NUMBER,
             QUARK_ENGINE_BUILD_DATE_STRING,
             backend == RendererType::OpenGL ? "OpenGL" :
+            backend == RendererType::Vulkan ? "Vulkan" :
+            backend == RendererType::D3D11 ? "Direct3D 11" :
             backend == RendererType::Auto ? "Auto" :
             "Unknown"
         );

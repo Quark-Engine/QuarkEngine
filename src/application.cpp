@@ -150,6 +150,10 @@ void CApplication::Initialize()
     {
         rendererType = RendererType::Vulkan;
     }
+    else if (m_Options.RendererOverride == ERendererOverride::D3D11)
+    {
+        rendererType = RendererType::D3D11;
+    }
 
     SetMSAASamples(m_Editor.m_Preferences.m_MsaaSamples);
     SetTextureFilterMode(m_Editor.m_Preferences.m_TextureFilter == 0
@@ -323,7 +327,7 @@ void CApplication::UpdateFrame()
     const bool anyPopupOpen = ImGui::GetCurrentContext() != nullptr &&
         ImGui::IsPopupOpen(nullptr, ImGuiPopupFlags_AnyPopupId | ImGuiPopupFlags_AnyPopupLevel);
     const bool imguiBlockingViewport = ImGui::GetCurrentContext() != nullptr &&
-        (ImGui::IsAnyItemHovered() || ImGui::IsAnyItemActive() || anyPopupOpen);
+        (ImGui::IsAnyItemHovered() || anyPopupOpen);
     const bool cursorOverSceneViewport =
         m_Editor.m_Ui.m_Viewport.m_Hovered &&
         !imguiBlockingViewport &&
@@ -666,7 +670,7 @@ void CApplication::RenderFrame()
             cursorViewport.m_Hovered &&
             !anyPopupOpen &&
             !ImGui::IsAnyItemHovered() &&
-            !ImGui::IsAnyItemActive() &&
+            !ImGui::IsAnyItemHovered() &&
             mousePosition.x >= cursorViewport.m_WindowPos.x &&
             mousePosition.x <= cursorViewport.m_WindowPos.x + cursorViewport.m_WindowSize.x &&
             mousePosition.y >= cursorViewport.m_WindowPos.y &&
@@ -752,8 +756,8 @@ void CApplication::RenderFrame()
         m_Editor.DrawUi(m_SceneRenderer.GetLightingShader(), m_Camera, m_PluginBridge.GetContext());
 
         if (m_Camera.m_Active &&
-            (ImGui::IsAnyItemActive() ||
-                ImGui::IsPopupOpen(nullptr, ImGuiPopupFlags_AnyPopupId | ImGuiPopupFlags_AnyPopupLevel)))
+            (ImGui::IsPopupOpen(nullptr, ImGuiPopupFlags_AnyPopupId | ImGuiPopupFlags_AnyPopupLevel) ||
+                m_Editor.m_BuildSettingsModalOpen))
         {
             m_Camera.ReleaseCapture();
         }

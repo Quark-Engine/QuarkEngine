@@ -6,7 +6,8 @@ enum class ERendererOverride
 {
     NONE,
     OPENGL,
-    VULKAN
+    VULKAN,
+    D3D11
 };
 
 enum class ETriState

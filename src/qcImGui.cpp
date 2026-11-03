@@ -430,7 +430,10 @@ void QcImGuiImageRect(const Texture2D* pTexture, int width, int height, Rectangl
     {
         std::swap(u0, u1);
     }
-    if (sourceRect.height < 0.0f)
+    const RendererType backend = GetCurrentBackend();
+    const bool topLeftTextureBackend =
+        backend == RendererType::D3D11 || backend == RendererType::Vulkan;
+    if (sourceRect.height < 0.0f && !topLeftTextureBackend)
     {
         std::swap(v0, v1);
     }

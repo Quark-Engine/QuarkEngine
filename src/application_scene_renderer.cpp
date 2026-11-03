@@ -418,10 +418,19 @@ void CSceneRenderer::Initialize(int shadowMapSize, bool shadowsEnabled,
     const std::filesystem::path shaderRoot = shaderDirectory.empty()
         ? std::filesystem::path("assets/shader") : shaderDirectory;
     m_VulkanBackend = GetCurrentBackend() == RendererType::Vulkan;
-    const std::string lightingVertex = m_VulkanBackend ? "lighting_vulkan.vs" : "lighting.vs";
-    const std::string lightingFragment = m_VulkanBackend ? "lighting_vulkan.fs" : "lighting.fs";
-    const std::string shadowVertex = m_VulkanBackend ? "shadow_depth_vulkan.vs" : "shadow_depth.vs";
-    const std::string shadowFragment = m_VulkanBackend ? "shadow_depth_vulkan.fs" : "shadow_depth.fs";
+    const bool d3d11Backend = GetCurrentBackend() == RendererType::D3D11;
+    const std::string lightingVertex = m_VulkanBackend
+        ? "lighting_vulkan.vs"
+        : (d3d11Backend ? "lighting_d3d11.vs" : "lighting.vs");
+    const std::string lightingFragment = m_VulkanBackend
+        ? "lighting_vulkan.fs"
+        : (d3d11Backend ? "lighting_d3d11.fs" : "lighting.fs");
+    const std::string shadowVertex = m_VulkanBackend
+        ? "shadow_depth_vulkan.vs"
+        : (d3d11Backend ? "shadow_depth_d3d11.vs" : "shadow_depth.vs");
+    const std::string shadowFragment = m_VulkanBackend
+        ? "shadow_depth_vulkan.fs"
+        : (d3d11Backend ? "shadow_depth_d3d11.fs" : "shadow_depth.fs");
     m_LightingShader = LoadShader((shaderRoot / lightingVertex).string().c_str(),
         (shaderRoot / lightingFragment).string().c_str());
     m_ShadowShader = LoadShader((shaderRoot / shadowVertex).string().c_str(),

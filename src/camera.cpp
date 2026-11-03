@@ -147,7 +147,6 @@ void CFlyCamera::Update(CScene& scene, CPreferences& preferences)
     }
 
     const bool imguiBlockingCamera =
-        ImGui::IsAnyItemActive() ||
         ImGui::IsAnyItemHovered() ||
         ImGui::IsPopupOpen(nullptr, ImGuiPopupFlags_AnyPopupId | ImGuiPopupFlags_AnyPopupLevel);
 
@@ -208,12 +207,16 @@ void CFlyCamera::Update(CScene& scene, CPreferences& preferences)
     else
     {
         const MouseButton cameraButton = MOUSE_BUTTON_LEFT;
-        if (IsMouseButtonPressed(cameraButton) &&
+        if (!m_Active && IsMouseButtonPressed(cameraButton) &&
             !ImGuizmo::IsOver() && !imguiBlockingCamera)
         {
-            SetImGuiCursorOverride(false);
+            SetImGuiCursorOverride(true);
             SetCameraCapture(true);
+            float flushX = 0.0f;
+            float flushY = 0.0f;
+            SDL_GetRelativeMouseState(&flushX, &flushY);
             m_Active = true;
+            return;
         }
 
         if (IsKeyPressed(KEY_ESCAPE) || !IsWindowFocused())
@@ -397,7 +400,10 @@ void CFlyCamera::SetImGuiCursorOverride(bool enabled)
     {
         m_PreviousImGuiCursorChangeDisabled =
             (io.ConfigFlags & ImGuiConfigFlags_NoMouseCursorChange) != 0;
+        m_PreviousImGuiMouseDisabled =
+            (io.ConfigFlags & ImGuiConfigFlags_NoMouse) != 0;
         io.ConfigFlags |= ImGuiConfigFlags_NoMouseCursorChange;
+        io.ConfigFlags |= ImGuiConfigFlags_NoMouse;
     }
     else
     {
@@ -408,6 +414,15 @@ void CFlyCamera::SetImGuiCursorOverride(bool enabled)
         else
         {
             io.ConfigFlags &= ~ImGuiConfigFlags_NoMouseCursorChange;
+        }
+
+        if (m_PreviousImGuiMouseDisabled)
+        {
+            io.ConfigFlags |= ImGuiConfigFlags_NoMouse;
+        }
+        else
+        {
+            io.ConfigFlags &= ~ImGuiConfigFlags_NoMouse;
         }
     }
 

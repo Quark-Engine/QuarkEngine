@@ -42,6 +42,7 @@ private:
     float m_LastMouseY = 0.0f;
     bool m_ImGuiCursorOverride = false;
     bool m_PreviousImGuiCursorChangeDisabled = false;
+    bool m_PreviousImGuiMouseDisabled = false;
     SDL_Cursor* m_pOrbitCursor = nullptr;
     SDL_Cursor* m_pPanCursor = nullptr;
 };
