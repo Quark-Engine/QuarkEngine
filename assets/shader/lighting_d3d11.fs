@@ -51,12 +51,20 @@ struct PSInput
     float3 fragTangent  : TANGENT;
 };
 
-float SampleShadowDepth(int index, float2 uv)
+#define SHADOW_DEPTH_RANGE 1000.0
+
+float UnpackDepth24(float3 rgb)
 {
-    if (index == 0) return shadowMap0.SampleLevel(mainSampler, uv, 0.0).r;
-    if (index == 1) return shadowMap1.SampleLevel(mainSampler, uv, 0.0).r;
-    if (index == 2) return shadowMap2.SampleLevel(mainSampler, uv, 0.0).r;
-    return shadowMap3.SampleLevel(mainSampler, uv, 0.0).r;
+    return dot(rgb, float3(1.0, 1.0 / 255.0, 1.0 / 65025.0)) * SHADOW_DEPTH_RANGE;
+}
+
+float SampleShadowDepth(int index, int2 texel)
+{
+    int3 location = int3(texel, 0);
+    if (index == 0) return UnpackDepth24(shadowMap0.Load(location).rgb);
+    if (index == 1) return UnpackDepth24(shadowMap1.Load(location).rgb);
+    if (index == 2) return UnpackDepth24(shadowMap2.Load(location).rgb);
+    return UnpackDepth24(shadowMap3.Load(location).rgb);
 }
 
 float2 GetShadowTexelSize(int index)
@@ -80,10 +88,7 @@ float shadow_factor(int index, float3 fragPosition, float3 normal, float3 lightD
     float NdotL = saturate(dot(normal, lightDir));
     float2 texelSize = GetShadowTexelSize(index);
 
-    float normalOffset = max(texelSize.x, texelSize.y) * 2.0 * (1.0 - NdotL * 0.5);
-    float3 shadowWorldPos = fragPosition + normal * normalOffset;
-
-    float4 lightClip = mul(lightProjections[index], mul(lightViews[index], float4(shadowWorldPos, 1.0)));
+    float4 lightClip = mul(lightProjections[index], mul(lightViews[index], float4(fragPosition, 1.0)));
     if (lightClip.w <= 0.0)
     {
         return 0.0;
@@ -93,15 +98,15 @@ float shadow_factor(int index, float3 fragPosition, float3 normal, float3 lightD
     projected.x = projected.x * 0.5 + 0.5;
     projected.y = -projected.y * 0.5 + 0.5;
     if (projected.x < 0.0 || projected.x > 1.0 ||
-        projected.y < 0.0 || projected.y > 1.0 ||
-        projected.z < 0.0 || projected.z > 1.0)
+        projected.y < 0.0 || projected.y > 1.0)
     {
         return 0.0;
     }
 
-    float currentDepth = projected.z;
-    float baseBias = max(shadowBias, 0.0045);
-    float bias = max(baseBias * (1.0 - NdotL) * 2.0, baseBias);
+    float currentDepth = lightClip.w;
+    float bias = currentDepth * max(shadowBias, 0.0005) * (1.0 + 2.0 * (1.0 - NdotL)) + 0.01;
+    int2 mapSize = int2(round(1.0 / texelSize));
+    int2 baseTexel = int2(projected.xy * float2(mapSize));
     int radius = clamp(shadowFilterQuality, 0, 2);
     int sampleWidth = radius * 2 + 1;
     int samples = sampleWidth * sampleWidth;
@@ -113,8 +118,8 @@ float shadow_factor(int index, float3 fragPosition, float3 normal, float3 lightD
         [loop]
         for (int y = -radius; y <= radius; ++y)
         {
-            float2 offset = float2(float(x), float(y)) * texelSize;
-            float closestDepth = SampleShadowDepth(index, projected.xy + offset);
+            int2 texel = clamp(baseTexel + int2(x, y), int2(0, 0), mapSize - 1);
+            float closestDepth = SampleShadowDepth(index, texel);
             shadow += (currentDepth - bias > closestDepth) ? 1.0 : 0.0;
         }
     }

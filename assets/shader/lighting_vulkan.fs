@@ -58,7 +58,15 @@ float decodeSpotAngle(int lightIndex)
     return packed - rangePart * 1000.0;
 }
 
-float shadow_factor(int lightIndex, vec3 worldPosition, float bias, int filterQuality)
+#define SHADOW_DEPTH_RANGE 1000.0
+
+float unpackDepth24(vec3 rgb)
+{
+    return dot(rgb, vec3(1.0, 1.0 / 255.0, 1.0 / 65025.0)) * SHADOW_DEPTH_RANGE;
+}
+
+float shadow_factor(int lightIndex, vec3 worldPosition, vec3 normal, vec3 lightDir,
+    float shadowBias, int filterQuality)
 {
     vec4 lightSpacePosition = lightProjections[lightIndex] * lightViews[lightIndex]
         * vec4(worldPosition, 1.0);
@@ -68,11 +76,15 @@ float shadow_factor(int lightIndex, vec3 worldPosition, float bias, int filterQu
     projected.xy = projected.xy * 0.5 + 0.5;
 
     if (projected.x < 0.0 || projected.x > 1.0 ||
-        projected.y < 0.0 || projected.y > 1.0 || projected.z > 1.0)
+        projected.y < 0.0 || projected.y > 1.0)
         return 0.0;
 
-    float currentDepth = projected.z;
-    vec2 texelSize = 1.0 / vec2(textureSize(shadowMaps[lightIndex], 0));
+    float currentDepth = lightSpacePosition.w;
+    float NdotL = clamp(dot(normal, lightDir), 0.0, 1.0);
+    float bias = currentDepth * max(shadowBias, 0.0005) * (1.0 + 2.0 * (1.0 - NdotL)) + 0.01;
+
+    ivec2 mapSize = textureSize(shadowMaps[lightIndex], 0);
+    ivec2 baseTexel = ivec2(projected.xy * vec2(mapSize));
     float shadow = 0.0;
 
     int radius = filterQuality == 0 ? 0 : filterQuality == 1 ? 1 : 2;
@@ -82,8 +94,8 @@ float shadow_factor(int lightIndex, vec3 worldPosition, float bias, int filterQu
     {
         for (int y = -radius; y <= radius; y++)
         {
-            float closestDepth = texture(shadowMaps[lightIndex],
-                projected.xy + vec2(x, y) * texelSize).r;
+            ivec2 texel = clamp(baseTexel + ivec2(x, y), ivec2(0), mapSize - 1);
+            float closestDepth = unpackDepth24(texelFetch(shadowMaps[lightIndex], texel, 0).rgb);
             shadow += currentDepth - bias > closestDepth ? 1.0 : 0.0;
         }
     }
@@ -169,7 +181,8 @@ void main()
 
         float directLight = max(dot(normal, lightDir), 0.0);
         float shadow = shadowsEnabled
-            ? shadow_factor(i, fragPosition, shadowBias, shadowFilterQuality) : 0.0;
+            ? shadow_factor(i, fragPosition, normalize(fragNormal), lightDir,
+                shadowBias, shadowFilterQuality) : 0.0;
         float wrappedLight = clamp((dot(normal, lightDir) + 0.28) / 1.28, 0.0, 1.0);
         float diffuse = max(directLight, wrappedLight * 0.25);
 
