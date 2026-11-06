@@ -17,6 +17,11 @@
 #include <iostream>
 #include <string>
 #include <SDL3/SDL_video.h>
+
+#if defined(__APPLE__)
+#include <mach-o/dyld.h>
+#endif
+
 #ifdef _WIN32
 #define NOMINMAX
 #include <windows.h>
@@ -97,7 +102,19 @@ int QuarkEngineRunGame()
     }
     executableBuffer.resize(executableLength);
     executablePath = fs::path(executableBuffer);
-#elif defined(__linux__)
+#elif defined(__APPLE__)
+    uint32_t executableSize = 0;
+    _NSGetExecutablePath(nullptr, &executableSize);
+    std::string executableBuffer(executableSize, '\0');
+    if (_NSGetExecutablePath(&executableBuffer[0], &executableSize) == 0)
+    {
+        executablePath = fs::canonical(executableBuffer.c_str());
+    }
+    else
+    {
+        executablePath = fs::current_path() / "QuarkRuntime";
+    }
+#elif defined(__linux__) || defined(__unix__)
     std::string executableBuffer(4096, '\0');
     const ssize_t executableLength = readlink("/proc/self/exe", executableBuffer.data(),
         executableBuffer.size() - 1);
@@ -298,11 +315,38 @@ int QuarkEngineRunGame()
     camera.projection = CAMERA_PERSPECTIVE;
 
     const std::string gameName = executablePath.stem().string();
-    const std::vector<fs::path> vDllCandidates = {
-        executablePath.parent_path() / (gameName + ".dll"),
-        executablePath.parent_path() / "GameScripts.dll",
-        executablePath.parent_path() / "GameName.dll"
+    const std::string libExt =
+#if defined(_WIN32)
+        ".dll";
+#elif defined(__APPLE__)
+        ".dylib";
+#else
+        ".so";
+#endif
+
+    const std::vector<std::string> vScriptNames = {
+        gameName + libExt,
+        "lib" + gameName + libExt,
+        "GameScripts" + libExt,
+        "libGameScripts" + libExt,
+        "GameName" + libExt
     };
+
+    std::vector<fs::path> vDllCandidates;
+    for (const auto& name : vScriptNames)
+    {
+        vDllCandidates.push_back(executablePath.parent_path() / name);
+    }
+#if !defined(_WIN32)
+    vDllCandidates.push_back(executablePath.parent_path() / (gameName + ".so"));
+    vDllCandidates.push_back(executablePath.parent_path() / ("lib" + gameName + ".so"));
+    vDllCandidates.push_back(executablePath.parent_path() / "GameScripts.so");
+    vDllCandidates.push_back(executablePath.parent_path() / "libGameScripts.so");
+    vDllCandidates.push_back(executablePath.parent_path() / (gameName + ".dylib"));
+    vDllCandidates.push_back(executablePath.parent_path() / ("lib" + gameName + ".dylib"));
+    vDllCandidates.push_back(executablePath.parent_path() / "GameScripts.dylib");
+    vDllCandidates.push_back(executablePath.parent_path() / "libGameScripts.dylib");
+#endif
 
     fs::path foundDllPath;
     for (const auto& cand : vDllCandidates)
@@ -317,8 +361,8 @@ int QuarkEngineRunGame()
     if (!foundDllPath.empty())
     {
         std::error_code copyEc;
-        fs::copy_file(foundDllPath, projectPath / "GameScripts.dll", fs::copy_options::overwrite_existing, copyEc);
-        fs::copy_file(foundDllPath, projectPath / (gameName + ".dll"), fs::copy_options::overwrite_existing, copyEc);
+        fs::copy_file(foundDllPath, projectPath / ("GameScripts" + libExt), fs::copy_options::overwrite_existing, copyEc);
+        fs::copy_file(foundDllPath, projectPath / (gameName + libExt), fs::copy_options::overwrite_existing, copyEc);
 
         quark::script::CScriptEngine::Get().LoadScriptDll(foundDllPath.string());
     }

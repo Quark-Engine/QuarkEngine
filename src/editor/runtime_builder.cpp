@@ -16,6 +16,10 @@
 #include <string>
 #include <vector>
 
+#if defined(__APPLE__)
+#include <mach-o/dyld.h>
+#endif
+
 #ifdef _WIN32
 #define NOMINMAX
 #include <windows.h>
@@ -144,6 +148,15 @@ fs::path GetExecutableDirectory()
     }
     executablePath.resize(pathLength);
     return fs::path(executablePath).parent_path();
+#elif defined(__APPLE__)
+    uint32_t size = 0;
+    _NSGetExecutablePath(nullptr, &size);
+    std::string path(size, '\0');
+    if (_NSGetExecutablePath(&path[0], &size) == 0)
+    {
+        return fs::canonical(path.c_str()).parent_path();
+    }
+    return fs::current_path();
 #else
     return fs::canonical("/proc/self/exe").parent_path();
 #endif
@@ -251,7 +264,11 @@ bool BuildRuntimeProject(const fs::path& buildRoot,
 
     const fs::path entryPath = generatedProject / "main.cpp";
     std::ofstream entryFile(entryPath, std::ios::binary | std::ios::trunc);
-    entryFile << R"(extern "C" __declspec(dllimport) int QuarkEngineRunGame();
+    entryFile << R"(#if defined(_WIN32)
+extern "C" __declspec(dllimport) int QuarkEngineRunGame();
+#else
+extern "C" int QuarkEngineRunGame();
+#endif
 
 int main()
 {
@@ -278,11 +295,31 @@ int main()
                         set(GAME_ICON_SOURCE game_icon.rc)
                     endif()
 
-                    add_library(QuarkEngine SHARED IMPORTED GLOBAL)
-                    set_target_properties(QuarkEngine PROPERTIES
-                        IMPORTED_IMPLIB "${ENGINE_SDK_DIR}/QuarkEngineRuntime.lib"
-                        IMPORTED_LOCATION "${ENGINE_SDK_DIR}/QuarkEngine.dll"
-                    )
+                    if(WIN32)
+                        add_library(QuarkEngine SHARED IMPORTED GLOBAL)
+                        set_target_properties(QuarkEngine PROPERTIES
+                            IMPORTED_IMPLIB "${ENGINE_SDK_DIR}/QuarkEngineRuntime.lib"
+                            IMPORTED_LOCATION "${ENGINE_SDK_DIR}/QuarkEngine.dll"
+                        )
+                    elseif(APPLE)
+                        find_library(QUARK_ENGINE_LOC NAMES QuarkEngine libQuarkEngine PATHS "${ENGINE_SDK_DIR}" NO_DEFAULT_PATH)
+                        if(NOT QUARK_ENGINE_LOC)
+                            set(QUARK_ENGINE_LOC "${ENGINE_SDK_DIR}/QuarkEngine.dylib")
+                        endif()
+                        add_library(QuarkEngine SHARED IMPORTED GLOBAL)
+                        set_target_properties(QuarkEngine PROPERTIES
+                            IMPORTED_LOCATION "${QUARK_ENGINE_LOC}"
+                        )
+                    else()
+                        find_library(QUARK_ENGINE_LOC NAMES QuarkEngine libQuarkEngine PATHS "${ENGINE_SDK_DIR}" NO_DEFAULT_PATH)
+                        if(NOT QUARK_ENGINE_LOC)
+                            set(QUARK_ENGINE_LOC "${ENGINE_SDK_DIR}/QuarkEngine.so")
+                        endif()
+                        add_library(QuarkEngine SHARED IMPORTED GLOBAL)
+                        set_target_properties(QuarkEngine PROPERTIES
+                            IMPORTED_LOCATION "${QUARK_ENGINE_LOC}"
+                        )
+                    endif()
 
                     add_executable(QuarkGame main.cpp ${GAME_ICON_SOURCE})
                     target_link_libraries(QuarkGame PRIVATE QuarkEngine)
@@ -290,6 +327,18 @@ int main()
                         OUTPUT_NAME "${GAME_EXECUTABLE_NAME}"
                         RUNTIME_OUTPUT_DIRECTORY "${GAME_OUTPUT_DIR}/$<0:>"
                     )
+
+                    if(APPLE)
+                        set_target_properties(QuarkGame PROPERTIES
+                            BUILD_RPATH "@loader_path"
+                            INSTALL_RPATH "@loader_path"
+                        )
+                    elseif(UNIX)
+                        set_target_properties(QuarkGame PROPERTIES
+                            BUILD_RPATH "$ORIGIN"
+                            INSTALL_RPATH "$ORIGIN"
+                        )
+                    endif()
                     )CMAKE";
     cmakeFile.close();
     if (!cmakeFile)
@@ -327,6 +376,7 @@ int main()
         return false;
     }
 
+#if defined(_WIN32)
     const bool isDebugBuild =
 #ifdef QUARK_ENGINE_CONFIGURATION
         std::string(QUARK_ENGINE_CONFIGURATION) == "Debug";
@@ -355,25 +405,77 @@ int main()
             return false;
         }
     }
+#elif defined(__APPLE__)
+    for (const std::string& fileName : std::vector<std::string>{
+        "QuarkCore.dylib", "QuarkEngine.dylib", "libSDL3.dylib",
+        "libfreetype.dylib", "libassimp.dylib", "libopenal.dylib",
+        "libcurl.dylib", "libssl.dylib", "libcrypto.dylib", "libnghttp2.dylib"
+    })
+    {
+        CopyRuntimeFile(executableDirectory, buildRoot, fileName, errorMessage, false);
+    }
+#else
+    for (const std::string& fileName : std::vector<std::string>{
+        "QuarkCore.so", "QuarkEngine.so", "libSDL3.so", "libSDL3.so.0",
+        "libfreetype.so", "libfreetype.so.6", "libassimp.so", "libassimp.so.6",
+        "libopenal.so", "libopenal.so.1", "libcurl.so", "libssl.so", "libcrypto.so"
+    })
+    {
+        CopyRuntimeFile(executableDirectory, buildRoot, fileName, errorMessage, false);
+    }
+#endif
 
     std::string scriptBuildError;
     quark::script::CScriptEngine::Get().BuildScriptDll(projectRoot.string(), gameName, scriptBuildError, progressCallback);
 
-    const std::vector<fs::path> vCandidateDlls = {
-        projectRoot / "GameScripts.dll",
-        projectRoot / (gameName + ".dll"),
-        projectRoot / ".script_build" / "build" / "Debug" / "GameScripts.dll",
-        projectRoot / ".script_build" / "build" / "Release" / "GameScripts.dll",
-        projectRoot / ".script_build" / "build" / "GameScripts.dll"
+    const std::string libExt =
+#if defined(_WIN32)
+        ".dll";
+#elif defined(__APPLE__)
+        ".dylib";
+#else
+        ".so";
+#endif
+
+    std::vector<std::string> vScriptNames = {
+        "GameScripts" + libExt,
+        "libGameScripts" + libExt,
+        gameName + libExt,
+        "lib" + gameName + libExt
     };
+#if !defined(_WIN32)
+    if (libExt != ".so")
+    {
+        vScriptNames.push_back("GameScripts.so");
+        vScriptNames.push_back("libGameScripts.so");
+        vScriptNames.push_back(gameName + ".so");
+        vScriptNames.push_back("lib" + gameName + ".so");
+    }
+    if (libExt != ".dylib")
+    {
+        vScriptNames.push_back("GameScripts.dylib");
+        vScriptNames.push_back("libGameScripts.dylib");
+        vScriptNames.push_back(gameName + ".dylib");
+        vScriptNames.push_back("lib" + gameName + ".dylib");
+    }
+#endif
+
+    std::vector<fs::path> vCandidateDlls;
+    for (const auto& name : vScriptNames)
+    {
+        vCandidateDlls.push_back(projectRoot / name);
+        vCandidateDlls.push_back(projectRoot / ".script_build" / "build" / "Debug" / name);
+        vCandidateDlls.push_back(projectRoot / ".script_build" / "build" / "Release" / name);
+        vCandidateDlls.push_back(projectRoot / ".script_build" / "build" / name);
+    }
 
     for (const auto& srcDll : vCandidateDlls)
     {
         if (fs::is_regular_file(srcDll))
         {
-            fs::copy_file(srcDll, buildRoot / "GameScripts.dll",
+            fs::copy_file(srcDll, buildRoot / ("GameScripts" + libExt),
                 fs::copy_options::overwrite_existing, error);
-            fs::copy_file(srcDll, buildRoot / (gameName + ".dll"),
+            fs::copy_file(srcDll, buildRoot / (gameName + libExt),
                 fs::copy_options::overwrite_existing, error);
             break;
         }

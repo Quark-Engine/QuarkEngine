@@ -10,6 +10,10 @@
 #include <fstream>
 #include <sstream>
 
+#if defined(__APPLE__)
+#include <mach-o/dyld.h>
+#endif
+
 #ifdef _WIN32
 #ifndef NOMINMAX
 #define NOMINMAX
@@ -158,6 +162,15 @@ fs::path GetExecutableDirectory()
     }
     executablePath.resize(pathLength);
     return fs::path(executablePath).parent_path();
+#elif defined(__APPLE__)
+    uint32_t size = 0;
+    _NSGetExecutablePath(nullptr, &size);
+    std::string path(size, '\0');
+    if (_NSGetExecutablePath(&path[0], &size) == 0)
+    {
+        return fs::canonical(path.c_str()).parent_path();
+    }
+    return fs::current_path();
 #else
     return fs::canonical("/proc/self/exe").parent_path();
 #endif
@@ -166,6 +179,38 @@ fs::path GetExecutableDirectory()
 std::string QuotePath(const fs::path& path)
 {
     return "\"" + path.generic_string() + "\"";
+}
+
+std::string GetScriptLibraryExtension()
+{
+#if defined(_WIN32)
+    return ".dll";
+#elif defined(__APPLE__)
+    return ".dylib";
+#else
+    return ".so";
+#endif
+}
+
+std::vector<std::string> GetScriptLibraryFileNames(const std::string& baseName)
+{
+    const std::string ext = GetScriptLibraryExtension();
+    std::vector<std::string> vNames;
+    vNames.push_back(baseName + ext);
+    vNames.push_back("lib" + baseName + ext);
+#if !defined(_WIN32)
+    if (ext != ".so")
+    {
+        vNames.push_back(baseName + ".so");
+        vNames.push_back("lib" + baseName + ".so");
+    }
+    if (ext != ".dylib")
+    {
+        vNames.push_back(baseName + ".dylib");
+        vNames.push_back("lib" + baseName + ".dylib");
+    }
+#endif
+    return vNames;
 }
 
 bool RunBuildCommand(const std::string& command, std::string& errorMessage,
@@ -706,43 +751,74 @@ bool CScriptEngine::BuildScriptDll(const std::string& projectPath, const std::st
     cmakeOut << "    " << QuotePath(projectRoot / "resources") << "\n";
     cmakeOut << ")\n\n";
 
-    cmakeOut << "add_library(QuarkCore SHARED IMPORTED GLOBAL)\n";
-    cmakeOut << "set_target_properties(QuarkCore PROPERTIES\n";
-    cmakeOut << "    IMPORTED_IMPLIB " << QuotePath(quarkCoreLib) << "\n";
-    cmakeOut << "    IMPORTED_LOCATION " << QuotePath(executableDir / "QuarkCore.dll") << "\n";
-    cmakeOut << ")\n\n";
+    cmakeOut << "if(WIN32)\n";
+    cmakeOut << "    add_library(QuarkCore SHARED IMPORTED GLOBAL)\n";
+    cmakeOut << "    set_target_properties(QuarkCore PROPERTIES\n";
+    cmakeOut << "        IMPORTED_IMPLIB " << QuotePath(quarkCoreLib) << "\n";
+    cmakeOut << "        IMPORTED_LOCATION " << QuotePath(executableDir / "QuarkCore.dll") << "\n";
+    cmakeOut << "    )\n\n";
 
-    cmakeOut << "add_library(QuarkEngine SHARED IMPORTED GLOBAL)\n";
-    cmakeOut << "set_target_properties(QuarkEngine PROPERTIES\n";
-    cmakeOut << "    IMPORTED_IMPLIB " << QuotePath(quarkEngineLib) << "\n";
-    cmakeOut << "    IMPORTED_LOCATION " << QuotePath(executableDir / "QuarkEngine.dll") << "\n";
-    cmakeOut << ")\n\n";
-
-    fs::path sdl3Lib = engineSourceDir / "quark-libs" / "QuarkCore" / "external" / "SDL3" / "lib";
-#if defined(_DEBUG) || defined(DEBUG)
-    sdl3Lib /= "debug";
-#else
-    sdl3Lib /= "release";
-#endif
-    sdl3Lib /= "SDL3.lib";
-    if (!fs::is_regular_file(sdl3Lib))
-    {
-        sdl3Lib = executableDir / "SDL3.lib";
-    }
+    cmakeOut << "    add_library(QuarkEngine SHARED IMPORTED GLOBAL)\n";
+    cmakeOut << "    set_target_properties(QuarkEngine PROPERTIES\n";
+    cmakeOut << "        IMPORTED_IMPLIB " << QuotePath(quarkEngineLib) << "\n";
+    cmakeOut << "        IMPORTED_LOCATION " << QuotePath(executableDir / "QuarkEngine.dll") << "\n";
+    cmakeOut << "    )\n\n";
 
     if (fs::is_regular_file(sdl3Lib))
     {
-        cmakeOut << "add_library(SDL3 SHARED IMPORTED GLOBAL)\n";
-        cmakeOut << "set_target_properties(SDL3 PROPERTIES\n";
-        cmakeOut << "    IMPORTED_IMPLIB " << QuotePath(sdl3Lib) << "\n";
-        cmakeOut << "    IMPORTED_LOCATION " << QuotePath(executableDir / "SDL3.dll") << "\n";
-        cmakeOut << ")\n\n";
-        cmakeOut << "target_link_libraries(" << targetName << " PRIVATE QuarkEngine QuarkCore SDL3)\n";
+        cmakeOut << "    add_library(SDL3 SHARED IMPORTED GLOBAL)\n";
+        cmakeOut << "    set_target_properties(SDL3 PROPERTIES\n";
+        cmakeOut << "        IMPORTED_IMPLIB " << QuotePath(sdl3Lib) << "\n";
+        cmakeOut << "        IMPORTED_LOCATION " << QuotePath(executableDir / "SDL3.dll") << "\n";
+        cmakeOut << "    )\n";
+        cmakeOut << "    target_link_libraries(" << targetName << " PRIVATE QuarkEngine QuarkCore SDL3)\n";
     }
     else
     {
-        cmakeOut << "target_link_libraries(" << targetName << " PRIVATE QuarkEngine QuarkCore)\n";
+        cmakeOut << "    target_link_libraries(" << targetName << " PRIVATE QuarkEngine QuarkCore)\n";
     }
+    cmakeOut << "else()\n";
+    cmakeOut << "    set(CMAKE_POSITION_INDEPENDENT_CODE ON)\n";
+    cmakeOut << "    if(APPLE)\n";
+    cmakeOut << "        set(QC_PLATFORM_EXT \".dylib\")\n";
+    cmakeOut << "    else()\n";
+    cmakeOut << "        set(QC_PLATFORM_EXT \".so\")\n";
+    cmakeOut << "    endif()\n\n";
+
+    cmakeOut << "    find_library(QUARK_CORE_LOC NAMES QuarkCore libQuarkCore PATHS " << QuotePath(executableDir) << " NO_DEFAULT_PATH)\n";
+    cmakeOut << "    if(NOT QUARK_CORE_LOC)\n";
+    cmakeOut << "        set(QUARK_CORE_LOC \"" << executableDir.generic_string() << "/QuarkCore${QC_PLATFORM_EXT}\")\n";
+    cmakeOut << "    endif()\n";
+    cmakeOut << "    add_library(QuarkCore SHARED IMPORTED GLOBAL)\n";
+    cmakeOut << "    set_target_properties(QuarkCore PROPERTIES IMPORTED_LOCATION \"${QUARK_CORE_LOC}\")\n\n";
+
+    cmakeOut << "    find_library(QUARK_ENGINE_LOC NAMES QuarkEngine libQuarkEngine PATHS " << QuotePath(executableDir) << " NO_DEFAULT_PATH)\n";
+    cmakeOut << "    if(NOT QUARK_ENGINE_LOC)\n";
+    cmakeOut << "        set(QUARK_ENGINE_LOC \"" << executableDir.generic_string() << "/QuarkEngine${QC_PLATFORM_EXT}\")\n";
+    cmakeOut << "    endif()\n";
+    cmakeOut << "    add_library(QuarkEngine SHARED IMPORTED GLOBAL)\n";
+    cmakeOut << "    set_target_properties(QuarkEngine PROPERTIES IMPORTED_LOCATION \"${QUARK_ENGINE_LOC}\")\n\n";
+
+    cmakeOut << "    target_link_libraries(" << targetName << " PRIVATE QuarkEngine QuarkCore)\n";
+    cmakeOut << "    find_library(SDL3_LOC NAMES SDL3 libSDL3 PATHS " << QuotePath(executableDir) << " NO_DEFAULT_PATH)\n";
+    cmakeOut << "    if(SDL3_LOC)\n";
+    cmakeOut << "        add_library(SDL3 SHARED IMPORTED GLOBAL)\n";
+    cmakeOut << "        set_target_properties(SDL3 PROPERTIES IMPORTED_LOCATION \"${SDL3_LOC}\")\n";
+    cmakeOut << "        target_link_libraries(" << targetName << " PRIVATE SDL3)\n";
+    cmakeOut << "    endif()\n\n";
+
+    cmakeOut << "    if(APPLE)\n";
+    cmakeOut << "        set_target_properties(" << targetName << " PROPERTIES\n";
+    cmakeOut << "            BUILD_RPATH \"@loader_path;" << executableDir.generic_string() << "\"\n";
+    cmakeOut << "            INSTALL_RPATH \"@loader_path;" << executableDir.generic_string() << "\"\n";
+    cmakeOut << "        )\n";
+    cmakeOut << "    elseif(UNIX)\n";
+    cmakeOut << "        set_target_properties(" << targetName << " PROPERTIES\n";
+    cmakeOut << "            BUILD_RPATH \"$ORIGIN;" << executableDir.generic_string() << "\"\n";
+    cmakeOut << "            INSTALL_RPATH \"$ORIGIN;" << executableDir.generic_string() << "\"\n";
+    cmakeOut << "        )\n";
+    cmakeOut << "    endif()\n";
+    cmakeOut << "endif()\n";
     cmakeOut.close();
 
     const fs::path cmakeBuild = buildDir / "build";
@@ -764,30 +840,35 @@ bool CScriptEngine::BuildScriptDll(const std::string& projectPath, const std::st
     const std::string buildConfig = "Release";
 #endif
 
+    const std::string ext = GetScriptLibraryExtension();
     const std::string buildCmd = "cmake --build " + QuotePath(cmakeBuild) +
         " --config " + buildConfig + " --target " + targetName;
     if (progressCallback)
     {
-        progressCallback("Compiling " + targetName + ".dll (" + buildConfig + ")...");
+        progressCallback("Compiling " + targetName + ext + " (" + buildConfig + ")...");
     }
     if (!RunBuildCommand(buildCmd, errorMessage, progressCallback))
     {
         return false;
     }
 
-    const std::vector<fs::path> vOutputs = {
-        cmakeBuild / buildConfig / (targetName + ".dll"),
-        cmakeBuild / (targetName + ".dll"),
-        cmakeBuild / "Debug" / (targetName + ".dll"),
-        cmakeBuild / "Release" / (targetName + ".dll")
-    };
+    std::vector<fs::path> vOutputs;
+    for (const auto& name : GetScriptLibraryFileNames(targetName))
+    {
+        vOutputs.push_back(cmakeBuild / buildConfig / name);
+        vOutputs.push_back(cmakeBuild / name);
+        vOutputs.push_back(cmakeBuild / "Debug" / name);
+        vOutputs.push_back(cmakeBuild / "Release" / name);
+        vOutputs.push_back(projectRoot / name);
+    }
+
     std::error_code copyEc;
     for (const auto& outPath : vOutputs)
     {
         if (fs::is_regular_file(outPath, copyEc))
         {
-            fs::copy_file(outPath, fs::path(projectPath) / "GameScripts.dll", fs::copy_options::overwrite_existing, copyEc);
-            fs::copy_file(outPath, fs::path(projectPath) / (gameName + ".dll"), fs::copy_options::overwrite_existing, copyEc);
+            fs::copy_file(outPath, fs::path(projectPath) / ("GameScripts" + ext), fs::copy_options::overwrite_existing, copyEc);
+            fs::copy_file(outPath, fs::path(projectPath) / (gameName + ext), fs::copy_options::overwrite_existing, copyEc);
             break;
         }
     }
@@ -909,24 +990,30 @@ void CScriptEngine::StartPlay(CScene& scene, const std::string& projectPath,
     else
     {
         m_pActiveDll = &m_Dll;
-        const fs::path primaryDllPath = fs::path(projectPath) / "GameScripts.dll";
-        const fs::path namedDllPath = fs::path(projectPath) / (gameName + ".dll");
+        const std::string libExt = GetScriptLibraryExtension();
+        const fs::path primaryDllPath = fs::path(projectPath) / ("GameScripts" + libExt);
+        const fs::path namedDllPath = fs::path(projectPath) / (gameName + libExt);
         std::error_code ec;
 
-        const std::vector<fs::path> vSearchPaths = {
-            primaryDllPath,
-            namedDllPath,
-            GetExecutableDirectory() / "GameScripts.dll",
-            GetExecutableDirectory() / (gameName + ".dll"),
-            fs::path(projectPath) / "Debug" / "GameScripts.dll",
-            fs::path(projectPath) / "Release" / "GameScripts.dll",
-            fs::path(projectPath) / "Debug" / (gameName + ".dll"),
-            fs::path(projectPath) / "Release" / (gameName + ".dll"),
-            fs::path(projectPath) / "Build" / gameName / (gameName + ".dll"),
-            fs::path(projectPath) / "Build" / gameName / "GameScripts.dll",
-            fs::current_path() / "GameScripts.dll",
-            fs::current_path() / (gameName + ".dll")
+        std::vector<fs::path> vSearchPaths;
+        auto addSearchDir = [&](const fs::path& dir)
+        {
+            for (const auto& name : GetScriptLibraryFileNames("GameScripts"))
+            {
+                vSearchPaths.push_back(dir / name);
+            }
+            for (const auto& name : GetScriptLibraryFileNames(gameName))
+            {
+                vSearchPaths.push_back(dir / name);
+            }
         };
+
+        addSearchDir(fs::path(projectPath));
+        addSearchDir(GetExecutableDirectory());
+        addSearchDir(fs::path(projectPath) / "Debug");
+        addSearchDir(fs::path(projectPath) / "Release");
+        addSearchDir(fs::path(projectPath) / "Build" / gameName);
+        addSearchDir(fs::current_path());
 
         const bool isStandaloneRuntime = fs::exists(fs::path(projectPath) / "__settings") ||
                                          (fs::path(projectPath).filename().string().rfind("QuarkRuntime-", 0) == 0);
@@ -1018,15 +1105,22 @@ void CScriptEngine::StartPlay(CScene& scene, const std::string& projectPath,
 
             if (BuildScriptDll(projectPath, gameName, buildError))
             {
-                std::vector<fs::path> vCandidates = {
-                    fs::path(projectPath) / ".script_build" / "build" / "Debug" / "GameScripts.dll",
-                    fs::path(projectPath) / ".script_build" / "build" / "Release" / "GameScripts.dll",
-                    fs::path(projectPath) / ".script_build" / "build" / "GameScripts.dll",
-                    fs::path(projectPath) / "Debug" / "GameScripts.dll",
-                    fs::path(projectPath) / "Release" / "GameScripts.dll",
-                    primaryDllPath,
-                    namedDllPath
-                };
+                std::vector<fs::path> vCandidates;
+                for (const auto& name : GetScriptLibraryFileNames("GameScripts"))
+                {
+                    vCandidates.push_back(fs::path(projectPath) / ".script_build" / "build" / "Debug" / name);
+                    vCandidates.push_back(fs::path(projectPath) / ".script_build" / "build" / "Release" / name);
+                    vCandidates.push_back(fs::path(projectPath) / ".script_build" / "build" / name);
+                    vCandidates.push_back(fs::path(projectPath) / "Debug" / name);
+                    vCandidates.push_back(fs::path(projectPath) / "Release" / name);
+                    vCandidates.push_back(fs::path(projectPath) / name);
+                }
+                for (const auto& name : GetScriptLibraryFileNames(gameName))
+                {
+                    vCandidates.push_back(fs::path(projectPath) / name);
+                }
+                vCandidates.push_back(primaryDllPath);
+                vCandidates.push_back(namedDllPath);
                 for (const auto& cand : vCandidates)
                 {
                     if (fs::is_regular_file(cand, ec))
