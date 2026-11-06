@@ -1,5 +1,31 @@
 #include "dynamic_library.h"
 
+#ifdef _WIN32
+    #ifndef NOMINMAX
+        #define NOMINMAX
+    #endif
+    #ifndef WIN32_LEAN_AND_MEAN
+        #define WIN32_LEAN_AND_MEAN
+    #endif
+    #include <windows.h>
+    #ifdef near
+        #undef near
+    #endif
+    #ifdef far
+        #undef far
+    #endif
+    #ifdef min
+        #undef min
+    #endif
+    #ifdef max
+        #undef max
+    #endif
+    #undef CloseWindow
+    #undef ShowCursor
+    #undef Rectangle
+#endif
+
+#include <filesystem>
 #include <utility>
 
 CDynamicLibrary::~CDynamicLibrary()
@@ -36,7 +62,8 @@ bool CDynamicLibrary::Open(const std::string& path)
     m_Error.clear();
 
 #ifdef _WIN32
-    m_Handle = LoadLibraryA(path.c_str());
+    std::filesystem::path fsPath(path);
+    m_Handle = LoadLibraryW(fsPath.wstring().c_str());
     if (!m_Handle)
     {
         const DWORD errorCode = GetLastError();

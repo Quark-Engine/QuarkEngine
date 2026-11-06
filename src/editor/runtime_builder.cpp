@@ -1,4 +1,5 @@
 #include "editor/runtime_builder.h"
+#include "scripting/script_engine.h"
 
 #include "engine/scene_package.h"
 #include "nlohmann/json.hpp"
@@ -18,6 +19,21 @@
 #ifdef _WIN32
 #define NOMINMAX
 #include <windows.h>
+#ifdef near
+#undef near
+#endif
+#ifdef far
+#undef far
+#endif
+#ifdef min
+#undef min
+#endif
+#ifdef max
+#undef max
+#endif
+#undef CloseWindow
+#undef ShowCursor
+#undef Rectangle
 #endif
 
 namespace fs = std::filesystem;
@@ -337,6 +353,29 @@ int main()
         if (!CopyRuntimeFile(executableDirectory, buildRoot, fileName, errorMessage, false))
         {
             return false;
+        }
+    }
+
+    std::string scriptBuildError;
+    quark::script::CScriptEngine::Get().BuildScriptDll(projectRoot.string(), gameName, scriptBuildError, progressCallback);
+
+    const std::vector<fs::path> vCandidateDlls = {
+        projectRoot / "GameScripts.dll",
+        projectRoot / (gameName + ".dll"),
+        projectRoot / ".script_build" / "build" / "Debug" / "GameScripts.dll",
+        projectRoot / ".script_build" / "build" / "Release" / "GameScripts.dll",
+        projectRoot / ".script_build" / "build" / "GameScripts.dll"
+    };
+
+    for (const auto& srcDll : vCandidateDlls)
+    {
+        if (fs::is_regular_file(srcDll))
+        {
+            fs::copy_file(srcDll, buildRoot / "GameScripts.dll",
+                fs::copy_options::overwrite_existing, error);
+            fs::copy_file(srcDll, buildRoot / (gameName + ".dll"),
+                fs::copy_options::overwrite_existing, error);
+            break;
         }
     }
 

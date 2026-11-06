@@ -3,26 +3,8 @@
 #include <string>
 
 #ifdef _WIN32
-   #ifndef NOMINMAX
-        #define NOMINMAX
-    #endif
-    #ifndef WIN32_LEAN_AND_MEAN
-        #define WIN32_LEAN_AND_MEAN
-    #endif
-    #ifndef NOGDI
-        #define NOGDI
-    #endif
-    #ifndef NOUSER
-        #define NOUSER
-    #endif
-
-    #include <windows.h>
-
-    #undef CloseWindow
-    #undef ShowCursor
-    #undef Rectangle
-
-    typedef HMODULE LibHandle;
+    struct HINSTANCE__;
+    typedef struct HINSTANCE__* LibHandle;
 #else
     #include <dlfcn.h>
 

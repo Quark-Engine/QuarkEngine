@@ -1,4 +1,5 @@
-﻿#include "editor/editor.h"
+#include "editor/editor.h"
+#include "scripting/script_engine.h"
 
 #include "editor/editor_assets.h"
 #include "editor/editor_entity_clipboard.h"
@@ -164,6 +165,7 @@ bool CEditor::BeginPlayMode()
     m_GameViewActive = true;
     m_ShowGameView = true;
     m_SelectGameTab = true;
+    quark::script::CScriptEngine::Get().StartPlay(m_Scene, m_ProjectPath);
     return true;
 }
 
@@ -177,6 +179,7 @@ bool CEditor::StopPlayMode()
     if (m_IsPlaying)
     {
         m_IsPlaying = false;
+        quark::script::CScriptEngine::Get().StopPlay(m_Scene);
         m_GameViewActive = false;
     }
 

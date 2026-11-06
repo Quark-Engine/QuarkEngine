@@ -1,5 +1,7 @@
 #include "tex.h"
 #include "editor/editor_components_ui.h"
+#include "scripting/script_component.h"
+#include "scripting/script_engine.h"
 #include "editor/editor_utils.h"
 #include "editor/editor_viewers.h"
 #include "imgui.h"
@@ -85,6 +87,10 @@ void CComponentUIHelper::DrawEntityInspector(CEditor& editor, CEntity& entity, S
                 else if (auto pText = std::dynamic_pointer_cast<CText3DComponent>(pComp))
                 {
                     Draw3dTextComponent(editor, entity, pText.get());
+                }
+                else if (auto pScript = std::dynamic_pointer_cast<CScriptComponent>(pComp))
+                {
+                    DrawScriptComponent(editor, entity, pScript.get());
                 }
 
                 ImGui::Spacing();
@@ -227,6 +233,27 @@ void CComponentUIHelper::DrawEntityInspector(CEditor& editor, CEntity& entity, S
                 }
                 return false;
             }();
+            const bool hasScript = [&]()
+            {
+                for (size_t j = 0; j < pComponentsManager->GetComponentCount(); ++j)
+                {
+                    auto pExisting = pComponentsManager->GetComponent(j);
+                    if (pExisting && pExisting->GetType() == COMPONENT_SCRIPT)
+                    {
+                        return true;
+                    }
+                }
+                return false;
+            }();
+            if (ImGui::MenuItem(lang.Word("script")))
+            {
+                if (!hasScript)
+                {
+                    editor.SaveState();
+                    pComponentsManager->AddComponent(std::make_shared<CScriptComponent>());
+                }
+            }
+
             if (ImGui::MenuItem(lang.Word("text")))
             {
                 if (!hasText)
@@ -1119,5 +1146,200 @@ void CComponentUIHelper::Draw3dTextComponent(CEditor& editor, CEntity& entity, C
     if (!pText->m_FontPath.empty() && ImGui::IsItemHovered())
     {
         ImGui::SetTooltip("%s", pText->m_FontPath.c_str());
+    }
+}
+
+void CComponentUIHelper::DrawScriptComponent(CEditor& editor, CEntity& entity, CScriptComponent* pScript)
+{
+    if (!pScript)
+    {
+        return;
+    }
+
+    auto& scriptEngine = quark::script::CScriptEngine::Get();
+    const auto& vAvailable = scriptEngine.GetAvailableScripts();
+    if (vAvailable.empty())
+    {
+        scriptEngine.RefreshAvailableScripts(editor.m_ProjectPath);
+    }
+
+    std::vector<std::string> vScriptNames;
+    vScriptNames.push_back("None");
+    int selectedIndex = 0;
+
+    for (size_t i = 0; i < vAvailable.size(); ++i)
+    {
+        vScriptNames.push_back(vAvailable[i].className);
+        if (vAvailable[i].className == pScript->m_ScriptName)
+        {
+            selectedIndex = static_cast<int>(i) + 1;
+        }
+    }
+
+    std::vector<const char*> vScriptNamePtrs;
+    vScriptNamePtrs.reserve(vScriptNames.size());
+    for (const auto& name : vScriptNames)
+    {
+        vScriptNamePtrs.push_back(name.c_str());
+    }
+
+    ImGui::Text("Script Class");
+    ImGui::SameLine();
+    if (ImGui::SmallButton("Refresh"))
+    {
+        scriptEngine.RefreshAvailableScripts(editor.m_ProjectPath);
+        if (!pScript->m_ScriptName.empty())
+        {
+            const std::string headerPath = scriptEngine.FindScriptHeaderPath(pScript->m_ScriptName);
+            if (!headerPath.empty())
+            {
+                quark::script::SParsedScriptInfo headerInfo;
+                if (quark::script::CScriptHeaderParser::ParseHeader(headerPath, headerInfo))
+                {
+                    pScript->SyncWithHeaderFields(headerInfo.vFields);
+                }
+            }
+        }
+    }
+    int comboIndex = selectedIndex;
+    if (ImGui::Combo("##script_class", &comboIndex, vScriptNamePtrs.data(), static_cast<int>(vScriptNamePtrs.size())))
+    {
+        editor.SaveState();
+        if (comboIndex == 0)
+        {
+            pScript->m_ScriptName.clear();
+            pScript->m_ScriptPath.clear();
+            pScript->m_vFields.clear();
+        }
+        else
+        {
+            const auto& selectedInfo = vAvailable[comboIndex - 1];
+            pScript->m_ScriptName = selectedInfo.className;
+            pScript->m_ScriptPath = selectedInfo.headerPath;
+            pScript->SyncWithHeaderFields(selectedInfo.vFields);
+        }
+        editor.m_SceneDirty = true;
+    }
+
+    if (pScript->m_ScriptName.empty())
+    {
+        ImGui::TextDisabled("Select a script from the dropdown above, or create one via Assets right-click menu.");
+        return;
+    }
+
+    if (pScript->m_vFields.empty())
+    {
+        for (const auto& info : vAvailable)
+        {
+            if (info.className == pScript->m_ScriptName)
+            {
+                if (!info.vFields.empty())
+                {
+                    pScript->SyncWithHeaderFields(info.vFields);
+                }
+                break;
+            }
+        }
+    }
+
+    ImGui::Spacing();
+    ImGui::Separator();
+    ImGui::Text("Public Variables (%s)", pScript->m_ScriptName.c_str());
+    ImGui::Spacing();
+
+    if (pScript->m_vFields.empty())
+    {
+        ImGui::TextDisabled("No public variables found in %s", pScript->m_ScriptName.c_str());
+    }
+
+    bool valueChanged = false;
+    for (size_t fIdx = 0; fIdx < pScript->m_vFields.size(); ++fIdx)
+    {
+        auto& field = pScript->m_vFields[fIdx];
+        ImGui::PushID(static_cast<int>(fIdx));
+
+        switch (field.type)
+        {
+        case quark::script::EScriptFieldType::FLOAT:
+        {
+            float val = field.floatValue;
+            if (ImGui::DragFloat(field.name.c_str(), &val, 0.1f))
+            {
+                field.floatValue = val;
+                valueChanged = true;
+            }
+            break;
+        }
+        case quark::script::EScriptFieldType::INT:
+        {
+            int val = field.intValue;
+            if (ImGui::DragInt(field.name.c_str(), &val, 1))
+            {
+                field.intValue = val;
+                valueChanged = true;
+            }
+            break;
+        }
+        case quark::script::EScriptFieldType::BOOL:
+        {
+            bool val = field.boolValue;
+            if (ImGui::Checkbox(field.name.c_str(), &val))
+            {
+                field.boolValue = val;
+                valueChanged = true;
+            }
+            break;
+        }
+        case quark::script::EScriptFieldType::STRING:
+        {
+            char aBuf[256];
+            size_t copied = field.stringValue.copy(aBuf, sizeof(aBuf) - 1);
+            aBuf[copied] = '\0';
+            if (ImGui::InputText(field.name.c_str(), aBuf, sizeof(aBuf)))
+            {
+                field.stringValue = aBuf;
+                valueChanged = true;
+            }
+            break;
+        }
+        case quark::script::EScriptFieldType::VEC3:
+        {
+            float aVec[3] = {field.vec3Value.x, field.vec3Value.y, field.vec3Value.z};
+            if (ImGui::DragFloat3(field.name.c_str(), aVec, 0.1f))
+            {
+                field.vec3Value = {aVec[0], aVec[1], aVec[2]};
+                valueChanged = true;
+            }
+            break;
+        }
+        }
+
+        ImGui::PopID();
+    }
+
+    if (valueChanged)
+    {
+        editor.SaveState();
+        editor.m_SceneDirty = true;
+        if (editor.m_IsPlaying && pScript->m_pInstance)
+        {
+            pScript->ApplyFieldsToInstance();
+        }
+    }
+
+    ImGui::Spacing();
+    if (ImGui::Button("Sync Fields from Header"))
+    {
+        const std::string headerPath = scriptEngine.FindScriptHeaderPath(pScript->m_ScriptName);
+        if (!headerPath.empty())
+        {
+            quark::script::SParsedScriptInfo headerInfo;
+            if (quark::script::CScriptHeaderParser::ParseHeader(headerPath, headerInfo))
+            {
+                editor.SaveState();
+                pScript->SyncWithHeaderFields(headerInfo.vFields);
+                editor.m_SceneDirty = true;
+            }
+        }
     }
 }

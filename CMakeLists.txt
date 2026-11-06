@@ -130,6 +130,7 @@ add_library(QuarkEngineRuntime SHARED
     src/engine/material_texture_restore.cpp
     src/engine/material_loader.cpp
     src/engine/runtime_application.cpp
+    src/dynamic_library.cpp
     src/engine/runtime_plugin_bridge.cpp
     src/engine/scene_document.cpp
     src/engine/scene_package.cpp
@@ -144,6 +145,8 @@ add_library(QuarkEngineRuntime SHARED
     src/text_mesh.cpp
     src/editor/editor_preferences.cpp
     src/editor/editor_utils.cpp
+    src/scripting/script_component.cpp
+    src/scripting/script_engine.cpp
 )
 if(WIN32)
     target_sources(QuarkEngineRuntime PRIVATE imgui/imgui_impl_dx11.cpp)
@@ -183,6 +186,7 @@ set_target_properties(QuarkEngineRuntime PROPERTIES
     PREFIX ""
     OUTPUT_NAME "QuarkEngine"
     ARCHIVE_OUTPUT_NAME "QuarkEngineRuntime"
+    WINDOWS_EXPORT_ALL_SYMBOLS ON
     RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/bin/$<CONFIG>
     LIBRARY_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/bin/$<CONFIG>
     ARCHIVE_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/bin/$<CONFIG>
@@ -306,6 +310,8 @@ if(BUILD_ENGINE)
         src/editor/editor_theme.cpp
         src/editor/editor_ui.cpp
         src/editor/editor_utils.cpp
+        src/scripting/script_component.cpp
+        src/scripting/script_engine.cpp
         src/editor/editor_viewers.cpp
         src/editor/editor.cpp
         src/editor/editor_hierarchy_utils.cpp
@@ -338,6 +344,8 @@ if(BUILD_ENGINE)
         src/hub.cpp
         src/language_manager.cpp
         src/lighting.cpp
+        src/scripting/script_component.cpp
+        src/scripting/script_engine.cpp
         src/main.cpp
         src/models.cpp
         src/project.cpp
@@ -567,6 +575,7 @@ if(QUARK_BUILD_TESTS)
         tests/test_scene_document.cpp
         tests/test_direct_texture.cpp
         tests/test_cpu_task_pool.cpp
+        src/dynamic_library.cpp
         src/component.cpp
         src/editable_mesh.cpp
         src/engine/cpu_task_pool.cpp
@@ -577,6 +586,8 @@ if(QUARK_BUILD_TESTS)
         src/entity.cpp
         src/editor/editor_hierarchy_utils.cpp
         src/lighting.cpp
+        src/scripting/script_component.cpp
+        src/scripting/script_engine.cpp
     )
 
     target_include_directories(QuarkEngineTests PRIVATE

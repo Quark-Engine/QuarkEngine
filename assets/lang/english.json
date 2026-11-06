@@ -228,6 +228,9 @@
     "spot": "Spot",
 
     "text": "3D Text",
+    "script": "Script",
+    "new_script": "New Script",
+    "script_name": "Script Name",
 
     "save_material": "Save Material",
     "material_file": "Material File",

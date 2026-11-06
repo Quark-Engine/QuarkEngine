@@ -1,4 +1,5 @@
 #include "engine/component_factory_registry.h"
+#include "scripting/script_component.h"
 
 #include <algorithm>
 
@@ -47,6 +48,10 @@ void CComponentFactoryRegistry::SeedBuiltIns()
     };
     seed("Text", textFactory);
     seed("3D Text", textFactory);
+    seed("Script", []()
+    {
+        return std::make_shared<CScriptComponent>();
+    });
 }
 
 bool CComponentFactoryRegistry::Register(const std::string& typeName, FComponentFactory create)

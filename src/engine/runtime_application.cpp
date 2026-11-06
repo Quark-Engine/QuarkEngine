@@ -1,4 +1,5 @@
 #include "application_scene_renderer.h"
+#include "scripting/script_engine.h"
 #include "assets/asset_library.h"
 #include "editor/editor_preferences.h"
 #include "engine/scene_package.h"
@@ -19,6 +20,21 @@
 #ifdef _WIN32
 #define NOMINMAX
 #include <windows.h>
+#ifdef near
+#undef near
+#endif
+#ifdef far
+#undef far
+#endif
+#ifdef min
+#undef min
+#endif
+#ifdef max
+#undef max
+#endif
+#undef CloseWindow
+#undef ShowCursor
+#undef Rectangle
 #elif defined(__linux__)
 #include <unistd.h>
 #endif
@@ -281,8 +297,39 @@ int QuarkEngineRunGame()
     camera.fovy = 45.0f;
     camera.projection = CAMERA_PERSPECTIVE;
 
+    const std::string gameName = executablePath.stem().string();
+    const std::vector<fs::path> vDllCandidates = {
+        executablePath.parent_path() / (gameName + ".dll"),
+        executablePath.parent_path() / "GameScripts.dll",
+        executablePath.parent_path() / "GameName.dll"
+    };
+
+    fs::path foundDllPath;
+    for (const auto& cand : vDllCandidates)
+    {
+        if (fs::is_regular_file(cand))
+        {
+            foundDllPath = cand;
+            break;
+        }
+    }
+
+    if (!foundDllPath.empty())
+    {
+        std::error_code copyEc;
+        fs::copy_file(foundDllPath, projectPath / "GameScripts.dll", fs::copy_options::overwrite_existing, copyEc);
+        fs::copy_file(foundDllPath, projectPath / (gameName + ".dll"), fs::copy_options::overwrite_existing, copyEc);
+
+        quark::script::CScriptEngine::Get().LoadScriptDll(foundDllPath.string());
+    }
+
+    quark::script::CScriptEngine::Get().StartPlay(scene, projectPath.string());
+
     while (!WindowShouldClose())
     {
+        const float deltaTime = static_cast<float>(GetFrameTime());
+        quark::script::CScriptEngine::Get().UpdatePlay(scene, deltaTime);
+
         FindSceneCamera(scene, camera);
         renderer.PrepareFrameCache(scene);
         BeginDrawing();
@@ -313,6 +360,8 @@ int QuarkEngineRunGame()
         EndMode3D();
         EndDrawing();
     }
+
+    quark::script::CScriptEngine::Get().StopPlay(scene);
 
     renderer.Unload();
     scene.ReleaseResources();

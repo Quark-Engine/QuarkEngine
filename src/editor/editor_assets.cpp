@@ -104,6 +104,68 @@ bool SpawnPrefabInScene(CEditor& editor, const fs::path& prefabPath)
     return true;
 }
 
+void CreateScriptFiles(const fs::path& directory, const std::string& scriptName)
+{
+    std::string safeName = scriptName;
+    while (!safeName.empty() && (safeName.front() == ' ' || safeName.front() == '\t'))
+    {
+        safeName.erase(safeName.begin());
+    }
+    while (!safeName.empty() && (safeName.back() == ' ' || safeName.back() == '\t'))
+    {
+        safeName.pop_back();
+    }
+    if (safeName.empty())
+    {
+        return;
+    }
+
+    std::string upperName = safeName;
+    for (char& c : upperName)
+    {
+        c = static_cast<char>(std::toupper(static_cast<unsigned char>(c)));
+    }
+
+    const fs::path hppPath = directory / (safeName + ".hpp");
+    const fs::path cppPath = directory / (safeName + ".cpp");
+
+    std::ofstream hppOut(hppPath);
+    hppOut << "#ifndef __" << upperName << "_HPP__\n";
+    hppOut << "#define __" << upperName << "_HPP__\n\n";
+    hppOut << "#include \"QuarkEngine/SDK.h\"\n\n";
+    hppOut << "class " << safeName << " : public IScript\n";
+    hppOut << "{\n";
+    hppOut << "public:\n";
+    hppOut << "    void OnCreate() override;\n";
+    hppOut << "    void OnStart() override;\n";
+    hppOut << "    void OnUpdate(float deltaTime) override;\n";
+    hppOut << "    void OnDestroy() override;\n";
+    hppOut << "};\n\n";
+    hppOut << "#endif // __" << upperName << "_HPP__\n";
+    hppOut.close();
+
+    std::ofstream cppOut(cppPath);
+    cppOut << "#include \"" << safeName << ".hpp\"\n\n";
+    cppOut << "void " << safeName << "::OnCreate()\n";
+    cppOut << "{\n";
+    cppOut << "    // Script created\n";
+    cppOut << "}\n\n";
+    cppOut << "void " << safeName << "::OnStart()\n";
+    cppOut << "{\n";
+    cppOut << "    // Script initialized\n";
+    cppOut << "}\n\n";
+    cppOut << "void " << safeName << "::OnUpdate(float deltaTime)\n";
+    cppOut << "{\n";
+    cppOut << "    // Script updating...\n";
+    cppOut << "}\n\n";
+    cppOut << "void " << safeName << "::OnDestroy()\n";
+    cppOut << "{\n";
+    cppOut << "    // Script destroying\n";
+    cppOut << "}\n\n";
+    cppOut << "REGISTER_SCRIPT(" << safeName << ");\n";
+    cppOut.close();
+}
+
 bool MatchesAssetFilter(const SLocalEntry& entry, int filter, const std::string& search)
 {
     if (entry.IsDirectory)
@@ -735,16 +797,24 @@ void DrawAssetsUi(CEditor& editor)
             pText
         );
 
-        if (ImGui::BeginPopupContextItem("AssetBgContext", ImGuiPopupFlags_MouseButtonRight | ImGuiPopupFlags_NoOpenOverItems))
+        if (ImGui::BeginPopupContextItem("AssetBgContextEmpty", ImGuiPopupFlags_MouseButtonRight | ImGuiPopupFlags_NoOpenOverItems))
         {
-            if (ImGui::MenuItem(lang.Word("new_file")))
+            if (ImGui::MenuItem(TextFormat("%s##empty_new_file", lang.Word("new_file"))))
             {
                 create.CreatingFolder = false;
                 create.aNewItemName[0] = '\0';
                 create.Open = true;
             }
 
-            if (ImGui::MenuItem(lang.Word("new_folder")))
+            if (ImGui::MenuItem(TextFormat("%s##empty_new_script", lang.Word("new_script"))))
+            {
+                create.CreatingFolder = false;
+                create.CreatingScript = true;
+                create.aNewItemName[0] = '\0';
+                create.Open = true;
+            }
+
+            if (ImGui::MenuItem(TextFormat("%s##empty_new_folder", lang.Word("new_folder"))))
             {
                 create.CreatingFolder = true;
                 create.aNewItemName[0] = '\0';
@@ -961,14 +1031,22 @@ void DrawAssetsUi(CEditor& editor)
 
             ImGui::Separator();
 
-            if (ImGui::MenuItem(lang.Word("new_file")))
+            if (ImGui::MenuItem(TextFormat("%s##empty_new_file", lang.Word("new_file"))))
             {
                 create.CreatingFolder = false;
                 create.aNewItemName[0] = '\0';
                 create.Open = true;
             }
 
-            if (ImGui::MenuItem(lang.Word("new_folder")))
+            if (ImGui::MenuItem(TextFormat("%s##empty_new_script", lang.Word("new_script"))))
+            {
+                create.CreatingFolder = false;
+                create.CreatingScript = true;
+                create.aNewItemName[0] = '\0';
+                create.Open = true;
+            }
+
+            if (ImGui::MenuItem(TextFormat("%s##empty_new_folder", lang.Word("new_folder"))))
             {
                 create.CreatingFolder = true;
                 create.aNewItemName[0] = '\0';
@@ -1391,14 +1469,22 @@ void DrawAssetsUi(CEditor& editor)
 
     if (ImGui::BeginPopupContextItem("AssetBgContext", ImGuiPopupFlags_MouseButtonRight | ImGuiPopupFlags_NoOpenOverItems))
     {
-        if (ImGui::MenuItem(lang.Word("new_file")))
+        if (ImGui::MenuItem(TextFormat("%s##bg_new_file", lang.Word("new_file"))))
         {
             create.CreatingFolder = false;
             create.aNewItemName[0] = '\0';
             create.Open = true;
         }
 
-        if (ImGui::MenuItem(lang.Word("new_folder")))
+        if (ImGui::MenuItem(TextFormat("%s##bg_new_script", lang.Word("new_script"))))
+        {
+            create.CreatingFolder = false;
+            create.CreatingScript = true;
+            create.aNewItemName[0] = '\0';
+            create.Open = true;
+        }
+
+        if (ImGui::MenuItem(TextFormat("%s##bg_new_folder", lang.Word("new_folder"))))
         {
             create.CreatingFolder = true;
             create.aNewItemName[0] = '\0';
@@ -1453,8 +1539,11 @@ void DrawAssetsUi(CEditor& editor)
 
     if (ImGui::BeginPopupModal(popupName.c_str(), nullptr, ImGuiWindowFlags_AlwaysAutoResize))
     {
-        ImGui::TextUnformatted(create.CreatingFolder ? lang.Word("new_folder") : lang.Word("new_file"));
-        ImGui::InputText(lang.Word("name"), create.aNewItemName, IM_ARRAYSIZE(create.aNewItemName));
+        const char* pModalTitle = create.CreatingScript ? lang.Word("new_script") :
+            (create.CreatingFolder ? lang.Word("new_folder") : lang.Word("new_file"));
+        ImGui::TextUnformatted(pModalTitle);
+        const char* pFieldLabel = create.CreatingScript ? lang.Word("script_name") : lang.Word("name");
+        ImGui::InputText(pFieldLabel, create.aNewItemName, IM_ARRAYSIZE(create.aNewItemName));
         ImGui::Spacing();
 
         if (ImGui::Button(lang.Word("ok"), ImVec2(120, 0)))
@@ -1463,7 +1552,24 @@ void DrawAssetsUi(CEditor& editor)
             {
                 fs::path path;
 
-                if (create.CreatingFolder)
+                if (create.CreatingScript)
+                {
+                    std::string scriptName = create.aNewItemName;
+                    if (scriptName.size() > 4 && scriptName.substr(scriptName.size() - 4) == ".hpp")
+                    {
+                        scriptName = scriptName.substr(0, scriptName.size() - 4);
+                    }
+                    else if (scriptName.size() > 4 && scriptName.substr(scriptName.size() - 4) == ".cpp")
+                    {
+                        scriptName = scriptName.substr(0, scriptName.size() - 4);
+                    }
+
+                    CreateScriptFiles(editor.m_CurrentAssetPath, scriptName);
+                    editor.m_Assets.RequestRefresh(editor.m_ProjectPath);
+                    browser.AssetListCacheDirty = true;
+                    create.CreatingScript = false;
+                }
+                else if (create.CreatingFolder)
                 {
                     path = editor.m_CurrentAssetPath / create.aNewItemName;
 

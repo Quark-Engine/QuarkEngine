@@ -1,4 +1,5 @@
 #include "application.h"
+#include "scripting/script_engine.h"
 #include "qcImGui.h"
 #include "imgui.h"
 #include "plugins/plugin_manager.h"
@@ -350,6 +351,12 @@ void CApplication::UpdateFrame()
         }
     }
     m_LastSelectedEntity = m_Editor.m_Scene.m_Selected;
+
+    if (m_Editor.m_IsPlaying)
+    {
+        const float deltaTime = static_cast<float>(GetFrameTime());
+        quark::script::CScriptEngine::Get().UpdatePlay(m_Editor.m_Scene, deltaTime);
+    }
 
     if (!buildSettingsOpen && !m_Editor.m_IsPlaying && !m_Editor.m_GameViewActive &&
         (m_Camera.m_Active || (!ImGuizmo::IsOver() && !ImGuizmo::IsUsing() &&

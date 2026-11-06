@@ -212,6 +212,16 @@ CCameraComponent* CEntity::GetCameraComponent()
     return m_pComponents ? m_pComponents->GetCamera() : nullptr;
 }
 
+CScriptComponent* CEntity::GetScriptComponent()
+{
+    return m_pComponents ? m_pComponents->GetScript() : nullptr;
+}
+
+const CScriptComponent* CEntity::GetScriptComponent() const
+{
+    return m_pComponents ? m_pComponents->GetScript() : nullptr;
+}
+
 const CCameraComponent* CEntity::GetCameraComponent() const
 {
     return m_pComponents ? m_pComponents->GetCamera() : nullptr;

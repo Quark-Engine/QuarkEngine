@@ -1,4 +1,5 @@
 #include "component.h"
+#include "scripting/script_component.h"
 #define _CRT_SECURE_NO_WARNINGS
 
 #include "engine/component_factory_registry.h"
@@ -202,7 +203,6 @@ void CComponentManager::Deserialize(const nlohmann::json& json, const CComponent
         const std::string typeName = compJson["type"];
         const bool compEnabled = compJson.value("enabled", true);
 
-
         std::shared_ptr<IComponent> pComp = factories.Create(typeName);
         if (!pComp)
         {
@@ -219,6 +219,12 @@ void CComponentManager::Deserialize(const nlohmann::json& json, const CComponent
         pComp->m_Enabled = compEnabled;
         m_vComponents.push_back(pComp);
     }
+}
+
+CScriptComponent* CComponentManager::GetScript()
+{
+    auto pComp = GetComponentOfType<CScriptComponent>();
+    return pComp ? pComp.get() : nullptr;
 }
 
 void CComponentManager::CloneInto(const CComponentManager& source)
@@ -264,6 +270,11 @@ void CComponentManager::CloneInto(const CComponentManager& source)
         case COMPONENT_CAMERA:
             pCloned = std::make_shared<CCameraComponent>(
                 *std::dynamic_pointer_cast<CCameraComponent>(pComponent));
+            break;
+
+        case COMPONENT_SCRIPT:
+            pCloned = std::make_shared<CScriptComponent>(
+                *std::dynamic_pointer_cast<CScriptComponent>(pComponent));
             break;
 
         default:

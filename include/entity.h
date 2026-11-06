@@ -62,6 +62,8 @@ public:
     CCollisionComponent* GetCollisionComponent();
     const CCollisionComponent* GetCollisionComponent() const;
     CCameraComponent* GetCameraComponent();
+    CScriptComponent* GetScriptComponent();
+    const CScriptComponent* GetScriptComponent() const;
     const CCameraComponent* GetCameraComponent() const;
 
     int m_Id = 0;

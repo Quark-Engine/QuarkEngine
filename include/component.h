@@ -15,6 +15,8 @@
 class CEntity;
 class CModelAsset;
 class CComponentFactoryRegistry;
+namespace quark::script { class CScriptComponent; }
+using CScriptComponent = ::quark::script::CScriptComponent;
 
 enum EObjectType
 {
@@ -41,7 +43,8 @@ enum EComponentType
     COMPONENT_LIGHT,
     COMPONENT_COLLISION,
     COMPONENT_CUSTOM,
-    COMPONENT_CAMERA
+    COMPONENT_CAMERA,
+    COMPONENT_SCRIPT
 };
 
 enum EColliderType
@@ -571,6 +574,8 @@ public:
         auto pComp = GetComponentOfType<CCameraComponent>();
         return pComp ? pComp.get() : nullptr;
     }
+
+    CScriptComponent* GetScript();
 
     const std::vector<std::shared_ptr<IComponent>>& GetAllComponents() const
     {
