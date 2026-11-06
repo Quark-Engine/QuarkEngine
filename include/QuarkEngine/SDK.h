@@ -33,6 +33,51 @@ struct SScriptTransform
     Vec3& position;
     Vec3& rotation;
     Vec3& scale;
+
+    Vec3 GetForward() const
+    {
+        const Mat4 rotMat = Mat4::rotationY(rotation.y * DEG2RAD) *
+                            Mat4::rotationX(rotation.x * DEG2RAD) *
+                            Mat4::rotationZ(rotation.z * DEG2RAD);
+        const Vec3 fwd = Vec3(rotMat * Vec3{ 0.0f, 0.0f, -1.0f });
+        return fwd.normalized();
+    }
+
+    Vec3 GetRight() const
+    {
+        const Mat4 rotMat = Mat4::rotationY(rotation.y * DEG2RAD) *
+                            Mat4::rotationX(rotation.x * DEG2RAD) *
+                            Mat4::rotationZ(rotation.z * DEG2RAD);
+        const Vec3 right = Vec3(rotMat * Vec3{ 1.0f, 0.0f, 0.0f });
+        return right.normalized();
+    }
+
+    Vec3 GetUp() const
+    {
+        const Mat4 rotMat = Mat4::rotationY(rotation.y * DEG2RAD) *
+                            Mat4::rotationX(rotation.x * DEG2RAD) *
+                            Mat4::rotationZ(rotation.z * DEG2RAD);
+        const Vec3 up = Vec3(rotMat * Vec3{ 0.0f, 1.0f, 0.0f });
+        return up.normalized();
+    }
+
+    void LookAt(const Vec3& target)
+    {
+        const Vec3 dir = target - position;
+        const float lenSq = dir.lengthSquared();
+        if (lenSq < 0.000001f)
+        {
+            return;
+        }
+
+        const Vec3 normDir = dir * (1.0f / std::sqrt(lenSq));
+        const float pitch = std::asin(std::clamp(normDir.y, -1.0f, 1.0f)) * RAD2DEG;
+        const float yaw = std::atan2(-normDir.x, -normDir.z) * RAD2DEG;
+
+        rotation.x = pitch;
+        rotation.y = yaw;
+        rotation.z = 0.0f;
+    }
 };
 
 class CScriptEntity
@@ -75,6 +120,26 @@ public:
         m_pRotation = pRot;
         m_pScale = pScale;
         m_pHasLocalMatrixOverride = pHasOverride;
+    }
+
+    Vec3 GetForward()
+    {
+        return GetTransform().GetForward();
+    }
+
+    Vec3 GetRight()
+    {
+        return GetTransform().GetRight();
+    }
+
+    Vec3 GetUp()
+    {
+        return GetTransform().GetUp();
+    }
+
+    void LookAt(const Vec3& target)
+    {
+        GetTransform().LookAt(target);
     }
 
     int GetId() const;
@@ -265,6 +330,12 @@ struct SInputCallbacks
     bool (*pfnIsMouseButtonReleased)(int button) = nullptr;
     bool (*pfnIsMouseButtonUp)(int button) = nullptr;
     Vec2 (*pfnGetMousePosition)() = nullptr;
+    Vec2 (*pfnGetMouseDelta)() = nullptr;
+    float (*pfnGetMouseWheelMove)() = nullptr;
+    void (*pfnSetCursorLocked)(bool locked) = nullptr;
+    bool (*pfnIsCursorLocked)() = nullptr;
+    void (*pfnSetCursorVisible)(bool visible) = nullptr;
+    bool (*pfnIsCursorVisible)() = nullptr;
 };
 
 extern SInputCallbacks g_InputCallbacks;
@@ -372,6 +443,165 @@ public:
         }
         return Vec2{ 0.0f, 0.0f };
     }
+
+    static Vec2 GetMouseDelta()
+    {
+        if (g_InputCallbacks.pfnGetMouseDelta)
+        {
+            return g_InputCallbacks.pfnGetMouseDelta();
+        }
+        return Vec2{ 0.0f, 0.0f };
+    }
+
+    static float GetMouseWheelMove()
+    {
+        if (g_InputCallbacks.pfnGetMouseWheelMove)
+        {
+            return g_InputCallbacks.pfnGetMouseWheelMove();
+        }
+        return 0.0f;
+    }
+
+    static void SetCursorLocked(bool locked)
+    {
+        if (g_InputCallbacks.pfnSetCursorLocked)
+        {
+            g_InputCallbacks.pfnSetCursorLocked(locked);
+        }
+    }
+
+    static bool IsCursorLocked()
+    {
+        if (g_InputCallbacks.pfnIsCursorLocked)
+        {
+            return g_InputCallbacks.pfnIsCursorLocked();
+        }
+        return false;
+    }
+
+    static void SetCursorVisible(bool visible)
+    {
+        if (g_InputCallbacks.pfnSetCursorVisible)
+        {
+            g_InputCallbacks.pfnSetCursorVisible(visible);
+        }
+    }
+
+    static bool IsCursorVisible()
+    {
+        if (g_InputCallbacks.pfnIsCursorVisible)
+        {
+            return g_InputCallbacks.pfnIsCursorVisible();
+        }
+        return true;
+    }
+};
+
+struct STimeCallbacks
+{
+    float (*pfnGetDeltaTime)() = nullptr;
+    float (*pfnGetUnscaledDeltaTime)() = nullptr;
+    double (*pfnGetTime)() = nullptr;
+    float (*pfnGetTimeScale)() = nullptr;
+    void (*pfnSetTimeScale)(float scale) = nullptr;
+};
+
+extern STimeCallbacks g_TimeCallbacks;
+
+class Time
+{
+public:
+    static float GetDeltaTime()
+    {
+        if (g_TimeCallbacks.pfnGetDeltaTime)
+        {
+            return g_TimeCallbacks.pfnGetDeltaTime();
+        }
+        return 0.0166667f;
+    }
+
+    static float GetUnscaledDeltaTime()
+    {
+        if (g_TimeCallbacks.pfnGetUnscaledDeltaTime)
+        {
+            return g_TimeCallbacks.pfnGetUnscaledDeltaTime();
+        }
+        return 0.0166667f;
+    }
+
+    static double GetTime()
+    {
+        if (g_TimeCallbacks.pfnGetTime)
+        {
+            return g_TimeCallbacks.pfnGetTime();
+        }
+        return 0.0;
+    }
+
+    static float GetTimeScale()
+    {
+        if (g_TimeCallbacks.pfnGetTimeScale)
+        {
+            return g_TimeCallbacks.pfnGetTimeScale();
+        }
+        return 1.0f;
+    }
+
+    static void SetTimeScale(float scale)
+    {
+        if (g_TimeCallbacks.pfnSetTimeScale)
+        {
+            g_TimeCallbacks.pfnSetTimeScale(scale);
+        }
+    }
+};
+
+class Math
+{
+public:
+    static constexpr float Pi = 3.14159265358979323846f;
+    static constexpr float Deg2Rad = Pi / 180.0f;
+    static constexpr float Rad2Deg = 180.0f / Pi;
+
+    static float Clamp(float value, float min, float max)
+    {
+        return value < min ? min : (value > max ? max : value);
+    }
+
+    static float Lerp(float a, float b, float t)
+    {
+        return a + (b - a) * t;
+    }
+
+    static Vec3 Lerp(const Vec3& a, const Vec3& b, float t)
+    {
+        return a + (b - a) * t;
+    }
+
+    static float Distance(const Vec3& a, const Vec3& b)
+    {
+        return (b - a).length();
+    }
+
+    static float DistanceSquared(const Vec3& a, const Vec3& b)
+    {
+        return (b - a).lengthSquared();
+    }
+
+    static float Dot(const Vec3& a, const Vec3& b)
+    {
+        return a.dot(b);
+    }
+
+    static Vec3 Cross(const Vec3& a, const Vec3& b)
+    {
+        return a.cross(b);
+    }
+
+    static Vec3 Normalize(const Vec3& v)
+    {
+        return v.normalized();
+    }
 };
 
 using FScriptCreator = IScript* (*)();
@@ -436,6 +666,8 @@ private:
 using IScript = ::quark::script::IScript;
 using Input = ::quark::script::Input;
 using Key = ::quark::script::Key;
+using Time = ::quark::script::Time;
+using Math = ::quark::script::Math;
 using ScriptEntity = ::quark::script::CScriptEntity;
 
 #define REGISTER_SCRIPT(ScriptClass) \

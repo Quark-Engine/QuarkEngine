@@ -14,8 +14,8 @@ Mat4 ComposeLocal(const CTransformComponent& transform)
     }
 
     return Mat4::translation(transform.m_Position.x, transform.m_Position.y, transform.m_Position.z) *
-        Mat4::rotationX(transform.m_Rotation.x * DEG2RAD) *
         Mat4::rotationY(transform.m_Rotation.y * DEG2RAD) *
+        Mat4::rotationX(transform.m_Rotation.x * DEG2RAD) *
         Mat4::rotationZ(transform.m_Rotation.z * DEG2RAD) *
         Mat4::scale(transform.m_Scale.x, transform.m_Scale.y, transform.m_Scale.z);
 }
@@ -238,9 +238,9 @@ void DecomposeLocal(const Mat4& parentWorld, const Mat4& world, CTransformCompon
             const Vec3 up = Mat4Column(rotation, 1);
             const Vec3 dir = Mat4Column(rotation, 2);
             out.m_Rotation = Vec3(
-                std::atan2(-dir.y, dir.z) * RAD2DEG,
-                std::asin(dir.x) * RAD2DEG,
-                std::atan2(-up.x, right.x) * RAD2DEG
+                std::asin(std::clamp(-dir.y, -1.0f, 1.0f)) * RAD2DEG,
+                std::atan2(dir.x, dir.z) * RAD2DEG,
+                std::atan2(right.y, up.y) * RAD2DEG
             );
         }
     }

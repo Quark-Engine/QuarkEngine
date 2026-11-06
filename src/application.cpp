@@ -356,6 +356,7 @@ void CApplication::UpdateFrame()
     {
         const float deltaTime = static_cast<float>(GetFrameTime());
         quark::script::CScriptEngine::Get().UpdatePlay(m_Editor.m_Scene, deltaTime);
+        m_SceneRenderer.PrepareFrameCache(m_Editor.m_Scene);
     }
 
     if (!buildSettingsOpen && !m_Editor.m_IsPlaying && !m_Editor.m_GameViewActive &&

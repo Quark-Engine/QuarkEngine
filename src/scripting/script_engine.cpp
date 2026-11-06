@@ -1,6 +1,9 @@
 #include "scripting/script_engine.h"
+#include "QuarkEngine/SDK.h"
 #include "entity.h"
 #include "project.h"
+
+#include <SDL3/SDL.h>
 
 #include <algorithm>
 #include <cctype>
@@ -561,6 +564,12 @@ std::vector<SParsedScriptInfo> CScriptHeaderParser::ScanProjectScripts(const std
 }
 
 SInputCallbacks g_InputCallbacks;
+STimeCallbacks g_TimeCallbacks;
+
+static float s_ScriptTimeScale = 1.0f;
+static float s_ScriptDeltaTime = 0.0166667f;
+static double s_ScriptAccumulatedTime = 0.0;
+static int s_DiscardMouseDeltaFrames = 0;
 
 CScriptEngine::CScriptEngine()
 {
@@ -599,6 +608,79 @@ CScriptEngine::CScriptEngine()
     g_InputCallbacks.pfnGetMousePosition = []() -> Vec2
     {
         return ::GetMousePosition();
+    };
+    g_InputCallbacks.pfnGetMouseDelta = []() -> Vec2
+    {
+        Vec2 delta = ::GetMouseDelta();
+        if (s_DiscardMouseDeltaFrames > 0)
+        {
+            --s_DiscardMouseDeltaFrames;
+            return Vec2{ 0.0f, 0.0f };
+        }
+        if (delta.x * delta.x + delta.y * delta.y > 40000.0f)
+        {
+            return Vec2{ 0.0f, 0.0f };
+        }
+        return delta;
+    };
+    g_InputCallbacks.pfnGetMouseWheelMove = []() -> float
+    {
+        return ::GetMouseWheelMove();
+    };
+    g_InputCallbacks.pfnSetCursorLocked = [](bool locked)
+    {
+        SDL_Window* pWin = ::GetNativeWindow();
+        if (pWin)
+        {
+            SDL_SetWindowRelativeMouseMode(pWin, locked);
+            if (locked)
+            {
+                float dummyX = 0.0f, dummyY = 0.0f;
+                SDL_GetRelativeMouseState(&dummyX, &dummyY);
+                s_DiscardMouseDeltaFrames = 2;
+            }
+        }
+    };
+    g_InputCallbacks.pfnIsCursorLocked = []() -> bool
+    {
+        SDL_Window* pWin = ::GetNativeWindow();
+        return pWin ? SDL_GetWindowRelativeMouseMode(pWin) : false;
+    };
+    g_InputCallbacks.pfnSetCursorVisible = [](bool visible)
+    {
+        if (visible)
+        {
+            ::ShowCursor();
+        }
+        else
+        {
+            ::HideCursor();
+        }
+    };
+    g_InputCallbacks.pfnIsCursorVisible = []() -> bool
+    {
+        return !::IsCursorHidden();
+    };
+
+    g_TimeCallbacks.pfnGetDeltaTime = []() -> float
+    {
+        return s_ScriptDeltaTime * s_ScriptTimeScale;
+    };
+    g_TimeCallbacks.pfnGetUnscaledDeltaTime = []() -> float
+    {
+        return s_ScriptDeltaTime;
+    };
+    g_TimeCallbacks.pfnGetTime = []() -> double
+    {
+        return s_ScriptAccumulatedTime;
+    };
+    g_TimeCallbacks.pfnGetTimeScale = []() -> float
+    {
+        return s_ScriptTimeScale;
+    };
+    g_TimeCallbacks.pfnSetTimeScale = [](float scale)
+    {
+        s_ScriptTimeScale = std::max(0.0f, scale);
     };
 
     m_pActiveDll = &m_Dll;
@@ -673,6 +755,12 @@ bool CScriptEngine::BuildScriptDll(const std::string& projectPath, const std::st
         quarkEngineLib = executableDir / "QuarkEngine.lib";
     }
 
+    fs::path sdl3Lib = executableDir / "SDL3.lib";
+    if (!fs::is_regular_file(sdl3Lib))
+    {
+        sdl3Lib = executableDir / "SDL3-static.lib";
+    }
+
     const fs::path bridgeCpp = buildDir / "script_bridge.cpp";
     std::ofstream bridgeOut(bridgeCpp, std::ios::binary | std::ios::trunc);
     if (bridgeOut.is_open())
@@ -680,12 +768,20 @@ bool CScriptEngine::BuildScriptDll(const std::string& projectPath, const std::st
         bridgeOut << "#include \"QuarkEngine/SDK.h\"\n\n";
         bridgeOut << "namespace quark::script\n{\n";
         bridgeOut << "    SInputCallbacks g_InputCallbacks;\n";
+        bridgeOut << "    STimeCallbacks g_TimeCallbacks;\n";
         bridgeOut << "}\n\n";
         bridgeOut << "extern \"C\" QUARK_SCRIPT_API void SetScriptInputCallbacks(const ::quark::script::SInputCallbacks* pCallbacks)\n";
         bridgeOut << "{\n";
         bridgeOut << "    if (pCallbacks)\n";
         bridgeOut << "    {\n";
         bridgeOut << "        ::quark::script::g_InputCallbacks = *pCallbacks;\n";
+        bridgeOut << "    }\n";
+        bridgeOut << "}\n\n";
+        bridgeOut << "extern \"C\" QUARK_SCRIPT_API void SetScriptTimeCallbacks(const ::quark::script::STimeCallbacks* pCallbacks)\n";
+        bridgeOut << "{\n";
+        bridgeOut << "    if (pCallbacks)\n";
+        bridgeOut << "    {\n";
+        bridgeOut << "        ::quark::script::g_TimeCallbacks = *pCallbacks;\n";
         bridgeOut << "    }\n";
         bridgeOut << "}\n";
         bridgeOut.close();
@@ -901,6 +997,14 @@ bool CScriptEngine::LoadScriptDll(const std::string& dllPath)
         TraceLog(LogLevel::Warn, "SCRIPT", "Script DLL does not export SetScriptInputCallbacks");
     }
 
+    using FSetScriptTimeCallbacks = void (*)(const STimeCallbacks*);
+    auto pfnSetTime = reinterpret_cast<FSetScriptTimeCallbacks>(m_Dll.GetSymbol("SetScriptTimeCallbacks"));
+    if (pfnSetTime)
+    {
+        pfnSetTime(&g_TimeCallbacks);
+        TraceLog(LogLevel::Info, "SCRIPT", "Configured script time callbacks bridge");
+    }
+
     TraceLog(LogLevel::Info, "SCRIPT", TextFormat("Loaded script DLL '%s'", dllPath.c_str()));
     return true;
 }
@@ -973,6 +1077,11 @@ void CScriptEngine::StartPlay(CScene& scene, const std::string& projectPath,
         gameName = "Game";
     }
 
+    s_ScriptTimeScale = 1.0f;
+    s_ScriptDeltaTime = 0.0166667f;
+    s_ScriptAccumulatedTime = 0.0;
+    s_DiscardMouseDeltaFrames = 2;
+
     if (pExternalDll && pExternalDll->IsOpen())
     {
         m_pActiveDll = pExternalDll;
@@ -981,6 +1090,12 @@ void CScriptEngine::StartPlay(CScene& scene, const std::string& projectPath,
         if (pfnSetInput)
         {
             pfnSetInput(&g_InputCallbacks);
+        }
+        using FSetScriptTimeCallbacks = void (*)(const STimeCallbacks*);
+        auto pfnSetTime = reinterpret_cast<FSetScriptTimeCallbacks>(m_pActiveDll->GetSymbol("SetScriptTimeCallbacks"));
+        if (pfnSetTime)
+        {
+            pfnSetTime(&g_TimeCallbacks);
         }
     }
     else if (m_Dll.IsOpen())
@@ -1207,12 +1322,16 @@ void CScriptEngine::UpdatePlay(CScene& scene, float deltaTime)
         return;
     }
 
+    s_ScriptDeltaTime = deltaTime;
+    const float scaledDelta = deltaTime * s_ScriptTimeScale;
+    s_ScriptAccumulatedTime += static_cast<double>(scaledDelta);
+
     for (auto& entity : scene.m_vEntities)
     {
         CScriptComponent* pScriptComp = entity.GetScriptComponent();
         if (pScriptComp && pScriptComp->m_pInstance && pScriptComp->m_Enabled)
         {
-            pScriptComp->m_pInstance->OnUpdate(deltaTime);
+            pScriptComp->m_pInstance->OnUpdate(scaledDelta);
         }
     }
 }
@@ -1235,6 +1354,15 @@ void CScriptEngine::StopPlay(CScene& scene)
             pScriptComp->m_pScriptEntity.reset();
         }
     }
+
+    SDL_Window* pWin = ::GetNativeWindow();
+    if (pWin && SDL_GetWindowRelativeMouseMode(pWin))
+    {
+        SDL_SetWindowRelativeMouseMode(pWin, false);
+    }
+    ::ShowCursor();
+    s_ScriptTimeScale = 1.0f;
+    s_DiscardMouseDeltaFrames = 0;
 
     UnloadScriptDll();
     m_pActiveDll = &m_Dll;
