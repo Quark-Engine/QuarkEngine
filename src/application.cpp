@@ -352,6 +352,11 @@ void CApplication::UpdateFrame()
     }
     m_LastSelectedEntity = m_Editor.m_Scene.m_Selected;
 
+    const bool activeViewportHovered = m_Editor.m_GameViewActive
+        ? m_Editor.m_Ui.m_GameViewport.m_Hovered
+        : m_Editor.m_Ui.m_Viewport.m_Hovered;
+    quark::script::CScriptEngine::Get().SetViewportHovered(activeViewportHovered);
+
     if (m_Editor.m_IsPlaying)
     {
         const float deltaTime = static_cast<float>(GetFrameTime());
@@ -680,75 +685,43 @@ void CApplication::RenderFrame()
 
         const auto imguiStart = std::chrono::steady_clock::now();
         QcImGuiBegin();
-        const bool gameViewRunning = m_Editor.m_IsPlaying && m_Editor.m_GameViewActive;
         const bool buildSettingsOpen = m_Editor.m_BuildSettingsModalOpen;
-        const bool wasGameCursorCaptured = m_GameCursorCaptured;
-        const CViewportState& cursorViewport = m_Editor.m_Ui.m_GameViewport;
-        const ImVec2 mousePosition = ImGui::GetIO().MousePos;
-        const bool anyPopupOpen = ImGui::IsPopupOpen(
-            nullptr, ImGuiPopupFlags_AnyPopupId | ImGuiPopupFlags_AnyPopupLevel);
-        const bool mouseOverGameViewport =
-            cursorViewport.m_Hovered &&
-            !anyPopupOpen &&
-            !ImGui::IsAnyItemHovered() &&
-            !ImGui::IsAnyItemHovered() &&
-            mousePosition.x >= cursorViewport.m_WindowPos.x &&
-            mousePosition.x <= cursorViewport.m_WindowPos.x + cursorViewport.m_WindowSize.x &&
-            mousePosition.y >= cursorViewport.m_WindowPos.y &&
-            mousePosition.y <= cursorViewport.m_WindowPos.y + cursorViewport.m_WindowSize.y;
-        if (buildSettingsOpen)
+        if (m_Editor.m_IsPlaying)
         {
-            m_GameCursorCaptured = false;
-        }
-        else if (gameViewRunning && !m_GameCursorCaptured && mouseOverGameViewport &&
-            IsMouseButtonPressed(MOUSE_BUTTON_LEFT))
-        {
-            m_GameCursorCaptured = true;
-        }
-        else if (!gameViewRunning)
-        {
-            m_GameCursorCaptured = false;
-        }
-        if (gameViewRunning && m_GameCursorCaptured && IsKeyPressed(KEY_ESCAPE))
-        {
-            m_GameCursorCaptured = false;
-        }
+            const CViewportState& activeViewport = m_Editor.m_GameViewActive
+                ? m_Editor.m_Ui.m_GameViewport
+                : m_Editor.m_Ui.m_Viewport;
+            const ImVec2 mousePos = ImGui::GetIO().MousePos;
+            const bool anyPopupOpen = ImGui::IsPopupOpen(
+                nullptr, ImGuiPopupFlags_AnyPopupId | ImGuiPopupFlags_AnyPopupLevel);
+            const bool mouseOverActiveViewport =
+                activeViewport.m_Hovered &&
+                !anyPopupOpen &&
+                !ImGui::IsAnyItemHovered() &&
+                mousePos.x >= activeViewport.m_WindowPos.x &&
+                mousePos.x <= activeViewport.m_WindowPos.x + activeViewport.m_WindowSize.x &&
+                mousePos.y >= activeViewport.m_WindowPos.y &&
+                mousePos.y <= activeViewport.m_WindowPos.y + activeViewport.m_WindowSize.y;
 
-        ImGuiIO& io = ImGui::GetIO();
-        if (m_GameCursorCaptured && !wasGameCursorCaptured)
-        {
-            m_PreviousGameCursorChangeDisabled =
-                (io.ConfigFlags & ImGuiConfigFlags_NoMouseCursorChange) != 0;
-            io.ConfigFlags |= ImGuiConfigFlags_NoMouseCursorChange;
-            if (SDL_Window* pWindow = GetNativeWindow())
+            if (IsKeyPressed(KEY_ESCAPE) && quark::script::CScriptEngine::Get().IsCursorLocked())
             {
-                if (!SDL_SetWindowRelativeMouseMode(pWindow, true))
-                {
-                    TraceLog(LogLevel::Error, "APPLICATION", TextFormat(
-                        "Failed to capture mouse for Play mode: %s", SDL_GetError()));
-                }
+                quark::script::CScriptEngine::Get().SetCursorLocked(false);
             }
-            DisableCursor();
+            else if (!quark::script::CScriptEngine::Get().IsCursorLocked() &&
+                     mouseOverActiveViewport && IsMouseButtonPressed(MOUSE_BUTTON_LEFT))
+            {
+                quark::script::CScriptEngine::Get().SetCursorLocked(true);
+            }
+
+            if (buildSettingsOpen && quark::script::CScriptEngine::Get().IsCursorLocked())
+            {
+                quark::script::CScriptEngine::Get().SetCursorLocked(false);
+            }
+            m_GameCursorCaptured = quark::script::CScriptEngine::Get().IsCursorLocked();
         }
-        else if (!m_GameCursorCaptured && wasGameCursorCaptured)
+        else
         {
-            if (SDL_Window* pWindow = GetNativeWindow())
-            {
-                if (!SDL_SetWindowRelativeMouseMode(pWindow, false))
-                {
-                    TraceLog(LogLevel::Error, "APPLICATION", TextFormat(
-                        "Failed to release mouse from Play mode: %s", SDL_GetError()));
-                }
-            }
-            if (m_PreviousGameCursorChangeDisabled)
-            {
-                io.ConfigFlags |= ImGuiConfigFlags_NoMouseCursorChange;
-            }
-            else
-            {
-                io.ConfigFlags &= ~ImGuiConfigFlags_NoMouseCursorChange;
-            }
-            EnableCursor();
+            m_GameCursorCaptured = false;
         }
 
         if (m_Camera.m_Active && (m_Editor.m_IsPlaying || m_Editor.m_GameViewActive))
@@ -756,7 +729,31 @@ void CApplication::RenderFrame()
             m_Camera.ReleaseCapture();
         }
 
-        if ((!gameViewRunning || !m_GameCursorCaptured) && !m_Camera.m_Active)
+        const bool scriptCursorCaptured = m_Editor.m_IsPlaying &&
+            quark::script::CScriptEngine::Get().IsCursorLocked();
+
+        ImGuiIO& io = ImGui::GetIO();
+        if (scriptCursorCaptured)
+        {
+            io.ConfigFlags |= ImGuiConfigFlags_NoMouseCursorChange | ImGuiConfigFlags_NoMouse;
+            if (!IsCursorHidden())
+            {
+                DisableCursor();
+            }
+            if (SDL_Window* pWin = GetNativeWindow())
+            {
+                if (!SDL_GetWindowRelativeMouseMode(pWin))
+                {
+                    SDL_SetWindowRelativeMouseMode(pWin, true);
+                }
+            }
+        }
+        else
+        {
+            io.ConfigFlags &= ~(ImGuiConfigFlags_NoMouseCursorChange | ImGuiConfigFlags_NoMouse);
+        }
+
+        if (!scriptCursorCaptured && !m_Camera.m_Active)
         {
             if (SDL_Window* pWindow = GetNativeWindow())
             {
@@ -785,18 +782,14 @@ void CApplication::RenderFrame()
 
         if (SDL_Window* pWindow = GetNativeWindow())
         {
-            const bool currentGameViewRunning =
-                m_Editor.m_IsPlaying && m_Editor.m_GameViewActive;
-            const bool gameCursorCaptured =
-                currentGameViewRunning && m_GameCursorCaptured;
             const bool editorCameraCaptured =
                 !m_Editor.m_IsPlaying && !m_Editor.m_GameViewActive &&
                 m_Camera.m_Active;
-            if (gameCursorCaptured || editorCameraCaptured)
+            if (scriptCursorCaptured || editorCameraCaptured)
             {
-                const CViewportState& viewport = gameCursorCaptured
-                    ? m_Editor.m_Ui.m_GameViewport
-                    : m_Editor.m_Ui.m_Viewport;
+                const CViewportState& viewport = (m_Editor.m_IsPlaying && !m_Editor.m_GameViewActive)
+                    ? m_Editor.m_Ui.m_Viewport
+                    : (scriptCursorCaptured ? m_Editor.m_Ui.m_GameViewport : m_Editor.m_Ui.m_Viewport);
                 const ImGuiViewport* pMainViewport = ImGui::GetMainViewport();
                 const SDL_Rect mouseRect = {
                     static_cast<int>(viewport.m_WindowPos.x - pMainViewport->Pos.x),
@@ -814,7 +807,7 @@ void CApplication::RenderFrame()
                     !SDL_SetWindowMouseRect(pWindow, &mouseRect))
                 {
                     TraceLog(LogLevel::Error, "APPLICATION", TextFormat(
-                        "Failed to confine mouse to Game viewport: %s", SDL_GetError()));
+                        "Failed to confine mouse for Play mode: %s", SDL_GetError()));
                 }
             }
         }

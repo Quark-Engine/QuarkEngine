@@ -739,7 +739,8 @@ TEST(ComponentFactory, TypeNames_lists_built_ins_and_registrations_in_a_stable_o
 {
     CComponentFactoryRegistry registry;
     const std::vector<std::string> vBuiltIns = registry.TypeNames();
-    CHECK(vBuiltIns.size() == 8);
+    CHECK(vBuiltIns.size() == 9);
+    CHECK(std::find(vBuiltIns.begin(), vBuiltIns.end(), "Script") != vBuiltIns.end());
     CHECK(vBuiltIns.front() == "3D Text");
     CHECK(vBuiltIns.back() == "Transform");
     CHECK(std::find(vBuiltIns.begin(), vBuiltIns.end(), "Camera") != vBuiltIns.end());

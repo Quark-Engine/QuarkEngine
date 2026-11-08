@@ -347,6 +347,7 @@ struct SInputCallbacks
     bool (*pfnIsCursorLocked)() = nullptr;
     void (*pfnSetCursorVisible)(bool visible) = nullptr;
     bool (*pfnIsCursorVisible)() = nullptr;
+    bool (*pfnIsViewportHovered)() = nullptr;
 };
 
 extern SInputCallbacks g_InputCallbacks;
@@ -523,6 +524,15 @@ public:
         if (g_InputCallbacks.pfnIsCursorVisible)
         {
             return g_InputCallbacks.pfnIsCursorVisible();
+        }
+        return true;
+    }
+
+    static bool IsViewportHovered()
+    {
+        if (g_InputCallbacks.pfnIsViewportHovered)
+        {
+            return g_InputCallbacks.pfnIsViewportHovered();
         }
         return true;
     }

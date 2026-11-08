@@ -368,6 +368,7 @@ int QuarkEngineRunGame()
     }
 
     quark::script::CScriptEngine::Get().StartPlay(scene, projectPath.string());
+    quark::script::CScriptEngine::Get().SetCursorLocked(true);
 
     while (!WindowShouldClose())
     {

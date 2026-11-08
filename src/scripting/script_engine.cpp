@@ -591,18 +591,34 @@ CScriptEngine::CScriptEngine()
     };
     g_InputCallbacks.pfnIsMouseButtonDown = [](int button) -> bool
     {
+        if (!CScriptEngine::Get().IsCursorLocked() && !CScriptEngine::Get().IsViewportHovered())
+        {
+            return false;
+        }
         return ::IsMouseButtonDown(static_cast<MouseButton>(button));
     };
     g_InputCallbacks.pfnIsMouseButtonPressed = [](int button) -> bool
     {
+        if (!CScriptEngine::Get().IsCursorLocked() && !CScriptEngine::Get().IsViewportHovered())
+        {
+            return false;
+        }
         return ::IsMouseButtonPressed(static_cast<MouseButton>(button));
     };
     g_InputCallbacks.pfnIsMouseButtonReleased = [](int button) -> bool
     {
+        if (!CScriptEngine::Get().IsCursorLocked() && !CScriptEngine::Get().IsViewportHovered())
+        {
+            return false;
+        }
         return ::IsMouseButtonReleased(static_cast<MouseButton>(button));
     };
     g_InputCallbacks.pfnIsMouseButtonUp = [](int button) -> bool
     {
+        if (!CScriptEngine::Get().IsCursorLocked() && !CScriptEngine::Get().IsViewportHovered())
+        {
+            return true;
+        }
         return ::IsMouseButtonUp(static_cast<MouseButton>(button));
     };
     g_InputCallbacks.pfnGetMousePosition = []() -> Vec2
@@ -611,12 +627,17 @@ CScriptEngine::CScriptEngine()
     };
     g_InputCallbacks.pfnGetMouseDelta = []() -> Vec2
     {
-        Vec2 delta = ::GetMouseDelta();
+        if (!CScriptEngine::Get().IsCursorLocked())
+        {
+            return Vec2{ 0.0f, 0.0f };
+        }
         if (s_DiscardMouseDeltaFrames > 0)
         {
             --s_DiscardMouseDeltaFrames;
+            ::GetMouseDelta();
             return Vec2{ 0.0f, 0.0f };
         }
+        Vec2 delta = ::GetMouseDelta();
         if (delta.x * delta.x + delta.y * delta.y > 40000.0f)
         {
             return Vec2{ 0.0f, 0.0f };
@@ -625,41 +646,51 @@ CScriptEngine::CScriptEngine()
     };
     g_InputCallbacks.pfnGetMouseWheelMove = []() -> float
     {
+        if (!CScriptEngine::Get().IsCursorLocked() && !CScriptEngine::Get().IsViewportHovered())
+        {
+            return 0.0f;
+        }
         return ::GetMouseWheelMove();
     };
     g_InputCallbacks.pfnSetCursorLocked = [](bool locked)
     {
-        SDL_Window* pWin = ::GetNativeWindow();
-        if (pWin)
-        {
-            SDL_SetWindowRelativeMouseMode(pWin, locked);
-            if (locked)
-            {
-                float dummyX = 0.0f, dummyY = 0.0f;
-                SDL_GetRelativeMouseState(&dummyX, &dummyY);
-                s_DiscardMouseDeltaFrames = 2;
-            }
-        }
+        CScriptEngine::Get().SetCursorLocked(locked);
     };
     g_InputCallbacks.pfnIsCursorLocked = []() -> bool
     {
-        SDL_Window* pWin = ::GetNativeWindow();
-        return pWin ? SDL_GetWindowRelativeMouseMode(pWin) : false;
+        return CScriptEngine::Get().IsCursorLocked();
     };
     g_InputCallbacks.pfnSetCursorVisible = [](bool visible)
     {
-        if (visible)
+        try
         {
-            ::ShowCursor();
+            if (visible)
+            {
+                ::ShowCursor();
+            }
+            else
+            {
+                ::HideCursor();
+            }
         }
-        else
+        catch (...)
         {
-            ::HideCursor();
         }
     };
     g_InputCallbacks.pfnIsCursorVisible = []() -> bool
     {
-        return !::IsCursorHidden();
+        try
+        {
+            return !::IsCursorHidden();
+        }
+        catch (...)
+        {
+            return true;
+        }
+    };
+    g_InputCallbacks.pfnIsViewportHovered = []() -> bool
+    {
+        return CScriptEngine::Get().IsViewportHovered();
     };
 
     g_TimeCallbacks.pfnGetDeltaTime = []() -> float
@@ -694,7 +725,40 @@ CScriptEngine& CScriptEngine::Get()
 
 CScriptEngine::~CScriptEngine()
 {
+    m_CursorLocked = false;
     UnloadScriptDll();
+}
+
+void CScriptEngine::SetCursorLocked(bool locked)
+{
+    m_CursorLocked = locked;
+    try
+    {
+        SDL_Window* pWin = ::GetNativeWindow();
+        if (locked)
+        {
+            if (pWin)
+            {
+                SDL_SetWindowRelativeMouseMode(pWin, true);
+                float dummyX = 0.0f, dummyY = 0.0f;
+                SDL_GetRelativeMouseState(&dummyX, &dummyY);
+            }
+            ::DisableCursor();
+            s_DiscardMouseDeltaFrames = 2;
+        }
+        else
+        {
+            if (pWin)
+            {
+                SDL_SetWindowRelativeMouseMode(pWin, false);
+            }
+            ::EnableCursor();
+            ::ShowCursor();
+        }
+    }
+    catch (...)
+    {
+    }
 }
 
 bool CScriptEngine::BuildScriptDll(const std::string& projectPath, const std::string& gameName,
@@ -1355,12 +1419,7 @@ void CScriptEngine::StopPlay(CScene& scene)
         }
     }
 
-    SDL_Window* pWin = ::GetNativeWindow();
-    if (pWin && SDL_GetWindowRelativeMouseMode(pWin))
-    {
-        SDL_SetWindowRelativeMouseMode(pWin, false);
-    }
-    ::ShowCursor();
+    SetCursorLocked(false);
     s_ScriptTimeScale = 1.0f;
     s_DiscardMouseDeltaFrames = 0;
 

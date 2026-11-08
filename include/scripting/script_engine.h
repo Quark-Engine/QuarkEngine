@@ -63,6 +63,23 @@ public:
 
     std::string FindScriptHeaderPath(const std::string& scriptName) const;
 
+    void SetViewportHovered(bool hovered)
+    {
+        m_ViewportHovered = hovered;
+    }
+
+    bool IsViewportHovered() const
+    {
+        return m_ViewportHovered;
+    }
+
+    void SetCursorLocked(bool locked);
+
+    bool IsCursorLocked() const
+    {
+        return m_CursorLocked;
+    }
+
 private:
     CScriptEngine();
     ~CScriptEngine();
@@ -73,6 +90,8 @@ private:
     CDynamicLibrary m_Dll;
     CDynamicLibrary* m_pActiveDll = nullptr;
     bool m_IsPlaying = false;
+    bool m_ViewportHovered = true;
+    bool m_CursorLocked = false;
     std::string m_LoadedDllPath;
     std::vector<SParsedScriptInfo> m_vAvailableScripts;
 };

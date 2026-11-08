@@ -1,4 +1,4 @@
-#include "editor/editor.h"
+﻿#include "editor/editor.h"
 #include "scripting/script_engine.h"
 
 #include "editor/editor_assets.h"
@@ -74,6 +74,12 @@ CEditor::~CEditor() = default;
 
 void CEditor::Unload()
 {
+    if (m_IsPlaying)
+    {
+        m_IsPlaying = false;
+        quark::script::CScriptEngine::Get().StopPlay(m_Scene);
+    }
+
     m_IsPlaying = false;
     m_PendingPlayRestore = false;
     m_GameViewActive = false;
@@ -166,6 +172,7 @@ bool CEditor::BeginPlayMode()
     m_ShowGameView = true;
     m_SelectGameTab = true;
     quark::script::CScriptEngine::Get().StartPlay(m_Scene, m_ProjectPath);
+    quark::script::CScriptEngine::Get().SetCursorLocked(true);
     return true;
 }
 

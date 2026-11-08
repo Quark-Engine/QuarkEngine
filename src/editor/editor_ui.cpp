@@ -231,25 +231,22 @@ void CEditor::DrawMainMenuBar(SPluginContext* pPluginCtx, ImGuiID dockspaceId,
             ImGui::Separator();
             if (ImGui::MenuItem("Build Settings..."))
             {
-                camera.ReleaseCapture();
                 m_BuildSettingsError.clear();
                 if (!CProjectService::LoadBuildSettings(m_ProjectPath, m_BuildSettings))
                 {
                     m_BuildSettingsError = "Could not load project build settings";
                 }
-                m_ShowBuildSettings = true;
+                camera.ReleaseCapture(); m_ShowBuildSettings = true;
                 m_BuildSettingsModalOpen = true;
             }
             ImGui::BeginDisabled(m_BuildInProgress);
             if (ImGui::MenuItem("Build"))
             {
-                camera.ReleaseCapture();
-                StartBuild(false);
+                camera.ReleaseCapture(); StartBuild(false);
             }
             if (ImGui::MenuItem("Build & Run"))
             {
-                camera.ReleaseCapture();
-                StartBuild(true);
+                camera.ReleaseCapture(); StartBuild(true);
             }
             ImGui::EndDisabled();
             ImGui::Separator();
@@ -308,8 +305,8 @@ void CEditor::DrawMainMenuBar(SPluginContext* pPluginCtx, ImGuiID dockspaceId,
             ImGui::Separator();
             if (ImGui::MenuItem(lang.Word("preferences")))
             {
-                camera.ReleaseCapture();
-                modal.ShowPreferences = true;
+
+                camera.ReleaseCapture(); modal.ShowPreferences = true;
             }
             ImGui::EndMenu();
         }
@@ -954,15 +951,14 @@ void CEditor::DrawScenePanel(CFlyCamera& camera, SPluginContext* pPluginCtx)
         {
             if (ImGui::Button("Restore", ImVec2(64.0f, 24.0f)))
             {
+                camera.ReleaseCapture();
                 StopPlayMode();
             }
         }
         else if (ImGui::Button("Play", ImVec2(48.0f, 24.0f)))
         {
-            if (BeginPlayMode())
-            {
-                camera.ReleaseCapture();
-            }
+            if (camera.m_Active) camera.ReleaseCapture();
+            BeginPlayMode();
         }
 
         DrawSceneViewport(viewport, camera, true);
