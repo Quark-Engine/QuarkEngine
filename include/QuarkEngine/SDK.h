@@ -319,6 +319,17 @@ enum class Key
     RightSuper = KEY_RIGHT_SUPER
 };
 
+enum class Mouse
+{
+    Left = MOUSE_BUTTON_LEFT,
+    Right = MOUSE_BUTTON_RIGHT,
+    Middle = MOUSE_BUTTON_MIDDLE,
+    Side = MOUSE_BUTTON_SIDE,
+    Extra = MOUSE_BUTTON_EXTRA,
+    Forward = MOUSE_BUTTON_FORWARD,
+    Back = MOUSE_BUTTON_BACK
+};
+
 struct SInputCallbacks
 {
     bool (*pfnIsKeyDown)(int key) = nullptr;
@@ -393,6 +404,11 @@ public:
         return IsMouseButtonDown(static_cast<int>(button));
     }
 
+    static bool IsMouseButtonDown(Mouse button)
+    {
+        return IsMouseButtonDown(static_cast<int>(button));
+    }
+
     static bool IsMouseButtonPressed(int button)
     {
         if (g_InputCallbacks.pfnIsMouseButtonPressed)
@@ -403,6 +419,11 @@ public:
     }
 
     static bool IsMouseButtonPressed(MouseButton button)
+    {
+        return IsMouseButtonPressed(static_cast<int>(button));
+    }
+
+    static bool IsMouseButtonPressed(Mouse button)
     {
         return IsMouseButtonPressed(static_cast<int>(button));
     }
@@ -421,6 +442,11 @@ public:
         return IsMouseButtonReleased(static_cast<int>(button));
     }
 
+    static bool IsMouseButtonReleased(Mouse button)
+    {
+        return IsMouseButtonReleased(static_cast<int>(button));
+    }
+
     static bool IsMouseButtonUp(int button)
     {
         if (g_InputCallbacks.pfnIsMouseButtonUp)
@@ -431,6 +457,11 @@ public:
     }
 
     static bool IsMouseButtonUp(MouseButton button)
+    {
+        return IsMouseButtonUp(static_cast<int>(button));
+    }
+
+    static bool IsMouseButtonUp(Mouse button)
     {
         return IsMouseButtonUp(static_cast<int>(button));
     }
@@ -666,6 +697,8 @@ private:
 using IScript = ::quark::script::IScript;
 using Input = ::quark::script::Input;
 using Key = ::quark::script::Key;
+using Mouse = ::quark::script::Mouse;
+using MouseBtn = ::quark::script::Mouse;
 using Time = ::quark::script::Time;
 using Math = ::quark::script::Math;
 using ScriptEntity = ::quark::script::CScriptEntity;
