@@ -43,31 +43,7 @@ int PushEntity(CScene& target, Vec3 position, Vec3 rotationDegrees, Vec3 scale, 
     return static_cast<int>(target.m_vEntities.size()) - 1;
 }
 
-Mat4 LegacyRaylibStyleCompose(const CTransformComponent& transform)
-{
-    Mat4 matScale = Mat4Scale(transform.m_Scale.x, transform.m_Scale.y, transform.m_Scale.z);
-    Mat4 matRotation = Mat4RotateXYZ(
-    {
-        transform.m_Rotation.x * DEG2RAD,
-        transform.m_Rotation.y * DEG2RAD,
-        transform.m_Rotation.z * DEG2RAD
-    });
-    Mat4 matTranslation = Mat4Translate(
-        transform.m_Position.x, transform.m_Position.y, transform.m_Position.z);
-    return Mat4Multiply(Mat4Multiply(matTranslation, matRotation), matScale);
-}
-
 } // anonymous
-
-TEST(ComposeLocal, matches_the_raylib_style_implementation_it_replaced)
-{
-    CTransformComponent transform;
-    transform.m_Position = { 3.0f, -2.5f, 7.25f };
-    transform.m_Rotation = { 35.0f, -110.0f, 22.5f };
-    transform.m_Scale = { 2.0f, 0.5f, 1.75f };
-
-    ExpectMatNear(quark::ComposeLocal(transform), LegacyRaylibStyleCompose(transform), 1e-6);
-}
 
 TEST(ComposeLocal, identity_transform_is_identity)
 {

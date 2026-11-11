@@ -181,6 +181,71 @@ CEntity CEntityFactory::Camera(CScene& scene, int parentIndex)
     return entity;
 }
 
+CEntity CEntityFactory::UiWidget(CScene& scene, EGuiWidgetType widgetType, int parentIndex)
+{
+    const char* baseName = "Ui Button";
+    if (widgetType == EGuiWidgetType::InputField)
+    {
+        baseName = "Ui Inputfield";
+    }
+    else if (widgetType == EGuiWidgetType::Combo)
+    {
+        baseName = "Ui Combo";
+    }
+
+    int existingUiCount = 0;
+    for (const CEntity& existing : scene.m_vEntities)
+    {
+        if (existing.GetUiComponent() != nullptr)
+        {
+            ++existingUiCount;
+        }
+    }
+
+    CEntity entity;
+    entity.m_Name = scene.MakeUniqueName(baseName);
+    entity.m_Id = static_cast<int>(scene.m_vEntities.size());
+    entity.m_ParentId = parentIndex;
+
+    CComponentManager* pCm = entity.GetComponents();
+    pCm->RemoveMeshAndMaterialForUi();
+
+    auto pUi = std::make_shared<CUiComponent>();
+    pUi->m_WidgetType = widgetType;
+    pUi->m_Name = pUi->GetTypeName();
+    auto pRectTransform = std::make_shared<CUiRectTransformComponent>();
+    auto pText = std::make_shared<CTextComponent>();
+    pRectTransform->m_Position = { 32.0f, 32.0f + static_cast<float>(existingUiCount) * 42.0f };
+
+    switch (widgetType)
+    {
+    case EGuiWidgetType::Button:
+        pRectTransform->m_Size = { 150.0f, 30.0f };
+        pText->m_Text = "Button";
+        pText->m_HorizontalAlignment = EUiTextAlignment::CENTER;
+        break;
+    case EGuiWidgetType::InputField:
+        pRectTransform->m_Size = { 260.0f, 30.0f };
+        pText->m_Text.clear();
+        pText->m_HorizontalAlignment = EUiTextAlignment::LEFT;
+        pUi->m_Placeholder = "InputField";
+        break;
+    case EGuiWidgetType::Combo:
+        pRectTransform->m_Size = { 260.0f, 30.0f };
+        pUi->m_vItems = { "Combo" };
+        pUi->m_SelectedIndex = 0;
+        pText->m_Text = "Combo";
+        pText->m_HorizontalAlignment = EUiTextAlignment::LEFT;
+        break;
+    }
+
+    pCm->AddComponent(pUi);
+    pCm->AddComponent(pRectTransform);
+    pCm->AddComponent(pText);
+    pUi->SyncToRuntimeDesc(pRectTransform.get(), pText.get());
+    return entity;
+}
+
 bool CEntityFactory::SavePrefab(const CScene& scene, int rootEntityIndex,
                                 const fs::path& directoryPath, fs::path* pOutFilePath)
 {

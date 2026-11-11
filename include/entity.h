@@ -65,6 +65,8 @@ public:
     CScriptComponent* GetScriptComponent();
     const CScriptComponent* GetScriptComponent() const;
     const CCameraComponent* GetCameraComponent() const;
+    CUiComponent* GetUiComponent();
+    const CUiComponent* GetUiComponent() const;
 
     int m_Id = 0;
     std::string m_Name;

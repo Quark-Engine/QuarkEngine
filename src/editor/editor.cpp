@@ -1,4 +1,5 @@
-﻿#include "editor/editor.h"
+#include "editor/editor.h"
+#include "gui/gui_renderer_bridge.h"
 #include "scripting/script_engine.h"
 
 #include "editor/editor_assets.h"
@@ -172,7 +173,7 @@ bool CEditor::BeginPlayMode()
     m_ShowGameView = true;
     m_SelectGameTab = true;
     quark::script::CScriptEngine::Get().StartPlay(m_Scene, m_ProjectPath);
-    quark::script::CScriptEngine::Get().SetCursorLocked(true);
+    quark::script::CScriptEngine::Get().SetCursorLocked(!quark::gui::SceneHasActiveUiWidgets(m_Scene));
     return true;
 }
 

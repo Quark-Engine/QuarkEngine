@@ -739,10 +739,17 @@ TEST(ComponentFactory, TypeNames_lists_built_ins_and_registrations_in_a_stable_o
 {
     CComponentFactoryRegistry registry;
     const std::vector<std::string> vBuiltIns = registry.TypeNames();
-    CHECK(vBuiltIns.size() == 9);
+    CHECK(vBuiltIns.size() == 14);
     CHECK(std::find(vBuiltIns.begin(), vBuiltIns.end(), "Script") != vBuiltIns.end());
+    CHECK(std::find(vBuiltIns.begin(), vBuiltIns.end(), "Transform") != vBuiltIns.end());
     CHECK(vBuiltIns.front() == "3D Text");
-    CHECK(vBuiltIns.back() == "Transform");
+    CHECK(std::find(vBuiltIns.begin(), vBuiltIns.end(), "UI") != vBuiltIns.end());
+    CHECK(std::find(vBuiltIns.begin(), vBuiltIns.end(), "Ui Button") != vBuiltIns.end());
+    CHECK(std::find(vBuiltIns.begin(), vBuiltIns.end(), "Ui Inputfield") != vBuiltIns.end());
+    CHECK(std::find(vBuiltIns.begin(), vBuiltIns.end(), "Ui Combo") != vBuiltIns.end());
+    CHECK(std::find(vBuiltIns.begin(), vBuiltIns.end(), "Text") != vBuiltIns.end());
+    CHECK(std::find(vBuiltIns.begin(), vBuiltIns.end(), "Rect Transform") != vBuiltIns.end());
+    CHECK(vBuiltIns.back() == "Ui Inputfield");
     CHECK(std::find(vBuiltIns.begin(), vBuiltIns.end(), "Camera") != vBuiltIns.end());
 
     registry.Register(s_GaugeTypeName, []()
@@ -755,6 +762,66 @@ TEST(ComponentFactory, TypeNames_lists_built_ins_and_registrations_in_a_stable_o
 
     registry.Unregister(s_GaugeTypeName);
     CHECK(registry.TypeNames() == vBuiltIns);
+}
+
+TEST(ComponentFactory, creates_ui_text_and_rect_transform_components)
+{
+    CComponentFactoryRegistry registry;
+
+    CHECK(std::dynamic_pointer_cast<CTextComponent>(registry.Create("Text")) != nullptr);
+    CHECK(std::dynamic_pointer_cast<CUiRectTransformComponent>(registry.Create("Rect Transform")) != nullptr);
+    CHECK(std::dynamic_pointer_cast<CText3DComponent>(registry.Create("3D Text")) != nullptr);
+}
+
+TEST(ComponentFactory, legacy_ui_fields_migrate_to_text_and_rect_transform)
+{
+    CComponentFactoryRegistry registry;
+    CComponentManager components;
+    nlohmann::json legacyComponents = {
+        { "components", nlohmann::json::array({
+            {
+                { "type", "UI" },
+                { "data", {
+                    { "widget_type", static_cast<int>(EGuiWidgetType::Button) },
+                    { "position", { 12.0f, 34.0f } },
+                    { "size", { 210.0f, 44.0f } },
+                    { "text", "Legacy button" }
+                } }
+            }
+        }) }
+    };
+
+    components.Deserialize(legacyComponents, registry);
+    auto pUi = components.GetComponentOfType<CUiComponent>();
+    auto pRectTransform = components.GetComponentOfType<CUiRectTransformComponent>();
+    auto pText = components.GetComponentOfType<CTextComponent>();
+    CHECK(pUi != nullptr);
+    CHECK(pRectTransform != nullptr);
+    CHECK(pText != nullptr);
+    if (!pUi || !pRectTransform || !pText)
+    {
+        return;
+    }
+    CHECK(pRectTransform->m_Position.x == 12.0f);
+    CHECK(pRectTransform->m_Position.y == 34.0f);
+    CHECK(pRectTransform->m_Size.x == 210.0f);
+    CHECK(pRectTransform->m_Size.y == 44.0f);
+    CHECK(pText->m_Text == "Legacy button");
+
+    nlohmann::json serialized;
+    components.Serialize(serialized);
+    bool foundUi = false;
+    for (const auto& component : serialized["components"])
+    {
+        if (component["type"] == "Ui Button")
+        {
+            foundUi = true;
+            CHECK(!component["data"].contains("text"));
+            CHECK(!component["data"].contains("position"));
+            CHECK(!component["data"].contains("size"));
+        }
+    }
+    CHECK(foundUi);
 }
 
 TEST(ComponentFactory, separate_registries_do_not_share_registrations)

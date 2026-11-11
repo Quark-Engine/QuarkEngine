@@ -226,3 +226,13 @@ const CCameraComponent* CEntity::GetCameraComponent() const
 {
     return m_pComponents ? m_pComponents->GetCamera() : nullptr;
 }
+
+CUiComponent* CEntity::GetUiComponent()
+{
+    return m_pComponents ? m_pComponents->GetUiComponent() : nullptr;
+}
+
+const CUiComponent* CEntity::GetUiComponent() const
+{
+    return m_pComponents ? m_pComponents->GetUiComponent() : nullptr;
+}

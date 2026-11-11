@@ -18,7 +18,10 @@ public:
     static void DrawMaterialComponent(CEditor& editor, CEntity& entity, CMaterialComponent* pMaterial);
     static void DrawCollisionComponent(CEditor& editor, CEntity& entity, CCollisionComponent* pCollision);
     static void Draw3dTextComponent(CEditor& editor, CEntity& entity, CText3DComponent* pText);
+    static void DrawUiRectTransformComponent(CEditor& editor, CUiRectTransformComponent* pRectTransform);
+    static void DrawUiTextComponent(CEditor& editor, CTextComponent* pText);
     static void DrawScriptComponent(CEditor& editor, CEntity& entity, CScriptComponent* pScript);
+    static void DrawUiComponent(CEditor& editor, CEntity& entity, CUiComponent* pUi);
 };
 
 #endif // __EDITOR_COMPONENTS_UI_H__

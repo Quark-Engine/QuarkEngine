@@ -42,15 +42,38 @@ void CComponentFactoryRegistry::SeedBuiltIns()
         return std::make_shared<CCameraComponent>();
     });
 
-    const FComponentFactory textFactory = []()
+    seed("Text", []()
+    {
+        return std::make_shared<CTextComponent>();
+    });
+    const FComponentFactory text3dFactory = []()
     {
         return std::make_shared<CText3DComponent>();
     };
-    seed("Text", textFactory);
-    seed("3D Text", textFactory);
+    seed("3D Text", text3dFactory);
+    seed("Rect Transform", []()
+    {
+        return std::make_shared<CUiRectTransformComponent>();
+    });
     seed("Script", []()
     {
         return std::make_shared<CScriptComponent>();
+    });
+    seed("UI", []()
+    {
+        return std::make_shared<CUiComponent>();
+    });
+    seed("Ui Button", []()
+    {
+        return std::make_shared<CUiComponent>();
+    });
+    seed("Ui Inputfield", []()
+    {
+        return std::make_shared<CUiComponent>();
+    });
+    seed("Ui Combo", []()
+    {
+        return std::make_shared<CUiComponent>();
     });
 }
 

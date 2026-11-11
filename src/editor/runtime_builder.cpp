@@ -387,7 +387,7 @@ int main()
     const std::string assimpName = isDebugBuild ? "assimp-vc143-mtd.dll" : "assimp-vc143-mt.dll";
     const std::string curlName = isDebugBuild ? "libcurl-d.dll" : "libcurl.dll";
     for (const std::string& fileName : std::vector<std::string>{
-        "QuarkCore.dll", "QuarkEngine.dll", "SDL3.dll", freetypeName, assimpName,
+        "QuarkCore.dll", "QuarkEngine.dll", "QuarkEngineGUI.dll", "SDL3.dll", freetypeName, assimpName,
         "OpenAL32.dll", "vulkan-1.dll", "SPIRV-Tools.dll", "SPIRV-Tools-opt.dll"
     })
     {
@@ -407,7 +407,7 @@ int main()
     }
 #elif defined(__APPLE__)
     for (const std::string& fileName : std::vector<std::string>{
-        "QuarkCore.dylib", "QuarkEngine.dylib", "libSDL3.dylib",
+        "QuarkCore.dylib", "QuarkEngine.dylib", "QuarkEngineGUI.dylib", "libSDL3.dylib",
         "libfreetype.dylib", "libassimp.dylib", "libopenal.dylib",
         "libcurl.dylib", "libssl.dylib", "libcrypto.dylib", "libnghttp2.dylib"
     })
@@ -416,7 +416,7 @@ int main()
     }
 #else
     for (const std::string& fileName : std::vector<std::string>{
-        "QuarkCore.so", "QuarkEngine.so", "libSDL3.so", "libSDL3.so.0",
+        "QuarkCore.so", "QuarkEngine.so", "QuarkEngineGUI.so", "libSDL3.so", "libSDL3.so.0",
         "libfreetype.so", "libfreetype.so.6", "libassimp.so", "libassimp.so.6",
         "libopenal.so", "libopenal.so.1", "libcurl.so", "libssl.so", "libcrypto.so"
     })
@@ -424,6 +424,18 @@ int main()
         CopyRuntimeFile(executableDirectory, buildRoot, fileName, errorMessage, false);
     }
 #endif
+
+    {
+        std::error_code fontEc;
+        const fs::path srcFont = executableDirectory / "assets" / "font" / "Rubik-Regular.ttf";
+        if (fs::is_regular_file(srcFont, fontEc))
+        {
+            const fs::path dstFontDir = buildRoot / "assets" / "font";
+            fs::create_directories(dstFontDir, fontEc);
+            fs::copy_file(srcFont, dstFontDir / "Rubik-Regular.ttf",
+                fs::copy_options::overwrite_existing, fontEc);
+        }
+    }
 
     std::string scriptBuildError;
     quark::script::CScriptEngine::Get().BuildScriptDll(projectRoot.string(), gameName, scriptBuildError, progressCallback);

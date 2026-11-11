@@ -10,3 +10,4 @@ config.json
 todo.todo
 .quark_layout_initialized
 engine_log.txt
+imgui_log.txt

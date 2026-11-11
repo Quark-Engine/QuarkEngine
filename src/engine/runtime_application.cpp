@@ -1,4 +1,5 @@
 #include "application_scene_renderer.h"
+#include "gui/gui_renderer_bridge.h"
 #include "scripting/script_engine.h"
 #include "assets/asset_library.h"
 #include "editor/editor_preferences.h"
@@ -250,6 +251,7 @@ int QuarkEngineRunGame()
     }
 #endif
     InitWindow(1280, 720, dataPath.parent_path().filename().string().c_str(), rendererType);
+    SetExitKey(KEY_NULL);
 #ifdef _WIN32
     HICON pGameIcon = nullptr;
     const fs::path gameIconPath = settingsPath / "game.ico";
@@ -368,10 +370,23 @@ int QuarkEngineRunGame()
     }
 
     quark::script::CScriptEngine::Get().StartPlay(scene, projectPath.string());
-    quark::script::CScriptEngine::Get().SetCursorLocked(true);
+    quark::script::CScriptEngine::Get().SetCursorLocked(!quark::gui::SceneHasActiveUiWidgets(scene));
 
     while (!WindowShouldClose())
     {
+        const bool hasSceneUi = quark::gui::SceneHasActiveUiWidgets(scene);
+        if (IsKeyPressed(KEY_ESCAPE) && quark::script::CScriptEngine::Get().IsCursorLocked())
+        {
+            quark::script::CScriptEngine::Get().SetCursorLocked(false);
+        }
+        else if (!hasSceneUi &&
+                 !quark::gui::CGuiSystem::Get().WantsMouseCapture() &&
+                 !quark::script::CScriptEngine::Get().IsCursorLocked() &&
+                 IsMouseButtonPressed(MOUSE_BUTTON_LEFT))
+        {
+            quark::script::CScriptEngine::Get().SetCursorLocked(true);
+        }
+
         const float deltaTime = static_cast<float>(GetFrameTime());
         quark::script::CScriptEngine::Get().UpdatePlay(scene, deltaTime);
 
@@ -403,6 +418,7 @@ int QuarkEngineRunGame()
             renderer.EndLightingPass();
         }
         EndMode3D();
+        quark::gui::RenderSceneGui(scene, GetMousePosition(), true);
         EndDrawing();
     }
 
@@ -412,6 +428,7 @@ int QuarkEngineRunGame()
     scene.ReleaseResources();
     assets.Unload();
     textMesh.Unload();
+    quark::gui::ShutdownGuiBackend();
     CloseWindow();
 #ifdef _WIN32
     if (pGameIcon != nullptr)

@@ -14,6 +14,7 @@
 #endif
 
 #include "editor/editor.h"
+#include "gui/gui_renderer_bridge.h"
 
 #include "application_plugin_bridge.h"
 
@@ -359,6 +360,41 @@ void CEditor::DrawMainMenuBar(SPluginContext* pPluginCtx, ImGuiID dockspaceId,
                 DispatchPluginEvent(PLUGIN_EVENT_ENTITY_CREATED, entityIndex);
                 m_Scene.SelectEntity(entityIndex, false);
             }
+            if (ImGui::MenuItem("Camera"))
+            {
+                SaveState();
+                CEntity created = CEntityFactory::Camera(m_Scene, -1);
+                m_Scene.m_vEntities.push_back(std::move(created));
+                const int entityIndex = static_cast<int>(m_Scene.m_vEntities.size()) - 1;
+                DispatchPluginEvent(PLUGIN_EVENT_ENTITY_CREATED, entityIndex);
+                m_Scene.SelectEntity(entityIndex, false);
+            }
+            ImGui::Separator();
+            if (ImGui::BeginMenu("UI"))
+            {
+                auto createUiEntity = [this](EGuiWidgetType type)
+                {
+                    SaveState();
+                    CEntity created = CEntityFactory::UiWidget(m_Scene, type, -1);
+                    m_Scene.m_vEntities.push_back(std::move(created));
+                    const int entityIndex = static_cast<int>(m_Scene.m_vEntities.size()) - 1;
+                    DispatchPluginEvent(PLUGIN_EVENT_ENTITY_CREATED, entityIndex);
+                    m_Scene.SelectEntity(entityIndex, false);
+                };
+                if (ImGui::MenuItem("Button"))
+                {
+                    createUiEntity(EGuiWidgetType::Button);
+                }
+                if (ImGui::MenuItem("Inputfield"))
+                {
+                    createUiEntity(EGuiWidgetType::InputField);
+                }
+                if (ImGui::MenuItem("Combo"))
+                {
+                    createUiEntity(EGuiWidgetType::Combo);
+                }
+                ImGui::EndMenu();
+            }
             ImGui::EndMenu();
         }
 
@@ -600,6 +636,32 @@ void CEditor::HierarchyDrawCreateMenu(int parentIndex)
             const int entityIndex = static_cast<int>(m_Scene.m_vEntities.size()) - 1;
             DispatchPluginEvent(PLUGIN_EVENT_ENTITY_CREATED, entityIndex);
             m_Scene.SelectEntity(entityIndex, false);
+        }
+        ImGui::Separator();
+        if (ImGui::BeginMenu("UI"))
+        {
+            auto createUiEntity = [this, parentIndex](EGuiWidgetType type)
+            {
+                SaveState();
+                CEntity entity = CEntityFactory::UiWidget(m_Scene, type, parentIndex);
+                m_Scene.m_vEntities.push_back(std::move(entity));
+                const int entityIndex = static_cast<int>(m_Scene.m_vEntities.size()) - 1;
+                DispatchPluginEvent(PLUGIN_EVENT_ENTITY_CREATED, entityIndex);
+                m_Scene.SelectEntity(entityIndex, false);
+            };
+            if (ImGui::MenuItem("Button"))
+            {
+                createUiEntity(EGuiWidgetType::Button);
+            }
+            if (ImGui::MenuItem("Inputfield"))
+            {
+                createUiEntity(EGuiWidgetType::InputField);
+            }
+            if (ImGui::MenuItem("Combo"))
+            {
+                createUiEntity(EGuiWidgetType::Combo);
+            }
+            ImGui::EndMenu();
         }
         ImGui::EndMenu();
     }
@@ -939,11 +1001,31 @@ void CEditor::DrawScenePanel(CFlyCamera& camera, SPluginContext* pPluginCtx)
     if (ImGui::Begin(lang.Word("scene"), &m_Preferences.m_ShowScene, sceneWindowFlags))
     {
         m_pPluginManager->DrawUiRegion(UI_INSPECTOR, *pPluginCtx);
+        if (!m_IsPlaying)
+        {
+            const bool twoDButtonActive = m_Scene2DMode;
+            if (twoDButtonActive)
+            {
+                ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.20f, 0.47f, 0.70f, 1.0f));
+                ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImVec4(0.25f, 0.54f, 0.78f, 1.0f));
+                ImGui::PushStyleColor(ImGuiCol_ButtonActive, ImVec4(0.16f, 0.39f, 0.60f, 1.0f));
+            }
+            if (ImGui::Button("2D", ImVec2(40.0f, 24.0f)))
+            {
+                SetScene2DMode(camera, !m_Scene2DMode);
+            }
+            if (twoDButtonActive)
+            {
+                ImGui::PopStyleColor(3);
+            }
+            ImGui::SameLine();
+        }
         if (m_IsPlaying)
         {
             if (ImGui::Button("Stop", ImVec2(48.0f, 24.0f)))
             {
                 camera.ReleaseCapture();
+                SetScene2DMode(camera, false);
                 StopPlayMode();
             }
         }
@@ -958,6 +1040,7 @@ void CEditor::DrawScenePanel(CFlyCamera& camera, SPluginContext* pPluginCtx)
         else if (ImGui::Button("Play", ImVec2(48.0f, 24.0f)))
         {
             if (camera.m_Active) camera.ReleaseCapture();
+            SetScene2DMode(camera, false);
             BeginPlayMode();
         }
 
@@ -965,6 +1048,31 @@ void CEditor::DrawScenePanel(CFlyCamera& camera, SPluginContext* pPluginCtx)
     }
     ImGui::End();
     ImGui::PopStyleVar();
+}
+
+void CEditor::SetScene2DMode(CFlyCamera& camera, bool enabled)
+{
+    if (m_Scene2DMode == enabled)
+    {
+        return;
+    }
+
+    camera.ReleaseCapture();
+    if (enabled)
+    {
+        m_CameraBefore2D = camera.m_Cam;
+        m_CameraPitchBefore2D = camera.m_Pitch;
+        m_CameraYawBefore2D = camera.m_Yaw;
+        m_Scene2DZoom = 1.0f;
+        m_Scene2DPan = { 0.0f, 0.0f };
+    }
+    else
+    {
+        camera.m_Cam = m_CameraBefore2D;
+        camera.m_Pitch = m_CameraPitchBefore2D;
+        camera.m_Yaw = m_CameraYawBefore2D;
+    }
+    m_Scene2DMode = enabled;
 }
 
 void CEditor::DrawGamePanel(CFlyCamera& camera)
@@ -1030,7 +1138,7 @@ void CEditor::DrawSceneViewport(CViewportState& viewport, CFlyCamera& camera,
             );
         }
 
-        if (!sceneView && !m_GameCameraAvailable)
+        if (!sceneView && !m_GameCameraAvailable && !quark::gui::SceneHasActiveUiWidgets(m_Scene))
         {
             const float textFontSize = ImGui::GetFontSize() * 2.5f;
             const char* pCameraMessage = "No cameras found";

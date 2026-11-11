@@ -12,6 +12,7 @@
 #include "application_plugin_bridge.h"
 #include "language_manager.h"
 #include <filesystem>
+#include <cstdio>
 #include <cstring>
 #define lang CLanguageManager::Get()
 
@@ -88,9 +89,21 @@ void CComponentUIHelper::DrawEntityInspector(CEditor& editor, CEntity& entity, S
                 {
                     Draw3dTextComponent(editor, entity, pText.get());
                 }
+                else if (auto pText = std::dynamic_pointer_cast<CTextComponent>(pComp))
+                {
+                    DrawUiTextComponent(editor, pText.get());
+                }
+                else if (auto pRectTransform = std::dynamic_pointer_cast<CUiRectTransformComponent>(pComp))
+                {
+                    DrawUiRectTransformComponent(editor, pRectTransform.get());
+                }
                 else if (auto pScript = std::dynamic_pointer_cast<CScriptComponent>(pComp))
                 {
                     DrawScriptComponent(editor, entity, pScript.get());
+                }
+                else if (auto pUi = std::dynamic_pointer_cast<CUiComponent>(pComp))
+                {
+                    DrawUiComponent(editor, entity, pUi.get());
                 }
 
                 ImGui::Spacing();
@@ -260,6 +273,34 @@ void CComponentUIHelper::DrawEntityInspector(CEditor& editor, CEntity& entity, S
                 {
                     editor.SaveState();
                     pComponentsManager->AddComponent(std::make_shared<CText3DComponent>());
+                }
+            }
+
+            const bool hasUi = [&]()
+            {
+                for (size_t j = 0; j < pComponentsManager->GetComponentCount(); ++j)
+                {
+                    auto pExisting = pComponentsManager->GetComponent(j);
+                    if (pExisting && pExisting->GetType() == COMPONENT_UI)
+                    {
+                        return true;
+                    }
+                }
+                return false;
+            }();
+            if (ImGui::MenuItem("UI"))
+            {
+                if (!hasUi)
+                {
+                    editor.SaveState();
+                    pComponentsManager->RemoveMeshAndMaterialForUi();
+                    auto pUi = std::make_shared<CUiComponent>();
+                    auto pRectTransform = std::make_shared<CUiRectTransformComponent>();
+                    auto pText = std::make_shared<CTextComponent>();
+                    pText->m_Text = "Button";
+                    pComponentsManager->AddComponent(pUi);
+                    pComponentsManager->AddComponent(pRectTransform);
+                    pComponentsManager->AddComponent(pText);
                 }
             }
             ImGui::EndPopup();
@@ -1341,5 +1382,340 @@ void CComponentUIHelper::DrawScriptComponent(CEditor& editor, CEntity& entity, C
                 editor.m_SceneDirty = true;
             }
         }
+    }
+}
+
+namespace {
+
+bool EditGuiColor4(const char* label, Color& c)
+{
+    float rgba[4] = {
+        c.r / 255.0f,
+        c.g / 255.0f,
+        c.b / 255.0f,
+        c.a / 255.0f
+    };
+    if (ImGui::ColorEdit4(label, rgba, ImGuiColorEditFlags_NoInputs))
+    {
+        c.r = static_cast<unsigned char>(std::clamp(rgba[0] * 255.0f, 0.0f, 255.0f));
+        c.g = static_cast<unsigned char>(std::clamp(rgba[1] * 255.0f, 0.0f, 255.0f));
+        c.b = static_cast<unsigned char>(std::clamp(rgba[2] * 255.0f, 0.0f, 255.0f));
+        c.a = static_cast<unsigned char>(std::clamp(rgba[3] * 255.0f, 0.0f, 255.0f));
+        return true;
+    }
+    return false;
+}
+
+} // namespace
+
+void CComponentUIHelper::DrawUiRectTransformComponent(
+    CEditor& editor,
+    CUiRectTransformComponent* pRectTransform)
+{
+    if (!pRectTransform)
+    {
+        return;
+    }
+
+    bool changed = false;
+    float position[2] = { pRectTransform->m_Position.x, pRectTransform->m_Position.y };
+    if (ImGui::DragFloat2("Position", position, 1.0f, -4096.0f, 4096.0f, "%.0f px"))
+    {
+        pRectTransform->m_Position = { position[0], position[1] };
+        changed = true;
+    }
+
+    float size[2] = { pRectTransform->m_Size.x, pRectTransform->m_Size.y };
+    if (ImGui::DragFloat2("Size", size, 1.0f, 16.0f, 2048.0f, "%.0f px"))
+    {
+        pRectTransform->m_Size = { std::max(16.0f, size[0]), std::max(16.0f, size[1]) };
+        changed = true;
+    }
+
+    if (changed)
+    {
+        editor.m_SceneDirty = true;
+    }
+}
+
+void CComponentUIHelper::DrawUiTextComponent(CEditor& editor, CTextComponent* pText)
+{
+    if (!pText)
+    {
+        return;
+    }
+
+    bool changed = false;
+    char text[4096] = {};
+    std::snprintf(text, sizeof(text), "%s", pText->m_Text.c_str());
+    if (ImGui::InputTextMultiline("Text", text, sizeof(text), ImVec2(-1.0f, 82.0f)))
+    {
+        pText->m_Text = text;
+        changed = true;
+    }
+
+    ImGui::Spacing();
+    ImGui::TextUnformatted("Character");
+    char font[256] = {};
+    std::snprintf(font, sizeof(font), "%s", pText->m_Font.c_str());
+    if (ImGui::InputText("Font", font, sizeof(font)))
+    {
+        pText->m_Font = font;
+        changed = true;
+    }
+
+    const char* fontStyles[] = { "Normal", "Bold", "Italic", "Bold Italic" };
+    int fontStyle = static_cast<int>(pText->m_FontStyle);
+    if (ImGui::Combo("Font Style", &fontStyle, fontStyles, IM_ARRAYSIZE(fontStyles)))
+    {
+        pText->m_FontStyle = static_cast<EUiTextFontStyle>(fontStyle);
+        changed = true;
+    }
+
+    float fontSize = pText->m_FontSize;
+    if (ImGui::InputFloat("Font Size", &fontSize, 1.0f, 5.0f, "%.0f"))
+    {
+        pText->m_FontSize = std::clamp(fontSize, 1.0f, 256.0f);
+        changed = true;
+    }
+
+    float lineSpacing = pText->m_LineSpacing;
+    if (ImGui::InputFloat("Line Spacing", &lineSpacing, 0.1f, 1.0f, "%.2f"))
+    {
+        pText->m_LineSpacing = std::clamp(lineSpacing, 0.1f, 10.0f);
+        changed = true;
+    }
+    changed |= ImGui::Checkbox("Rich Text", &pText->m_RichText);
+
+    ImGui::Spacing();
+    ImGui::TextUnformatted("Paragraph");
+    const char* horizontalAlignment[] = { "Left", "Center", "Right" };
+    int horizontal = static_cast<int>(pText->m_HorizontalAlignment);
+    if (ImGui::Combo("Horizontal Alignment", &horizontal, horizontalAlignment, IM_ARRAYSIZE(horizontalAlignment)))
+    {
+        pText->m_HorizontalAlignment = static_cast<EUiTextAlignment>(horizontal);
+        changed = true;
+    }
+
+    const char* verticalAlignment[] = { "Top", "Middle", "Bottom" };
+    int vertical = static_cast<int>(pText->m_VerticalAlignment);
+    if (ImGui::Combo("Vertical Alignment", &vertical, verticalAlignment, IM_ARRAYSIZE(verticalAlignment)))
+    {
+        pText->m_VerticalAlignment = static_cast<EUiTextVerticalAlignment>(vertical);
+        changed = true;
+    }
+
+    const char* overflowOptions[] = { "Wrap", "Truncate" };
+    int horizontalOverflow = static_cast<int>(pText->m_HorizontalOverflow);
+    if (ImGui::Combo("Horizontal Overflow", &horizontalOverflow, overflowOptions, IM_ARRAYSIZE(overflowOptions)))
+    {
+        pText->m_HorizontalOverflow = static_cast<EUiTextOverflow>(horizontalOverflow);
+        changed = true;
+    }
+
+    int verticalOverflow = static_cast<int>(pText->m_VerticalOverflow);
+    if (ImGui::Combo("Vertical Overflow", &verticalOverflow, overflowOptions, IM_ARRAYSIZE(overflowOptions)))
+    {
+        pText->m_VerticalOverflow = static_cast<EUiTextOverflow>(verticalOverflow);
+        changed = true;
+    }
+
+    changed |= ImGui::Checkbox("Best Fit", &pText->m_BestFit);
+    changed |= EditGuiColor4("Color", pText->m_Color);
+
+    char material[256] = {};
+    std::snprintf(material, sizeof(material), "%s", pText->m_Material.c_str());
+    if (ImGui::InputText("Material", material, sizeof(material)))
+    {
+        pText->m_Material = material;
+        changed = true;
+    }
+
+    if (changed)
+    {
+        editor.m_SceneDirty = true;
+    }
+}
+
+void CComponentUIHelper::DrawUiComponent(CEditor& editor, CEntity& entity, CUiComponent* pUi)
+{
+    if (!pUi)
+    {
+        return;
+    }
+
+    bool changed = false;
+
+    const char* widgetTypes[] = { "Button", "Inputfield", "Combo" };
+    int currentType = static_cast<int>(pUi->m_WidgetType);
+    if (ImGui::Combo("Widget Type", &currentType, widgetTypes, IM_ARRAYSIZE(widgetTypes)))
+    {
+        editor.SaveState();
+        pUi->m_WidgetType = static_cast<EGuiWidgetType>(currentType);
+        auto pComponents = entity.GetComponents();
+        auto pText = pComponents->GetComponentOfType<CTextComponent>();
+        auto pRectTransform = pComponents->GetComponentOfType<CUiRectTransformComponent>();
+        if (pUi->m_WidgetType == EGuiWidgetType::Button)
+        {
+            if (pText)
+            {
+                pText->m_Text = "Button";
+                pText->m_HorizontalAlignment = EUiTextAlignment::CENTER;
+            }
+            if (pRectTransform)
+            {
+                pRectTransform->m_Size = { 150.0f, 30.0f };
+            }
+        }
+        else if (pUi->m_WidgetType == EGuiWidgetType::InputField)
+        {
+            pUi->m_Placeholder = "InputField";
+            if (pText)
+            {
+                pText->m_Text.clear();
+                pText->m_HorizontalAlignment = EUiTextAlignment::LEFT;
+            }
+            if (pRectTransform)
+            {
+                pRectTransform->m_Size = { 260.0f, 30.0f };
+            }
+        }
+        else if (pUi->m_WidgetType == EGuiWidgetType::Combo)
+        {
+            pUi->m_vItems = { "Combo" };
+            pUi->m_SelectedIndex = 0;
+            if (pText)
+            {
+                pText->m_Text = "Combo";
+                pText->m_HorizontalAlignment = EUiTextAlignment::LEFT;
+            }
+            if (pRectTransform)
+            {
+                pRectTransform->m_Size = { 260.0f, 30.0f };
+            }
+        }
+        changed = true;
+    }
+
+    if (pUi->m_WidgetType == EGuiWidgetType::Button)
+    {
+        ImGui::Spacing();
+        ImGui::Separator();
+        changed |= ImGui::Checkbox("Interactable", &pUi->m_Interactable);
+
+        const char* transitionOptions[] = { "None", "Color Tint" };
+        int transition = static_cast<int>(pUi->m_Transition);
+        if (ImGui::Combo("Transition", &transition, transitionOptions, IM_ARRAYSIZE(transitionOptions)))
+        {
+            pUi->m_Transition = static_cast<EGuiButtonTransition>(transition);
+            changed = true;
+        }
+
+        const char* targetGraphics[] = { "Button Background" };
+        int targetGraphic = 0;
+        ImGui::BeginDisabled();
+        ImGui::Combo("Target Graphic", &targetGraphic, targetGraphics, IM_ARRAYSIZE(targetGraphics));
+        ImGui::EndDisabled();
+
+        ImGui::BeginDisabled(pUi->m_Transition == EGuiButtonTransition::NONE);
+        changed |= EditGuiColor4("Normal Color", pUi->m_NormalColor);
+        changed |= EditGuiColor4("Highlighted Color", pUi->m_HighlightedColor);
+        changed |= EditGuiColor4("Pressed Color", pUi->m_PressedColor);
+        changed |= EditGuiColor4("Selected Color", pUi->m_SelectedColor);
+        changed |= EditGuiColor4("Disabled Color", pUi->m_DisabledColor);
+        changed |= ImGui::SliderFloat("Color Multiplier", &pUi->m_ColorMultiplier, 0.0f, 2.0f, "%.2f");
+        changed |= ImGui::SliderFloat("Fade Duration", &pUi->m_FadeDuration, 0.0f, 1.0f, "%.2f s");
+        ImGui::EndDisabled();
+
+        ImGui::Spacing();
+        ImGui::Separator();
+        const char* navigationOptions[] = { "Automatic", "None" };
+        int navigation = static_cast<int>(pUi->m_Navigation);
+        if (ImGui::Combo("Navigation", &navigation, navigationOptions, IM_ARRAYSIZE(navigationOptions)))
+        {
+            pUi->m_Navigation = static_cast<EGuiButtonNavigation>(navigation);
+            changed = true;
+        }
+        if (ImGui::Button("Visualize", ImVec2(-1.0f, 0.0f)))
+        {
+            pUi->m_ShowNavigationVisualization = !pUi->m_ShowNavigationVisualization;
+            changed = true;
+        }
+    }
+
+    if (pUi->m_WidgetType == EGuiWidgetType::InputField)
+    {
+        char phBuf[256] = {};
+        std::snprintf(phBuf, sizeof(phBuf), "%s", pUi->m_Placeholder.c_str());
+        if (ImGui::InputText("Placeholder", phBuf, sizeof(phBuf)))
+        {
+            pUi->m_Placeholder = phBuf;
+            changed = true;
+        }
+    }
+    else if (pUi->m_WidgetType == EGuiWidgetType::Combo)
+    {
+        ImGui::Spacing();
+        ImGui::TextDisabled("Combo Items");
+        int removeIdx = -1;
+        for (int i = 0; i < static_cast<int>(pUi->m_vItems.size()); ++i)
+        {
+            ImGui::PushID(i);
+            char itemBuf[256] = {};
+            std::snprintf(itemBuf, sizeof(itemBuf), "%s",
+                          pUi->m_vItems[static_cast<size_t>(i)].c_str());
+            ImGui::SetNextItemWidth(ImGui::GetContentRegionAvail().x - 36.0f);
+            if (ImGui::InputText("##item", itemBuf, sizeof(itemBuf)))
+            {
+                pUi->m_vItems[static_cast<size_t>(i)] = itemBuf;
+                changed = true;
+            }
+            ImGui::SameLine();
+            if (ImGui::Button("X", ImVec2(28.0f, 0.0f)))
+            {
+                removeIdx = i;
+            }
+            ImGui::PopID();
+        }
+        if (removeIdx >= 0 && removeIdx < static_cast<int>(pUi->m_vItems.size()))
+        {
+            pUi->m_vItems.erase(pUi->m_vItems.begin() + removeIdx);
+            if (pUi->m_SelectedIndex >= static_cast<int>(pUi->m_vItems.size()))
+            {
+                pUi->m_SelectedIndex = std::max(0, static_cast<int>(pUi->m_vItems.size()) - 1);
+            }
+            changed = true;
+        }
+        if (ImGui::Button("+ Add Item", ImVec2(-1.0f, 0.0f)))
+        {
+            pUi->m_vItems.push_back("New Item " + std::to_string(pUi->m_vItems.size() + 1));
+            changed = true;
+        }
+        if (!pUi->m_vItems.empty())
+        {
+            int sel = std::clamp(pUi->m_SelectedIndex, 0, static_cast<int>(pUi->m_vItems.size()) - 1);
+            if (ImGui::SliderInt("Selected Index", &sel, 0, static_cast<int>(pUi->m_vItems.size()) - 1))
+            {
+                pUi->m_SelectedIndex = sel;
+                pUi->m_RuntimeDesc.selectedIndex = sel;
+                changed = true;
+            }
+        }
+    }
+
+    if (pUi->m_WidgetType == EGuiWidgetType::Button)
+    {
+        ImGui::Spacing();
+        ImGui::TextDisabled("Clicks in Play Mode: %d", pUi->m_RuntimeDesc.clickCount);
+    }
+
+    if (changed)
+    {
+        pUi->m_Name = pUi->GetTypeName();
+        auto pComponents = entity.GetComponents();
+        pUi->SyncToRuntimeDesc(
+            pComponents->GetComponentOfType<CUiRectTransformComponent>().get(),
+            pComponents->GetComponentOfType<CTextComponent>().get());
+        editor.m_SceneDirty = true;
     }
 }

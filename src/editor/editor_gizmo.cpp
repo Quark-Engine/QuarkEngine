@@ -74,12 +74,19 @@ void CGizmoController::Draw(CEditor& editor, CFlyCamera& camera)
         camera.GetCamera().up
     );
 
-    const Mat4 projection = Mat4::perspective(
-        camera.GetCamera().fovy * DEG2RAD,
-        viewport.m_WindowSize.x / viewport.m_WindowSize.y,
-        0.1f,
-        1000.0f
-    );
+    const Mat4 projection = editor.m_Scene2DMode
+        ? Mat4::ortho(
+            -camera.GetCamera().fovy * viewport.m_WindowSize.x / viewport.m_WindowSize.y * 0.5f,
+            camera.GetCamera().fovy * viewport.m_WindowSize.x / viewport.m_WindowSize.y * 0.5f,
+            -camera.GetCamera().fovy * 0.5f,
+            camera.GetCamera().fovy * 0.5f,
+            0.1f,
+            1000.0f)
+        : Mat4::perspective(
+            camera.GetCamera().fovy * DEG2RAD,
+            viewport.m_WindowSize.x / viewport.m_WindowSize.y,
+            0.1f,
+            1000.0f);
 
     float aViewMat4[16] = {};
     float aProjectionMat4[16] = {};

@@ -1,4 +1,5 @@
 #include "application.h"
+#include "gui/gui_renderer_bridge.h"
 #include "scripting/script_engine.h"
 #include "qcImGui.h"
 #include "imgui.h"
@@ -15,8 +16,10 @@
 #include "tex.h"
 #include "engine/transform.h"
 #include "engine/scene_runtime.h"
+#include <algorithm>
 #include <cfloat>
 #include <chrono>
+#include <cmath>
 #include <fstream>
 #include <iostream>
 #include <mutex>
@@ -161,6 +164,7 @@ void CApplication::Initialize()
         ? TEXTURE_FILTER_POINT : TEXTURE_FILTER_BILINEAR);
 
     InitWindow(1280, 720, "Quark Engine", rendererType);
+    MaximizeWindow();
     m_WindowOpen = true;
     m_Camera.InitializeCursors();
 
@@ -364,7 +368,41 @@ void CApplication::UpdateFrame()
         m_SceneRenderer.PrepareFrameCache(m_Editor.m_Scene);
     }
 
-    if (!buildSettingsOpen && !m_Editor.m_IsPlaying && !m_Editor.m_GameViewActive &&
+    if (m_Editor.m_Scene2DMode)
+    {
+        const float viewportWidth = std::max(1.0f, m_Editor.m_Ui.m_Viewport.m_WindowSize.x);
+        const float viewportHeight = std::max(1.0f, m_Editor.m_Ui.m_Viewport.m_WindowSize.y);
+        if (m_Editor.m_Ui.m_Viewport.m_Hovered)
+        {
+            const float wheel = GetMouseWheelMove();
+            if (std::fabs(wheel) > 0.001f)
+            {
+                m_Editor.m_Scene2DZoom = std::clamp(
+                    m_Editor.m_Scene2DZoom * std::pow(1.1f, wheel), 0.1f, 8.0f);
+            }
+            if (IsMouseButtonDown(MOUSE_BUTTON_MIDDLE))
+            {
+                const Vec2 mouseDelta = GetMouseDelta();
+                m_Editor.m_Scene2DPan.x -= mouseDelta.x / m_Editor.m_Scene2DZoom;
+                m_Editor.m_Scene2DPan.y -= mouseDelta.y / m_Editor.m_Scene2DZoom;
+            }
+        }
+
+        const float viewHeight = viewportHeight / m_Editor.m_Scene2DZoom;
+        const Vec3 target = {
+            viewportWidth * 0.5f + m_Editor.m_Scene2DPan.x,
+            viewportHeight * 0.5f + m_Editor.m_Scene2DPan.y,
+            0.0f
+        };
+        m_Camera.m_Cam.position = { target.x, target.y, -100.0f };
+        m_Camera.m_Cam.target = target;
+        m_Camera.m_Cam.up = { 0.0f, -1.0f, 0.0f };
+        m_Camera.m_Cam.fovy = viewHeight;
+        m_Camera.m_Cam.projection = CAMERA_ORTHOGRAPHIC;
+    }
+
+    if (!m_Editor.m_Scene2DMode &&
+        !buildSettingsOpen && !m_Editor.m_IsPlaying && !m_Editor.m_GameViewActive &&
         (m_Camera.m_Active || (!ImGuizmo::IsOver() && !ImGuizmo::IsUsing() &&
             cursorOverSceneViewport)))
     {
@@ -407,33 +445,25 @@ void CApplication::RenderFrame()
     BeginDrawing();
         const Vec3& renderCameraPosition = m_Editor.m_GameViewActive &&
             m_Editor.m_GameCameraAvailable ? gameCamera.position : renderCamera.position;
-        m_SceneRenderer.Update(m_Editor.m_Scene, m_Editor.m_Lights, renderCameraPosition,
-            m_Editor.m_Preferences.m_ShadowsEnabled,
-            m_Editor.m_Preferences.m_ShadowBias,
-            m_Editor.m_Preferences.m_ShadowFilterQuality);
+        m_SceneRenderer.Update(m_Editor.m_Scene, m_Editor.m_Lights, renderCameraPosition, m_Editor.m_Preferences.m_ShadowsEnabled,
+                               m_Editor.m_Preferences.m_ShadowBias, m_Editor.m_Preferences.m_ShadowFilterQuality);
         ClearBackground(DARKGRAY);
 
         if (m_Editor.m_Ui.m_Viewport.m_RenderTexture.id > 0 && IsRenderTextureValid(m_Editor.m_Ui.m_Viewport.m_RenderTexture))
         {
             BeginTextureMode(m_Editor.m_Ui.m_Viewport.m_RenderTexture);
-            ClearBackground(Color
+            ClearBackground(Color{static_cast<unsigned char>(m_Editor.m_Preferences.m_BackgroundRed),
+                                  static_cast<unsigned char>(m_Editor.m_Preferences.m_BackgroundGreen),
+                                  static_cast<unsigned char>(m_Editor.m_Preferences.m_BackgroundBlue), 255});
+            m_FrameTimings.main3dPassMs = 0.0f;
+            if (!m_Editor.m_Scene2DMode)
             {
-                static_cast<unsigned char>(m_Editor.m_Preferences.m_BackgroundRed),
-                static_cast<unsigned char>(m_Editor.m_Preferences.m_BackgroundGreen),
-                static_cast<unsigned char>(m_Editor.m_Preferences.m_BackgroundBlue),
-                255
-            });
-            const auto main3dStart = std::chrono::steady_clock::now();
-            BeginMode3D(renderCamera);
+                const auto main3dStart = std::chrono::steady_clock::now();
+                BeginMode3D(renderCamera);
                 if (m_Editor.m_Preferences.m_ShowGrid)
                 {
-                    CInfiniteGrid::Draw(
-                        m_Camera.GetCamera(),
-                        (int)m_Editor.m_Ui.m_Viewport.m_WindowSize.x,
-                        (int)m_Editor.m_Ui.m_Viewport.m_WindowSize.y,
-                        1.0f,
-                        GRAY
-                    );
+                    CInfiniteGrid::Draw(m_Camera.GetCamera(), (int)m_Editor.m_Ui.m_Viewport.m_WindowSize.x, (int)m_Editor.m_Ui.m_Viewport.m_WindowSize.y, 1.0f,
+                                        GRAY);
                 }
                 if (m_Editor.m_Preferences.m_ShowAxes)
                 {
@@ -446,18 +476,17 @@ void CApplication::RenderFrame()
                 const float aspectRatio = viewportHeight > 0.0f ? viewportWidth / viewportHeight : 1.0f;
                 for (int entityIndex = 0; entityIndex < static_cast<int>(m_Editor.m_Scene.m_vEntities.size()); ++entityIndex)
                 {
-                    auto& e = m_Editor.m_Scene.m_vEntities[entityIndex];
-                    CMeshComponent* pMesh = e.GetMeshComponent();
-                    CTransformComponent* pTransform = e.GetTransformComponent();
-                    CMaterialComponent* pMat = e.GetMaterialComponent();
+                    auto &e = m_Editor.m_Scene.m_vEntities[entityIndex];
+                    CMeshComponent *pMesh = e.GetMeshComponent();
+                    CTransformComponent *pTransform = e.GetTransformComponent();
+                    CMaterialComponent *pMat = e.GetMaterialComponent();
                     if (!pMesh || !pMesh->m_Enabled || !pTransform)
                     {
                         continue;
                     }
 
-                    const Mat4& worldTransform = m_SceneRenderer.GetCachedWorldTransform(entityIndex);
-                    if (!m_SceneRenderer.IsMeshVisible(entityIndex,
-                        renderCamera, aspectRatio))
+                    const Mat4 &worldTransform = m_SceneRenderer.GetCachedWorldTransform(entityIndex);
+                    if (!m_SceneRenderer.IsMeshVisible(entityIndex, renderCamera, aspectRatio))
                     {
                         continue;
                     }
@@ -468,9 +497,8 @@ void CApplication::RenderFrame()
                     {
                         for (int matIdx = 0; matIdx < pMesh->m_Model.materialCount; ++matIdx)
                         {
-                            if (pMesh->m_Model.materials[matIdx].maps &&
-                                (pMesh->m_Model.materials[matIdx].maps[MATERIAL_MAP_ALBEDO].texture.valid ||
-                                 pMesh->m_Model.materials[matIdx].maps[MATERIAL_MAP_ALBEDO].texture.id != 0))
+                            if (pMesh->m_Model.materials[matIdx].maps && (pMesh->m_Model.materials[matIdx].maps[MATERIAL_MAP_ALBEDO].texture.valid ||
+                                                                          pMesh->m_Model.materials[matIdx].maps[MATERIAL_MAP_ALBEDO].texture.id != 0))
                             {
                                 hasTexture = true;
                                 break;
@@ -481,32 +509,24 @@ void CApplication::RenderFrame()
                     m_SceneRenderer.BeginLightingPass();
                     CEntityTextureService::DrawEntityWithTexture(e, worldTransform, m_Editor.m_Preferences);
                     m_SceneRenderer.EndLightingPass();
-                    if (m_Editor.m_Preferences.m_ShowSelectionVisualization &&
-                        m_Editor.m_Scene.IsSelected(entityIndex) && pMesh->m_Model.meshCount > 0)
-                        {
-                        PushMatrix();
-                        MultMatrix(m_SceneRenderer.GetCachedMeshWorldTransform(entityIndex));
-                        const bool primarySelection = entityIndex == m_Editor.m_Scene.m_Selected;
-                        DrawBoundingBox(GetModelBoundingBox(pMesh->m_Model), Color
-                        {
-                            static_cast<unsigned char>(m_Editor.m_Preferences.m_SelectionRed),
-                            static_cast<unsigned char>(m_Editor.m_Preferences.m_SelectionGreen),
-                            static_cast<unsigned char>(m_Editor.m_Preferences.m_SelectionBlue),
-                            static_cast<unsigned char>(primarySelection ? 255 : 150)
-                        });
-                        PopMatrix();
-                    }
-                    if (m_Editor.m_Preferences.m_ShowBoundingBoxes &&
-                        pMesh->m_Model.meshCount > 0)
+                    if (m_Editor.m_Preferences.m_ShowSelectionVisualization && m_Editor.m_Scene.IsSelected(entityIndex) && pMesh->m_Model.meshCount > 0)
                     {
                         PushMatrix();
                         MultMatrix(m_SceneRenderer.GetCachedMeshWorldTransform(entityIndex));
-                        DrawBoundingBox(GetModelBoundingBox(pMesh->m_Model), Color
-                        {
-                            static_cast<unsigned char>(m_Editor.m_Preferences.m_BoundsRed),
-                            static_cast<unsigned char>(m_Editor.m_Preferences.m_BoundsGreen),
-                            static_cast<unsigned char>(m_Editor.m_Preferences.m_BoundsBlue), 255
-                        });
+                        const bool primarySelection = entityIndex == m_Editor.m_Scene.m_Selected;
+                        DrawBoundingBox(GetModelBoundingBox(pMesh->m_Model), Color{static_cast<unsigned char>(m_Editor.m_Preferences.m_SelectionRed),
+                                                                                   static_cast<unsigned char>(m_Editor.m_Preferences.m_SelectionGreen),
+                                                                                   static_cast<unsigned char>(m_Editor.m_Preferences.m_SelectionBlue),
+                                                                                   static_cast<unsigned char>(primarySelection ? 255 : 150)});
+                        PopMatrix();
+                    }
+                    if (m_Editor.m_Preferences.m_ShowBoundingBoxes && pMesh->m_Model.meshCount > 0)
+                    {
+                        PushMatrix();
+                        MultMatrix(m_SceneRenderer.GetCachedMeshWorldTransform(entityIndex));
+                        DrawBoundingBox(GetModelBoundingBox(pMesh->m_Model), Color{static_cast<unsigned char>(m_Editor.m_Preferences.m_BoundsRed),
+                                                                                   static_cast<unsigned char>(m_Editor.m_Preferences.m_BoundsGreen),
+                                                                                   static_cast<unsigned char>(m_Editor.m_Preferences.m_BoundsBlue), 255});
                         PopMatrix();
                     }
                 }
@@ -514,118 +534,128 @@ void CApplication::RenderFrame()
                 {
                     for (int entityIndex = 0; entityIndex < static_cast<int>(m_Editor.m_Scene.m_vEntities.size()); ++entityIndex)
                     {
-                        auto& entity = m_Editor.m_Scene.m_vEntities[entityIndex];
-                        CLightComponent* pLight = entity.GetLightComponent();
-                        CTransformComponent* pTransform = entity.GetTransformComponent();
+                        auto &entity = m_Editor.m_Scene.m_vEntities[entityIndex];
+                        CLightComponent *pLight = entity.GetLightComponent();
+                        CTransformComponent *pTransform = entity.GetTransformComponent();
                         if (!pLight || !pTransform || !pLight->m_Enabled)
                         {
                             continue;
                         }
-                        const Mat4& worldTransform = m_SceneRenderer.GetCachedWorldTransform(entityIndex);
+                        const Mat4 &worldTransform = m_SceneRenderer.GetCachedWorldTransform(entityIndex);
                         const Vec3 worldPosition = Vec3(worldTransform * Vec3{0.0f, 0.0f, 0.0f});
                         DrawLine3D(worldPosition, pLight->m_Light.m_Target, pLight->m_Light.m_Color);
                     }
                 }
                 if (m_Editor.m_Preferences.m_ShowCameras)
                 {
-                    const Camera3D& editorCamera = m_Camera.GetCamera();
+                    const Camera3D &editorCamera = m_Camera.GetCamera();
                     const Vec3 forward = (editorCamera.target - editorCamera.position).normalized();
                     const Vec3 right = forward.cross(editorCamera.up).normalized();
                     const Vec3 up = right.cross(forward).normalized();
                     const float length = 1.5f;
                     const float halfWidth = tanf(editorCamera.fovy * DEG2RAD * 0.5f) * length;
                     const Vec3 center = editorCamera.position + forward * length;
-                    const Vec3 aCorners[4] = {
-                        center + up * halfWidth - right * halfWidth,
-                        center + up * halfWidth + right * halfWidth,
-                        center - up * halfWidth + right * halfWidth,
-                        center - up * halfWidth - right * halfWidth
-                    };
+                    const Vec3 aCorners[4] = {center + up * halfWidth - right * halfWidth, center + up * halfWidth + right * halfWidth,
+                                              center - up * halfWidth + right * halfWidth, center - up * halfWidth - right * halfWidth};
                     for (int i = 0; i < 4; ++i)
                     {
                         DrawLine3D(editorCamera.position, aCorners[i], YELLOW);
                         DrawLine3D(aCorners[i], aCorners[(i + 1) % 4], YELLOW);
                     }
                 }
-            EndMode3D();
-            m_FrameTimings.main3dPassMs = ElapsedMilliseconds(main3dStart);
+                EndMode3D();
+                m_FrameTimings.main3dPassMs = ElapsedMilliseconds(main3dStart);
 
-            if (m_Editor.m_Preferences.m_ShowLightHelpers &&
-                m_Editor.m_Ui.m_Viewport.m_WindowSize.x > 0.0f &&
-                m_Editor.m_Ui.m_Viewport.m_WindowSize.y > 0.0f)
-            {
-                const Texture2D* pLightHelper = m_Editor.m_Textures.Load("assets/img/light_helper.png");
-                if (pLightHelper != nullptr)
+                if (m_Editor.m_Preferences.m_ShowLightHelpers && m_Editor.m_Ui.m_Viewport.m_WindowSize.x > 0.0f &&
+                    m_Editor.m_Ui.m_Viewport.m_WindowSize.y > 0.0f)
                 {
-                    const Camera3D& editorCamera = m_Camera.GetCamera();
-                    const Mat4 view = Mat4::lookAt(editorCamera.position, editorCamera.target, editorCamera.up);
-                    const Mat4 projection = Mat4::perspective(
-                        editorCamera.fovy * DEG2RAD,
-                        m_Editor.m_Ui.m_Viewport.m_WindowSize.x / m_Editor.m_Ui.m_Viewport.m_WindowSize.y,
-                        0.1f,
-                        1000.0f
-                    );
-                    const float texW = static_cast<float>(pLightHelper->width);
-                    const float texH = static_cast<float>(pLightHelper->height);
-                    const float aspect = texH / texW;
-                    const float helperWorldSize = 0.8f;
-                    const float helperMaxPx = m_Editor.m_Ui.m_Viewport.m_WindowSize.y * 0.2f;
-                    const float fovScale = tanf(editorCamera.fovy * DEG2RAD * 0.5f);
-
-                    for (int entityIndex = 0; entityIndex < static_cast<int>(m_Editor.m_Scene.m_vEntities.size()); ++entityIndex)
+                    const Texture2D *pLightHelper = m_Editor.m_Textures.Load("assets/img/light_helper.png");
+                    if (pLightHelper != nullptr)
                     {
-                        auto& entity = m_Editor.m_Scene.m_vEntities[entityIndex];
-                        CLightComponent* pLight = entity.GetLightComponent();
-                        CTransformComponent* pTransform = entity.GetTransformComponent();
-                        if (!pLight || !pTransform || !pLight->m_Enabled)
-                        {
-                            continue;
-                        }
-                        const Mat4& worldTransform = m_SceneRenderer.GetCachedWorldTransform(entityIndex);
-                        const Vec3 worldPos = Vec3(worldTransform * Vec3{0.0f, 0.0f, 0.0f});
+                        const Camera3D &editorCamera = m_Camera.GetCamera();
+                        const Mat4 view = Mat4::lookAt(editorCamera.position, editorCamera.target, editorCamera.up);
+                        const Mat4 projection = Mat4::perspective(
+                            editorCamera.fovy * DEG2RAD, m_Editor.m_Ui.m_Viewport.m_WindowSize.x / m_Editor.m_Ui.m_Viewport.m_WindowSize.y, 0.1f, 1000.0f);
+                        const float texW = static_cast<float>(pLightHelper->width);
+                        const float texH = static_cast<float>(pLightHelper->height);
+                        const float aspect = texH / texW;
+                        const float helperWorldSize = 0.8f;
+                        const float helperMaxPx = m_Editor.m_Ui.m_Viewport.m_WindowSize.y * 0.2f;
+                        const float fovScale = tanf(editorCamera.fovy * DEG2RAD * 0.5f);
 
-                        const Vec4 clip = projection * (view * Vec4{worldPos.x, worldPos.y, worldPos.z, 1.0f});
-                        if (clip.w <= 0.000001f)
+                        for (int entityIndex = 0; entityIndex < static_cast<int>(m_Editor.m_Scene.m_vEntities.size()); ++entityIndex)
                         {
-                            continue;
-                        }
-                        const float nx = clip.x / clip.w * 0.5f + 0.5f;
-                        const float ny = -clip.y / clip.w * 0.5f + 0.5f;
-                        if (nx < -0.2f || nx > 1.2f || ny < -0.2f || ny > 1.2f)
-                        {
-                            continue;
-                        }
-                        const float sx = nx * static_cast<float>(m_Editor.m_Ui.m_Viewport.m_RenderTexture.texture.width);
-                        const float sy = ny * static_cast<float>(m_Editor.m_Ui.m_Viewport.m_RenderTexture.texture.height);
+                            auto &entity = m_Editor.m_Scene.m_vEntities[entityIndex];
+                            CLightComponent *pLight = entity.GetLightComponent();
+                            CTransformComponent *pTransform = entity.GetTransformComponent();
+                            if (!pLight || !pTransform || !pLight->m_Enabled)
+                            {
+                                continue;
+                            }
+                            const Mat4 &worldTransform = m_SceneRenderer.GetCachedWorldTransform(entityIndex);
+                            const Vec3 worldPos = Vec3(worldTransform * Vec3{0.0f, 0.0f, 0.0f});
 
-                        const Vec3 toCamera = editorCamera.position - worldPos;
-                        float dist = toCamera.length();
-                        if (dist < 0.0001f)
-                        {
-                            dist = 0.0001f;
-                        }
-                        const float pixelsPerMeter = (m_Editor.m_Ui.m_Viewport.m_WindowSize.y * 0.5f) / (fovScale * dist);
-                        float helperH = helperWorldSize * pixelsPerMeter;
-                        if (helperH > helperMaxPx)
-                        {
-                            helperH = helperMaxPx;
-                        }
-                        const float helperW = helperH / aspect;
+                            const Vec4 clip = projection * (view * Vec4{worldPos.x, worldPos.y, worldPos.z, 1.0f});
+                            if (clip.w <= 0.000001f)
+                            {
+                                continue;
+                            }
+                            const float nx = clip.x / clip.w * 0.5f + 0.5f;
+                            const float ny = -clip.y / clip.w * 0.5f + 0.5f;
+                            if (nx < -0.2f || nx > 1.2f || ny < -0.2f || ny > 1.2f)
+                            {
+                                continue;
+                            }
+                            const float sx = nx * static_cast<float>(m_Editor.m_Ui.m_Viewport.m_RenderTexture.texture.width);
+                            const float sy = ny * static_cast<float>(m_Editor.m_Ui.m_Viewport.m_RenderTexture.texture.height);
 
-                        DrawTexturePro(
-                            *pLightHelper,
-                            {0.0f, 0.0f, texW, texH},
-                            {sx, sy, helperW, helperH},
-                            {helperW * 0.5f, helperH * 0.5f},
-                            0.0f,
-                            WHITE);
+                            const Vec3 toCamera = editorCamera.position - worldPos;
+                            float dist = toCamera.length();
+                            if (dist < 0.0001f)
+                            {
+                                dist = 0.0001f;
+                            }
+                            const float pixelsPerMeter = (m_Editor.m_Ui.m_Viewport.m_WindowSize.y * 0.5f) / (fovScale * dist);
+                            float helperH = helperWorldSize * pixelsPerMeter;
+                            if (helperH > helperMaxPx)
+                            {
+                                helperH = helperMaxPx;
+                            }
+                            const float helperW = helperH / aspect;
+
+                            DrawTexturePro(*pLightHelper, {0.0f, 0.0f, texW, texH}, {sx, sy, helperW, helperH}, {helperW * 0.5f, helperH * 0.5f}, 0.0f, WHITE);
+                        }
                     }
+                }
+            }
+            {
+                const CViewportState &sceneVp = m_Editor.m_Ui.m_Viewport;
+                const Vec2 rawMouse = GetMousePosition();
+                const float scaleX = sceneVp.m_WindowSize.x > 0.0f ? static_cast<float>(sceneVp.m_RenderTexture.texture.width) / sceneVp.m_WindowSize.x : 1.0f;
+                const float scaleY = sceneVp.m_WindowSize.y > 0.0f ? static_cast<float>(sceneVp.m_RenderTexture.texture.height) / sceneVp.m_WindowSize.y : 1.0f;
+                const Vec2 localMouse = {(rawMouse.x - sceneVp.m_WindowPos.x) * scaleX, (rawMouse.y - sceneVp.m_WindowPos.y) * scaleY};
+                const bool sceneGuiInteractive = m_Editor.m_IsPlaying && !m_Editor.m_GameViewActive;
+                const bool sceneGui2D = m_Editor.m_Scene2DMode;
+                Camera2D guiCamera = {};
+                if (sceneGui2D)
+                {
+                    guiCamera.offset = {sceneVp.m_WindowSize.x * 0.5f, sceneVp.m_WindowSize.y * 0.5f};
+                    guiCamera.target = {m_Camera.m_Cam.target.x, m_Camera.m_Cam.target.y};
+                    guiCamera.zoom = m_Editor.m_Scene2DZoom;
+                    BeginMode2D(guiCamera);
+                    quark::gui::SetGuiScissorCamera2D(&guiCamera);
+                }
+                quark::gui::RenderSceneGui(m_Editor.m_Scene, localMouse, sceneGuiInteractive);
+                if (sceneGui2D)
+                {
+                    quark::gui::SetGuiScissorCamera2D(nullptr);
+                    EndMode2D();
                 }
             }
             EndTextureMode();
         }
 
-        CViewportState& gameViewport = m_Editor.m_Ui.m_GameViewport;
+        CViewportState &gameViewport = m_Editor.m_Ui.m_GameViewport;
         if (m_Editor.m_ShowGameView && gameViewport.m_RenderTexture.id > 0 &&
             IsRenderTextureValid(gameViewport.m_RenderTexture))
         {
@@ -633,51 +663,75 @@ void CApplication::RenderFrame()
             BeginTextureMode(gameViewport.m_RenderTexture);
             if (!m_Editor.m_GameCameraAvailable)
             {
-                ClearBackground(BLACK);
+                ClearBackground(Color{35, 35, 35, 255});
             }
             else
             {
-                ClearBackground(Color
-                {
-                    static_cast<unsigned char>(m_Editor.m_Preferences.m_BackgroundRed),
-                    static_cast<unsigned char>(m_Editor.m_Preferences.m_BackgroundGreen),
-                    static_cast<unsigned char>(m_Editor.m_Preferences.m_BackgroundBlue),
-                    255
-                });
+                ClearBackground(Color{static_cast<unsigned char>(
+                                          m_Editor.m_Preferences.m_BackgroundRed),
+                                      static_cast<unsigned char>(
+                                          m_Editor.m_Preferences.m_BackgroundGreen),
+                                      static_cast<unsigned char>(
+                                          m_Editor.m_Preferences.m_BackgroundBlue),
+                                      255});
                 const float viewportWidth = gameViewport.m_WindowSize.x;
                 const float viewportHeight = gameViewport.m_WindowSize.y;
-                const float aspectRatio = viewportHeight > 0.0f
-                    ? viewportWidth / viewportHeight : 1.0f;
+                const float aspectRatio =
+                    viewportHeight > 0.0f ? viewportWidth / viewportHeight : 1.0f;
                 BeginMode3D(gameCamera);
                 for (int entityIndex = 0;
-                    entityIndex < static_cast<int>(m_Editor.m_Scene.m_vEntities.size());
-                    ++entityIndex)
+                     entityIndex <
+                     static_cast<int>(m_Editor.m_Scene.m_vEntities.size());
+                     ++entityIndex)
                 {
-                    CEntity& entity = m_Editor.m_Scene.m_vEntities[entityIndex];
-                    CMeshComponent* pMesh = entity.GetMeshComponent();
-                    CTransformComponent* pTransform = entity.GetTransformComponent();
-                    CMaterialComponent* pMaterial = entity.GetMaterialComponent();
+                    CEntity &entity = m_Editor.m_Scene.m_vEntities[entityIndex];
+                    CMeshComponent *pMesh = entity.GetMeshComponent();
+                    CTransformComponent *pTransform = entity.GetTransformComponent();
+                    CMaterialComponent *pMaterial = entity.GetMaterialComponent();
                     if (!pMesh || !pMesh->m_Enabled || !pTransform)
                     {
                         continue;
                     }
 
-                    const Mat4& worldTransform =
+                    const Mat4 &worldTransform =
                         m_SceneRenderer.GetCachedWorldTransform(entityIndex);
-                    if (!m_SceneRenderer.IsMeshVisible(entityIndex, gameCamera, aspectRatio))
+                    if (!m_SceneRenderer.IsMeshVisible(entityIndex, gameCamera,
+                                                       aspectRatio))
                     {
                         continue;
                     }
 
                     m_SceneRenderer.EnsureLightingShader(pMesh);
-                    m_SceneRenderer.SetUseTexture(
-                        pMaterial != nullptr && pMaterial->m_Texture.id != 0);
+                    m_SceneRenderer.SetUseTexture(pMaterial != nullptr &&
+                                                  pMaterial->m_Texture.id != 0);
                     m_SceneRenderer.BeginLightingPass();
                     CEntityTextureService::DrawEntityWithTexture(
                         entity, worldTransform, m_Editor.m_Preferences);
                     m_SceneRenderer.EndLightingPass();
                 }
                 EndMode3D();
+            }
+            {
+                const Vec2 rawMouse = GetMousePosition();
+                const float scaleX =
+                    gameViewport.m_WindowSize.x > 0.0f
+                        ? static_cast<float>(
+                              gameViewport.m_RenderTexture.texture.width) /
+                              gameViewport.m_WindowSize.x
+                        : 1.0f;
+                const float scaleY =
+                    gameViewport.m_WindowSize.y > 0.0f
+                        ? static_cast<float>(
+                              gameViewport.m_RenderTexture.texture.height) /
+                              gameViewport.m_WindowSize.y
+                        : 1.0f;
+                const Vec2 localMouse = {
+                    (rawMouse.x - gameViewport.m_WindowPos.x) * scaleX,
+                    (rawMouse.y - gameViewport.m_WindowPos.y) * scaleY};
+                const bool gameGuiInteractive =
+                    m_Editor.m_IsPlaying && m_Editor.m_GameViewActive;
+                quark::gui::RenderSceneGui(m_Editor.m_Scene, localMouse,
+                                           gameGuiInteractive);
             }
             EndTextureMode();
             m_FrameTimings.main3dPassMs += ElapsedMilliseconds(game3dStart);
@@ -703,11 +757,14 @@ void CApplication::RenderFrame()
                 mousePos.y >= activeViewport.m_WindowPos.y &&
                 mousePos.y <= activeViewport.m_WindowPos.y + activeViewport.m_WindowSize.y;
 
+            const bool hasSceneUi = quark::gui::SceneHasActiveUiWidgets(m_Editor.m_Scene);
             if (IsKeyPressed(KEY_ESCAPE) && quark::script::CScriptEngine::Get().IsCursorLocked())
             {
                 quark::script::CScriptEngine::Get().SetCursorLocked(false);
             }
-            else if (!quark::script::CScriptEngine::Get().IsCursorLocked() &&
+            else if (!hasSceneUi &&
+                     !quark::gui::CGuiSystem::Get().WantsMouseCapture() &&
+                     !quark::script::CScriptEngine::Get().IsCursorLocked() &&
                      mouseOverActiveViewport && IsMouseButtonPressed(MOUSE_BUTTON_LEFT))
             {
                 quark::script::CScriptEngine::Get().SetCursorLocked(true);
@@ -879,7 +936,10 @@ void CApplication::Shutdown()
         return;
     }
 
-    m_Editor.m_Preferences.m_CameraFov = m_Camera.GetCamera().fovy;
+    if (!m_Editor.m_Scene2DMode)
+    {
+        m_Editor.m_Preferences.m_CameraFov = m_Camera.GetCamera().fovy;
+    }
     m_Editor.m_Preferences.Save();
 
     Unload();
@@ -892,6 +952,7 @@ void CApplication::Unload()
     m_PluginManager.UnloadAll();
     m_Editor.Unload();
     m_SceneRenderer.Unload();
+    quark::gui::ShutdownGuiBackend();
     QcImGuiShutdown();
 
     m_PluginBridge.Reset();

@@ -18,6 +18,7 @@ public:
 
     static CEntity Light(CScene& scene, int parentIndex);
     static CEntity Camera(CScene& scene, int parentIndex);
+    static CEntity UiWidget(CScene& scene, EGuiWidgetType widgetType, int parentIndex = -1);
 
     static void AssignName(CEntity& entity, const char* pNewName);
 

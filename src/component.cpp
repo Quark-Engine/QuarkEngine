@@ -193,17 +193,223 @@ void CCollisionComponent::OnEntityTransformChanged()
     m_Dirty = true;
 }
 
+namespace {
+
+nlohmann::json SerializeGuiColor(Color c)
+{
+    return nlohmann::json::array({ c.r, c.g, c.b, c.a });
+}
+
+void DeserializeGuiColor(const nlohmann::json& j, const char* key, Color& outColor)
+{
+    if (j.contains(key) && j[key].is_array() && j[key].size() >= 4)
+    {
+        outColor.r = static_cast<unsigned char>(j[key][0].get<int>());
+        outColor.g = static_cast<unsigned char>(j[key][1].get<int>());
+        outColor.b = static_cast<unsigned char>(j[key][2].get<int>());
+        outColor.a = static_cast<unsigned char>(j[key][3].get<int>());
+    }
+}
+
+} // anonymous
+
+void CUiComponent::Serialize(nlohmann::json& json) const
+{
+    json["widget_type"] = static_cast<int>(m_WidgetType);
+    json["placeholder"] = m_Placeholder;
+    json["items"] = m_vItems;
+    json["selected_index"] = m_SelectedIndex;
+    json["interactable"] = m_Interactable;
+    json["transition"] = static_cast<int>(m_Transition);
+    json["normal_color"] = SerializeGuiColor(m_NormalColor);
+    json["highlighted_color"] = SerializeGuiColor(m_HighlightedColor);
+    json["pressed_color"] = SerializeGuiColor(m_PressedColor);
+    json["selected_color"] = SerializeGuiColor(m_SelectedColor);
+    json["disabled_color"] = SerializeGuiColor(m_DisabledColor);
+    json["color_multiplier"] = m_ColorMultiplier;
+    json["fade_duration"] = m_FadeDuration;
+    json["navigation"] = static_cast<int>(m_Navigation);
+}
+
+void CUiComponent::Deserialize(const nlohmann::json& json)
+{
+    if (json.contains("widget_type") && json["widget_type"].is_number_integer())
+    {
+        int wt = json["widget_type"].get<int>();
+        if (wt >= 0 && wt <= 2)
+        {
+            m_WidgetType = static_cast<EGuiWidgetType>(wt);
+        }
+    }
+    if (json.contains("placeholder") && json["placeholder"].is_string())
+    {
+        m_Placeholder = json["placeholder"].get<std::string>();
+    }
+    if (json.contains("items") && json["items"].is_array())
+    {
+        m_vItems.clear();
+        for (const auto& item : json["items"])
+        {
+            if (item.is_string())
+            {
+                m_vItems.push_back(item.get<std::string>());
+            }
+        }
+    }
+    if (json.contains("selected_index") && json["selected_index"].is_number_integer())
+    {
+        m_SelectedIndex = json["selected_index"].get<int>();
+    }
+    if (json.contains("interactable") && json["interactable"].is_boolean())
+    {
+        m_Interactable = json["interactable"].get<bool>();
+    }
+    if (json.contains("transition") && json["transition"].is_number_integer())
+    {
+        const int transition = json["transition"].get<int>();
+        if (transition >= static_cast<int>(EGuiButtonTransition::NONE) &&
+            transition <= static_cast<int>(EGuiButtonTransition::COLOR_TINT))
+        {
+            m_Transition = static_cast<EGuiButtonTransition>(transition);
+        }
+    }
+    DeserializeGuiColor(json, "normal_color", m_NormalColor);
+    DeserializeGuiColor(json, "highlighted_color", m_HighlightedColor);
+    DeserializeGuiColor(json, "pressed_color", m_PressedColor);
+    DeserializeGuiColor(json, "selected_color", m_SelectedColor);
+    DeserializeGuiColor(json, "disabled_color", m_DisabledColor);
+    if (json.contains("color_multiplier") && json["color_multiplier"].is_number())
+    {
+        m_ColorMultiplier = std::clamp(json["color_multiplier"].get<float>(), 0.0f, 10.0f);
+    }
+    if (json.contains("fade_duration") && json["fade_duration"].is_number())
+    {
+        m_FadeDuration = std::clamp(json["fade_duration"].get<float>(), 0.0f, 10.0f);
+    }
+    if (json.contains("navigation") && json["navigation"].is_number_integer())
+    {
+        const int navigation = json["navigation"].get<int>();
+        if (navigation >= static_cast<int>(EGuiButtonNavigation::AUTOMATIC) &&
+            navigation <= static_cast<int>(EGuiButtonNavigation::NONE))
+        {
+            m_Navigation = static_cast<EGuiButtonNavigation>(navigation);
+        }
+    }
+    m_Name = GetTypeName();
+}
+
+void CTextComponent::Serialize(nlohmann::json& json) const
+{
+    json["text"] = m_Text;
+    json["font"] = m_Font;
+    json["font_style"] = static_cast<int>(m_FontStyle);
+    json["font_size"] = m_FontSize;
+    json["line_spacing"] = m_LineSpacing;
+    json["rich_text"] = m_RichText;
+    json["horizontal_alignment"] = static_cast<int>(m_HorizontalAlignment);
+    json["vertical_alignment"] = static_cast<int>(m_VerticalAlignment);
+    json["horizontal_overflow"] = static_cast<int>(m_HorizontalOverflow);
+    json["vertical_overflow"] = static_cast<int>(m_VerticalOverflow);
+    json["best_fit"] = m_BestFit;
+    json["color"] = SerializeGuiColor(m_Color);
+    json["material"] = m_Material;
+}
+
+void CTextComponent::Deserialize(const nlohmann::json& json)
+{
+    if (json.contains("text") && json["text"].is_string())
+    {
+        m_Text = json["text"].get<std::string>();
+    }
+    if (json.contains("font") && json["font"].is_string())
+    {
+        m_Font = json["font"].get<std::string>();
+    }
+    if (json.contains("font_style") && json["font_style"].is_number_integer())
+    {
+        const int fontStyle = json["font_style"].get<int>();
+        if (fontStyle >= static_cast<int>(EUiTextFontStyle::NORMAL) &&
+            fontStyle <= static_cast<int>(EUiTextFontStyle::BOLD_ITALIC))
+        {
+            m_FontStyle = static_cast<EUiTextFontStyle>(fontStyle);
+        }
+    }
+    if (json.contains("font_size") && json["font_size"].is_number())
+    {
+        m_FontSize = std::clamp(json["font_size"].get<float>(), 1.0f, 256.0f);
+    }
+    if (json.contains("line_spacing") && json["line_spacing"].is_number())
+    {
+        m_LineSpacing = std::clamp(json["line_spacing"].get<float>(), 0.1f, 10.0f);
+    }
+    if (json.contains("rich_text") && json["rich_text"].is_boolean())
+    {
+        m_RichText = json["rich_text"].get<bool>();
+    }
+    if (json.contains("horizontal_alignment") && json["horizontal_alignment"].is_number_integer())
+    {
+        const int alignment = json["horizontal_alignment"].get<int>();
+        if (alignment >= static_cast<int>(EUiTextAlignment::LEFT) &&
+            alignment <= static_cast<int>(EUiTextAlignment::RIGHT))
+        {
+            m_HorizontalAlignment = static_cast<EUiTextAlignment>(alignment);
+        }
+    }
+    if (json.contains("vertical_alignment") && json["vertical_alignment"].is_number_integer())
+    {
+        const int alignment = json["vertical_alignment"].get<int>();
+        if (alignment >= static_cast<int>(EUiTextVerticalAlignment::TOP) &&
+            alignment <= static_cast<int>(EUiTextVerticalAlignment::BOTTOM))
+        {
+            m_VerticalAlignment = static_cast<EUiTextVerticalAlignment>(alignment);
+        }
+    }
+    if (json.contains("horizontal_overflow") && json["horizontal_overflow"].is_number_integer())
+    {
+        const int overflow = json["horizontal_overflow"].get<int>();
+        if (overflow >= static_cast<int>(EUiTextOverflow::WRAP) &&
+            overflow <= static_cast<int>(EUiTextOverflow::TRUNCATE))
+        {
+            m_HorizontalOverflow = static_cast<EUiTextOverflow>(overflow);
+        }
+    }
+    if (json.contains("vertical_overflow") && json["vertical_overflow"].is_number_integer())
+    {
+        const int overflow = json["vertical_overflow"].get<int>();
+        if (overflow >= static_cast<int>(EUiTextOverflow::WRAP) &&
+            overflow <= static_cast<int>(EUiTextOverflow::TRUNCATE))
+        {
+            m_VerticalOverflow = static_cast<EUiTextOverflow>(overflow);
+        }
+    }
+    if (json.contains("best_fit") && json["best_fit"].is_boolean())
+    {
+        m_BestFit = json["best_fit"].get<bool>();
+    }
+    DeserializeGuiColor(json, "color", m_Color);
+    if (json.contains("material") && json["material"].is_string())
+    {
+        m_Material = json["material"].get<std::string>();
+    }
+}
+
 void CComponentManager::Deserialize(const nlohmann::json& json, const CComponentFactoryRegistry& factories)
 {
     if (!json.contains("components")) return;
 
     m_vComponents.clear();
+    nlohmann::json legacyUiData;
     for (const auto& compJson : json["components"])
     {
         const std::string typeName = compJson["type"];
         const bool compEnabled = compJson.value("enabled", true);
 
         std::shared_ptr<IComponent> pComp = factories.Create(typeName);
+        if (typeName == "Text" && compJson.contains("data") &&
+            compJson["data"].contains("thickness"))
+        {
+            pComp = std::make_shared<CText3DComponent>();
+        }
         if (!pComp)
         {
             TraceLog(LogLevel::Warn, "COMPONENT",
@@ -214,10 +420,68 @@ void CComponentManager::Deserialize(const nlohmann::json& json, const CComponent
 
         if (compJson.contains("data"))
         {
+            if (std::dynamic_pointer_cast<CUiComponent>(pComp))
+            {
+                legacyUiData = compJson["data"];
+            }
             pComp->Deserialize(compJson["data"]);
         }
         pComp->m_Enabled = compEnabled;
         m_vComponents.push_back(pComp);
+    }
+
+    if (auto pUi = GetComponentOfType<CUiComponent>())
+    {
+        auto pRectTransform = GetComponentOfType<CUiRectTransformComponent>();
+        if (!pRectTransform)
+        {
+            pRectTransform = std::make_shared<CUiRectTransformComponent>();
+            if (legacyUiData.contains("position") && legacyUiData["position"].is_array() &&
+                legacyUiData["position"].size() >= 2)
+            {
+                pRectTransform->m_Position = {
+                    legacyUiData["position"][0].get<float>(),
+                    legacyUiData["position"][1].get<float>()
+                };
+            }
+            if (legacyUiData.contains("size") && legacyUiData["size"].is_array() &&
+                legacyUiData["size"].size() >= 2)
+            {
+                pRectTransform->m_Size = {
+                    legacyUiData["size"][0].get<float>(),
+                    legacyUiData["size"][1].get<float>()
+                };
+            }
+            m_vComponents.push_back(pRectTransform);
+        }
+
+        auto pText = GetComponentOfType<CTextComponent>();
+        if (!pText)
+        {
+            pText = std::make_shared<CTextComponent>();
+            if (legacyUiData.contains("text") && legacyUiData["text"].is_string())
+            {
+                pText->m_Text = legacyUiData["text"].get<std::string>();
+            }
+            else if (pUi->m_WidgetType == EGuiWidgetType::Button)
+            {
+                pText->m_Text = "Button";
+            }
+            else if (pUi->m_WidgetType == EGuiWidgetType::InputField)
+            {
+                pText->m_Text.clear();
+            }
+            else
+            {
+                pText->m_Text = "Combo";
+            }
+            pText->m_HorizontalAlignment = pUi->m_WidgetType == EGuiWidgetType::Button
+                ? EUiTextAlignment::CENTER
+                : EUiTextAlignment::LEFT;
+            m_vComponents.push_back(pText);
+        }
+
+        RemoveMeshAndMaterialForUi();
     }
 }
 
@@ -275,6 +539,21 @@ void CComponentManager::CloneInto(const CComponentManager& source)
         case COMPONENT_SCRIPT:
             pCloned = std::make_shared<CScriptComponent>(
                 *std::dynamic_pointer_cast<CScriptComponent>(pComponent));
+            break;
+
+        case COMPONENT_UI:
+            pCloned = std::make_shared<CUiComponent>(
+                *std::dynamic_pointer_cast<CUiComponent>(pComponent));
+            break;
+
+        case COMPONENT_TEXT:
+            pCloned = std::make_shared<CTextComponent>(
+                *std::dynamic_pointer_cast<CTextComponent>(pComponent));
+            break;
+
+        case COMPONENT_UI_RECT_TRANSFORM:
+            pCloned = std::make_shared<CUiRectTransformComponent>(
+                *std::dynamic_pointer_cast<CUiRectTransformComponent>(pComponent));
             break;
 
         default:

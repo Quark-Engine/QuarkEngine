@@ -145,9 +145,45 @@ add_library(QuarkEngineRuntime SHARED
     src/text_mesh.cpp
     src/editor/editor_preferences.cpp
     src/editor/editor_utils.cpp
+    src/gui/gui_renderer_bridge.cpp
     src/scripting/script_component.cpp
     src/scripting/script_engine.cpp
 )
+
+add_library(QuarkEngineGUI SHARED
+    src/gui/quark_gui.cpp
+)
+target_include_directories(QuarkEngineGUI PUBLIC
+    ${CMAKE_SOURCE_DIR}/quark-libs/QuarkCore/include
+    ${CMAKE_SOURCE_DIR}/quark-libs/QuarkCore/external/SDL3/include
+    ${CMAKE_SOURCE_DIR}/include
+)
+target_link_libraries(QuarkEngineGUI PUBLIC
+    SDL3::SDL3
+)
+target_compile_definitions(QuarkEngineGUI PRIVATE
+    QUARK_GUI_BUILD_DLL
+    QUARKCORE_STATIC
+)
+set_target_properties(QuarkEngineGUI PROPERTIES
+    PREFIX ""
+    OUTPUT_NAME "QuarkEngineGUI"
+    RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/bin/$<CONFIG>
+    LIBRARY_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/bin/$<CONFIG>
+    ARCHIVE_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/bin/$<CONFIG>
+)
+if(APPLE)
+    set_target_properties(QuarkEngineGUI PROPERTIES
+        BUILD_RPATH "@loader_path"
+        INSTALL_RPATH "@loader_path"
+    )
+elseif(UNIX)
+    set_target_properties(QuarkEngineGUI PROPERTIES
+        BUILD_RPATH "$ORIGIN"
+        INSTALL_RPATH "$ORIGIN"
+    )
+endif()
+
 if(WIN32)
     target_sources(QuarkEngineRuntime PRIVATE imgui/imgui_impl_dx11.cpp)
     target_link_libraries(QuarkEngineRuntime PRIVATE d3d11)
@@ -164,6 +200,7 @@ if(WIN32)
 endif()
 target_link_libraries(QuarkEngineRuntime PRIVATE
     QuarkCoreRuntime
+    QuarkEngineGUI
     SDL3::SDL3
     assimp::assimp
     freetype
@@ -344,6 +381,7 @@ if(BUILD_ENGINE)
         src/hub.cpp
         src/language_manager.cpp
         src/lighting.cpp
+        src/gui/gui_renderer_bridge.cpp
         src/scripting/script_component.cpp
         src/scripting/script_engine.cpp
         src/main.cpp
@@ -357,7 +395,7 @@ if(BUILD_ENGINE)
     )
 
     add_executable(${PROJECT_NAME} ${SOURCE_FILES} ${EDITOR_FILES})
-    add_dependencies(${PROJECT_NAME} QuarkCoreRuntime QuarkEngineRuntime)
+    add_dependencies(${PROJECT_NAME} QuarkCoreRuntime QuarkEngineRuntime QuarkEngineGUI)
 
     set_target_properties(${PROJECT_NAME} PROPERTIES
         RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/bin/$<CONFIG>
@@ -400,6 +438,7 @@ if(BUILD_ENGINE)
 
     target_link_libraries(${PROJECT_NAME} PRIVATE
         QuarkCore-Combined
+        QuarkEngineGUI
         imgui
         imgui-opengl
         imgui-vulkan
@@ -467,6 +506,7 @@ if(BUILD_ENGINE)
                 $<TARGET_FILE:QuarkCore>
                 $<TARGET_FILE:QuarkCore-OpenGL>
                 $<TARGET_FILE:QuarkCore-D3D11>
+                $<TARGET_FILE:QuarkEngineGUI>
                 $<TARGET_FILE:imgui>
                 $<TARGET_FILE:imgui-opengl>
                 $<TARGET_FILE:imgui-vulkan>
@@ -520,6 +560,7 @@ if(BUILD_ENGINE)
             COMMAND ${CMAKE_COMMAND} -E copy_if_different
                 $<TARGET_FILE:QuarkCore>
                 $<TARGET_FILE:QuarkCore-OpenGL>
+                $<TARGET_FILE:QuarkEngineGUI>
                 $<TARGET_FILE:imgui>
                 $<TARGET_FILE:imgui-opengl>
                 $<TARGET_FILE:imgui-vulkan>
@@ -597,7 +638,7 @@ if(QUARK_BUILD_TESTS)
         ${CMAKE_SOURCE_DIR}/include
     )
 
-    target_link_libraries(QuarkEngineTests PRIVATE QuarkCore-Combined)
+    target_link_libraries(QuarkEngineTests PRIVATE QuarkCore-Combined QuarkEngineGUI)
 
     if(WIN32)
         target_compile_definitions(QuarkEngineTests PRIVATE
@@ -639,6 +680,7 @@ if(QUARK_BUILD_TESTS)
             COMMAND ${CMAKE_COMMAND} -E copy_if_different
                 $<TARGET_FILE:QuarkCore-OpenGL>
                 $<TARGET_FILE:QuarkCore-D3D11>
+                $<TARGET_FILE:QuarkEngineGUI>
                 $<TARGET_FILE:SDL3::SDL3>
                 $<TARGET_FILE:assimp::assimp>
                 $<TARGET_FILE:freetype>
@@ -657,6 +699,7 @@ if(QUARK_BUILD_TESTS)
             COMMAND ${CMAKE_COMMAND} -E copy_if_different
                 $<TARGET_FILE:QuarkCore>
                 $<TARGET_FILE:QuarkCore-OpenGL>
+                $<TARGET_FILE:QuarkEngineGUI>
                 $<TARGET_FILE:assimp::assimp>
                 $<TARGET_FILE:freetype>
                 $<TARGET_FILE:SDL3::SDL3>

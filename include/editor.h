@@ -102,6 +102,9 @@ public:
     bool m_SelectGameTab = false;
     bool m_ShowGameView = true;
     bool m_GameCameraAvailable = false;
+    bool m_Scene2DMode = false;
+    float m_Scene2DZoom = 1.0f;
+    Vec2 m_Scene2DPan = { 0.0f, 0.0f };
     std::string m_StatusMessage;
     SEditorUiTimings m_UiTimings{};
 
@@ -131,6 +134,7 @@ public:
     std::future<SBuildTaskResult> m_BuildFuture;
 
 private:
+    void SetScene2DMode(CFlyCamera& camera, bool enabled);
     void StartSnapshotRestore(const quark::SSceneSnapshot& snapshot, bool playRestore);
     void StartHistoryRestore(bool undo);
     void DrawMainMenuBar(SPluginContext* pCtx, ImGuiID dockspaceId,
@@ -158,6 +162,10 @@ private:
     bool DrawPreferencesRenderingTab(CFlyCamera& camera);
     bool DrawPreferencesInterfaceTab();
     bool DrawPreferencesPluginsTab(SPluginContext* pPluginCtx);
+
+    Camera3D m_CameraBefore2D = {};
+    float m_CameraPitchBefore2D = 0.0f;
+    float m_CameraYawBefore2D = 0.0f;
 };
 
 #endif // __EDITOR_H__
