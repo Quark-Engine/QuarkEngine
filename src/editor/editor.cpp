@@ -22,46 +22,45 @@ namespace fs = std::filesystem;
 namespace
 {
 
-void PushHistory(std::stack<quark::SSceneSnapshot>& stack, const quark::SSceneSnapshot& snapshot,
-    int historyLimit)
-{
-    stack.push(snapshot);
-    while (stack.size() > static_cast<size_t>(historyLimit))
+    void PushHistory(std::stack<quark::SSceneSnapshot>& stack, const quark::SSceneSnapshot& snapshot,
+                     int historyLimit)
     {
-        stack.pop();
-    }
-}
-
-bool RestoreSnapshot(CScene& scene, const quark::SParsedSceneDocument& document,
-                     const quark::SSceneSnapshot& snapshot,
-                     CAssetLibrary& assets, CLightRegistry& lights,
-                     const CComponentFactoryRegistry& factories,
-                     const std::vector<std::optional<SEditableMeshBuildData>>& vGeometry)
-{
-    CScene previousScene;
-    previousScene.m_vEntities = std::move(scene.m_vEntities);
-    try
-    {
-        if (!quark::CSceneDocument::Deserialize(document, scene, factories))
+        stack.push(snapshot);
+        while (stack.size() > static_cast<size_t>(historyLimit))
         {
+            stack.pop();
+        }
+    }
+
+    bool RestoreSnapshot(CScene& scene, const quark::SParsedSceneDocument& document,
+                         const quark::SSceneSnapshot& snapshot,
+                         CAssetLibrary& assets, CLightRegistry& lights,
+                         const CComponentFactoryRegistry& factories,
+                         const std::vector<std::optional<SEditableMeshBuildData>>& vGeometry)
+    {
+        CScene previousScene;
+        previousScene.m_vEntities = std::move(scene.m_vEntities);
+        try
+        {
+            if (!quark::CSceneDocument::Deserialize(document, scene, factories))
+            {
+                scene.m_vEntities = std::move(previousScene.m_vEntities);
+                return false;
+            }
+        }
+        catch (const std::exception& exception)
+        {
+            TraceLog(LogLevel::Error, "EDITOR", TextFormat("Failed to deserialize scene snapshot: %s", exception.what()));
             scene.m_vEntities = std::move(previousScene.m_vEntities);
             return false;
         }
-    }
-    catch (const std::exception& exception)
-    {
-        TraceLog(LogLevel::Error, "EDITOR", TextFormat(
-            "Failed to deserialize scene snapshot: %s", exception.what()));
-        scene.m_vEntities = std::move(previousScene.m_vEntities);
-        return false;
-    }
 
-    scene.m_Selected = snapshot.Selected;
-    scene.m_vSelectedEntities = snapshot.vSelectedEntities;
-    quark::CSceneRuntime::RestoreSceneEntityModels(scene, assets, &previousScene, &vGeometry);
-    quark::CSceneRuntime::ResetSceneLightRuntime(scene, lights);
-    return true;
-}
+        scene.m_Selected = snapshot.m_Selected;
+        scene.m_vSelectedEntities = snapshot.m_vSelectedEntities;
+        quark::CSceneRuntime::RestoreSceneEntityModels(scene, assets, &previousScene, &vGeometry);
+        quark::CSceneRuntime::ResetSceneLightRuntime(scene, lights);
+        return true;
+    }
 
 } // anonymous
 
@@ -229,7 +228,7 @@ void CEditor::StartSnapshotRestore(const quark::SSceneSnapshot& snapshot, bool p
         ? std::nullopt
         : std::optional<quark::SSceneSnapshot>(quark::CSceneDocument::CaptureSnapshot(m_Scene));
     m_PendingPlayRestore = playRestore;
-    const std::string document = snapshot.Document;
+    const std::string document = snapshot.m_Document;
     m_StatusMessage = playRestore
         ? "Restoring scene after Play..."
         : (m_PendingHistoryIsUndo ? "Undo in progress..." : "Redo in progress...");
@@ -238,17 +237,16 @@ void CEditor::StartSnapshotRestore(const quark::SSceneSnapshot& snapshot, bool p
         m_HistoryRestoreFuture = m_CpuTaskPool.Submit(
             playRestore ? "Parse scene snapshot for Play restore" : "Parse scene snapshot for Undo/Redo",
             [document]()
-        {
-            return quark::CSceneDocument::Parse(document);
-        });
+            {
+                return quark::CSceneDocument::Parse(document);
+            });
     }
     catch (const std::exception& exception)
     {
         m_StatusMessage = playRestore
             ? "Play restore failed to start background parsing"
             : "Undo/Redo failed to start background parsing";
-        TraceLog(LogLevel::Error, "EDITOR", TextFormat("%s: %s",
-            m_StatusMessage.c_str(), exception.what()));
+        TraceLog(LogLevel::Error, "EDITOR", TextFormat("%s: %s", m_StatusMessage.c_str(), exception.what()));
         m_PendingHistorySnapshot.reset();
         m_PendingCurrentSnapshot.reset();
         m_PendingPlayRestore = false;
@@ -288,13 +286,12 @@ void CEditor::PollHistoryRestore()
             m_StatusMessage = m_PendingPlayRestore
                 ? "Play restore failed while parsing the scene snapshot"
                 : "Undo/Redo failed while parsing the scene snapshot";
-            TraceLog(LogLevel::Error, "EDITOR", TextFormat("%s: %s",
-                m_StatusMessage.c_str(), exception.what()));
+            TraceLog(LogLevel::Error, "EDITOR", TextFormat("%s: %s", m_StatusMessage.c_str(), exception.what()));
             clearPendingRestore();
             return;
         }
 
-        if (!m_PendingParsedSceneDocument->IsValid)
+        if (!m_PendingParsedSceneDocument->m_IsValid)
         {
             m_StatusMessage = m_PendingPlayRestore
                 ? "Play restore failed: the scene snapshot is invalid"
@@ -305,19 +302,19 @@ void CEditor::PollHistoryRestore()
         }
 
         m_vPendingGeometryResults.resize(
-            m_PendingParsedSceneDocument->Document["entities"].size());
+            m_PendingParsedSceneDocument->m_Document["entities"].size());
         try
         {
-            for (auto& meshSnapshot : m_PendingParsedSceneDocument->vEditableMeshes)
+            for (auto& meshSnapshot : m_PendingParsedSceneDocument->m_vEditableMeshes)
             {
-                const size_t entityIndex = meshSnapshot.EntityIndex;
-                CEditableMesh editableMesh = std::move(meshSnapshot.Mesh);
+                const size_t entityIndex = meshSnapshot.m_EntityIndex;
+                CEditableMesh editableMesh = std::move(meshSnapshot.m_Mesh);
                 m_vPendingGeometryFutures.emplace_back(
                     entityIndex,
                     m_CpuTaskPool.Submit("Build editable mesh geometry", [editableMesh = std::move(editableMesh)]()
-                    {
-                        return BuildEditableMeshData(editableMesh);
-                    }));
+                                         {
+                                             return BuildEditableMeshData(editableMesh);
+                                         }));
             }
         }
         catch (const std::exception& exception)
@@ -325,8 +322,7 @@ void CEditor::PollHistoryRestore()
             m_StatusMessage = m_PendingPlayRestore
                 ? "Play restore failed to schedule geometry processing"
                 : "Undo/Redo failed to schedule geometry processing";
-            TraceLog(LogLevel::Error, "EDITOR", TextFormat("%s: %s",
-                m_StatusMessage.c_str(), exception.what()));
+            TraceLog(LogLevel::Error, "EDITOR", TextFormat("%s: %s", m_StatusMessage.c_str(), exception.what()));
             clearPendingRestore();
             return;
         }
@@ -345,7 +341,7 @@ void CEditor::PollHistoryRestore()
         for (auto& geometryFuture : m_vPendingGeometryFutures)
         {
             SEditableMeshBuildData buildData = geometryFuture.second.get();
-            if (!buildData.IsValid || geometryFuture.first >= m_vPendingGeometryResults.size())
+            if (!buildData.m_IsValid || geometryFuture.first >= m_vPendingGeometryResults.size())
             {
                 m_StatusMessage = m_PendingPlayRestore
                     ? "Play restore failed: editable mesh geometry is invalid"
@@ -362,8 +358,7 @@ void CEditor::PollHistoryRestore()
         m_StatusMessage = m_PendingPlayRestore
             ? "Play restore failed while processing editable mesh geometry"
             : "Undo/Redo failed while processing editable mesh geometry";
-        TraceLog(LogLevel::Error, "EDITOR", TextFormat("%s: %s",
-            m_StatusMessage.c_str(), exception.what()));
+        TraceLog(LogLevel::Error, "EDITOR", TextFormat("%s: %s", m_StatusMessage.c_str(), exception.what()));
         clearPendingRestore();
         return;
     }
@@ -381,7 +376,7 @@ void CEditor::PollHistoryRestore()
     }
 
     if (!RestoreSnapshot(m_Scene, *m_PendingParsedSceneDocument, *m_PendingHistorySnapshot,
-        m_Assets, m_Lights, m_ComponentFactories, m_vPendingGeometryResults))
+                         m_Assets, m_Lights, m_ComponentFactories, m_vPendingGeometryResults))
     {
         m_StatusMessage = m_PendingPlayRestore
             ? "Play restore failed: could not restore the scene snapshot"
@@ -431,15 +426,15 @@ void CEditor::HandleInput()
 
     if (keyboardAvailable && IsKeyPressed(KEY_P))
     {
-        m_Ui.m_MeshEdit.GizmoMode = ImGuizmo::TRANSLATE;
+        m_Ui.m_MeshEdit.m_GizmoMode = ImGuizmo::TRANSLATE;
     }
     if (keyboardAvailable && IsKeyPressed(KEY_R))
     {
-        m_Ui.m_MeshEdit.GizmoMode = ImGuizmo::ROTATE;
+        m_Ui.m_MeshEdit.m_GizmoMode = ImGuizmo::ROTATE;
     }
     if (keyboardAvailable && IsKeyPressed(KEY_S))
     {
-        m_Ui.m_MeshEdit.GizmoMode = ImGuizmo::SCALE;
+        m_Ui.m_MeshEdit.m_GizmoMode = ImGuizmo::SCALE;
     }
 
     if (IsFileDropped())
@@ -493,64 +488,64 @@ void CEditor::HandleInput()
 
     if (ctrl && IsKeyDown(KEY_Z))
     {
-        if (m_Ui.m_MeshEdit.Undo.ShouldFire(now))
+        if (m_Ui.m_MeshEdit.m_Undo.ShouldFire(now))
         {
             Undo();
         }
     }
     else
     {
-        m_Ui.m_MeshEdit.Undo.Release();
+        m_Ui.m_MeshEdit.m_Undo.Release();
     }
 
     if (ctrl && IsKeyDown(KEY_Y))
     {
-        if (m_Ui.m_MeshEdit.Redo.ShouldFire(now))
+        if (m_Ui.m_MeshEdit.m_Redo.ShouldFire(now))
         {
             Redo();
         }
     }
     else
     {
-        m_Ui.m_MeshEdit.Redo.Release();
+        m_Ui.m_MeshEdit.m_Redo.Release();
     }
 
     CEntity* pEntity = m_Scene.GetSelected();
 
     if (ctrl && IsKeyDown(KEY_C))
     {
-        if (m_Ui.m_MeshEdit.Copy.ShouldFire(now))
+        if (m_Ui.m_MeshEdit.m_Copy.ShouldFire(now))
         {
             CEntityClipboard::Copy(*this, pEntity);
         }
     }
     else
     {
-        m_Ui.m_MeshEdit.Copy.Release();
+        m_Ui.m_MeshEdit.m_Copy.Release();
     }
 
     if (ctrl && IsKeyDown(KEY_V))
     {
-        if (m_Ui.m_MeshEdit.Paste.ShouldFire(now))
+        if (m_Ui.m_MeshEdit.m_Paste.ShouldFire(now))
         {
             CEntityClipboard::Paste(*this);
         }
     }
     else
     {
-        m_Ui.m_MeshEdit.Paste.Release();
+        m_Ui.m_MeshEdit.m_Paste.Release();
     }
 
     if (ctrl && IsKeyDown(KEY_D))
     {
-        if (m_Ui.m_MeshEdit.Duplicate.ShouldFire(now))
+        if (m_Ui.m_MeshEdit.m_Duplicate.ShouldFire(now))
         {
             CSceneEntityCommands::Duplicate(*this, pEntity);
         }
     }
     else
     {
-        m_Ui.m_MeshEdit.Duplicate.Release();
+        m_Ui.m_MeshEdit.m_Duplicate.Release();
     }
 
     if (keyboardAvailable && IsKeyPressed(KEY_DELETE))
@@ -562,9 +557,9 @@ void CEditor::HandleInput()
     {
         m_Previews.InvalidateModelPreviews();
         m_Previews.InvalidateMaterialPreviews();
-        m_Ui.m_AssetBrowser.dependencyCachePath.clear();
-        m_Ui.m_AssetBrowser.vCachedFileDependencies.clear();
-        m_Ui.m_AssetBrowser.dependencyCacheReady = false;
+        m_Ui.m_AssetBrowser.m_DependencyCachePath.clear();
+        m_Ui.m_AssetBrowser.m_vCachedFileDependencies.clear();
+        m_Ui.m_AssetBrowser.m_DependencyCacheReady = false;
 
         if (m_Ui.m_ModelViewer.m_Visible && !m_Ui.m_ModelViewer.m_AssetName.empty())
         {

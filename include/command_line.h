@@ -19,27 +19,27 @@ enum class ETriState
 
 struct SCommandLineOptions
 {
-    bool Headless = false;
-    bool TestMode = false;
-    std::string ProjectPath;
+    bool m_Headless = false;
+    bool m_TestMode = false;
+    std::string m_ProjectPath;
 
-    ERendererOverride RendererOverride = ERendererOverride::NONE;
-    ETriState VsyncOverride = ETriState::UNSET;
-    int FpsOverride = -1;
+    ERendererOverride m_RendererOverride = ERendererOverride::NONE;
+    ETriState m_VsyncOverride = ETriState::UNSET;
+    int m_FpsOverride = -1;
 
-    bool NoPlugins = false;
-    std::string PluginsDir = "plugins";
+    bool m_NoPlugins = false;
+    std::string m_PluginsDir = "plugins";
 
-    std::string LangOverride;
-    std::string LogLevel;
+    std::string m_LangOverride;
+    std::string m_LogLevel;
 
-    bool NoAutosave = false;
-    bool NewProject = false;
+    bool m_NoAutosave = false;
+    bool m_NewProject = false;
 
-    bool HelpRequested = false;
-    bool VersionRequested = false;
+    bool m_HelpRequested = false;
+    bool m_VersionRequested = false;
 
-    int DumpFrames = 0;
+    int m_DumpFrames = 0;
 };
 
 class CCommandLineParser

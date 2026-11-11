@@ -24,54 +24,54 @@ namespace fs = std::filesystem;
 namespace
 {
 
-fs::path ResolvePrefabDropPath(const CEditor& editor, const std::string& assetName)
-{
-    std::error_code ec;
-    const fs::path directPath(assetName);
-    if (fs::is_regular_file(directPath, ec) && !ec)
+    fs::path ResolvePrefabDropPath(const CEditor& editor, const std::string& assetName)
     {
+        std::error_code ec;
+        const fs::path directPath(assetName);
+        if (fs::is_regular_file(directPath, ec) && !ec)
+        {
+            return directPath;
+        }
+
+        if (!editor.m_CurrentAssetPath.empty())
+        {
+            const fs::path currentDirCandidate = editor.m_CurrentAssetPath / directPath;
+            if (fs::is_regular_file(currentDirCandidate, ec) && !ec)
+            {
+                return currentDirCandidate;
+            }
+        }
+
+        if (!editor.m_ProjectPath.empty())
+        {
+            const fs::path resourcesCandidate = fs::path(editor.m_ProjectPath) / "resources" / directPath;
+            if (fs::is_regular_file(resourcesCandidate, ec) && !ec)
+            {
+                return resourcesCandidate;
+            }
+        }
+
         return directPath;
     }
 
-    if (!editor.m_CurrentAssetPath.empty())
+    bool CanParsePrefabFile(const fs::path& prefabPath)
     {
-        const fs::path currentDirCandidate = editor.m_CurrentAssetPath / directPath;
-        if (fs::is_regular_file(currentDirCandidate, ec) && !ec)
+        std::ifstream file(prefabPath);
+        if (!file.is_open())
         {
-            return currentDirCandidate;
+            return false;
         }
+        std::stringstream buffer;
+        buffer << file.rdbuf();
+        return quark::CSceneDocument::ParsePrefab(buffer.str()).m_IsValid;
     }
-
-    if (!editor.m_ProjectPath.empty())
-    {
-        const fs::path resourcesCandidate = fs::path(editor.m_ProjectPath) / "resources" / directPath;
-        if (fs::is_regular_file(resourcesCandidate, ec) && !ec)
-        {
-            return resourcesCandidate;
-        }
-    }
-
-    return directPath;
-}
-
-bool CanParsePrefabFile(const fs::path& prefabPath)
-{
-    std::ifstream file(prefabPath);
-    if (!file.is_open())
-    {
-        return false;
-    }
-    std::stringstream buffer;
-    buffer << file.rdbuf();
-    return quark::CSceneDocument::ParsePrefab(buffer.str()).IsValid;
-}
 
 } // anonymous
 
 void CSceneAssetDrop::Handle(CEditor& editor, const Camera3D& camera)
 {
     CViewportState& viewport = editor.m_Ui.m_Viewport;
-    if (!editor.m_Ui.m_Layout.SceneAssetDragging)
+    if (!editor.m_Ui.m_Layout.m_SceneAssetDragging)
     {
         return;
     }
@@ -80,9 +80,9 @@ void CSceneAssetDrop::Handle(CEditor& editor, const Camera3D& camera)
         return;
     }
 
-    const std::string assetName = editor.m_Ui.m_Layout.DraggedSceneAssetName;
-    editor.m_Ui.m_Layout.SceneAssetDragging = false;
-    editor.m_Ui.m_Layout.DraggedSceneAssetName.clear();
+    const std::string assetName = editor.m_Ui.m_Layout.m_DraggedSceneAssetName;
+    editor.m_Ui.m_Layout.m_SceneAssetDragging = false;
+    editor.m_Ui.m_Layout.m_DraggedSceneAssetName.clear();
 
     if (ImGuizmo::IsUsing())
     {

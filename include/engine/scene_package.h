@@ -9,20 +9,20 @@
 namespace quark
 {
 
-class CScenePackage
-{
-public:
-    static bool Write(const std::filesystem::path& packagePath,
-                      const std::string& activeScene,
-                      const std::filesystem::path& projectRoot,
-                      const std::filesystem::path& activeScenePath,
-                      std::string& errorMessage);
-    static bool WriteFiles(const std::filesystem::path& packagePath,
-                           const std::vector<std::pair<std::string, std::string>>& vEntries,
-                           std::string& errorMessage);
-    static bool Extract(const std::filesystem::path& packagePath,
-                        const std::filesystem::path& projectRoot);
-};
+    class CScenePackage
+    {
+    public:
+        static bool Write(const std::filesystem::path& packagePath,
+                          const std::string& activeScene,
+                          const std::filesystem::path& projectRoot,
+                          const std::filesystem::path& activeScenePath,
+                          std::string& errorMessage);
+        static bool WriteFiles(const std::filesystem::path& packagePath,
+                               const std::vector<std::pair<std::string, std::string>>& vEntries,
+                               std::string& errorMessage);
+        static bool Extract(const std::filesystem::path& packagePath,
+                            const std::filesystem::path& projectRoot);
+    };
 
 } // quark
 

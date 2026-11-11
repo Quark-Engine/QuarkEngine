@@ -11,51 +11,51 @@
 namespace quark
 {
 
-struct SSceneSnapshot
-{
-    std::string Document;
-    int Selected = -1;
-    std::vector<int> vSelectedEntities;
-};
-
-struct SParsedSceneDocument
-{
-    nlohmann::json Document;
-    struct SEditableMeshSnapshot
+    struct SSceneSnapshot
     {
-        size_t EntityIndex = 0;
-        CEditableMesh Mesh;
+        std::string m_Document;
+        int m_Selected = -1;
+        std::vector<int> m_vSelectedEntities;
     };
-    std::vector<SEditableMeshSnapshot> vEditableMeshes;
-    bool IsValid = false;
-};
 
-class CSceneDocument
-{
-public:
-    static std::string Serialize(const CScene& scene, int indent = 4);
+    struct SParsedSceneDocument
+    {
+        nlohmann::json m_Document;
+        struct SEditableMeshSnapshot
+        {
+            size_t m_EntityIndex = 0;
+            CEditableMesh m_Mesh;
+        };
+        std::vector<SEditableMeshSnapshot> m_vEditableMeshes;
+        bool m_IsValid = false;
+    };
 
-    static SParsedSceneDocument Parse(const std::string& document);
+    class CSceneDocument
+    {
+    public:
+        static std::string Serialize(const CScene& scene, int indent = 4);
 
-    static bool Deserialize(const SParsedSceneDocument& document, CScene& scene,
-        const CComponentFactoryRegistry& factories);
+        static SParsedSceneDocument Parse(const std::string& document);
 
-    static bool Deserialize(const std::string& document, CScene& scene, const CComponentFactoryRegistry& factories);
+        static bool Deserialize(const SParsedSceneDocument& document, CScene& scene,
+                                const CComponentFactoryRegistry& factories);
 
-    static std::string SerializePrefab(const CScene& scene, int rootEntityIndex, int indent = 4);
+        static bool Deserialize(const std::string& document, CScene& scene, const CComponentFactoryRegistry& factories);
 
-    static SParsedSceneDocument ParsePrefab(const std::string& document);
+        static std::string SerializePrefab(const CScene& scene, int rootEntityIndex, int indent = 4);
 
-    static bool InstantiatePrefab(const SParsedSceneDocument& parsedPrefab, CScene& scene,
-        const CComponentFactoryRegistry& factories, int parentEntityIndex = -1,
-        std::vector<int>* pvOutCreatedIndices = nullptr);
+        static SParsedSceneDocument ParsePrefab(const std::string& document);
 
-    static bool InstantiatePrefab(const std::string& document, CScene& scene,
-        const CComponentFactoryRegistry& factories, int parentEntityIndex = -1,
-        std::vector<int>* pvOutCreatedIndices = nullptr);
+        static bool InstantiatePrefab(const SParsedSceneDocument& parsedPrefab, CScene& scene,
+                                      const CComponentFactoryRegistry& factories, int parentEntityIndex = -1,
+                                      std::vector<int>* pvOutCreatedIndices = nullptr);
 
-    static SSceneSnapshot CaptureSnapshot(const CScene& scene);
-};
+        static bool InstantiatePrefab(const std::string& document, CScene& scene,
+                                      const CComponentFactoryRegistry& factories, int parentEntityIndex = -1,
+                                      std::vector<int>* pvOutCreatedIndices = nullptr);
+
+        static SSceneSnapshot CaptureSnapshot(const CScene& scene);
+    };
 
 } // quark
 

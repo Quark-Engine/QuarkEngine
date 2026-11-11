@@ -22,43 +22,43 @@ bool CTextureMetadataStore::IsImageFile(const fs::path& path)
 namespace
 {
 
-std::string MakeTextureGuid()
-{
-    std::random_device device;
-    std::mt19937_64 generator(device());
-    std::uniform_int_distribution<unsigned long long> distribution;
-    std::ostringstream stream;
-    stream << std::hex << std::setfill('0') << std::setw(16) << distribution(generator)
-           << std::setw(16) << distribution(generator);
-    return stream.str();
-}
-
-bool ParseMetaValue(const fs::path& texturePath, const char* pKey, std::string& value)
-{
-    std::ifstream file(texturePath.string() + ".meta");
-    if (!file.is_open())
+    std::string MakeTextureGuid()
     {
+        std::random_device device;
+        std::mt19937_64 generator(device());
+        std::uniform_int_distribution<unsigned long long> distribution;
+        std::ostringstream stream;
+        stream << std::hex << std::setfill('0') << std::setw(16) << distribution(generator)
+               << std::setw(16) << distribution(generator);
+        return stream.str();
+    }
+
+    bool ParseMetaValue(const fs::path& texturePath, const char* pKey, std::string& value)
+    {
+        std::ifstream file(texturePath.string() + ".meta");
+        if (!file.is_open())
+        {
+            return false;
+        }
+        std::string line;
+        const std::string prefix = std::string(pKey) + ":";
+        while (std::getline(file, line))
+        {
+            line.erase(0, line.find_first_not_of(" \t"));
+            if (line.rfind(prefix, 0) != 0)
+            {
+                continue;
+            }
+            value = line.substr(prefix.size());
+            value.erase(0, value.find_first_not_of(" \t"));
+            if (value.empty())
+            {
+                continue;
+            }
+            return true;
+        }
         return false;
     }
-    std::string line;
-    const std::string prefix = std::string(pKey) + ":";
-    while (std::getline(file, line))
-    {
-        line.erase(0, line.find_first_not_of(" \t"));
-        if (line.rfind(prefix, 0) != 0)
-        {
-            continue;
-        }
-        value = line.substr(prefix.size());
-        value.erase(0, value.find_first_not_of(" \t"));
-        if (value.empty())
-        {
-            continue;
-        }
-        return true;
-    }
-    return false;
-}
 
 } // anonymous
 
@@ -81,22 +81,22 @@ bool CTextureMetadataStore::Save(const fs::path& texturePath, const STextureMeta
         return false;
     }
     file << "quark_texture_meta: 1\n"
-         << "asset_id: " << meta.Guid << "\n"
+         << "asset_id: " << meta.m_Guid << "\n"
          << "image:\n"
-         << "  color_space: " << (meta.SrgbTexture ? "srgb" : "linear") << "\n"
-         << "  alpha_mode: " << (meta.AlphaIsTransparency ? "transparency" : "straight") << "\n"
-         << "  readable: " << (meta.IsReadable ? "true" : "false") << "\n"
+         << "  color_space: " << (meta.m_SrgbTexture ? "srgb" : "linear") << "\n"
+         << "  alpha_mode: " << (meta.m_AlphaIsTransparency ? "transparency" : "straight") << "\n"
+         << "  readable: " << (meta.m_IsReadable ? "true" : "false") << "\n"
          << "sampling:\n"
-         << "  mipmaps: " << (meta.EnableMipMap ? "true" : "false") << "\n"
-         << "  filter: " << (meta.FilterMode == 1 ? "linear" : "nearest") << "\n"
-         << "  wrap_u: " << (meta.WrapU == 0 ? "repeat" : "clamp") << "\n"
-         << "  wrap_v: " << (meta.WrapV == 0 ? "repeat" : "clamp") << "\n"
+         << "  mipmaps: " << (meta.m_EnableMipMap ? "true" : "false") << "\n"
+         << "  filter: " << (meta.m_FilterMode == 1 ? "linear" : "nearest") << "\n"
+         << "  wrap_u: " << (meta.m_WrapU == 0 ? "repeat" : "clamp") << "\n"
+         << "  wrap_v: " << (meta.m_WrapV == 0 ? "repeat" : "clamp") << "\n"
          << "limits:\n"
-         << "  max_size: " << meta.MaxTextureSize << "\n"
-         << "  compression: " << meta.CompressionQuality << "\n"
+         << "  max_size: " << meta.m_MaxTextureSize << "\n"
+         << "  compression: " << meta.m_CompressionQuality << "\n"
          << "sprite:\n"
-         << "  mode: " << meta.SpriteMode << "\n"
-         << "  type: " << meta.TextureType << "\n";
+         << "  mode: " << meta.m_SpriteMode << "\n"
+         << "  type: " << meta.m_TextureType << "\n";
     return file.good();
 }
 
@@ -109,59 +109,59 @@ bool CTextureMetadataStore::Load(const fs::path& texturePath, STextureMeta& meta
     std::string value;
     if (ParseMetaValue(texturePath, "asset_id", value))
     {
-        meta.Guid = value;
+        meta.m_Guid = value;
     }
-    if (meta.Guid.empty())
+    if (meta.m_Guid.empty())
     {
-        ParseMetaValue(texturePath, "guid", meta.Guid);
+        ParseMetaValue(texturePath, "guid", meta.m_Guid);
     }
-    if (meta.Guid.empty())
+    if (meta.m_Guid.empty())
     {
-        meta.Guid = MakeTextureGuid();
+        meta.m_Guid = MakeTextureGuid();
     }
     if (ParseMetaValue(texturePath, "mipmaps", value))
     {
-        meta.EnableMipMap = value == "true";
+        meta.m_EnableMipMap = value == "true";
     }
     if (ParseMetaValue(texturePath, "color_space", value))
     {
-        meta.SrgbTexture = value == "srgb";
+        meta.m_SrgbTexture = value == "srgb";
     }
     if (ParseMetaValue(texturePath, "readable", value))
     {
-        meta.IsReadable = value == "true";
+        meta.m_IsReadable = value == "true";
     }
     if (ParseMetaValue(texturePath, "filter", value))
     {
-        meta.FilterMode = value == "linear" ? 1 : 0;
+        meta.m_FilterMode = value == "linear" ? 1 : 0;
     }
     if (ParseMetaValue(texturePath, "wrap_u", value))
     {
-        meta.WrapU = value == "repeat" ? 0 : 1;
+        meta.m_WrapU = value == "repeat" ? 0 : 1;
     }
     if (ParseMetaValue(texturePath, "wrap_v", value))
     {
-        meta.WrapV = value == "repeat" ? 0 : 1;
+        meta.m_WrapV = value == "repeat" ? 0 : 1;
     }
     if (ParseMetaValue(texturePath, "max_size", value))
     {
-        meta.MaxTextureSize = std::atoi(value.c_str());
+        meta.m_MaxTextureSize = std::atoi(value.c_str());
     }
     if (ParseMetaValue(texturePath, "compression", value))
     {
-        meta.CompressionQuality = std::atoi(value.c_str());
+        meta.m_CompressionQuality = std::atoi(value.c_str());
     }
     if (ParseMetaValue(texturePath, "mode", value))
     {
-        meta.SpriteMode = std::atoi(value.c_str());
+        meta.m_SpriteMode = std::atoi(value.c_str());
     }
     if (ParseMetaValue(texturePath, "type", value))
     {
-        meta.TextureType = std::atoi(value.c_str());
+        meta.m_TextureType = std::atoi(value.c_str());
     }
     if (ParseMetaValue(texturePath, "alpha_mode", value))
     {
-        meta.AlphaIsTransparency = value == "transparency";
+        meta.m_AlphaIsTransparency = value == "transparency";
     }
     return true;
 }
@@ -175,7 +175,7 @@ bool CTextureMetadataStore::Ensure(const fs::path& texturePath)
     STextureMeta meta;
     if (!Load(texturePath, meta))
     {
-        meta.Guid = MakeTextureGuid();
+        meta.m_Guid = MakeTextureGuid();
         return Save(texturePath, meta);
     }
     return Save(texturePath, meta);
@@ -187,9 +187,9 @@ void CTextureMetadataStore::ApplyToTexture(Texture2D& texture, const STextureMet
     {
         return;
     }
-    SetTextureFilter(texture, meta.FilterMode == 1 ? TEXTURE_FILTER_BILINEAR : TEXTURE_FILTER_POINT);
-    SetTextureWrap(texture, meta.WrapU == 0 ? TEXTURE_WRAP_REPEAT : TEXTURE_WRAP_CLAMP);
-    if (meta.EnableMipMap)
+    SetTextureFilter(texture, meta.m_FilterMode == 1 ? TEXTURE_FILTER_BILINEAR : TEXTURE_FILTER_POINT);
+    SetTextureWrap(texture, meta.m_WrapU == 0 ? TEXTURE_WRAP_REPEAT : TEXTURE_WRAP_CLAMP);
+    if (meta.m_EnableMipMap)
     {
         GenTextureMipmaps(&texture);
     }
@@ -207,7 +207,7 @@ void CEntityTextureService::ApplyTextureRepeat(CEntity& entity)
 
     for (int m = 0; m < pMeshComponent->m_Model.meshCount; m++)
     {
-        Mesh &mesh = pMeshComponent->m_Model.meshes[m];
+        Mesh& mesh = pMeshComponent->m_Model.meshes[m];
         if (!mesh.texcoords)
         {
             continue;
@@ -220,15 +220,15 @@ void CEntityTextureService::ApplyTextureRepeat(CEntity& entity)
             if (pMatComponent->m_AutoUv)
             {
                 Vec3 pos = {
-                    mesh.vertices[i*3+0],
-                    mesh.vertices[i*3+1],
-                    mesh.vertices[i*3+2]
+                    mesh.vertices[i * 3 + 0],
+                    mesh.vertices[i * 3 + 1],
+                    mesh.vertices[i * 3 + 2]
                 };
 
                 Vec3 normal = {
-                    mesh.normals[i*3+0],
-                    mesh.normals[i*3+1],
-                    mesh.normals[i*3+2]
+                    mesh.normals[i * 3 + 0],
+                    mesh.normals[i * 3 + 1],
+                    mesh.normals[i * 3 + 2]
                 };
 
                 float ax = fabs(normal.x);
@@ -266,12 +266,12 @@ void CEntityTextureService::ApplyTextureRepeat(CEntity& entity)
                 }
                 auto& vBase = pMatComponent->m_vOriginalTexcoords[m];
 
-                u = vBase[i*2+0] * pMatComponent->m_TextureRepeatU * pTransform->m_Scale.x;
-                v = vBase[i*2+1] * pMatComponent->m_TextureRepeatV * pTransform->m_Scale.y;
+                u = vBase[i * 2 + 0] * pMatComponent->m_TextureRepeatU * pTransform->m_Scale.x;
+                v = vBase[i * 2 + 1] * pMatComponent->m_TextureRepeatV * pTransform->m_Scale.y;
             }
 
-            mesh.texcoords[i*2+0] = u;
-            mesh.texcoords[i*2+1] = v;
+            mesh.texcoords[i * 2 + 0] = u;
+            mesh.texcoords[i * 2 + 1] = v;
         }
 
         UpdateMeshBuffer(mesh, 2, mesh.texcoords, mesh.vertexCount * 2 * sizeof(float), 0);
@@ -357,7 +357,7 @@ void CEntityTextureService::StoreMaterialTextures(CEntity* pEntity)
     {
         if (!pMesh->m_Model.materials[i].maps)
         {
-            pMat->m_vOriginalMaterialTextures.push_back({0});
+            pMat->m_vOriginalMaterialTextures.push_back({ 0 });
             continue;
         }
 
@@ -396,7 +396,7 @@ void CEntityTextureService::ClearMaterialTextures(CEntity* pEntity)
     {
         if (pMesh->m_Model.materials[i].maps)
         {
-            pMesh->m_Model.materials[i].maps[MATERIAL_MAP_DIFFUSE].texture = {0};
+            pMesh->m_Model.materials[i].maps[MATERIAL_MAP_DIFFUSE].texture = { 0 };
         }
     }
 }
@@ -463,20 +463,20 @@ void DrawCollisionDebug(CEntity& entity, const Mat4& worldTransform, const CPref
     {
         case COLLIDER_BOX:
         {
-            DrawCubeWires({0,0,0},
-                pCollision->m_Size.x,
-                pCollision->m_Size.y,
-                pCollision->m_Size.z,
-                lineColor);
+            DrawCubeWires({ 0, 0, 0 },
+                          pCollision->m_Size.x,
+                          pCollision->m_Size.y,
+                          pCollision->m_Size.z,
+                          lineColor);
             break;
         }
 
         case COLLIDER_SPHERE:
         {
-            DrawSphereWires({0,0,0},
-                pCollision->m_Radius,
-                16, 16,
-                lineColor);
+            DrawSphereWires({ 0, 0, 0 },
+                            pCollision->m_Radius,
+                            16, 16,
+                            lineColor);
             break;
         }
 
@@ -487,10 +487,10 @@ void DrawCollisionDebug(CEntity& entity, const Mat4& worldTransform, const CPref
 
             float cylinderH = std::max(0.0f, h - r * 2.0f);
 
-            DrawCylinderWires({0,0,0}, r, r, cylinderH, 16, lineColor);
+            DrawCylinderWires({ 0, 0, 0 }, r, r, cylinderH, 16, lineColor);
 
-            DrawSphereWires({0, cylinderH * 0.5f, 0}, r, 12, 12, lineColor);
-            DrawSphereWires({0,-cylinderH * 0.5f, 0}, r, 12, 12, lineColor);
+            DrawSphereWires({ 0, cylinderH * 0.5f, 0 }, r, 12, 12, lineColor);
+            DrawSphereWires({ 0, -cylinderH * 0.5f, 0 }, r, 12, 12, lineColor);
             break;
         }
 
@@ -501,7 +501,7 @@ void DrawCollisionDebug(CEntity& entity, const Mat4& worldTransform, const CPref
                 break;
             }
 
-            DrawModelWires(pMeshComponent->m_Model, {0,0,0}, 1.0f, lineColor);
+            DrawModelWires(pMeshComponent->m_Model, { 0, 0, 0 }, 1.0f, lineColor);
             break;
         }
     }
@@ -530,7 +530,7 @@ void CEntityTextureService::DrawEntityWithTexture(CEntity& entity, const Mat4& w
         DisableBackfaceCulling();
     }
 
-    DrawModel(pMesh->m_Model, {0,0,0}, 1.0f, pMat->m_Color);
+    DrawModel(pMesh->m_Model, { 0, 0, 0 }, 1.0f, pMat->m_Color);
     if (preferences.m_WireframeEnabled && pMat->m_OutlineColor.a > 0)
     {
         Color wireframeColor = {
@@ -538,7 +538,7 @@ void CEntityTextureService::DrawEntityWithTexture(CEntity& entity, const Mat4& w
             static_cast<unsigned char>(preferences.m_WireframeGreen),
             static_cast<unsigned char>(preferences.m_WireframeBlue), 255
         };
-        DrawModelWires(pMesh->m_Model, {0,0,0}, 1.0f, wireframeColor);
+        DrawModelWires(pMesh->m_Model, { 0, 0, 0 }, 1.0f, wireframeColor);
     }
 
     if (disableBackfaceCulling)
@@ -572,9 +572,9 @@ void CEntityTextureService::CloneModelMaterials(CEntity* pEntity)
         {
             free(pMesh->m_Model.meshMaterial);
         }
-        pMesh->m_Model.materials    = nullptr;
+        pMesh->m_Model.materials = nullptr;
         pMesh->m_Model.meshMaterial = nullptr;
-        pMesh->m_OwnsMaterials     = false;
+        pMesh->m_OwnsMaterials = false;
     }
     if (!pMesh->m_pAsset || !pMesh->m_pAsset->m_LoadedModel.materials)
     {

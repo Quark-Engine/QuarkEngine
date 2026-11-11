@@ -10,7 +10,7 @@ public:
     static std::string OpenFileDialog(const char* pFilterLabel, const char* pFilter);
 
     static std::string SaveFileDialog(const char* pFilterLabel, const char* pFilter,
-        const char* pDefExt, const std::string& defaultName);
+                                      const char* pDefExt, const std::string& defaultName);
 };
 
 #endif // __EDITOR_EDITOR_DESKTOP_H__

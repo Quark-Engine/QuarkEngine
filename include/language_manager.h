@@ -5,7 +5,6 @@
 #include <string>
 #include <unordered_map>
 
-
 class CLanguageManager
 {
 public:

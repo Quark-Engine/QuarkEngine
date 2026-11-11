@@ -10,16 +10,16 @@
 
 void CEntityClipboard::Copy(CEditor& editor, CEntity* pEntity)
 {
-    editor.m_Ui.m_MeshEdit.ClipboardData = *pEntity;
-    editor.m_Ui.m_MeshEdit.HasClipboard = true;
+    editor.m_Ui.m_MeshEdit.m_ClipboardData = *pEntity;
+    editor.m_Ui.m_MeshEdit.m_HasClipboard = true;
 }
 
 void CEntityClipboard::Paste(CEditor& editor)
 {
-    const CMeshComponent* pClipboardMesh = editor.m_Ui.m_MeshEdit.ClipboardData.GetMeshComponent();
-    const CTransformComponent* pClipboardTransform = editor.m_Ui.m_MeshEdit.ClipboardData.GetTransformComponent();
-    const CLightComponent* pClipboardLight = editor.m_Ui.m_MeshEdit.ClipboardData.GetLightComponent();
-    const CMaterialComponent* pClipboardMat = editor.m_Ui.m_MeshEdit.ClipboardData.GetMaterialComponent();
+    const CMeshComponent* pClipboardMesh = editor.m_Ui.m_MeshEdit.m_ClipboardData.GetMeshComponent();
+    const CTransformComponent* pClipboardTransform = editor.m_Ui.m_MeshEdit.m_ClipboardData.GetTransformComponent();
+    const CLightComponent* pClipboardLight = editor.m_Ui.m_MeshEdit.m_ClipboardData.GetLightComponent();
+    const CMaterialComponent* pClipboardMat = editor.m_Ui.m_MeshEdit.m_ClipboardData.GetMaterialComponent();
     CModelAsset* pAsset = (pClipboardMesh && !pClipboardMesh->m_AssetName.empty())
         ? editor.m_Assets.FindModelByName(pClipboardMesh->m_AssetName)
         : nullptr;
@@ -29,7 +29,7 @@ void CEntityClipboard::Paste(CEditor& editor)
         editor.SaveState();
         CEntity pasted = CEntityFactory::FromAsset(editor.m_Scene, *pAsset);
         pasted.m_Name = CSceneEntityCommands::MakeDuplicateName(
-            editor.m_Scene, editor.m_Ui.m_MeshEdit.ClipboardData.m_Name);
+            editor.m_Scene, editor.m_Ui.m_MeshEdit.m_ClipboardData.m_Name);
         if (auto pPastedTransform = pasted.GetTransformComponent(); pPastedTransform && pClipboardTransform)
         {
             pPastedTransform->m_Position = pClipboardTransform->m_Position;

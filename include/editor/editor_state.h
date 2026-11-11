@@ -17,23 +17,23 @@ struct SKeyRepeat
     static constexpr float HOLD_DELAY = 0.5f;
     static constexpr float REPEAT_INTERVAL = 0.15f;
 
-    bool WasPressed = false;
-    float HoldStart = 0.0f;
-    float LastFire = 0.0f;
+    bool m_WasPressed = false;
+    float m_HoldStart = 0.0f;
+    float m_LastFire = 0.0f;
 
     bool ShouldFire(float now)
     {
-        if (!WasPressed)
+        if (!m_WasPressed)
         {
-            WasPressed = true;
-            HoldStart = now;
-            LastFire = now;
+            m_WasPressed = true;
+            m_HoldStart = now;
+            m_LastFire = now;
             return true;
         }
 
-        if (now - HoldStart > HOLD_DELAY && now - LastFire > REPEAT_INTERVAL)
+        if (now - m_HoldStart > HOLD_DELAY && now - m_LastFire > REPEAT_INTERVAL)
         {
-            LastFire = now;
+            m_LastFire = now;
             return true;
         }
 
@@ -42,24 +42,24 @@ struct SKeyRepeat
 
     void Release()
     {
-        WasPressed = false;
-        HoldStart = 0.0f;
+        m_WasPressed = false;
+        m_HoldStart = 0.0f;
     }
 };
 
 struct SMeshEditState
 {
-    ImGuizmo::OPERATION GizmoMode = ImGuizmo::TRANSLATE;
-    int RenamingIndex = -1;
-    char aRenameBuffer[128] = "";
-    bool HasClipboard = false;
-    CEntity ClipboardData;
+    ImGuizmo::OPERATION m_GizmoMode = ImGuizmo::TRANSLATE;
+    int m_RenamingIndex = -1;
+    char m_aRenameBuffer[128] = "";
+    bool m_HasClipboard = false;
+    CEntity m_ClipboardData;
 
-    SKeyRepeat Undo;
-    SKeyRepeat Redo;
-    SKeyRepeat Copy;
-    SKeyRepeat Paste;
-    SKeyRepeat Duplicate;
+    SKeyRepeat m_Undo;
+    SKeyRepeat m_Redo;
+    SKeyRepeat m_Copy;
+    SKeyRepeat m_Paste;
+    SKeyRepeat m_Duplicate;
 };
 
 enum EPolygonEditMode
@@ -71,13 +71,13 @@ enum EPolygonEditMode
 
 struct SVertexEditState
 {
-    bool Enabled = false;
-    int EntityIndex = -1;
-    int MeshIndex = 0;
-    int TriangleIndex = 0;
-    int VertexCorner = 0;
+    bool m_Enabled = false;
+    int m_EntityIndex = -1;
+    int m_MeshIndex = 0;
+    int m_TriangleIndex = 0;
+    int m_VertexCorner = 0;
 
-    std::vector<int> vSelectedVertices;
+    std::vector<int> m_vSelectedVertices;
 };
 
 class CViewportState
@@ -102,158 +102,158 @@ class CEditor;
 
 struct SPendingEntityDelete
 {
-    CEditor* pEditor = nullptr;
-    CEntity* pEntity = nullptr;
+    CEditor* m_pEditor = nullptr;
+    CEntity* m_pEntity = nullptr;
 };
 
 struct SDeferredHierarchyDelete
 {
-    CEditor* pEditor = nullptr;
-    int Index = -1;
+    CEditor* m_pEditor = nullptr;
+    int m_Index = -1;
 };
 
 struct SModalState
 {
-    bool ShowExitConfirmation = false;
-    bool ShowPreferences = false;
-    SPendingEntityDelete PendingDelete;
-    SDeferredHierarchyDelete DeferredHierarchyDelete;
+    bool m_ShowExitConfirmation = false;
+    bool m_ShowPreferences = false;
+    SPendingEntityDelete m_PendingDelete;
+    SDeferredHierarchyDelete m_DeferredHierarchyDelete;
 };
 
 struct SGizmoState
 {
-    bool WasUsingTransform = false;
-    bool WasUsingMeshEdit = false;
-    bool WasUsingPolygon = false;
+    bool m_WasUsingTransform = false;
+    bool m_WasUsingMeshEdit = false;
+    bool m_WasUsingPolygon = false;
 };
 
 struct SInspectorUiState
 {
-    char aTagBuffer[128] = {};
+    char m_aTagBuffer[128] = {};
 
-    int ComponentToRemove = -1;
-    int SelectedTextureIndex = 0;
-    int SelectedNormalIndex = 0;
+    int m_ComponentToRemove = -1;
+    int m_SelectedTextureIndex = 0;
+    int m_SelectedNormalIndex = 0;
 };
 
 struct SPreferencesUiState
 {
-    int LanguageIndex = -1;
+    int m_LanguageIndex = -1;
 };
 
 struct SLayoutState
 {
-    bool ShowAboutWindow = false;
+    bool m_ShowAboutWindow = false;
 
-    bool SceneAssetDragging = false;
-    std::string DraggedSceneAssetName;
+    bool m_SceneAssetDragging = false;
+    std::string m_DraggedSceneAssetName;
 
-    bool FileDragging = false;
-    int DraggedFileIndex = -1;
-    int DraggedTargetFolderIndex = -1;
+    bool m_FileDragging = false;
+    int m_DraggedFileIndex = -1;
+    int m_DraggedTargetFolderIndex = -1;
 
-    ImGuiDockNodeFlags DockspaceFlags = ImGuiDockNodeFlags_PassthruCentralNode;
-    bool LayoutMarkerChecked = false;
+    ImGuiDockNodeFlags m_DockspaceFlags = ImGuiDockNodeFlags_PassthruCentralNode;
+    bool m_LayoutMarkerChecked = false;
 };
 
 struct SAssetBrowserMarquee
 {
-    ImVec2 Start = {};
-    ImVec2 End = {};
-    bool Active = false;
+    ImVec2 m_Start = {};
+    ImVec2 m_End = {};
+    bool m_Active = false;
 };
 
 struct SAssetBrowserDrag
 {
-    std::filesystem::path FilePath;
-    std::string FileName;
-    ImVec2 StartPos = {};
+    std::filesystem::path m_FilePath;
+    std::string m_FileName;
+    ImVec2 m_StartPos = {};
 };
 
 struct SAssetBrowserCreatePopup
 {
-    bool Open = false;
-    bool CreatingFolder = false;
-    bool CreatingScript = false;
-    char aNewItemName[128] = "";
+    bool m_Open = false;
+    bool m_CreatingFolder = false;
+    bool m_CreatingScript = false;
+    char m_aNewItemName[128] = "";
 };
 
 struct SLocalEntry
 {
-    std::string FileName;
-    bool IsDirectory = false;
-    bool IsDirectoryEmpty = false;
-    bool IsImage = false;
-    bool IsModel = false;
-    bool IsMaterial = false;
-    bool IsTextureMeta = false;
-    bool isPrefab = false;
-    Texture PreviewTexture = {};
-    std::string Extension;
+    std::string m_FileName;
+    bool m_IsDirectory = false;
+    bool m_IsDirectoryEmpty = false;
+    bool m_IsImage = false;
+    bool m_IsModel = false;
+    bool m_IsMaterial = false;
+    bool m_IsTextureMeta = false;
+    bool m_IsPrefab = false;
+    Texture m_PreviewTexture = {};
+    std::string m_Extension;
 };
 
 struct SAssetBrowserState
 {
-    SAssetBrowserMarquee Marquee;
-    SAssetBrowserDrag Drag;
+    SAssetBrowserMarquee m_Marquee;
+    SAssetBrowserDrag m_Drag;
 
-    char aSearchBuffer[128] = "";
-    std::string dependencyCachePath;
-    std::vector<std::string> vCachedFileDependencies;
-    bool dependencyCacheReady = false;
-    int RenameTarget = -1;
-    std::string LastAppliedRename;
+    char m_aSearchBuffer[128] = "";
+    std::string m_DependencyCachePath;
+    std::vector<std::string> m_vCachedFileDependencies;
+    bool m_DependencyCacheReady = false;
+    int m_RenameTarget = -1;
+    std::string m_LastAppliedRename;
 
-    bool DuplicatePopupOpen = false;
-    std::string DuplicateName;
+    bool m_DuplicatePopupOpen = false;
+    std::string m_DuplicateName;
 
-    std::filesystem::path CachedPath;
-    std::string CachedSearch;
-    int CachedFilter = -1;
-    bool AssetListCacheDirty = true;
-    std::vector<SLocalEntry> vCachedEntries;
+    std::filesystem::path m_CachedPath;
+    std::string m_CachedSearch;
+    int m_CachedFilter = -1;
+    bool m_AssetListCacheDirty = true;
+    std::vector<SLocalEntry> m_vCachedEntries;
 
-    SAssetBrowserCreatePopup Create;
+    SAssetBrowserCreatePopup m_Create;
 };
 
 struct SMaterialPickerState
 {
-    std::vector<std::string> vMaterialPaths;
-    std::vector<std::string> vDisplayNames;
-    std::vector<const char*> vMaterialNames;
-    int SelectedIndex = -1;
-    bool NeedsUpdate = true;
+    std::vector<std::string> m_vMaterialPaths;
+    std::vector<std::string> m_vDisplayNames;
+    std::vector<const char*> m_vMaterialNames;
+    int m_SelectedIndex = -1;
+    bool m_NeedsUpdate = true;
 };
 
 struct SFontPickerState
 {
-    std::vector<std::pair<std::string, std::string>> vFonts;
-    std::vector<const char*> vFontNames;
-    int SelectedIndex = -1;
-    bool Scanned = false;
+    std::vector<std::pair<std::string, std::string>> m_vFonts;
+    std::vector<const char*> m_vFontNames;
+    int m_SelectedIndex = -1;
+    bool m_Scanned = false;
 };
 
 struct SEntityRenameState
 {
-    int EntityId = -1;
-    bool StateSaved = false;
-    std::string LastName;
+    int m_EntityId = -1;
+    bool m_StateSaved = false;
+    std::string m_LastName;
 };
 
 struct SInterfaceStyleState
 {
-    ImGuiStyle BaseStyle = {};
-    float BaseScale = 1.0f;
-    bool Initialized = false;
+    ImGuiStyle m_BaseStyle = {};
+    float m_BaseScale = 1.0f;
+    bool m_Initialized = false;
 };
 
 struct SPreviewOrbit
 {
-    Vec3 Target = { 0.0f, 0.0f, 0.0f };
-    Vec3 ModelRotation = { 0.0f, 0.0f, 0.0f };
-    float Phi = 20.0f;
-    float Theta = 45.0f;
-    float Radius = 5.0f;
+    Vec3 m_Target = { 0.0f, 0.0f, 0.0f };
+    Vec3 m_ModelRotation = { 0.0f, 0.0f, 0.0f };
+    float m_Phi = 20.0f;
+    float m_Theta = 45.0f;
+    float m_Radius = 5.0f;
 };
 
 class CModelViewerState

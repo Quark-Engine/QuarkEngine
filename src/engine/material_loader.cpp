@@ -171,4 +171,3 @@ void LoadMaterialToEntity(CEntity* pEntity, const std::filesystem::path& mtlPath
 
     pMatComp->m_TextureName = mtlPath.string();
 }
-

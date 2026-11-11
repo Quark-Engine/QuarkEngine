@@ -65,12 +65,13 @@
 
 namespace
 {
-float ElapsedMilliseconds(const std::chrono::steady_clock::time_point& start)
-{
-    return std::chrono::duration<float, std::milli>(
-        std::chrono::steady_clock::now() - start).count();
-}
-}
+    float ElapsedMilliseconds(const std::chrono::steady_clock::time_point& start)
+    {
+        return std::chrono::duration<float, std::milli>(
+                   std::chrono::steady_clock::now() - start)
+            .count();
+    }
+} // anonymous
 
 void CViewportState::Release()
 {
@@ -115,10 +116,10 @@ void CEditor::DrawUi(Shader shader, CFlyCamera& camera, SPluginContext* pPluginC
             ImVec2(0.5f, 0.5f));
         ImGui::SetNextWindowBgAlpha(0.9f);
         if (ImGui::Begin(lang.Word("restoring_scene"), nullptr,
-            ImGuiWindowFlags_AlwaysAutoResize |
-            ImGuiWindowFlags_NoCollapse |
-            ImGuiWindowFlags_NoSavedSettings |
-            ImGuiWindowFlags_NoInputs))
+                         ImGuiWindowFlags_AlwaysAutoResize |
+                             ImGuiWindowFlags_NoCollapse |
+                             ImGuiWindowFlags_NoSavedSettings |
+                             ImGuiWindowFlags_NoInputs))
         {
             ImGui::TextUnformatted(m_StatusMessage.c_str());
         }
@@ -130,14 +131,13 @@ void CEditor::DrawUi(Shader shader, CFlyCamera& camera, SPluginContext* pPluginC
         m_Preferences.m_SelectionRed / 255.0f,
         m_Preferences.m_SelectionGreen / 255.0f,
         m_Preferences.m_SelectionBlue / 255.0f,
-        1.0f
-    );
+        1.0f);
 
     ImGuizmo::BeginFrame();
 
     const ImGuiID dockspaceId = ImGui::GetID("MainDockSpace");
 
-    ImGui::DockSpaceOverViewport(dockspaceId, ImGui::GetMainViewport(), m_Ui.m_Layout.DockspaceFlags);
+    ImGui::DockSpaceOverViewport(dockspaceId, ImGui::GetMainViewport(), m_Ui.m_Layout.m_DockspaceFlags);
 
     CEditorLayout::EnsureInitialized(*this, dockspaceId);
 
@@ -152,25 +152,25 @@ void CEditor::DrawUi(Shader shader, CFlyCamera& camera, SPluginContext* pPluginC
     {
         const auto panelStart = std::chrono::steady_clock::now();
         DrawHierarchyPanel(pPluginCtx);
-        m_UiTimings.hierarchyMs = ElapsedMilliseconds(panelStart);
+        m_UiTimings.m_HierarchyMs = ElapsedMilliseconds(panelStart);
     }
     if (m_Preferences.m_ShowInspector)
     {
         const auto panelStart = std::chrono::steady_clock::now();
         DrawInspectorPanel(shader, pPluginCtx);
-        m_UiTimings.inspectorMs = ElapsedMilliseconds(panelStart);
+        m_UiTimings.m_InspectorMs = ElapsedMilliseconds(panelStart);
     }
     if (m_Preferences.m_ShowScene)
     {
         const auto panelStart = std::chrono::steady_clock::now();
         DrawScenePanel(camera, pPluginCtx);
-        m_UiTimings.scenePanelMs = ElapsedMilliseconds(panelStart);
+        m_UiTimings.m_ScenePanelMs = ElapsedMilliseconds(panelStart);
     }
     if (m_ShowGameView)
     {
         const auto panelStart = std::chrono::steady_clock::now();
         DrawGamePanel(camera);
-        m_UiTimings.scenePanelMs += ElapsedMilliseconds(panelStart);
+        m_UiTimings.m_ScenePanelMs += ElapsedMilliseconds(panelStart);
     }
     else
     {
@@ -183,12 +183,12 @@ void CEditor::DrawUi(Shader shader, CFlyCamera& camera, SPluginContext* pPluginC
     {
         const auto panelStart = std::chrono::steady_clock::now();
         DrawAssetsUi();
-        m_UiTimings.assetsMs = ElapsedMilliseconds(panelStart);
+        m_UiTimings.m_AssetsMs = ElapsedMilliseconds(panelStart);
     }
     const auto viewerStart = std::chrono::steady_clock::now();
     DrawModelViewerWindow(m_Ui.m_ModelViewer);
     DrawMaterialViewerWindow(*this, m_Ui.m_MaterialViewer, m_Scene.GetSelected());
-    m_UiTimings.modelViewerMs = ElapsedMilliseconds(viewerStart);
+    m_UiTimings.m_ModelViewerMs = ElapsedMilliseconds(viewerStart);
 
     DrawAboutModal();
     DrawPreferencesUi(camera, pPluginCtx);
@@ -237,17 +237,20 @@ void CEditor::DrawMainMenuBar(SPluginContext* pPluginCtx, ImGuiID dockspaceId,
                 {
                     m_BuildSettingsError = "Could not load project build settings";
                 }
-                camera.ReleaseCapture(); m_ShowBuildSettings = true;
+                camera.ReleaseCapture();
+                m_ShowBuildSettings = true;
                 m_BuildSettingsModalOpen = true;
             }
             ImGui::BeginDisabled(m_BuildInProgress);
             if (ImGui::MenuItem("Build"))
             {
-                camera.ReleaseCapture(); StartBuild(false);
+                camera.ReleaseCapture();
+                StartBuild(false);
             }
             if (ImGui::MenuItem("Build & Run"))
             {
-                camera.ReleaseCapture(); StartBuild(true);
+                camera.ReleaseCapture();
+                StartBuild(true);
             }
             ImGui::EndDisabled();
             ImGui::Separator();
@@ -255,7 +258,7 @@ void CEditor::DrawMainMenuBar(SPluginContext* pPluginCtx, ImGuiID dockspaceId,
             {
                 if (m_Preferences.m_ConfirmExit && m_SceneDirty)
                 {
-                    modal.ShowExitConfirmation = true;
+                    modal.m_ShowExitConfirmation = true;
                 }
                 else
                 {
@@ -286,7 +289,7 @@ void CEditor::DrawMainMenuBar(SPluginContext* pPluginCtx, ImGuiID dockspaceId,
                 CEntityClipboard::Copy(*this, pEntity);
             }
 
-            if (ImGui::MenuItem(lang.Word("paste"), "Ctrl+V", false, m_Ui.m_MeshEdit.HasClipboard))
+            if (ImGui::MenuItem(lang.Word("paste"), "Ctrl+V", false, m_Ui.m_MeshEdit.m_HasClipboard))
             {
                 CEntityClipboard::Paste(*this);
             }
@@ -306,8 +309,8 @@ void CEditor::DrawMainMenuBar(SPluginContext* pPluginCtx, ImGuiID dockspaceId,
             ImGui::Separator();
             if (ImGui::MenuItem(lang.Word("preferences")))
             {
-
-                camera.ReleaseCapture(); modal.ShowPreferences = true;
+                camera.ReleaseCapture();
+                modal.m_ShowPreferences = true;
             }
             ImGui::EndMenu();
         }
@@ -383,15 +386,15 @@ void CEditor::DrawMainMenuBar(SPluginContext* pPluginCtx, ImGuiID dockspaceId,
                 };
                 if (ImGui::MenuItem("Button"))
                 {
-                    createUiEntity(EGuiWidgetType::Button);
+                    createUiEntity(EGuiWidgetType::BUTTON);
                 }
                 if (ImGui::MenuItem("Inputfield"))
                 {
-                    createUiEntity(EGuiWidgetType::InputField);
+                    createUiEntity(EGuiWidgetType::INPUT_FIELD);
                 }
                 if (ImGui::MenuItem("Combo"))
                 {
-                    createUiEntity(EGuiWidgetType::Combo);
+                    createUiEntity(EGuiWidgetType::COMBO);
                 }
                 ImGui::EndMenu();
             }
@@ -404,7 +407,7 @@ void CEditor::DrawMainMenuBar(SPluginContext* pPluginCtx, ImGuiID dockspaceId,
 
             if (ImGui::MenuItem(lang.Word("about")))
             {
-                m_Ui.m_Layout.ShowAboutWindow = true;
+                m_Ui.m_Layout.m_ShowAboutWindow = true;
             }
             ImGui::EndMenu();
         }
@@ -456,14 +459,13 @@ void CEditor::DrawHierarchyPanel(SPluginContext* pPluginCtx)
                     IM_COL32(80, 180, 255, 255),
                     2.0f,
                     0,
-                    2.0f
-                );
+                    2.0f);
             }
             ImGui::EndDragDropTarget();
         }
 
-        if (m_Ui.m_Layout.SceneAssetDragging &&
-            std::filesystem::path(m_Ui.m_Layout.DraggedSceneAssetName).extension() == ".prefab" &&
+        if (m_Ui.m_Layout.m_SceneAssetDragging &&
+            std::filesystem::path(m_Ui.m_Layout.m_DraggedSceneAssetName).extension() == ".prefab" &&
             ImGui::IsWindowHovered(ImGuiHoveredFlags_AllowWhenBlockedByActiveItem))
         {
             ImGui::GetWindowDrawList()->AddRect(
@@ -472,15 +474,14 @@ void CEditor::DrawHierarchyPanel(SPluginContext* pPluginCtx)
                 IM_COL32(80, 180, 255, 255),
                 2.0f,
                 0,
-                2.0f
-            );
+                2.0f);
             if (ImGui::IsMouseReleased(ImGuiMouseButton_Left))
             {
                 SaveState();
                 const std::vector<int> vCreatedIndices = CEntityFactory::InstantiatePrefab(
                     m_Scene,
                     m_Assets,
-                    m_Ui.m_Layout.DraggedSceneAssetName,
+                    m_Ui.m_Layout.m_DraggedSceneAssetName,
                     m_ComponentFactories,
                     -1);
                 if (!vCreatedIndices.empty())
@@ -491,8 +492,8 @@ void CEditor::DrawHierarchyPanel(SPluginContext* pPluginCtx)
                     }
                     m_Scene.SelectEntity(vCreatedIndices[0], false);
                 }
-                m_Ui.m_Layout.SceneAssetDragging = false;
-                m_Ui.m_Layout.DraggedSceneAssetName.clear();
+                m_Ui.m_Layout.m_SceneAssetDragging = false;
+                m_Ui.m_Layout.m_DraggedSceneAssetName.clear();
             }
         }
     }
@@ -515,11 +516,11 @@ void CEditor::DrawHierarchyPanel(SPluginContext* pPluginCtx)
         ImGui::EndDragDropTarget();
     }
 
-    if (modal.DeferredHierarchyDelete.pEditor == this && modal.DeferredHierarchyDelete.Index >= 0)
+    if (modal.m_DeferredHierarchyDelete.m_pEditor == this && modal.m_DeferredHierarchyDelete.m_Index >= 0)
     {
-        const int index = modal.DeferredHierarchyDelete.Index;
-        modal.DeferredHierarchyDelete.pEditor = nullptr;
-        modal.DeferredHierarchyDelete.Index = -1;
+        const int index = modal.m_DeferredHierarchyDelete.m_Index;
+        modal.m_DeferredHierarchyDelete.m_pEditor = nullptr;
+        modal.m_DeferredHierarchyDelete.m_Index = -1;
         CSceneEntityCommands::Erase(*this, index);
     }
     ImGui::End();
@@ -527,8 +528,8 @@ void CEditor::DrawHierarchyPanel(SPluginContext* pPluginCtx)
 
 void CEditor::HierarchyAcceptEntityDrop(int targetIndex)
 {
-    if (m_Ui.m_Layout.SceneAssetDragging &&
-        std::filesystem::path(m_Ui.m_Layout.DraggedSceneAssetName).extension() == ".prefab" &&
+    if (m_Ui.m_Layout.m_SceneAssetDragging &&
+        std::filesystem::path(m_Ui.m_Layout.m_DraggedSceneAssetName).extension() == ".prefab" &&
         ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenBlockedByActiveItem))
     {
         ImGui::GetWindowDrawList()->AddRect(
@@ -537,15 +538,14 @@ void CEditor::HierarchyAcceptEntityDrop(int targetIndex)
             IM_COL32(80, 180, 255, 255),
             2.0f,
             0,
-            2.0f
-        );
+            2.0f);
         if (ImGui::IsMouseReleased(ImGuiMouseButton_Left))
         {
             SaveState();
             const std::vector<int> vCreatedIndices = CEntityFactory::InstantiatePrefab(
                 m_Scene,
                 m_Assets,
-                m_Ui.m_Layout.DraggedSceneAssetName,
+                m_Ui.m_Layout.m_DraggedSceneAssetName,
                 m_ComponentFactories,
                 targetIndex);
             if (!vCreatedIndices.empty())
@@ -556,8 +556,8 @@ void CEditor::HierarchyAcceptEntityDrop(int targetIndex)
                 }
                 m_Scene.SelectEntity(vCreatedIndices[0], false);
             }
-            m_Ui.m_Layout.SceneAssetDragging = false;
-            m_Ui.m_Layout.DraggedSceneAssetName.clear();
+            m_Ui.m_Layout.m_SceneAssetDragging = false;
+            m_Ui.m_Layout.m_DraggedSceneAssetName.clear();
         }
     }
 
@@ -587,8 +587,7 @@ void CEditor::HierarchyAcceptEntityDrop(int targetIndex)
             IM_COL32(80, 180, 255, 255),
             2.0f,
             0,
-            2.0f
-        );
+            2.0f);
     }
 
     ImGui::EndDragDropTarget();
@@ -651,15 +650,15 @@ void CEditor::HierarchyDrawCreateMenu(int parentIndex)
             };
             if (ImGui::MenuItem("Button"))
             {
-                createUiEntity(EGuiWidgetType::Button);
+                createUiEntity(EGuiWidgetType::BUTTON);
             }
             if (ImGui::MenuItem("Inputfield"))
             {
-                createUiEntity(EGuiWidgetType::InputField);
+                createUiEntity(EGuiWidgetType::INPUT_FIELD);
             }
             if (ImGui::MenuItem("Combo"))
             {
-                createUiEntity(EGuiWidgetType::Combo);
+                createUiEntity(EGuiWidgetType::COMBO);
             }
             ImGui::EndMenu();
         }
@@ -700,8 +699,8 @@ void CEditor::HierarchyDrawEntityItem(int entityIndex)
         {
             SaveState();
 
-            m_Ui.m_Modal.DeferredHierarchyDelete.pEditor = this;
-            m_Ui.m_Modal.DeferredHierarchyDelete.Index = entityIndex;
+            m_Ui.m_Modal.m_DeferredHierarchyDelete.m_pEditor = this;
+            m_Ui.m_Modal.m_DeferredHierarchyDelete.m_Index = entityIndex;
 
             ImGui::EndPopup();
             ImGui::PopID();
@@ -711,9 +710,9 @@ void CEditor::HierarchyDrawEntityItem(int entityIndex)
         if (ImGui::MenuItem(lang.Word("rename")))
         {
             SaveState();
-            m_Ui.m_MeshEdit.RenamingIndex = entityIndex;
-            const size_t copied = entity.m_Name.copy(m_Ui.m_MeshEdit.aRenameBuffer, sizeof(m_Ui.m_MeshEdit.aRenameBuffer) - 1);
-            m_Ui.m_MeshEdit.aRenameBuffer[copied] = '\0';
+            m_Ui.m_MeshEdit.m_RenamingIndex = entityIndex;
+            const size_t copied = entity.m_Name.copy(m_Ui.m_MeshEdit.m_aRenameBuffer, sizeof(m_Ui.m_MeshEdit.m_aRenameBuffer) - 1);
+            m_Ui.m_MeshEdit.m_aRenameBuffer[copied] = '\0';
         }
 
         if (ImGui::MenuItem(lang.Word("dublicate")))
@@ -722,7 +721,7 @@ void CEditor::HierarchyDrawEntityItem(int entityIndex)
             CEntity copy = CSceneEntityCommands::CloneInstance(entity, m_Scene);
             m_Scene.m_vEntities.push_back(std::move(copy));
             DispatchPluginEvent(PLUGIN_EVENT_ENTITY_CREATED,
-                static_cast<int>(m_Scene.m_vEntities.size()) - 1);
+                                static_cast<int>(m_Scene.m_vEntities.size()) - 1);
         }
 
         if (ImGui::MenuItem(lang.Word("save_prefab")))
@@ -733,7 +732,7 @@ void CEditor::HierarchyDrawEntityItem(int entityIndex)
             std::filesystem::path savedPath;
             if (CEntityFactory::SavePrefab(m_Scene, entityIndex, targetDir, &savedPath))
             {
-                m_Ui.m_AssetBrowser.AssetListCacheDirty = true;
+                m_Ui.m_AssetBrowser.m_AssetListCacheDirty = true;
                 m_Assets.RequestRefresh(m_ProjectPath);
                 const std::string status = "Saved prefab: " + savedPath.filename().string();
                 SetStatusMessage(status.c_str());
@@ -780,8 +779,8 @@ void CEditor::HierarchyDrawEntityTree(int parentId)
                 if (ImGui::MenuItem(lang.Word("delete")))
                 {
                     SaveState();
-                    m_Ui.m_Modal.DeferredHierarchyDelete.pEditor = this;
-                    m_Ui.m_Modal.DeferredHierarchyDelete.Index = childIndex;
+                    m_Ui.m_Modal.m_DeferredHierarchyDelete.m_pEditor = this;
+                    m_Ui.m_Modal.m_DeferredHierarchyDelete.m_Index = childIndex;
                     ImGui::EndPopup();
                     if (open)
                     {
@@ -793,9 +792,9 @@ void CEditor::HierarchyDrawEntityTree(int parentId)
                 if (ImGui::MenuItem(lang.Word("rename")))
                 {
                     SaveState();
-                    m_Ui.m_MeshEdit.RenamingIndex = childIndex;
-                    const size_t copied = child.m_Name.copy(m_Ui.m_MeshEdit.aRenameBuffer, sizeof(m_Ui.m_MeshEdit.aRenameBuffer) - 1);
-                    m_Ui.m_MeshEdit.aRenameBuffer[copied] = '\0';
+                    m_Ui.m_MeshEdit.m_RenamingIndex = childIndex;
+                    const size_t copied = child.m_Name.copy(m_Ui.m_MeshEdit.m_aRenameBuffer, sizeof(m_Ui.m_MeshEdit.m_aRenameBuffer) - 1);
+                    m_Ui.m_MeshEdit.m_aRenameBuffer[copied] = '\0';
                 }
 
                 if (ImGui::MenuItem(lang.Word("dublicate")))
@@ -804,7 +803,7 @@ void CEditor::HierarchyDrawEntityTree(int parentId)
                     CEntity copy = CSceneEntityCommands::CloneInstance(child, m_Scene);
                     m_Scene.m_vEntities.push_back(std::move(copy));
                     DispatchPluginEvent(PLUGIN_EVENT_ENTITY_CREATED,
-                        static_cast<int>(m_Scene.m_vEntities.size()) - 1);
+                                        static_cast<int>(m_Scene.m_vEntities.size()) - 1);
                 }
 
                 if (ImGui::MenuItem(lang.Word("save_prefab")))
@@ -815,7 +814,7 @@ void CEditor::HierarchyDrawEntityTree(int parentId)
                     std::filesystem::path savedPath;
                     if (CEntityFactory::SavePrefab(m_Scene, childIndex, targetDir, &savedPath))
                     {
-                        m_Ui.m_AssetBrowser.AssetListCacheDirty = true;
+                        m_Ui.m_AssetBrowser.m_AssetListCacheDirty = true;
                         m_Assets.RequestRefresh(m_ProjectPath);
                         const std::string status = "Saved prefab: " + savedPath.filename().string();
                         SetStatusMessage(status.c_str());
@@ -867,17 +866,17 @@ void CEditor::DrawInspectorPanel(Shader shader, SPluginContext* pPluginCtx)
     ImGui::SameLine();
     if (ImGui::Button("P"))
     {
-        m_Ui.m_MeshEdit.GizmoMode = ImGuizmo::TRANSLATE;
+        m_Ui.m_MeshEdit.m_GizmoMode = ImGuizmo::TRANSLATE;
     }
     ImGui::SameLine();
     if (ImGui::Button("R"))
     {
-        m_Ui.m_MeshEdit.GizmoMode = ImGuizmo::ROTATE;
+        m_Ui.m_MeshEdit.m_GizmoMode = ImGuizmo::ROTATE;
     }
     ImGui::SameLine();
     if (ImGui::Button("S"))
     {
-        m_Ui.m_MeshEdit.GizmoMode = ImGuizmo::SCALE;
+        m_Ui.m_MeshEdit.m_GizmoMode = ImGuizmo::SCALE;
     }
 
     CEntity* pEntity = m_Scene.GetSelected();
@@ -893,26 +892,26 @@ void CEditor::DrawInspectorPanel(Shader shader, SPluginContext* pPluginCtx)
         SEntityRenameState& rename = m_Ui.m_EntityRename;
         if (ImGui::InputText(lang.Word("name"), aInspectorName, IM_ARRAYSIZE(aInspectorName)))
         {
-            if (rename.LastName != aInspectorName)
+            if (rename.m_LastName != aInspectorName)
             {
-                if (!rename.StateSaved || rename.EntityId != pEntity->m_Id)
+                if (!rename.m_StateSaved || rename.m_EntityId != pEntity->m_Id)
                 {
                     SaveState();
-                    rename.StateSaved = true;
-                    rename.EntityId = pEntity->m_Id;
+                    rename.m_StateSaved = true;
+                    rename.m_EntityId = pEntity->m_Id;
                 }
                 CEntityFactory::AssignName(*pEntity, aInspectorName);
-                rename.LastName = aInspectorName;
+                rename.m_LastName = aInspectorName;
             }
         }
         else
         {
-            rename.LastName = aInspectorName;
+            rename.m_LastName = aInspectorName;
         }
         if (!ImGui::IsItemActive())
         {
-            rename.StateSaved = false;
-            rename.EntityId = -1;
+            rename.m_StateSaved = false;
+            rename.m_EntityId = -1;
         }
 
         ImGui::Spacing();
@@ -959,22 +958,22 @@ void CEditor::DrawInspectorPanel(Shader shader, SPluginContext* pPluginCtx)
         if (ImGui::BeginPopup("AddTagPopup"))
         {
             ImGui::TextUnformatted("Add Tag");
-            ImGui::InputText("##tag_name", inspector.aTagBuffer, IM_ARRAYSIZE(inspector.aTagBuffer));
-            if (ImGui::Button("Add") && inspector.aTagBuffer[0] != '\0')
+            ImGui::InputText("##tag_name", inspector.m_aTagBuffer, IM_ARRAYSIZE(inspector.m_aTagBuffer));
+            if (ImGui::Button("Add") && inspector.m_aTagBuffer[0] != '\0')
             {
-                const std::string newTag(inspector.aTagBuffer);
+                const std::string newTag(inspector.m_aTagBuffer);
                 if (std::find(pEntity->m_vTags.begin(), pEntity->m_vTags.end(), newTag) == pEntity->m_vTags.end())
                 {
                     SaveState();
                     pEntity->m_vTags.push_back(newTag);
                 }
-                inspector.aTagBuffer[0] = '\0';
+                inspector.m_aTagBuffer[0] = '\0';
                 ImGui::CloseCurrentPopup();
             }
             ImGui::SameLine();
             if (ImGui::Button("Cancel"))
             {
-                inspector.aTagBuffer[0] = '\0';
+                inspector.m_aTagBuffer[0] = '\0';
                 ImGui::CloseCurrentPopup();
             }
             ImGui::EndPopup();
@@ -1039,7 +1038,10 @@ void CEditor::DrawScenePanel(CFlyCamera& camera, SPluginContext* pPluginCtx)
         }
         else if (ImGui::Button("Play", ImVec2(48.0f, 24.0f)))
         {
-            if (camera.m_Active) camera.ReleaseCapture();
+            if (camera.m_Active)
+            {
+                camera.ReleaseCapture();
+            }
             SetScene2DMode(camera, false);
             BeginPlayMode();
         }
@@ -1105,7 +1107,7 @@ void CEditor::DrawGamePanel(CFlyCamera& camera)
 }
 
 void CEditor::DrawSceneViewport(CViewportState& viewport, CFlyCamera& camera,
-    bool sceneView)
+                                bool sceneView)
 {
     viewport.m_WindowPos = ImGui::GetCursorScreenPos();
     viewport.m_WindowSize = ImGui::GetContentRegionAvail();
@@ -1132,10 +1134,9 @@ void CEditor::DrawSceneViewport(CViewportState& viewport, CFlyCamera& camera,
                 &viewport.m_RenderTexture.texture,
                 viewport.m_WindowPos,
                 ImVec2(viewport.m_WindowPos.x + viewport.m_WindowSize.x,
-                    viewport.m_WindowPos.y + viewport.m_WindowSize.y),
+                       viewport.m_WindowPos.y + viewport.m_WindowSize.y),
                 topLeftTextureBackend ? ImVec2(0, 0) : ImVec2(0, 1),
-                topLeftTextureBackend ? ImVec2(1, 1) : ImVec2(1, 0)
-            );
+                topLeftTextureBackend ? ImVec2(1, 1) : ImVec2(1, 0));
         }
 
         if (!sceneView && !m_GameCameraAvailable && !quark::gui::SceneHasActiveUiWidgets(m_Scene))
@@ -1158,7 +1159,7 @@ void CEditor::DrawSceneViewport(CViewportState& viewport, CFlyCamera& camera,
             pDrawList->AddRectFilled(
                 viewport.m_WindowPos,
                 ImVec2(viewport.m_WindowPos.x + viewport.m_WindowSize.x,
-                    viewport.m_WindowPos.y + viewport.m_WindowSize.y),
+                       viewport.m_WindowPos.y + viewport.m_WindowSize.y),
                 IM_COL32(0, 0, 0, 255));
             pDrawList->AddText(
                 ImGui::GetFont(), textFontSize, cameraMessagePosition,
@@ -1197,28 +1198,28 @@ void CEditor::DrawSceneViewport(CViewportState& viewport, CFlyCamera& camera,
 
 void CEditor::DrawRenameModal()
 {
-    if (m_Ui.m_MeshEdit.RenamingIndex != -1)
+    if (m_Ui.m_MeshEdit.m_RenamingIndex != -1)
     {
         ImGui::OpenPopup(lang.Word("rename"));
     }
 
     if (ImGui::BeginPopupModal(lang.Word("rename"), nullptr, ImGuiWindowFlags_AlwaysAutoResize))
     {
-        ImGui::InputText("##rename", m_Ui.m_MeshEdit.aRenameBuffer, IM_ARRAYSIZE(m_Ui.m_MeshEdit.aRenameBuffer));
+        ImGui::InputText("##rename", m_Ui.m_MeshEdit.m_aRenameBuffer, IM_ARRAYSIZE(m_Ui.m_MeshEdit.m_aRenameBuffer));
         if (ImGui::Button(lang.Word("ok")))
         {
-            if (m_Ui.m_MeshEdit.RenamingIndex >= 0 && m_Ui.m_MeshEdit.RenamingIndex < static_cast<int>(m_Scene.m_vEntities.size()))
+            if (m_Ui.m_MeshEdit.m_RenamingIndex >= 0 && m_Ui.m_MeshEdit.m_RenamingIndex < static_cast<int>(m_Scene.m_vEntities.size()))
             {
                 SaveState();
-                CEntityFactory::AssignName(m_Scene.m_vEntities[m_Ui.m_MeshEdit.RenamingIndex], m_Ui.m_MeshEdit.aRenameBuffer);
+                CEntityFactory::AssignName(m_Scene.m_vEntities[m_Ui.m_MeshEdit.m_RenamingIndex], m_Ui.m_MeshEdit.m_aRenameBuffer);
             }
-            m_Ui.m_MeshEdit.RenamingIndex = -1;
+            m_Ui.m_MeshEdit.m_RenamingIndex = -1;
             ImGui::CloseCurrentPopup();
         }
         ImGui::SameLine();
         if (ImGui::Button(lang.Word("cancel")))
         {
-            m_Ui.m_MeshEdit.RenamingIndex = -1;
+            m_Ui.m_MeshEdit.m_RenamingIndex = -1;
             ImGui::CloseCurrentPopup();
         }
         ImGui::EndPopup();
@@ -1227,41 +1228,39 @@ void CEditor::DrawRenameModal()
 
 void CEditor::DrawAboutModal()
 {
-    if (m_Ui.m_Layout.ShowAboutWindow)
+    if (m_Ui.m_Layout.m_ShowAboutWindow)
     {
         ImGui::OpenPopup(lang.Word("about_quark_engine"));
-        m_Ui.m_Layout.ShowAboutWindow = false;
+        m_Ui.m_Layout.m_ShowAboutWindow = false;
     }
 
     if (ImGui::BeginPopupModal(lang.Word("about_quark_engine"), nullptr, ImGuiWindowFlags_AlwaysAutoResize))
     {
-        constexpr float kLogoWidth = 400.0f;
-        constexpr float kLogoHeight = kLogoWidth * 648.0f / 1500.0f;
+        constexpr float LOGO_WIDTH = 400.0f;
+        constexpr float LOGO_HEIGHT = LOGO_WIDTH * 648.0f / 1500.0f;
 
         const Texture2D* pLogo = m_Textures.Load("assets/img/quark_engine.png");
         if (pLogo != nullptr)
         {
-            const float logoOffsetX = (ImGui::GetContentRegionAvail().x - kLogoWidth) * 0.5f;
+            const float logoOffsetX = (ImGui::GetContentRegionAvail().x - LOGO_WIDTH) * 0.5f;
             if (logoOffsetX > 0.0f)
             {
                 ImGui::SetCursorPosX(ImGui::GetCursorPosX() + logoOffsetX);
             }
-            QcImGuiImage(pLogo, ImVec2(kLogoWidth, kLogoHeight));
+            QcImGuiImage(pLogo, ImVec2(LOGO_WIDTH, LOGO_HEIGHT));
             ImGui::Spacing();
         }
 
         const auto backend = GetCurrentBackend();
 
         ImGui::Text("Quark Engine %s (Build %s | %s) using %s",
-            QUARK_ENGINE_VERSION,
-            QUARK_ENGINE_BUILD_NUMBER,
-            QUARK_ENGINE_BUILD_DATE_STRING,
-            backend == RendererType::OpenGL ? "OpenGL" :
-            backend == RendererType::Vulkan ? "Vulkan" :
-            backend == RendererType::D3D11 ? "Direct3D 11" :
-            backend == RendererType::Auto ? "Auto" :
-            "Unknown"
-        );
+                    QUARK_ENGINE_VERSION,
+                    QUARK_ENGINE_BUILD_NUMBER,
+                    QUARK_ENGINE_BUILD_DATE_STRING,
+                    backend == RendererType::OpenGL ? "OpenGL" : backend == RendererType::Vulkan ? "Vulkan"
+                        : backend == RendererType::D3D11                                         ? "Direct3D 11"
+                        : backend == RendererType::Auto                                          ? "Auto"
+                                                                                                 : "Unknown");
         ImGui::Separator();
         ImGui::Text(lang.Word("quarkcore_version"), QC_VERSION_STRING, "stable");
         ImGui::Text(lang.Word("imgui_version"), IMGUI_VERSION);
@@ -1308,17 +1307,17 @@ void CEditor::DrawAboutModal()
 
 void CEditor::DrawPreferencesUi(CFlyCamera& camera, SPluginContext* pPluginCtx)
 {
-    if (!m_Ui.m_Modal.ShowPreferences)
+    if (!m_Ui.m_Modal.m_ShowPreferences)
     {
         return;
     }
 
-    ImGui::Begin(lang.Word("preferences"), &m_Ui.m_Modal.ShowPreferences);
+    ImGui::Begin(lang.Word("preferences"), &m_Ui.m_Modal.m_ShowPreferences);
     if (camera.m_Active &&
         (ImGui::IsWindowHovered(ImGuiHoveredFlags_RootAndChildWindows |
-            ImGuiHoveredFlags_AllowWhenBlockedByPopup |
-            ImGuiHoveredFlags_AllowWhenBlockedByActiveItem) ||
-            ImGui::IsWindowFocused(ImGuiFocusedFlags_RootAndChildWindows)))
+                                ImGuiHoveredFlags_AllowWhenBlockedByPopup |
+                                ImGuiHoveredFlags_AllowWhenBlockedByActiveItem) ||
+         ImGui::IsWindowFocused(ImGuiFocusedFlags_RootAndChildWindows)))
     {
         camera.ReleaseCapture();
     }
@@ -1367,18 +1366,18 @@ bool CEditor::DrawPreferencesGeneralTab()
 {
     SPreferencesUiState& prefs = m_Ui.m_Preferences;
 
-    if (prefs.LanguageIndex == -1)
+    if (prefs.m_LanguageIndex == -1)
     {
-        prefs.LanguageIndex = CLanguageCatalog::IndexOf(CLanguageManager::Get().m_Current.c_str());
+        prefs.m_LanguageIndex = CLanguageCatalog::IndexOf(CLanguageManager::Get().m_Current.c_str());
     }
 
     bool changed = false;
 
     ImGui::Text("%s", lang.Word("language"));
-    if (ImGui::Combo("##language_combo", &prefs.LanguageIndex, CLanguageCatalog::GetLabel, nullptr, CLanguageCatalog::Count()))
+    if (ImGui::Combo("##language_combo", &prefs.m_LanguageIndex, CLanguageCatalog::GetLabel, nullptr, CLanguageCatalog::Count()))
     {
         ImGui::SaveIniSettingsToDisk(ImGui::GetIO().IniFilename);
-        lang.SetLang(CLanguageCatalog::Code(prefs.LanguageIndex));
+        lang.SetLang(CLanguageCatalog::Code(prefs.m_LanguageIndex));
         ImGui::LoadIniSettingsFromDisk(ImGui::GetIO().IniFilename);
         changed = true;
     }
@@ -1431,7 +1430,7 @@ bool CEditor::DrawPreferencesPluginsTab(SPluginContext* pPluginCtx)
             vPlugins.end(),
             [&normalizePluginPath, &pluginPath](const SLoadedPlugin& plugin)
             {
-                return normalizePluginPath(plugin.FilePath) == normalizePluginPath(pluginPath);
+                return normalizePluginPath(plugin.m_FilePath) == normalizePluginPath(pluginPath);
             });
 
         if (iterator == vPlugins.end())
@@ -1465,7 +1464,7 @@ bool CEditor::DrawPreferencesPluginsTab(SPluginContext* pPluginCtx)
 
     for (const SLoadedPlugin& plugin : vPlugins)
     {
-        const std::string normalizedPath = normalizePluginPath(plugin.FilePath);
+        const std::string normalizedPath = normalizePluginPath(plugin.m_FilePath);
         addPluginRow(normalizedPath, findDisabledPlugin(normalizedPath) == m_Preferences.m_vDisabledPlugins.end());
     }
 
@@ -1516,10 +1515,10 @@ bool CEditor::DrawPreferencesPluginsTab(SPluginContext* pPluginCtx)
 
             ImGui::TableSetColumnIndex(1);
             ImGui::BeginGroup();
-            if (pLoadedPlugin != nullptr && pLoadedPlugin->pPlugin != nullptr)
+            if (pLoadedPlugin != nullptr && pLoadedPlugin->m_pPlugin != nullptr)
             {
-                const char* pPluginName = pLoadedPlugin->pPlugin->pName;
-                const char* pPluginVersion = pLoadedPlugin->pPlugin->pVersion;
+                const char* pPluginName = pLoadedPlugin->m_pPlugin->m_pName;
+                const char* pPluginVersion = pLoadedPlugin->m_pPlugin->m_pVersion;
                 if (pPluginName != nullptr)
                 {
                     ImGui::TextUnformatted(pPluginName);
@@ -1556,7 +1555,7 @@ bool CEditor::DrawPreferencesPluginsTab(SPluginContext* pPluginCtx)
             vPlugins.end(),
             [&normalizePluginPath, &pluginPath](const SLoadedPlugin& plugin)
             {
-                return normalizePluginPath(plugin.FilePath) == normalizePluginPath(pluginPath);
+                return normalizePluginPath(plugin.m_FilePath) == normalizePluginPath(pluginPath);
             });
         const bool isLoaded = loadedPluginIterator != vPlugins.end();
 
@@ -1633,11 +1632,15 @@ bool CEditor::DrawPreferencesRenderingTab(CFlyCamera& camera)
     }
 
     const char* apMsaaNames[] = { lang.Word("off"), "2x", "4x", "8x" };
-    int msaaIndex = m_Preferences.m_MsaaSamples == 2 ? 1 : m_Preferences.m_MsaaSamples == 4 ? 2 : m_Preferences.m_MsaaSamples == 8 ? 3 : 0;
+    int msaaIndex = m_Preferences.m_MsaaSamples == 2 ? 1 : m_Preferences.m_MsaaSamples == 4 ? 2
+        : m_Preferences.m_MsaaSamples == 8                                                  ? 3
+                                                                                            : 0;
     ImGui::TextUnformatted(lang.Word("msaa_restart"));
     if (ImGui::Combo("##msaa", &msaaIndex, apMsaaNames, 4))
     {
-        m_Preferences.m_MsaaSamples = msaaIndex == 1 ? 2 : msaaIndex == 2 ? 4 : msaaIndex == 3 ? 8 : 1;
+        m_Preferences.m_MsaaSamples = msaaIndex == 1 ? 2 : msaaIndex == 2 ? 4
+            : msaaIndex == 3                                              ? 8
+                                                                          : 1;
         changed = true;
     }
 
@@ -1674,12 +1677,12 @@ bool CEditor::DrawPreferencesRenderingTab(CFlyCamera& camera)
 
     changed |= ImGui::Checkbox(lang.Word("enable_shadows"), &m_Preferences.m_ShadowsEnabled);
     const char* apShadowSizes[] = { "512", "1024", "2048" };
-    int shadowSizeIndex = m_Preferences.m_ShadowMapSize == 512 ? 0 :
-        m_Preferences.m_ShadowMapSize == 2048 ? 2 : 1;
+    int shadowSizeIndex = m_Preferences.m_ShadowMapSize == 512 ? 0 : m_Preferences.m_ShadowMapSize == 2048 ? 2
+                                                                                                           : 1;
     if (ImGui::Combo(lang.Word("shadow_map_size_restart"), &shadowSizeIndex, apShadowSizes, 3))
     {
-        m_Preferences.m_ShadowMapSize = shadowSizeIndex == 0 ? 512 :
-            shadowSizeIndex == 2 ? 2048 : 1024;
+        m_Preferences.m_ShadowMapSize = shadowSizeIndex == 0 ? 512 : shadowSizeIndex == 2 ? 2048
+                                                                                          : 1024;
         changed = true;
     }
 
@@ -1693,11 +1696,11 @@ bool CEditor::DrawPreferencesRenderingTab(CFlyCamera& camera)
 bool CEditor::DrawPreferencesInterfaceTab()
 {
     SInterfaceStyleState& iface = m_Ui.m_InterfaceStyle;
-    if (!iface.Initialized)
+    if (!iface.m_Initialized)
     {
-        iface.BaseStyle = ImGui::GetStyle();
-        iface.BaseScale = m_Preferences.m_InterfaceScale;
-        iface.Initialized = true;
+        iface.m_BaseStyle = ImGui::GetStyle();
+        iface.m_BaseScale = m_Preferences.m_InterfaceScale;
+        iface.m_Initialized = true;
     }
 
     bool changed = false;
@@ -1709,25 +1712,29 @@ bool CEditor::DrawPreferencesInterfaceTab()
 
     static const std::vector<SEditorTheme> s_vThemes = CThemeManager::GetAvailableThemes();
     const auto selectedTheme = std::find_if(s_vThemes.begin(), s_vThemes.end(),
-        [this](const SEditorTheme& theme) { return theme.id == m_Preferences.m_ThemeName; });
+                                            [this](const SEditorTheme& theme)
+                                            {
+                                                return theme.m_Id == m_Preferences.m_ThemeName;
+                                            });
     const std::string preview = selectedTheme != s_vThemes.end()
-        ? selectedTheme->name : TextFormat(lang.Word("missing_theme"), m_Preferences.m_ThemeName.c_str());
+        ? selectedTheme->m_Name
+        : TextFormat(lang.Word("missing_theme"), m_Preferences.m_ThemeName.c_str());
     if (ImGui::BeginCombo(lang.Word("theme"), preview.c_str()))
     {
         for (const SEditorTheme& theme : s_vThemes)
         {
-            const bool isSelected = theme.id == m_Preferences.m_ThemeName;
-            ImGui::PushID(theme.id.c_str());
-            if (ImGui::Selectable(theme.name.c_str(), isSelected) &&
-                CThemeManager::Apply(theme.id))
+            const bool isSelected = theme.m_Id == m_Preferences.m_ThemeName;
+            ImGui::PushID(theme.m_Id.c_str());
+            if (ImGui::Selectable(theme.m_Name.c_str(), isSelected) &&
+                CThemeManager::Apply(theme.m_Id))
             {
-                m_Preferences.m_ThemeName = theme.id;
-                m_Preferences.m_LightTheme = theme.id == "quark-light";
+                m_Preferences.m_ThemeName = theme.m_Id;
+                m_Preferences.m_LightTheme = theme.m_Id == "quark-light";
                 ImGui::GetStyle().ScaleAllSizes(m_Preferences.m_InterfaceScale);
                 ImGui::GetStyle().FontScaleMain = m_Preferences.m_InterfaceScale *
                     CThemeManager::GetAppliedFontScale();
-                iface.BaseStyle = ImGui::GetStyle();
-                iface.BaseScale = m_Preferences.m_InterfaceScale;
+                iface.m_BaseStyle = ImGui::GetStyle();
+                iface.m_BaseScale = m_Preferences.m_InterfaceScale;
                 changed = true;
             }
             if (isSelected)
@@ -1792,8 +1799,8 @@ bool CEditor::DrawPreferencesInterfaceTab()
 
     if (ImGui::SliderFloat(lang.Word("interface_scale"), &m_Preferences.m_InterfaceScale, 0.75f, 2.0f, "%.2fx"))
     {
-        ImGui::GetStyle() = iface.BaseStyle;
-        ImGui::GetStyle().ScaleAllSizes(m_Preferences.m_InterfaceScale / iface.BaseScale);
+        ImGui::GetStyle() = iface.m_BaseStyle;
+        ImGui::GetStyle().ScaleAllSizes(m_Preferences.m_InterfaceScale / iface.m_BaseScale);
         if (ImGui::GetStyle().SeparatorSize <= 0.0f)
         {
             ImGui::GetStyle().SeparatorSize = 1.0f;
@@ -1822,7 +1829,7 @@ void CEditor::DrawConfirmationModals()
 {
     SModalState& modal = m_Ui.m_Modal;
 
-    if (modal.PendingDelete.pEditor && modal.PendingDelete.pEntity)
+    if (modal.m_PendingDelete.m_pEditor && modal.m_PendingDelete.m_pEntity)
     {
         std::string popupName = lang.Word("confirm_delete_title");
         popupName += "###ConfirmDelete";
@@ -1835,10 +1842,10 @@ void CEditor::DrawConfirmationModals()
             ImGui::TextUnformatted(lang.Word("delete_selected_entity"));
             if (ImGui::Button(lang.Word("delete")))
             {
-                CEditor* pEditorToDelete = modal.PendingDelete.pEditor;
-                CEntity* pEntityToDelete = modal.PendingDelete.pEntity;
-                modal.PendingDelete.pEditor = nullptr;
-                modal.PendingDelete.pEntity = nullptr;
+                CEditor* pEditorToDelete = modal.m_PendingDelete.m_pEditor;
+                CEntity* pEntityToDelete = modal.m_PendingDelete.m_pEntity;
+                modal.m_PendingDelete.m_pEditor = nullptr;
+                modal.m_PendingDelete.m_pEntity = nullptr;
                 const bool previousConfirm = m_Preferences.m_ConfirmDelete;
                 m_Preferences.m_ConfirmDelete = false;
                 CSceneEntityCommands::Delete(*pEditorToDelete, pEntityToDelete);
@@ -1848,18 +1855,18 @@ void CEditor::DrawConfirmationModals()
             ImGui::SameLine();
             if (ImGui::Button(lang.Word("cancel")))
             {
-                modal.PendingDelete.pEditor = nullptr;
-                modal.PendingDelete.pEntity = nullptr;
+                modal.m_PendingDelete.m_pEditor = nullptr;
+                modal.m_PendingDelete.m_pEntity = nullptr;
                 ImGui::CloseCurrentPopup();
             }
             ImGui::EndPopup();
         }
     }
 
-    if (modal.ShowExitConfirmation)
+    if (modal.m_ShowExitConfirmation)
     {
         ImGui::OpenPopup(lang.Word("unsaved_changes"));
-        modal.ShowExitConfirmation = false;
+        modal.m_ShowExitConfirmation = false;
     }
     if (ImGui::BeginPopupModal(lang.Word("unsaved_changes"), nullptr, ImGuiWindowFlags_AlwaysAutoResize))
     {
@@ -1896,22 +1903,22 @@ void CEditor::DrawBuildSettingsModal()
     }
 
     if (!ImGui::BeginPopupModal("Build Settings", nullptr,
-        ImGuiWindowFlags_AlwaysAutoResize))
+                                ImGuiWindowFlags_AlwaysAutoResize))
     {
         return;
     }
 
     const std::vector<std::string> vSceneFiles = CProjectService::GetSceneFiles(m_ProjectPath);
     ImGui::TextUnformatted("Start Scene");
-    const char* pSelectedScene = m_BuildSettings.startScene.c_str();
+    const char* pSelectedScene = m_BuildSettings.m_StartScene.c_str();
     if (ImGui::BeginCombo("##build_start_scene", pSelectedScene))
     {
         for (const std::string& sceneFile : vSceneFiles)
         {
-            const bool selected = sceneFile == m_BuildSettings.startScene;
+            const bool selected = sceneFile == m_BuildSettings.m_StartScene;
             if (ImGui::Selectable(sceneFile.c_str(), selected))
             {
-                m_BuildSettings.startScene = sceneFile;
+                m_BuildSettings.m_StartScene = sceneFile;
             }
             if (selected)
             {
@@ -1923,17 +1930,18 @@ void CEditor::DrawBuildSettingsModal()
 
     ImGui::Spacing();
     ImGui::TextUnformatted("Build Profile");
-    const char* pProfileName = m_BuildSettings.profile == EProjectBuildProfile::DEBUG
-        ? "Debug" : "Release";
+    const char* pProfileName = m_BuildSettings.m_Profile == EProjectBuildProfile::DEBUG
+        ? "Debug"
+        : "Release";
     if (ImGui::BeginCombo("##build_profile", pProfileName))
     {
-        if (ImGui::Selectable("Debug", m_BuildSettings.profile == EProjectBuildProfile::DEBUG))
+        if (ImGui::Selectable("Debug", m_BuildSettings.m_Profile == EProjectBuildProfile::DEBUG))
         {
-            m_BuildSettings.profile = EProjectBuildProfile::DEBUG;
+            m_BuildSettings.m_Profile = EProjectBuildProfile::DEBUG;
         }
-        if (ImGui::Selectable("Release", m_BuildSettings.profile == EProjectBuildProfile::RELEASE))
+        if (ImGui::Selectable("Release", m_BuildSettings.m_Profile == EProjectBuildProfile::RELEASE))
         {
-            m_BuildSettings.profile = EProjectBuildProfile::RELEASE;
+            m_BuildSettings.m_Profile = EProjectBuildProfile::RELEASE;
         }
         ImGui::EndCombo();
     }
@@ -1941,20 +1949,20 @@ void CEditor::DrawBuildSettingsModal()
     ImGui::Spacing();
     ImGui::TextUnformatted("Game Icon (.ico)");
     ImGui::SameLine();
-    if (m_BuildSettings.iconPath.empty())
+    if (m_BuildSettings.m_IconPath.empty())
     {
         ImGui::TextDisabled("None");
     }
     else
     {
-        ImGui::TextDisabled("%s", m_BuildSettings.iconPath.c_str());
+        ImGui::TextDisabled("%s", m_BuildSettings.m_IconPath.c_str());
     }
     if (ImGui::Button("Choose Icon..."))
     {
-        static constexpr char aIconFilter[] =
+        static constexpr char s_aIconFilter[] =
             "ICO Files\0*.ico\0All Files\0*.*\0\0";
         const std::string selectedIcon = CDesktopIntegration::OpenFileDialog(
-            "ICO Files", aIconFilter);
+            "ICO Files", s_aIconFilter);
         if (!selectedIcon.empty())
         {
             const std::filesystem::path projectRoot = CProjectService::ResolveRoot(m_ProjectPath);
@@ -1964,7 +1972,7 @@ void CEditor::DrawBuildSettingsModal()
                 std::filesystem::absolute(iconDestination).lexically_normal())
             {
                 std::filesystem::copy_file(selectedIcon, iconDestination,
-                    std::filesystem::copy_options::overwrite_existing, error);
+                                           std::filesystem::copy_options::overwrite_existing, error);
             }
             if (error)
             {
@@ -1972,7 +1980,7 @@ void CEditor::DrawBuildSettingsModal()
             }
             else
             {
-                m_BuildSettings.iconPath = "game_icon.ico";
+                m_BuildSettings.m_IconPath = "game_icon.ico";
                 m_BuildSettingsError.clear();
             }
         }
@@ -1980,7 +1988,7 @@ void CEditor::DrawBuildSettingsModal()
     ImGui::SameLine();
     if (ImGui::Button("Clear Icon"))
     {
-        m_BuildSettings.iconPath.clear();
+        m_BuildSettings.m_IconPath.clear();
         m_BuildSettingsError.clear();
     }
 
@@ -2050,24 +2058,24 @@ void CEditor::StartBuild(bool runAfterBuild)
     try
     {
         m_BuildFuture = std::async(std::launch::async,
-            [this, runAfterBuild, projectPath, sceneDocument, preferences, buildSettings]()
-            {
-                SBuildTaskResult result;
-                const CRuntimeBuilder::FProgressCallback progressCallback =
-                    [this](const std::string& line)
-                    {
-                        std::lock_guard<std::mutex> lock(m_BuildConsoleMutex);
-                        m_vBuildConsoleLines.push_back(line);
-                    };
-                result.succeeded = runAfterBuild
-                    ? CRuntimeBuilder::BuildAndRun(projectPath, sceneDocument,
-                        preferences, buildSettings, result.outputPath,
-                        result.errorMessage, progressCallback)
-                    : CRuntimeBuilder::Build(projectPath, sceneDocument,
-                        preferences, buildSettings, result.outputPath,
-                        result.errorMessage, progressCallback);
-                return result;
-            });
+                                   [this, runAfterBuild, projectPath, sceneDocument, preferences, buildSettings]()
+                                   {
+                                       SBuildTaskResult result;
+                                       const CRuntimeBuilder::FProgressCallback pfnProgressCallback =
+                                           [this](const std::string& line)
+                                       {
+                                           std::lock_guard<std::mutex> lock(m_BuildConsoleMutex);
+                                           m_vBuildConsoleLines.push_back(line);
+                                       };
+                                       result.m_Succeeded = runAfterBuild
+                                           ? CRuntimeBuilder::BuildAndRun(projectPath, sceneDocument,
+                                                                          preferences, buildSettings, result.m_OutputPath,
+                                                                          result.m_ErrorMessage, pfnProgressCallback)
+                                           : CRuntimeBuilder::Build(projectPath, sceneDocument,
+                                                                    preferences, buildSettings, result.m_OutputPath,
+                                                                    result.m_ErrorMessage, pfnProgressCallback);
+                                       return result;
+                                   });
     }
     catch (const std::exception& exception)
     {
@@ -2093,16 +2101,16 @@ void CEditor::PollBuild()
     }
     catch (const std::exception& exception)
     {
-        result.errorMessage = exception.what();
+        result.m_ErrorMessage = exception.what();
     }
     m_BuildInProgress = false;
-    if (result.succeeded)
+    if (result.m_Succeeded)
     {
-        m_StatusMessage = "Build completed: " + result.outputPath;
+        m_StatusMessage = "Build completed: " + result.m_OutputPath;
     }
     else
     {
-        m_StatusMessage = "Build failed: " + result.errorMessage;
+        m_StatusMessage = "Build failed: " + result.m_ErrorMessage;
     }
     {
         std::lock_guard<std::mutex> lock(m_BuildConsoleMutex);
@@ -2135,7 +2143,7 @@ void CEditor::DrawBuildConsole()
         }
         ImGui::Separator();
         ImGui::BeginChild("##build_console_output", ImVec2(0, 0), false,
-            ImGuiWindowFlags_HorizontalScrollbar);
+                          ImGuiWindowFlags_HorizontalScrollbar);
         std::vector<std::string> vConsoleLines;
         {
             std::lock_guard<std::mutex> lock(m_BuildConsoleMutex);

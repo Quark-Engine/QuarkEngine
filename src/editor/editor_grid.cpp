@@ -6,84 +6,81 @@
 
 namespace
 {
-constexpr float kPlaneEpsilon = 1e-5f;
-constexpr float kGridFarDistance = 400.0f;
-constexpr int kMaxLinesPerAxis = 256;
+    constexpr float PLANE_EPSILON = 1e-5f;
+    constexpr float GRID_FAR_DISTANCE = 400.0f;
+    constexpr int MAX_LINES_PER_AXIS = 256;
 
-struct Plane
-{
-    Vec3 normal{};
-    Vec3 point{};
-    float offset = 0.0f;
-};
-
-float EvaluateAtGround(const Plane& plane, float x, float z)
-{
-    return plane.normal.x*(x - plane.point.x) + plane.normal.z*(z - plane.point.z)
-        - plane.normal.y*plane.point.y + plane.offset;
-}
-
-void ClipPolygon(const Plane& plane, std::vector<Vec2>& vPolygon)
-{
-    if (vPolygon.empty())
+    struct SPlane
     {
-        return;
+        Vec3 m_Normal{};
+        Vec3 m_Point{};
+        float m_Offset = 0.0f;
+    };
+
+    float EvaluateAtGround(const SPlane& plane, float x, float z)
+    {
+        return plane.m_Normal.x * (x - plane.m_Point.x) + plane.m_Normal.z * (z - plane.m_Point.z) - plane.m_Normal.y * plane.m_Point.y + plane.m_Offset;
     }
 
-    std::vector<Vec2> vClipped;
-    vClipped.reserve(vPolygon.size() + 4);
-
-    Vec2 last = vPolygon.back();
-    float previousDistance = EvaluateAtGround(plane, last.x, last.y);
-    bool previousInside = previousDistance >= 0.0f;
-
-    for (const Vec2& current : vPolygon)
+    void ClipPolygon(const SPlane& plane, std::vector<Vec2>& vPolygon)
     {
-        const float currentDistance = EvaluateAtGround(plane, current.x, current.y);
-        const bool currentInside = currentDistance >= 0.0f;
-
-        if (currentInside != previousInside)
+        if (vPolygon.empty())
         {
-            const float denominator = previousDistance - currentDistance;
-            if (std::fabs(denominator) > kPlaneEpsilon)
+            return;
+        }
+
+        std::vector<Vec2> vClipped;
+        vClipped.reserve(vPolygon.size() + 4);
+
+        Vec2 last = vPolygon.back();
+        float previousDistance = EvaluateAtGround(plane, last.x, last.y);
+        bool previousInside = previousDistance >= 0.0f;
+
+        for (const Vec2& current : vPolygon)
+        {
+            const float currentDistance = EvaluateAtGround(plane, current.x, current.y);
+            const bool currentInside = currentDistance >= 0.0f;
+
+            if (currentInside != previousInside)
             {
-                const float t = previousDistance / denominator;
-                vClipped.push_back({
-                    last.x + (current.x - last.x)*t,
-                    last.y + (current.y - last.y)*t
-                });
+                const float denominator = previousDistance - currentDistance;
+                if (std::fabs(denominator) > PLANE_EPSILON)
+                {
+                    const float t = previousDistance / denominator;
+                    vClipped.push_back({ last.x + (current.x - last.x) * t,
+                                         last.y + (current.y - last.y) * t });
+                }
             }
+
+            if (currentInside)
+            {
+                vClipped.push_back(current);
+            }
+
+            last = current;
+            previousDistance = currentDistance;
+            previousInside = currentInside;
         }
 
-        if (currentInside)
-        {
-            vClipped.push_back(current);
-        }
-
-        last = current;
-        previousDistance = currentDistance;
-        previousInside = currentInside;
+        vPolygon.swap(vClipped);
     }
 
-    vPolygon.swap(vClipped);
-}
-
-Plane MakeSidePlane(const Vec3& eye, const Vec3& first, const Vec3& second)
-{
-    Plane plane;
-    plane.normal = first.cross(second);
-    const float length = plane.normal.length();
-    if (length > kPlaneEpsilon)
+    SPlane MakeSidePlane(const Vec3& eye, const Vec3& first, const Vec3& second)
     {
-        plane.normal = plane.normal * (1.0f / length);
+        SPlane plane;
+        plane.m_Normal = first.cross(second);
+        const float length = plane.m_Normal.length();
+        if (length > PLANE_EPSILON)
+        {
+            plane.m_Normal = plane.m_Normal * (1.0f / length);
+        }
+        plane.m_Point = eye;
+        return plane;
     }
-    plane.point = eye;
-    return plane;
-}
-}
+} // anonymous
 
 void CInfiniteGrid::Draw(const Camera3D& camera, int viewportWidth, int viewportHeight,
-    float spacing, Color color, float maxExtent)
+                         float spacing, Color color, float maxExtent)
 {
     if (spacing <= 0.0f || viewportWidth <= 0 || viewportHeight <= 0 || maxExtent <= 0.0f)
     {
@@ -98,7 +95,7 @@ void CInfiniteGrid::Draw(const Camera3D& camera, int viewportWidth, int viewport
 
     Vec3 forward = camera.target - camera.position;
     float length = forward.length();
-    forward = (length > kPlaneEpsilon) ? forward * (1.0f / length) : Vec3{ 0.0f, 0.0f, -1.0f };
+    forward = (length > PLANE_EPSILON) ? forward * (1.0f / length) : Vec3{ 0.0f, 0.0f, -1.0f };
 
     Vec3 up = camera.up;
     if (std::fabs(forward.dot(up)) > 0.999f)
@@ -114,7 +111,7 @@ void CInfiniteGrid::Draw(const Camera3D& camera, int viewportWidth, int viewport
 
     const auto rayDirection = [&](float ndcX, float ndcY)
     {
-        return right*(ndcX * tanHalfFovx) + cameraUp*(ndcY * tanHalfFovy) + forward;
+        return right * (ndcX * tanHalfFovx) + cameraUp * (ndcY * tanHalfFovy) + forward;
     };
 
     const Vec3 rayBottomLeft = rayDirection(-1.0f, -1.0f);
@@ -122,37 +119,35 @@ void CInfiniteGrid::Draw(const Camera3D& camera, int viewportWidth, int viewport
     const Vec3 rayTopRight = rayDirection(1.0f, 1.0f);
     const Vec3 rayTopLeft = rayDirection(-1.0f, 1.0f);
 
-    std::vector<Plane> vPlanes =
-    {
+    std::vector<SPlane> vPlanes = {
         MakeSidePlane(camera.position, rayBottomLeft, rayTopLeft),
         MakeSidePlane(camera.position, rayBottomRight, rayTopRight),
         MakeSidePlane(camera.position, rayBottomLeft, rayBottomRight),
         MakeSidePlane(camera.position, rayTopLeft, rayTopRight),
-        { forward * -1.0f, camera.position, kGridFarDistance }
+        { forward * -1.0f, camera.position, GRID_FAR_DISTANCE }
     };
 
     const Vec3 viewCentre = camera.position + forward;
-    for (Plane& plane : vPlanes)
+    for (SPlane& plane : vPlanes)
     {
-        const float side = plane.normal.dot(viewCentre - plane.point) + plane.offset;
+        const float side = plane.m_Normal.dot(viewCentre - plane.m_Point) + plane.m_Offset;
         if (side < 0.0f)
         {
-            plane.normal = plane.normal * -1.0f;
+            plane.m_Normal = plane.m_Normal * -1.0f;
         }
     }
 
     const float centerX = std::floor(camera.position.x / spacing) * spacing;
     const float centerZ = std::floor(camera.position.z / spacing) * spacing;
 
-    std::vector<Vec2> vPolygon =
-    {
+    std::vector<Vec2> vPolygon = {
         { centerX - maxExtent, centerZ - maxExtent },
         { centerX + maxExtent, centerZ - maxExtent },
         { centerX + maxExtent, centerZ + maxExtent },
         { centerX - maxExtent, centerZ + maxExtent }
     };
 
-    for (const Plane& plane : vPlanes)
+    for (const SPlane& plane : vPlanes)
     {
         ClipPolygon(plane, vPolygon);
     }
@@ -182,7 +177,7 @@ void CInfiniteGrid::Draw(const Camera3D& camera, int viewportWidth, int viewport
     float step = spacing;
     for (int i = 0; i < 24; ++i)
     {
-        if ((maxX - minX) / step + (maxZ - minZ) / step <= static_cast<float>(kMaxLinesPerAxis * 2))
+        if ((maxX - minX) / step + (maxZ - minZ) / step <= static_cast<float>(MAX_LINES_PER_AXIS * 2))
         {
             break;
         }
@@ -205,8 +200,7 @@ void CInfiniteGrid::Draw(const Camera3D& camera, int viewportWidth, int viewport
         static_cast<unsigned char>(std::min(255, static_cast<int>(color.r) + 55)),
         static_cast<unsigned char>(std::min(255, static_cast<int>(color.g) + 55)),
         static_cast<unsigned char>(std::min(255, static_cast<int>(color.b) + 55)),
-        color.a
-    );
+        color.a);
 
     if (0.0f >= minX && 0.0f <= maxX)
     {

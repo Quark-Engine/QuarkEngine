@@ -15,9 +15,9 @@ enum class EProjectBuildProfile
 
 struct SProjectBuildSettings
 {
-    std::string startScene = "scene.json";
-    std::string iconPath;
-    EProjectBuildProfile profile = EProjectBuildProfile::RELEASE;
+    std::string m_StartScene = "scene.json";
+    std::string m_IconPath;
+    EProjectBuildProfile m_Profile = EProjectBuildProfile::RELEASE;
 };
 
 class CProjectService

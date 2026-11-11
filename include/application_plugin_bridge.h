@@ -24,7 +24,10 @@ public:
 
     void Reset();
 
-    SPluginContext* GetContext() const { return m_pContext.get(); }
+    SPluginContext* GetContext() const
+    {
+        return m_pContext.get();
+    }
 
 private:
     void SyncContext(CEditor& editor, CPluginManager& pluginManager);

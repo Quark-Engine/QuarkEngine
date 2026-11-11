@@ -2,33 +2,44 @@
 #include <fstream>
 #include <unordered_map>
 
-using json = nlohmann::json;
+using Json = nlohmann::json;
 
 namespace
 {
-std::string NormalizeLanguageCode(const std::string& code)
-{
-    if (code == "ru_ru") return "russian";
-    return code;
-}
+    std::string NormalizeLanguageCode(const std::string& code)
+    {
+        if (code == "ru_ru")
+        {
+            return "russian";
+        }
+        return code;
+    }
 
-std::string ResolveFontPath(const std::string& fontValue)
-{
-    if (fontValue.empty()) return "assets/font/Rubik-Regular.ttf";
-    if (fontValue.find('/') != std::string::npos || fontValue.find('\\') != std::string::npos)
-        return fontValue;
-    return "assets/font/" + fontValue;
-}
+    std::string ResolveFontPath(const std::string& fontValue)
+    {
+        if (fontValue.empty())
+        {
+            return "assets/font/Rubik-Regular.ttf";
+        }
+        if (fontValue.find('/') != std::string::npos || fontValue.find('\\') != std::string::npos)
+        {
+            return fontValue;
+        }
+        return "assets/font/" + fontValue;
+    }
 } // anonymous
 
 bool CLanguageManager::Load(const std::string& path)
 {
     std::ifstream file(path);
-    if (!file.is_open()) return false;
+    if (!file.is_open())
+    {
+        return false;
+    }
     m_Cache.clear();
     file >> m_Data;
 
-    m_FallbackData = json::object();
+    m_FallbackData = Json::object();
     std::ifstream fallbackFile("assets/lang/english.json");
     if (fallbackFile.is_open())
     {
@@ -38,7 +49,7 @@ bool CLanguageManager::Load(const std::string& path)
         }
         catch (...)
         {
-            m_FallbackData = json::object();
+            m_FallbackData = Json::object();
         }
     }
     return true;
@@ -50,7 +61,7 @@ void CLanguageManager::SetLang(const std::string& code)
     Load("assets/lang/" + m_Current + ".json");
 
     const std::string path = "config.json";
-    json j;
+    Json j;
     if (std::filesystem::exists(path))
     {
         std::ifstream input(path);
@@ -70,7 +81,10 @@ void CLanguageManager::SetLang(const std::string& code)
 const char* CLanguageManager::Word(const std::string& key) const
 {
     auto it = m_Cache.find(key);
-    if (it != m_Cache.end()) return it->second.c_str();
+    if (it != m_Cache.end())
+    {
+        return it->second.c_str();
+    }
 
     const nlohmann::json* pNode = &m_Data;
     size_t start = 0;
@@ -98,11 +112,14 @@ const char* CLanguageManager::Word(const std::string& key) const
                 }
                 pFallback = &(*pFallback)[fallbackPart];
                 if (fallbackDot == std::string::npos)
+                {
                     break;
+                }
                 fallbackStart = fallbackDot + 1;
             }
             m_Cache[key] = fallbackFound && pFallback->is_string()
-                ? pFallback->get<std::string>() : key;
+                ? pFallback->get<std::string>()
+                : key;
             return m_Cache[key].c_str();
         }
 
@@ -124,7 +141,9 @@ std::string CLanguageManager::EditorFontPath() const
     {
         const auto& meta = m_Data["_meta"];
         if (meta.contains("editor_font") && meta["editor_font"].is_string())
+        {
             return ResolveFontPath(meta["editor_font"].get<std::string>());
+        }
     }
 
     return "assets/font/Rubik-Regular.ttf";
@@ -136,7 +155,9 @@ std::string CLanguageManager::EditorFontMergePath() const
     {
         const auto& meta = m_Data["_meta"];
         if (meta.contains("editor_font_merge") && meta["editor_font_merge"].is_string())
+        {
             return ResolveFontPath(meta["editor_font_merge"].get<std::string>());
+        }
     }
 
     return "";
@@ -148,9 +169,9 @@ std::string LoadOrCreateConfig()
 
     if (!std::filesystem::exists(path))
     {
-        json def;
+        Json def;
         def["language"] = "english";
-        def["projects"] = json::array();
+        def["projects"] = Json::array();
 
         std::ofstream output(path);
         output << def.dump(4);
@@ -160,9 +181,11 @@ std::string LoadOrCreateConfig()
 
     std::ifstream input(path);
     if (!input.is_open())
+    {
         return "english";
+    }
 
-    json j;
+    Json j;
     try
     {
         input >> j;

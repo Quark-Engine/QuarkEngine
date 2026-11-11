@@ -21,324 +21,321 @@ namespace fs = std::filesystem;
 namespace
 {
 
-std::vector<fs::directory_entry> CollectResourceEntries(const fs::path& resourceDir)
-{
-    std::vector<fs::directory_entry> vResult;
-    std::error_code ec;
-    fs::recursive_directory_iterator it(resourceDir, fs::directory_options::skip_permission_denied, ec);
-    if (ec)
+    std::vector<fs::directory_entry> CollectResourceEntries(const fs::path& resourceDir)
     {
-        return vResult;
-    }
-
-    for (const auto& entry : it)
-    {
-        vResult.push_back(entry);
-    }
-
-    std::sort(
-        vResult.begin(),
-        vResult.end(),
-        [](const fs::directory_entry& lhs, const fs::directory_entry& rhs)
-        {
-            std::error_code lhsEc;
-            std::error_code rhsEc;
-            const bool lhsIsDir = lhs.is_directory(lhsEc) && !lhsEc;
-            const bool rhsIsDir = rhs.is_directory(rhsEc) && !rhsEc;
-
-            if (lhsIsDir != rhsIsDir)
-            {
-                return lhsIsDir;
-            }
-            return lhs.path().generic_string() < rhs.path().generic_string();
-        }
-    );
-
-    return vResult;
-}
-
-std::vector<fs::path> CollectResourceFiles(const fs::path& resourceDir)
-{
-    std::vector<fs::path> vResult;
-    for (const auto& entry : CollectResourceEntries(resourceDir))
-    {
+        std::vector<fs::directory_entry> vResult;
         std::error_code ec;
-        if (!entry.is_regular_file(ec) || ec)
+        fs::recursive_directory_iterator it(resourceDir, fs::directory_options::skip_permission_denied, ec);
+        if (ec)
         {
-            continue;
+            return vResult;
         }
 
-        vResult.push_back(entry.path());
-    }
+        for (const auto& entry : it)
+        {
+            vResult.push_back(entry);
+        }
 
-    return vResult;
-}
+        std::sort(
+            vResult.begin(),
+            vResult.end(),
+            [](const fs::directory_entry& lhs, const fs::directory_entry& rhs)
+            {
+                std::error_code lhsEc;
+                std::error_code rhsEc;
+                const bool lhsIsDir = lhs.is_directory(lhsEc) && !lhsEc;
+                const bool rhsIsDir = rhs.is_directory(rhsEc) && !rhsEc;
 
-std::vector<fs::path> CollectModelPaths(const fs::path& resourceDir)
-{
-    std::vector<fs::path> vResult;
-    std::error_code ec;
-    fs::recursive_directory_iterator it(resourceDir, fs::directory_options::skip_permission_denied, ec);
-    if (ec)
-    {
+                if (lhsIsDir != rhsIsDir)
+                {
+                    return lhsIsDir;
+                }
+                return lhs.path().generic_string() < rhs.path().generic_string();
+            });
+
         return vResult;
     }
 
-    for (const auto& entry : it)
+    std::vector<fs::path> CollectResourceFiles(const fs::path& resourceDir)
     {
-        if (!entry.is_regular_file(ec) || ec)
+        std::vector<fs::path> vResult;
+        for (const auto& entry : CollectResourceEntries(resourceDir))
         {
-            ec.clear();
-            continue;
-        }
+            std::error_code ec;
+            if (!entry.is_regular_file(ec) || ec)
+            {
+                continue;
+            }
 
-        if (CModelService::IsModelFile(entry.path()))
-        {
             vResult.push_back(entry.path());
         }
+
+        return vResult;
     }
 
-    return vResult;
-}
-
-std::string BuildFileFingerprint(const fs::path& path)
-{
-    std::string fingerprint;
-    const auto appendFileState = [&fingerprint](const fs::path& filePath)
+    std::vector<fs::path> CollectModelPaths(const fs::path& resourceDir)
     {
-        std::error_code stateError;
-        if (!fs::is_regular_file(filePath, stateError) || stateError)
+        std::vector<fs::path> vResult;
+        std::error_code ec;
+        fs::recursive_directory_iterator it(resourceDir, fs::directory_options::skip_permission_denied, ec);
+        if (ec)
         {
-            fingerprint += "|missing";
-            return;
+            return vResult;
         }
 
-        stateError.clear();
-        const uintmax_t size = fs::file_size(filePath, stateError);
-        fingerprint += stateError ? "|size-error" : "|" + std::to_string(size);
-        stateError.clear();
-        const auto writeTime = fs::last_write_time(filePath, stateError);
-        fingerprint += stateError ? "|time-error" : "|" +
-            std::to_string(static_cast<long long>(writeTime.time_since_epoch().count()));
-    };
-    appendFileState(path);
-    appendFileState(fs::path(path.string() + ".meta"));
-    return fingerprint;
-}
+        for (const auto& entry : it)
+        {
+            if (!entry.is_regular_file(ec) || ec)
+            {
+                ec.clear();
+                continue;
+            }
 
-std::string BuildModelFingerprint(const fs::path& modelPath)
-{
-    std::string fingerprint = BuildFileFingerprint(modelPath);
-    std::string extension = modelPath.extension().string();
-    std::transform(extension.begin(), extension.end(), extension.begin(), [](unsigned char character)
+            if (CModelService::IsModelFile(entry.path()))
+            {
+                vResult.push_back(entry.path());
+            }
+        }
+
+        return vResult;
+    }
+
+    std::string BuildFileFingerprint(const fs::path& path)
     {
-        return static_cast<char>(std::tolower(character));
-    });
-    if (extension != ".obj")
-    {
+        std::string fingerprint;
+        const auto appendFileState = [&fingerprint](const fs::path& filePath)
+        {
+            std::error_code stateError;
+            if (!fs::is_regular_file(filePath, stateError) || stateError)
+            {
+                fingerprint += "|missing";
+                return;
+            }
+
+            stateError.clear();
+            const uintmax_t size = fs::file_size(filePath, stateError);
+            fingerprint += stateError ? "|size-error" : "|" + std::to_string(size);
+            stateError.clear();
+            const auto writeTime = fs::last_write_time(filePath, stateError);
+            fingerprint += stateError ? "|time-error" : "|" + std::to_string(static_cast<long long>(writeTime.time_since_epoch().count()));
+        };
+        appendFileState(path);
+        appendFileState(fs::path(path.string() + ".meta"));
         return fingerprint;
     }
 
-    std::ifstream modelFile(modelPath);
-    std::string line;
-    size_t scannedLines = 0;
-    while (scannedLines < 4096 && std::getline(modelFile, line))
+    std::string BuildModelFingerprint(const fs::path& modelPath)
     {
-        ++scannedLines;
-        std::istringstream modelLine(line);
-        std::string directive;
-        modelLine >> directive;
-        if (directive != "mtllib")
+        std::string fingerprint = BuildFileFingerprint(modelPath);
+        std::string extension = modelPath.extension().string();
+        std::transform(extension.begin(), extension.end(), extension.begin(), [](unsigned char character)
+                       {
+                           return static_cast<char>(std::tolower(character));
+                       });
+        if (extension != ".obj")
         {
-            continue;
+            return fingerprint;
         }
 
-        std::string materialName;
-        while (modelLine >> materialName)
+        std::ifstream modelFile(modelPath);
+        std::string line;
+        size_t scannedLines = 0;
+        while (scannedLines < 4096 && std::getline(modelFile, line))
         {
-            const fs::path materialPath = modelPath.parent_path() / materialName;
-            fingerprint += "|" + BuildFileFingerprint(materialPath);
-
-            std::ifstream materialFile(materialPath);
-            std::string materialLine;
-            while (std::getline(materialFile, materialLine))
+            ++scannedLines;
+            std::istringstream modelLine(line);
+            std::string directive;
+            modelLine >> directive;
+            if (directive != "mtllib")
             {
-                std::istringstream materialStream(materialLine);
-                std::string materialDirective;
-                materialStream >> materialDirective;
-                if (materialDirective != "map_Kd")
-                {
-                    continue;
-                }
+                continue;
+            }
 
-                std::string textureName;
-                std::getline(materialStream >> std::ws, textureName);
-                if (!textureName.empty())
+            std::string materialName;
+            while (modelLine >> materialName)
+            {
+                const fs::path materialPath = modelPath.parent_path() / materialName;
+                fingerprint += "|" + BuildFileFingerprint(materialPath);
+
+                std::ifstream materialFile(materialPath);
+                std::string materialLine;
+                while (std::getline(materialFile, materialLine))
                 {
-                    fingerprint += "|" + BuildFileFingerprint(materialPath.parent_path() / textureName);
+                    std::istringstream materialStream(materialLine);
+                    std::string materialDirective;
+                    materialStream >> materialDirective;
+                    if (materialDirective != "map_Kd")
+                    {
+                        continue;
+                    }
+
+                    std::string textureName;
+                    std::getline(materialStream >> std::ws, textureName);
+                    if (!textureName.empty())
+                    {
+                        fingerprint += "|" + BuildFileFingerprint(materialPath.parent_path() / textureName);
+                    }
                 }
             }
         }
+
+        return fingerprint;
     }
 
-    return fingerprint;
-}
-
-std::string BuildResourceSignature(const fs::path& resourceDir)
-{
-    std::vector<std::string> vEntries;
-    std::error_code ec;
-    fs::recursive_directory_iterator it(resourceDir, fs::directory_options::skip_permission_denied, ec);
-    if (ec)
+    std::string BuildResourceSignature(const fs::path& resourceDir)
     {
-        return {};
-    }
-
-    for (const auto& entry : it)
-    {
-        std::error_code entryEc;
-        const fs::path relative = fs::relative(entry.path(), resourceDir, entryEc);
-        if (entryEc)
-        {
-            continue;
-        }
-
-        std::string row = relative.generic_string();
-        if (entry.is_regular_file(entryEc) && !entryEc)
-        {
-            std::error_code sizeEc;
-            std::error_code timeEc;
-            row += "|f|";
-            const uintmax_t size = fs::file_size(entry.path(), sizeEc);
-            row += sizeEc ? "0" : std::to_string(size);
-            row += "|";
-            const auto writeTime = fs::last_write_time(entry.path(), timeEc);
-            row += timeEc ? "0" :
-                std::to_string(static_cast<long long>(writeTime.time_since_epoch().count()));
-        }
-        else
-        {
-            row += "|d";
-        }
-
-        vEntries.push_back(std::move(row));
-    }
-
-    std::sort(vEntries.begin(), vEntries.end());
-
-    std::string signature;
-    for (const auto& entry : vEntries)
-    {
-        signature += entry;
-        signature.push_back('\n');
-    }
-
-    return signature;
-}
-
-SResourceScanResult ScanResources(const fs::path& resourceDir,
-    const std::unordered_map<std::string, std::string>& textureFingerprints)
-{
-    std::error_code directoryError;
-    if (!fs::is_directory(resourceDir, directoryError) || directoryError)
-    {
-        throw std::runtime_error("Project resources directory is unavailable");
-    }
-
-    SResourceScanResult scan;
-    const std::vector<fs::directory_entry> vEntries = CollectResourceEntries(resourceDir);
-
-    for (const fs::directory_entry& entry : vEntries)
-    {
+        std::vector<std::string> vEntries;
         std::error_code ec;
-        if (!entry.is_regular_file(ec) || ec)
-        {
-            continue;
-        }
-
-        const fs::path path = entry.path();
-        if (CModelService::IsModelFile(path))
-        {
-            scan.vModelPaths.push_back(path);
-        }
-        if (!CTextureMetadataStore::IsImageFile(path))
-        {
-            continue;
-        }
-
-        SScannedTexture texture;
-        texture.name = fs::relative(path, resourceDir, ec).generic_string();
+        fs::recursive_directory_iterator it(resourceDir, fs::directory_options::skip_permission_denied, ec);
         if (ec)
         {
-            texture.name = path.filename().generic_string();
-            ec.clear();
-        }
-        const fs::path metadataPath(path.string() + ".meta");
-        if (!fs::exists(metadataPath, ec))
-        {
-            CTextureMetadataStore::Ensure(path);
-        }
-        texture.fingerprint = BuildFileFingerprint(path);
-
-        const auto fingerprintIt = textureFingerprints.find(texture.name);
-        if (fingerprintIt != textureFingerprints.end() &&
-            fingerprintIt->second == texture.fingerprint)
-        {
-            scan.vTextures.push_back(std::move(texture));
-            continue;
+            return {};
         }
 
-        if (!CTextureMetadataStore::Load(path, texture.meta))
+        for (const auto& entry : it)
         {
-            texture.meta = {};
-        }
-
-        texture.imageData = LoadImage(path.string().c_str());
-        if (!IsImageValid(texture.imageData))
-        {
-            texture.error = "Failed to decode image";
-        }
-        else
-        {
-            ImageFormat(&texture.imageData, PIXELFORMAT_UNCOMPRESSED_R8G8B8A8);
-            texture.hasImage = IsImageValid(texture.imageData) &&
-                texture.imageData.format == PIXELFORMAT_UNCOMPRESSED_R8G8B8A8;
-            if (!texture.hasImage)
+            std::error_code entryEc;
+            const fs::path relative = fs::relative(entry.path(), resourceDir, entryEc);
+            if (entryEc)
             {
-                texture.error = "Failed to convert image to RGBA8";
+                continue;
             }
+
+            std::string row = relative.generic_string();
+            if (entry.is_regular_file(entryEc) && !entryEc)
+            {
+                std::error_code sizeEc;
+                std::error_code timeEc;
+                row += "|f|";
+                const uintmax_t size = fs::file_size(entry.path(), sizeEc);
+                row += sizeEc ? "0" : std::to_string(size);
+                row += "|";
+                const auto writeTime = fs::last_write_time(entry.path(), timeEc);
+                row += timeEc ? "0" : std::to_string(static_cast<long long>(writeTime.time_since_epoch().count()));
+            }
+            else
+            {
+                row += "|d";
+            }
+
+            vEntries.push_back(std::move(row));
         }
 
-        scan.vTextures.push_back(std::move(texture));
-    }
+        std::sort(vEntries.begin(), vEntries.end());
 
-    std::sort(scan.vModelPaths.begin(), scan.vModelPaths.end());
-    scan.signature = BuildResourceSignature(resourceDir);
-    return scan;
-}
-
-void UnloadScannedImages(SResourceScanResult& scan)
-{
-    for (SScannedTexture& texture : scan.vTextures)
-    {
-        if (texture.imageData.data)
+        std::string signature;
+        for (const auto& entry : vEntries)
         {
-            UnloadImage(texture.imageData);
-            texture.imageData = {};
+            signature += entry;
+            signature.push_back('\n');
         }
-        texture.hasImage = false;
+
+        return signature;
     }
-}
 
-struct SScannedImageGuard
-{
-    SResourceScanResult& scan;
-
-    ~SScannedImageGuard()
+    SResourceScanResult ScanResources(const fs::path& resourceDir,
+                                      const std::unordered_map<std::string, std::string>& textureFingerprints)
     {
-        UnloadScannedImages(scan);
+        std::error_code directoryError;
+        if (!fs::is_directory(resourceDir, directoryError) || directoryError)
+        {
+            throw std::runtime_error("Project resources directory is unavailable");
+        }
+
+        SResourceScanResult scan;
+        const std::vector<fs::directory_entry> vEntries = CollectResourceEntries(resourceDir);
+
+        for (const fs::directory_entry& entry : vEntries)
+        {
+            std::error_code ec;
+            if (!entry.is_regular_file(ec) || ec)
+            {
+                continue;
+            }
+
+            const fs::path path = entry.path();
+            if (CModelService::IsModelFile(path))
+            {
+                scan.m_vModelPaths.push_back(path);
+            }
+            if (!CTextureMetadataStore::IsImageFile(path))
+            {
+                continue;
+            }
+
+            SScannedTexture texture;
+            texture.m_Name = fs::relative(path, resourceDir, ec).generic_string();
+            if (ec)
+            {
+                texture.m_Name = path.filename().generic_string();
+                ec.clear();
+            }
+            const fs::path metadataPath(path.string() + ".meta");
+            if (!fs::exists(metadataPath, ec))
+            {
+                CTextureMetadataStore::Ensure(path);
+            }
+            texture.m_Fingerprint = BuildFileFingerprint(path);
+
+            const auto fingerprintIt = textureFingerprints.find(texture.m_Name);
+            if (fingerprintIt != textureFingerprints.end() &&
+                fingerprintIt->second == texture.m_Fingerprint)
+            {
+                scan.m_vTextures.push_back(std::move(texture));
+                continue;
+            }
+
+            if (!CTextureMetadataStore::Load(path, texture.m_Meta))
+            {
+                texture.m_Meta = {};
+            }
+
+            texture.m_ImageData = LoadImage(path.string().c_str());
+            if (!IsImageValid(texture.m_ImageData))
+            {
+                texture.m_Error = "Failed to decode image";
+            }
+            else
+            {
+                ImageFormat(&texture.m_ImageData, PIXELFORMAT_UNCOMPRESSED_R8G8B8A8);
+                texture.m_HasImage = IsImageValid(texture.m_ImageData) &&
+                    texture.m_ImageData.format == PIXELFORMAT_UNCOMPRESSED_R8G8B8A8;
+                if (!texture.m_HasImage)
+                {
+                    texture.m_Error = "Failed to convert image to RGBA8";
+                }
+            }
+
+            scan.m_vTextures.push_back(std::move(texture));
+        }
+
+        std::sort(scan.m_vModelPaths.begin(), scan.m_vModelPaths.end());
+        scan.m_Signature = BuildResourceSignature(resourceDir);
+        return scan;
     }
-};
+
+    void UnloadScannedImages(SResourceScanResult& scan)
+    {
+        for (SScannedTexture& texture : scan.m_vTextures)
+        {
+            if (texture.m_ImageData.data)
+            {
+                UnloadImage(texture.m_ImageData);
+                texture.m_ImageData = {};
+            }
+            texture.m_HasImage = false;
+        }
+    }
+
+    struct SScannedImageGuard
+    {
+        SResourceScanResult& m_Scan;
+
+        ~SScannedImageGuard()
+        {
+            UnloadScannedImages(m_Scan);
+        }
+    };
 
 } // anonymous
 
@@ -366,8 +363,7 @@ CAssetLibrary::~CAssetLibrary()
         }
         catch (const std::exception& exception)
         {
-            TraceLog(LogLevel::Error, "ASSETS", TextFormat(
-                "Resource scan failed during shutdown: %s", exception.what()));
+            TraceLog(LogLevel::Error, "ASSETS", TextFormat("Resource scan failed during shutdown: %s", exception.what()));
         }
     }
 }
@@ -478,7 +474,7 @@ void CAssetLibrary::LoadTexturesFromDisk(const std::string& projectPath)
     UnloadTextures();
     m_vTextures.clear();
     m_TextureFingerprints.clear();
-    m_vTextures.push_back({ "None", {0} });
+    m_vTextures.push_back({ "None", { 0 } });
 
     for (const auto& path : CollectResourceFiles(resourceDir))
     {
@@ -505,13 +501,13 @@ void CAssetLibrary::UnloadTextures()
     std::unordered_set<unsigned int> releasedIds;
     for (auto& option : m_vTextures)
     {
-        if (option.Texture.id == 0)
+        if (option.m_Texture.id == 0)
         {
             continue;
         }
-        if (releasedIds.insert(option.Texture.id).second)
+        if (releasedIds.insert(option.m_Texture.id).second)
         {
-            UnloadTexture(option.Texture);
+            UnloadTexture(option.m_Texture);
         }
     }
     m_vTextures.clear();
@@ -528,15 +524,15 @@ void CAssetLibrary::RefreshTextures(const std::string& projectPath, CScene* pSce
     std::unordered_map<std::string, Texture2D> oldByName;
     for (auto& option : m_vTextures)
     {
-        if (option.Texture.id != 0)
+        if (option.m_Texture.id != 0)
         {
-            oldByName[option.Name] = option.Texture;
+            oldByName[option.m_Name] = option.m_Texture;
         }
     }
 
     std::vector<STextureOption> vNextOptions;
     std::unordered_map<std::string, std::string> nextFingerprints;
-    vNextOptions.push_back({ "None", {0} });
+    vNextOptions.push_back({ "None", { 0 } });
 
     for (const auto& path : CollectResourceFiles(resourceDir))
     {
@@ -572,7 +568,7 @@ void CAssetLibrary::RefreshTextures(const std::string& projectPath, CScene* pSce
                 CMaterialComponent* pMat = entity.GetMaterialComponent();
                 if (pMesh && pMat && pMat->m_Texture.id == removedTex.id)
                 {
-                    pMat->m_Texture = {0};
+                    pMat->m_Texture = { 0 };
                 }
             }
         }
@@ -601,7 +597,7 @@ bool CAssetLibrary::RefreshModels(const std::string& projectPath, CScene& scene)
 }
 
 bool CAssetLibrary::RefreshModels(const std::string& projectPath, CScene& scene,
-    const std::vector<fs::path>& vModelPaths)
+                                  const std::vector<fs::path>& vModelPaths)
 {
     std::unordered_map<std::string, Model> oldModels;
     const std::unordered_map<std::string, std::string> oldFingerprints = m_ModelFingerprints;
@@ -759,16 +755,16 @@ void CAssetLibrary::StartResourceScan(const std::string& projectPath)
     m_ActiveScanGeneration = m_ResourceScanGeneration;
     m_ResourceScanFuture = m_pTaskPool->Submit(
         "Scan project assets and decode changed textures", [resourceDir, textureFingerprints]()
-    {
-        return ScanResources(resourceDir, textureFingerprints);
-    });
+        {
+            return ScanResources(resourceDir, textureFingerprints);
+        });
 }
 
 bool CAssetLibrary::ApplyResourceScan(SResourceScanResult& scan,
-    const std::string& projectPath, CScene& scene)
+                                      const std::string& projectPath, CScene& scene)
 {
     SScannedImageGuard imageGuard{ scan };
-    if (scan.signature == m_LastResourceSignature)
+    if (scan.m_Signature == m_LastResourceSignature)
     {
         return false;
     }
@@ -776,81 +772,79 @@ bool CAssetLibrary::ApplyResourceScan(SResourceScanResult& scan,
     std::unordered_map<std::string, Texture2D> oldByName;
     for (const STextureOption& option : m_vTextures)
     {
-        if (option.Texture.id != 0)
+        if (option.m_Texture.id != 0)
         {
-            oldByName[option.Name] = option.Texture;
+            oldByName[option.m_Name] = option.m_Texture;
         }
     }
 
     std::vector<STextureOption> vNextTextures;
     std::unordered_map<std::string, std::string> nextFingerprints;
     std::unordered_map<unsigned int, Texture2D> textureReplacements;
-    vNextTextures.push_back({ "None", {0} });
+    vNextTextures.push_back({ "None", { 0 } });
 
-    for (SScannedTexture& scannedTexture : scan.vTextures)
+    for (SScannedTexture& scannedTexture : scan.m_vTextures)
     {
-        const auto oldIt = oldByName.find(scannedTexture.name);
-        if (!scannedTexture.hasImage)
+        const auto oldIt = oldByName.find(scannedTexture.m_Name);
+        if (!scannedTexture.m_HasImage)
         {
-            if (scannedTexture.error.empty() && oldIt != oldByName.end())
+            if (scannedTexture.m_Error.empty() && oldIt != oldByName.end())
             {
-                vNextTextures.push_back({ scannedTexture.name, oldIt->second });
+                vNextTextures.push_back({ scannedTexture.m_Name, oldIt->second });
                 oldByName.erase(oldIt);
-                const auto fingerprintIt = m_TextureFingerprints.find(scannedTexture.name);
+                const auto fingerprintIt = m_TextureFingerprints.find(scannedTexture.m_Name);
                 if (fingerprintIt != m_TextureFingerprints.end())
                 {
-                    nextFingerprints[scannedTexture.name] = fingerprintIt->second;
+                    nextFingerprints[scannedTexture.m_Name] = fingerprintIt->second;
                 }
             }
-            else if (!scannedTexture.error.empty())
+            else if (!scannedTexture.m_Error.empty())
             {
-                TraceLog(LogLevel::Error, "ASSETS", TextFormat("%s: %s",
-                    scannedTexture.name.c_str(), scannedTexture.error.c_str()));
+                TraceLog(LogLevel::Error, "ASSETS", TextFormat("%s: %s", scannedTexture.m_Name.c_str(), scannedTexture.m_Error.c_str()));
                 if (oldIt != oldByName.end())
                 {
-                    vNextTextures.push_back({ scannedTexture.name, oldIt->second });
+                    vNextTextures.push_back({ scannedTexture.m_Name, oldIt->second });
                     oldByName.erase(oldIt);
-                    const auto fingerprintIt = m_TextureFingerprints.find(scannedTexture.name);
+                    const auto fingerprintIt = m_TextureFingerprints.find(scannedTexture.m_Name);
                     if (fingerprintIt != m_TextureFingerprints.end())
                     {
-                        nextFingerprints[scannedTexture.name] = fingerprintIt->second;
+                        nextFingerprints[scannedTexture.m_Name] = fingerprintIt->second;
                     }
                 }
             }
             continue;
         }
 
-        const auto fingerprintIt = m_TextureFingerprints.find(scannedTexture.name);
+        const auto fingerprintIt = m_TextureFingerprints.find(scannedTexture.m_Name);
         if (oldIt != oldByName.end() &&
             fingerprintIt != m_TextureFingerprints.end() &&
-            fingerprintIt->second == scannedTexture.fingerprint)
+            fingerprintIt->second == scannedTexture.m_Fingerprint)
         {
-            vNextTextures.push_back({ scannedTexture.name, oldIt->second });
+            vNextTextures.push_back({ scannedTexture.m_Name, oldIt->second });
             oldByName.erase(oldIt);
-            nextFingerprints[scannedTexture.name] = scannedTexture.fingerprint;
+            nextFingerprints[scannedTexture.m_Name] = scannedTexture.m_Fingerprint;
             continue;
         }
 
-        Texture2D texture = LoadTextureFromImage(scannedTexture.imageData);
+        Texture2D texture = LoadTextureFromImage(scannedTexture.m_ImageData);
         if (texture.id == 0)
         {
-            TraceLog(LogLevel::Error, "ASSETS", TextFormat(
-                "%s: GPU texture creation failed", scannedTexture.name.c_str()));
+            TraceLog(LogLevel::Error, "ASSETS", TextFormat("%s: GPU texture creation failed", scannedTexture.m_Name.c_str()));
             if (oldIt != oldByName.end())
             {
-                vNextTextures.push_back({ scannedTexture.name, oldIt->second });
+                vNextTextures.push_back({ scannedTexture.m_Name, oldIt->second });
                 oldByName.erase(oldIt);
-                const auto fingerprintIt = m_TextureFingerprints.find(scannedTexture.name);
+                const auto fingerprintIt = m_TextureFingerprints.find(scannedTexture.m_Name);
                 if (fingerprintIt != m_TextureFingerprints.end())
                 {
-                    nextFingerprints[scannedTexture.name] = fingerprintIt->second;
+                    nextFingerprints[scannedTexture.m_Name] = fingerprintIt->second;
                 }
             }
             continue;
         }
-        CTextureMetadataStore::ApplyToTexture(texture, scannedTexture.meta);
-        vNextTextures.push_back({ scannedTexture.name, texture });
-        nextFingerprints[scannedTexture.name] = scannedTexture.fingerprint;
+        CTextureMetadataStore::ApplyToTexture(texture, scannedTexture.m_Meta);
+        vNextTextures.push_back({ scannedTexture.m_Name, texture });
+        nextFingerprints[scannedTexture.m_Name] = scannedTexture.m_Fingerprint;
         if (oldIt != oldByName.end())
         {
             textureReplacements[oldIt->second.id] = texture;
@@ -859,7 +853,7 @@ bool CAssetLibrary::ApplyResourceScan(SResourceScanResult& scan,
     }
     for (const auto& [_, removedTexture] : oldByName)
     {
-        textureReplacements[removedTexture.id] = {0};
+        textureReplacements[removedTexture.id] = { 0 };
     }
 
     for (CEntity& entity : scene.m_vEntities)
@@ -908,7 +902,7 @@ bool CAssetLibrary::ApplyResourceScan(SResourceScanResult& scan,
 
     m_vTextures = std::move(vNextTextures);
     m_TextureFingerprints = std::move(nextFingerprints);
-    if (RefreshModels(projectPath, scene, scan.vModelPaths))
+    if (RefreshModels(projectPath, scene, scan.m_vModelPaths))
     {
         quark::CSceneRuntime::RestoreSceneEntityModels(scene, *this);
     }
@@ -916,7 +910,7 @@ bool CAssetLibrary::ApplyResourceScan(SResourceScanResult& scan,
     {
         quark::CSceneRuntime::RestoreSceneEntityMaterials(scene, *this);
     }
-    m_LastResourceSignature = scan.signature;
+    m_LastResourceSignature = scan.m_Signature;
     return true;
 }
 
@@ -933,8 +927,7 @@ bool CAssetLibrary::PollResources(const std::string& projectPath, CScene& scene,
         }
         catch (const std::exception& exception)
         {
-            TraceLog(LogLevel::Error, "ASSETS", TextFormat(
-                "Background resource scan failed: %s", exception.what()));
+            TraceLog(LogLevel::Error, "ASSETS", TextFormat("Background resource scan failed: %s", exception.what()));
             m_ResourceScanFailed = true;
         }
 
@@ -974,8 +967,7 @@ bool CAssetLibrary::PollResources(const std::string& projectPath, CScene& scene,
     }
     catch (const std::exception& exception)
     {
-        TraceLog(LogLevel::Error, "ASSETS", TextFormat(
-            "Failed to start background resource scan: %s", exception.what()));
+        TraceLog(LogLevel::Error, "ASSETS", TextFormat("Failed to start background resource scan: %s", exception.what()));
     }
     return resourcesChanged;
 }
@@ -993,8 +985,7 @@ void CAssetLibrary::Unload()
         }
         catch (const std::exception& exception)
         {
-            TraceLog(LogLevel::Error, "ASSETS", TextFormat(
-                "Background resource scan failed during unload: %s", exception.what()));
+            TraceLog(LogLevel::Error, "ASSETS", TextFormat("Background resource scan failed during unload: %s", exception.what()));
         }
     }
     m_ResourceScanPath.clear();

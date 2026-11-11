@@ -17,19 +17,19 @@ void CMeshEditor::SyncState(CEditor& editor)
 {
     SVertexEditState& edit = editor.m_Ui.m_VertexEdit;
 
-    if (editor.m_Scene.m_Selected != edit.EntityIndex)
+    if (editor.m_Scene.m_Selected != edit.m_EntityIndex)
     {
-        edit.EntityIndex = editor.m_Scene.m_Selected;
-        edit.MeshIndex = 0;
-        edit.TriangleIndex = 0;
-        edit.VertexCorner = 0;
-        editor.m_Ui.m_Gizmo.WasUsingMeshEdit = false;
-        edit.vSelectedVertices.clear();
+        edit.m_EntityIndex = editor.m_Scene.m_Selected;
+        edit.m_MeshIndex = 0;
+        edit.m_TriangleIndex = 0;
+        edit.m_VertexCorner = 0;
+        editor.m_Ui.m_Gizmo.m_WasUsingMeshEdit = false;
+        edit.m_vSelectedVertices.clear();
     }
 }
 
 bool CMeshEditor::GetSelectedTriangleVertices(const CEntity& entity, int meshIndex,
-    int triangleIndex, int aOutIndices[3])
+                                              int triangleIndex, int aOutIndices[3])
 {
     const CMeshComponent* pMeshComponent = entity.GetMeshComponent();
     if (!pMeshComponent || !HasValidModelData(pMeshComponent->m_Model))
@@ -50,7 +50,7 @@ bool CMeshEditor::GetSelectedTriangleVertices(const CEntity& entity, int meshInd
 }
 
 bool CMeshEditor::GetSelectedVertexIndex(const CEntity& entity, int meshIndex, int triangleIndex,
-    int vertexCorner, int& outVertexIndex)
+                                         int vertexCorner, int& outVertexIndex)
 {
     int aTriangleVertices[3] = {};
     if (!GetSelectedTriangleVertices(entity, meshIndex, triangleIndex, aTriangleVertices))
@@ -77,7 +77,7 @@ Vec3 CMeshEditor::GetVertexLocalPosition(const CEntity& entity, int meshIndex, i
 }
 
 Vec3 CMeshEditor::GetVertexWorldPosition(const CScene& scene, const CEntity& entity,
-    int meshIndex, int vertexIndex)
+                                         int meshIndex, int vertexIndex)
 {
     const Mat4 transform = quark::ComposeMeshWorld(scene, entity);
     return Vec3Transform(GetVertexLocalPosition(entity, meshIndex, vertexIndex), transform);
@@ -99,7 +99,7 @@ bool CMeshEditor::EnsureReady(CEntity& entity)
 }
 
 bool CMeshEditor::SetVertexLocalPosition(CEntity& entity, int meshIndex, int vertexIndex,
-    const Vec3& localPosition)
+                                         const Vec3& localPosition)
 {
     CMeshComponent* pMeshComponent = entity.GetMeshComponent();
     if (!pMeshComponent || !HasValidModelData(pMeshComponent->m_Model))
@@ -144,7 +144,7 @@ bool CMeshEditor::SetVertexLocalPosition(CEntity& entity, int meshIndex, int ver
 }
 
 bool CMeshEditor::SetVertexWorldPosition(const CScene& scene, CEntity& entity, int meshIndex,
-    int vertexIndex, const Vec3& worldPosition)
+                                         int vertexIndex, const Vec3& worldPosition)
 {
     const Mat4 inverseTransform = quark::ComposeMeshWorld(scene, entity).inverted();
     const Vec3 localPosition = Vec3Transform(worldPosition, inverseTransform);
@@ -195,7 +195,7 @@ void CMeshEditor::DrawOverlay(CEditor& editor, const Camera3D& camera)
     SVertexEditState& edit = editor.m_Ui.m_VertexEdit;
 
     SyncState(editor);
-    if (!edit.Enabled)
+    if (!edit.m_Enabled)
     {
         return;
     }
@@ -206,13 +206,13 @@ void CMeshEditor::DrawOverlay(CEditor& editor, const Camera3D& camera)
     {
         return;
     }
-    if (edit.MeshIndex >= pMesh->m_Model.meshCount)
+    if (edit.m_MeshIndex >= pMesh->m_Model.meshCount)
     {
-        edit.MeshIndex = 0;
+        edit.m_MeshIndex = 0;
     }
 
     int aTriangleVertices[3] = {};
-    if (!GetSelectedTriangleVertices(*pEntity, edit.MeshIndex, edit.TriangleIndex, aTriangleVertices))
+    if (!GetSelectedTriangleVertices(*pEntity, edit.m_MeshIndex, edit.m_TriangleIndex, aTriangleVertices))
     {
         return;
     }
@@ -222,7 +222,7 @@ void CMeshEditor::DrawOverlay(CEditor& editor, const Camera3D& camera)
 
     for (int i = 0; i < 3; i++)
     {
-        const Vec3 wp = GetVertexWorldPosition(editor.m_Scene, *pEntity, edit.MeshIndex, aTriangleVertices[i]);
+        const Vec3 wp = GetVertexWorldPosition(editor.m_Scene, *pEntity, edit.m_MeshIndex, aTriangleVertices[i]);
         aScreenPoints[i] = CScenePicker::WorldToScreen(viewport, wp, camera);
     }
 
@@ -232,13 +232,12 @@ void CMeshEditor::DrawOverlay(CEditor& editor, const Camera3D& camera)
         pDrawList->AddLine(
             ImVec2(aScreenPoints[i].x, aScreenPoints[i].y),
             ImVec2(aScreenPoints[next].x, aScreenPoints[next].y),
-            IM_COL32(255, 210, 120, 220), 2.0f
-        );
+            IM_COL32(255, 210, 120, 220), 2.0f);
     }
 
     for (int i = 0; i < 3; i++)
     {
-        const bool selected = edit.VertexCorner == i;
+        const bool selected = edit.m_VertexCorner == i;
         const ImU32 fill = selected ? IM_COL32(255, 170, 64, 255) : IM_COL32(70, 180, 255, 240);
         const float radius = selected ? 8.0f : 6.0f;
         pDrawList->AddCircleFilled(ImVec2(aScreenPoints[i].x, aScreenPoints[i].y), radius, fill);
@@ -266,26 +265,26 @@ void CMeshEditor::DrawOverlay(CEditor& editor, const Camera3D& camera)
     {
         const float dx = mouse.x - aScreenPoints[i].x;
         const float dy = mouse.y - aScreenPoints[i].y;
-        if (sqrtf(dx*dx + dy*dy) < bestDistance)
+        if (sqrtf(dx * dx + dy * dy) < bestDistance)
         {
-            bestDistance = sqrtf(dx*dx + dy*dy);
+            bestDistance = sqrtf(dx * dx + dy * dy);
             bestCorner = i;
         }
     }
 
     if (bestCorner >= 0)
     {
-        edit.VertexCorner = bestCorner;
+        edit.m_VertexCorner = bestCorner;
         return;
     }
 
     int pickedTriangle = -1;
     int pickedCorner = 0;
-    if (CScenePicker::PickMeshTriangle(editor.m_Scene, *pEntity, edit.MeshIndex,
-            CScenePicker::ScreenToWorldRay(viewport, mouse, camera),
-            pickedTriangle, pickedCorner))
-            {
-        edit.TriangleIndex = pickedTriangle;
-        edit.VertexCorner = pickedCorner;
+    if (CScenePicker::PickMeshTriangle(editor.m_Scene, *pEntity, edit.m_MeshIndex,
+                                       CScenePicker::ScreenToWorldRay(viewport, mouse, camera),
+                                       pickedTriangle, pickedCorner))
+    {
+        edit.m_TriangleIndex = pickedTriangle;
+        edit.m_VertexCorner = pickedCorner;
     }
 }

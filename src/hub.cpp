@@ -1,22 +1,22 @@
 #define NOMINMAX
 
 #ifdef _WIN32
-    #define WIN32_LEAN_AND_MEAN
+#define WIN32_LEAN_AND_MEAN
 
-    #define CloseWindow WinCloseWindow
-    #define ShowCursor WinShowCursor
-    #define Rectangle WinRectangle
+#define CloseWindow WinCloseWindow
+#define ShowCursor WinShowCursor
+#define Rectangle WinRectangle
 
-    #include <windows.h>
-    #include <commdlg.h>
-    #include <shlobj.h>
-    #include <ole2.h>
+#include <windows.h>
+#include <commdlg.h>
+#include <shlobj.h>
+#include <ole2.h>
 
-    #undef CloseWindow
-    #undef ShowCursor
-    #undef Rectangle
-    #undef near
-    #undef far
+#undef CloseWindow
+#undef ShowCursor
+#undef Rectangle
+#undef near
+#undef far
 #endif
 
 #include "hub.h"
@@ -36,80 +36,80 @@
 
 namespace fs = std::filesystem;
 
-using json = nlohmann::json;
+using Json = nlohmann::json;
 
 #define lang CLanguageManager::Get()
 
 namespace
 {
 
-const char* const HUB_PROJECTS_ROOT = "projects";
-const char* const HUB_REGISTRY_FILE = "config.json";
+    const char* const HUB_PROJECTS_ROOT = "projects";
+    const char* const HUB_REGISTRY_FILE = "config.json";
 
-bool ThemedButton(const char* pLabel, const ImVec2& size, const std::string& variant,
-    bool disabled = false)
-{
-    if (!CThemeManager::PushVariant("button", variant, disabled))
+    bool ThemedButton(const char* pLabel, const ImVec2& size, const std::string& variant,
+                      bool disabled = false)
     {
-        return ImGui::Button(pLabel, size);
+        if (!CThemeManager::PushVariant("button", variant, disabled))
+        {
+            return ImGui::Button(pLabel, size);
+        }
+
+        const bool clicked = ImGui::Button(pLabel, size);
+        CThemeManager::PopVariant();
+        return clicked;
     }
 
-    const bool clicked = ImGui::Button(pLabel, size);
-    CThemeManager::PopVariant();
-    return clicked;
-}
-
-bool IsSupportedPluginExtension(const std::string& extension)
-{
-#ifdef _WIN32
-    return extension == ".dll";
-#elif __APPLE__
-    return extension == ".dylib";
-#else
-    return extension == ".so";
-#endif
-}
-
-std::string ReadMetaLine(const fs::path& metaPath, const char* pKey)
-{
-    const std::string prefix = std::string(pKey) + "=";
-    if (!fs::exists(metaPath))
+    bool IsSupportedPluginExtension(const std::string& extension)
     {
+#ifdef _WIN32
+        return extension == ".dll";
+#elif __APPLE__
+        return extension == ".dylib";
+#else
+        return extension == ".so";
+#endif
+    }
+
+    std::string ReadMetaLine(const fs::path& metaPath, const char* pKey)
+    {
+        const std::string prefix = std::string(pKey) + "=";
+        if (!fs::exists(metaPath))
+        {
+            return "";
+        }
+
+        std::ifstream file(metaPath);
+        std::string line;
+        while (std::getline(file, line))
+        {
+            if (line.rfind(prefix, 0) == 0)
+            {
+                return line.substr(prefix.size());
+            }
+        }
+
         return "";
     }
 
-    std::ifstream file(metaPath);
-    std::string line;
-    while (std::getline(file, line))
+    Color ToQuarkColor(const ImVec4& color)
     {
-        if (line.rfind(prefix, 0) == 0)
-        {
-            return line.substr(prefix.size());
-        }
+        return Color{
+            static_cast<unsigned char>(std::clamp(color.x, 0.0f, 1.0f) * 255.0f),
+            static_cast<unsigned char>(std::clamp(color.y, 0.0f, 1.0f) * 255.0f),
+            static_cast<unsigned char>(std::clamp(color.z, 0.0f, 1.0f) * 255.0f),
+            static_cast<unsigned char>(std::clamp(color.w, 0.0f, 1.0f) * 255.0f)
+        };
     }
-
-    return "";
-}
-
-Color ToQuarkColor(const ImVec4& color)
-{
-    return Color{
-        static_cast<unsigned char>(std::clamp(color.x, 0.0f, 1.0f) * 255.0f),
-        static_cast<unsigned char>(std::clamp(color.y, 0.0f, 1.0f) * 255.0f),
-        static_cast<unsigned char>(std::clamp(color.z, 0.0f, 1.0f) * 255.0f),
-        static_cast<unsigned char>(std::clamp(color.w, 0.0f, 1.0f) * 255.0f)
-    };
-}
 
 } // anonymous
 
 CHubApp::~CHubApp()
 {
-    for (auto& plugin : m_State.vPlugins)
+    for (auto& plugin : m_State.m_vPlugins)
     {
-        if (plugin.Icon.id != 0)
+        if (plugin.m_Icon.id != 0)
         {
-            UnloadTexture(plugin.Icon);
+            UnloadTexture(plugin.m_Icon);
         }
     }
 }
@@ -179,20 +179,20 @@ std::string CHubApp::PluginReadMetaDescription(const fs::path& pluginPath)
 std::string CHubApp::BrowseFolder()
 {
 #ifdef _WIN32
-    char path[MAX_PATH] = {};
+    char aPath[MAX_PATH] = {};
     BROWSEINFOA info = {};
     info.lpszTitle = lang.Word("select_project_loc");
     info.ulFlags = BIF_RETURNONLYFSDIRS | BIF_NEWDIALOGSTYLE;
 
-    LPITEMIDLIST pidl = SHBrowseForFolderA(&info);
-    if (!pidl)
+    LPITEMIDLIST pPidl = SHBrowseForFolderA(&info);
+    if (!pPidl)
     {
         return "";
     }
 
-    SHGetPathFromIDListA(pidl, path);
-    CoTaskMemFree(pidl);
-    return path;
+    SHGetPathFromIDListA(pPidl, aPath);
+    CoTaskMemFree(pPidl);
+    return aPath;
 
 #elif __linux__
     FILE* pPipe = popen("zenity --file-selection --directory 2>/dev/null", "r");
@@ -220,18 +220,18 @@ std::string CHubApp::BrowseFolder()
 std::string CHubApp::BrowseProjectFile()
 {
 #ifdef _WIN32
-    char path[MAX_PATH] = {};
+    char aPath[MAX_PATH] = {};
     OPENFILENAMEA ofn = {};
     ofn.lStructSize = sizeof(ofn);
     ofn.hwndOwner = nullptr;
     ofn.lpstrFilter = "Quark Project (*.quarkproj)\0*.quarkproj\0All Files (*.*)\0*.*\0";
-    ofn.lpstrFile = path;
+    ofn.lpstrFile = aPath;
     ofn.nMaxFile = MAX_PATH;
     ofn.Flags = OFN_FILEMUSTEXIST | OFN_PATHMUSTEXIST | OFN_NOCHANGEDIR;
     ofn.lpstrDefExt = "quarkproj";
     if (GetOpenFileNameA(&ofn))
     {
-        return path;
+        return aPath;
     }
     return "";
 
@@ -260,7 +260,7 @@ std::string CHubApp::BrowseProjectFile()
 
 void CHubApp::SaveRegistry()
 {
-    json root;
+    Json root;
 
     if (fs::exists(RegistryFile()))
     {
@@ -279,10 +279,10 @@ void CHubApp::SaveRegistry()
         root["language"] = "english";
     }
 
-    json projects = json::array();
-    for (auto& project : m_State.vProjects)
+    Json projects = Json::array();
+    for (auto& project : m_State.m_vProjects)
     {
-        projects.push_back({ { "name", project.Name }, { "path", project.Path } });
+        projects.push_back({ { "name", project.m_Name }, { "path", project.m_Path } });
     }
     root["projects"] = projects;
 
@@ -292,16 +292,16 @@ void CHubApp::SaveRegistry()
 
 void CHubApp::Refresh()
 {
-    m_State.vProjects.clear();
+    m_State.m_vProjects.clear();
 
     if (fs::exists(RegistryFile()))
     {
         std::ifstream file(RegistryFile());
-        json root;
+        Json root;
         try
         {
             file >> root;
-            json projects = root.contains("projects") ? root["projects"] : json::array();
+            Json projects = root.contains("projects") ? root["projects"] : Json::array();
             if (projects.is_array())
             {
                 for (auto& entry : projects)
@@ -313,9 +313,9 @@ void CHubApp::Refresh()
                     }
 
                     SHubProject project;
-                    project.Name = entry["name"];
-                    project.Path = CProjectService::ResolveRoot(path);
-                    m_State.vProjects.push_back(project);
+                    project.m_Name = entry["name"];
+                    project.m_Path = CProjectService::ResolveRoot(path);
+                    m_State.m_vProjects.push_back(project);
                 }
             }
         }
@@ -324,25 +324,25 @@ void CHubApp::Refresh()
         }
     }
 
-    std::sort(m_State.vProjects.begin(), m_State.vProjects.end(),
-        [](const SHubProject& a, const SHubProject& b)
-        {
-            return a.Name < b.Name;
-        });
+    std::sort(m_State.m_vProjects.begin(), m_State.m_vProjects.end(),
+              [](const SHubProject& a, const SHubProject& b)
+              {
+                  return a.m_Name < b.m_Name;
+              });
 }
 
 void CHubApp::RefreshPlugins()
 {
-    for (auto& plugin : m_State.vPlugins)
+    for (auto& plugin : m_State.m_vPlugins)
     {
-        if (plugin.Icon.id != 0)
+        if (plugin.m_Icon.id != 0)
         {
-            UnloadTexture(plugin.Icon);
+            UnloadTexture(plugin.m_Icon);
         }
     }
 
-    m_State.vPlugins.clear();
-    m_State.SelectedPlugin = -1;
+    m_State.m_vPlugins.clear();
+    m_State.m_SelectedPlugin = -1;
 
     const std::string pluginsDir = "plugins";
     if (!fs::exists(pluginsDir))
@@ -370,13 +370,13 @@ void CHubApp::RefreshPlugins()
                 continue;
             }
 
-            plugin.Path = binary.string();
-            plugin.Name = entry.path().filename().string();
+            plugin.m_Path = binary.string();
+            plugin.m_Name = entry.path().filename().string();
 
             const fs::path iconPath = entry.path() / "icon.png";
             const fs::path metaPath = entry.path() / "meta.txt";
-            plugin.Icon = fs::exists(iconPath) ? LoadTexture(iconPath.string().c_str()) : Texture2D{ 0 };
-            plugin.Description = ReadMetaLine(metaPath, "description");
+            plugin.m_Icon = fs::exists(iconPath) ? LoadTexture(iconPath.string().c_str()) : Texture2D{ 0 };
+            plugin.m_Description = ReadMetaLine(metaPath, "description");
         }
         else if (entry.is_regular_file())
         {
@@ -385,32 +385,32 @@ void CHubApp::RefreshPlugins()
                 continue;
             }
 
-            plugin.Path = entry.path().string();
-            plugin.Name = entry.path().stem().string();
+            plugin.m_Path = entry.path().string();
+            plugin.m_Name = entry.path().stem().string();
 
-            const fs::path iconPath = entry.path().parent_path() / (plugin.Name + ".png");
-            const fs::path metaPath = entry.path().parent_path() / (plugin.Name + ".meta");
-            plugin.Icon = fs::exists(iconPath) ? LoadTexture(iconPath.string().c_str()) : Texture2D{ 0 };
-            plugin.Description = ReadMetaLine(metaPath, "description");
+            const fs::path iconPath = entry.path().parent_path() / (plugin.m_Name + ".png");
+            const fs::path metaPath = entry.path().parent_path() / (plugin.m_Name + ".meta");
+            plugin.m_Icon = fs::exists(iconPath) ? LoadTexture(iconPath.string().c_str()) : Texture2D{ 0 };
+            plugin.m_Description = ReadMetaLine(metaPath, "description");
         }
         else
         {
             continue;
         }
 
-        plugin.Enabled = PluginIsEnabled(plugin.Path);
-        if (plugin.Description.empty())
+        plugin.m_Enabled = PluginIsEnabled(plugin.m_Path);
+        if (plugin.m_Description.empty())
         {
-            plugin.Description = "No description provided.";
+            plugin.m_Description = "No description provided.";
         }
-        m_State.vPlugins.push_back(plugin);
+        m_State.m_vPlugins.push_back(plugin);
     }
 
-    std::sort(m_State.vPlugins.begin(), m_State.vPlugins.end(),
-        [](const SHubPlugin& a, const SHubPlugin& b)
-        {
-            return a.Name < b.Name;
-        });
+    std::sort(m_State.m_vPlugins.begin(), m_State.m_vPlugins.end(),
+              [](const SHubPlugin& a, const SHubPlugin& b)
+              {
+                  return a.m_Name < b.m_Name;
+              });
 }
 
 void CHubApp::CreateProject(const std::string& name, const std::string& base)
@@ -420,22 +420,22 @@ void CHubApp::CreateProject(const std::string& name, const std::string& base)
     CProjectService::CreateNew(project.string(), emptyScene);
 
     SHubProject entry;
-    entry.Name = name;
-    entry.Path = fs::absolute(project).string();
-    m_State.vProjects.push_back(entry);
+    entry.m_Name = name;
+    entry.m_Path = fs::absolute(project).string();
+    m_State.m_vProjects.push_back(entry);
     SaveRegistry();
 }
 
 void CHubApp::DeleteProject(const std::string& path)
 {
     fs::remove_all(path);
-    m_State.vProjects.erase(
-        std::remove_if(m_State.vProjects.begin(), m_State.vProjects.end(),
-            [&](const SHubProject& project)
-            {
-                return project.Path == path;
-            }),
-        m_State.vProjects.end());
+    m_State.m_vProjects.erase(
+        std::remove_if(m_State.m_vProjects.begin(), m_State.m_vProjects.end(),
+                       [&](const SHubProject& project)
+                       {
+                           return project.m_Path == path;
+                       }),
+        m_State.m_vProjects.end());
     SaveRegistry();
 }
 
@@ -445,14 +445,14 @@ void CHubApp::RenameProject(const std::string& oldPath, const std::string& newNa
     const fs::path newPath = oldProject.parent_path() / newName;
     fs::rename(oldProject, newPath);
 
-    for (auto& project : m_State.vProjects)
+    for (auto& project : m_State.m_vProjects)
     {
-        if (project.Path != oldPath)
+        if (project.m_Path != oldPath)
         {
             continue;
         }
-        project.Name = newName;
-        project.Path = fs::absolute(newPath).string();
+        project.m_Name = newName;
+        project.m_Path = fs::absolute(newPath).string();
         break;
     }
     SaveRegistry();
@@ -471,18 +471,18 @@ void CHubApp::ImportProject(const std::string& manifestOrPath)
         ? root.stem().string()
         : root.filename().string();
 
-    for (auto& existing : m_State.vProjects)
+    for (auto& existing : m_State.m_vProjects)
     {
-        if (existing.Path == rootPath)
+        if (existing.m_Path == rootPath)
         {
             return;
         }
     }
 
     SHubProject project;
-    project.Name = name;
-    project.Path = rootPath;
-    m_State.vProjects.push_back(project);
+    project.m_Name = name;
+    project.m_Path = rootPath;
+    m_State.m_vProjects.push_back(project);
     SaveRegistry();
 }
 
@@ -490,7 +490,7 @@ void CHubApp::DrawProjectCard(int index)
 {
     ImGui::PushID(index);
 
-    const bool isSelected = m_State.SelectedProject == index;
+    const bool isSelected = m_State.m_SelectedProject == index;
     const ImVec2 cardPos = ImGui::GetCursorScreenPos();
     const float cardWidth = ImGui::GetContentRegionAvail().x;
     const float cardHeight = 62.0f;
@@ -500,8 +500,7 @@ void CHubApp::DrawProjectCard(int index)
     const bool isHovered = ImGui::IsItemHovered() && !isSelected;
     const ImGuiStyle& style = ImGui::GetStyle();
     ImDrawList* pDrawList = ImGui::GetWindowDrawList();
-    const ImVec4& fill = isSelected ? style.HubCardSelected :
-        (isHovered ? style.HubCardHovered : style.HubCard);
+    const ImVec4& fill = isSelected ? style.HubCardSelected : (isHovered ? style.HubCardHovered : style.HubCard);
     const ImVec4& border = isSelected ? style.HubCardSelectedBorder : style.HubCardBorder;
 
     pDrawList->AddRectFilled(
@@ -515,21 +514,21 @@ void CHubApp::DrawProjectCard(int index)
 
     if (ImGui::IsItemClicked(ImGuiMouseButton_Left))
     {
-        m_State.SelectedProject = index;
+        m_State.m_SelectedProject = index;
     }
 
     if (ImGui::IsItemHovered() && ImGui::IsMouseDoubleClicked(ImGuiMouseButton_Left))
     {
-        const std::string savedVersion = CProjectService::GetVersion(m_State.vProjects[index].Path);
+        const std::string savedVersion = CProjectService::GetVersion(m_State.m_vProjects[index].m_Path);
         if (!savedVersion.empty() && savedVersion != QUARK_ENGINE_VERSION)
         {
-            m_State.PendingOpenPath = m_State.vProjects[index].Path;
-            m_State.SavedVersion = savedVersion;
-            m_State.ShowVersionWarning = true;
+            m_State.m_PendingOpenPath = m_State.m_vProjects[index].m_Path;
+            m_State.m_SavedVersion = savedVersion;
+            m_State.m_ShowVersionWarning = true;
         }
         else
         {
-            m_PendingResult = m_State.vProjects[index].Path;
+            m_PendingResult = m_State.m_vProjects[index].m_Path;
             m_ShouldExit = true;
         }
     }
@@ -538,32 +537,32 @@ void CHubApp::DrawProjectCard(int index)
     {
         if (ImGui::MenuItem(lang.Word("open")))
         {
-            m_PendingResult = m_State.vProjects[index].Path;
+            m_PendingResult = m_State.m_vProjects[index].m_Path;
             m_ShouldExit = true;
         }
 
         ImGui::Separator();
         if (ImGui::MenuItem(lang.Word("rename")))
         {
-            m_State.RenameProjectIndex = index;
-            snprintf(m_State.aRenameBuffer, sizeof(m_State.aRenameBuffer), "%s",
-                m_State.vProjects[index].Name.c_str());
-            m_State.ShowRename = true;
+            m_State.m_RenameProjectIndex = index;
+            snprintf(m_State.m_aRenameBuffer, sizeof(m_State.m_aRenameBuffer), "%s",
+                     m_State.m_vProjects[index].m_Name.c_str());
+            m_State.m_ShowRename = true;
         }
 
         if (ImGui::MenuItem(lang.Word("delete")))
         {
-            m_State.SelectedProject = index;
-            m_State.ShowDelete = true;
+            m_State.m_SelectedProject = index;
+            m_State.m_ShowDelete = true;
         }
         ImGui::EndPopup();
     }
 
     ImGui::SetCursorScreenPos(ImVec2(cardPos.x + 14, cardPos.y + 11));
-    ImGui::Text("%s", m_State.vProjects[index].Name.c_str());
+    ImGui::Text("%s", m_State.m_vProjects[index].m_Name.c_str());
 
     ImGui::SetCursorScreenPos(ImVec2(cardPos.x + 14, cardPos.y + 36));
-    ImGui::TextDisabled("%s", m_State.vProjects[index].Path.c_str());
+    ImGui::TextDisabled("%s", m_State.m_vProjects[index].m_Path.c_str());
 
     ImGui::SetCursorScreenPos(ImVec2(cardPos.x, cardPos.y + cardHeight + 4));
     ImGui::Dummy(ImVec2(cardWidth, 0));
@@ -575,7 +574,7 @@ void CHubApp::DrawProjectList()
 {
     ImGui::BeginChild("##list", ImVec2(0, static_cast<float>(GetScreenHeight()) - 90), false);
 
-    if (m_State.vProjects.empty())
+    if (m_State.m_vProjects.empty())
     {
         const ImVec2 available = ImGui::GetContentRegionAvail();
         const char* pMessage = lang.Word("no_projects");
@@ -586,22 +585,22 @@ void CHubApp::DrawProjectList()
         ImGui::TextDisabled("%s", pMessage);
     }
 
-    for (int index = 0; index < static_cast<int>(m_State.vProjects.size()); index++)
+    for (int index = 0; index < static_cast<int>(m_State.m_vProjects.size()); index++)
     {
         DrawProjectCard(index);
     }
 
     ImGui::EndChild();
 
-    if (m_State.SelectedProject < 0 ||
-        m_State.SelectedProject >= static_cast<int>(m_State.vProjects.size()))
+    if (m_State.m_SelectedProject < 0 ||
+        m_State.m_SelectedProject >= static_cast<int>(m_State.m_vProjects.size()))
     {
         return;
     }
 
     if (ThemedButton(lang.Word("open_selected"), ImVec2(140, 30), "secondary"))
     {
-        m_PendingResult = m_State.vProjects[m_State.SelectedProject].Path;
+        m_PendingResult = m_State.m_vProjects[m_State.m_SelectedProject].m_Path;
         m_ShouldExit = true;
     }
 }
@@ -628,9 +627,9 @@ void CHubApp::DrawHeader()
 
     if (ThemedButton(("+ %s", lang.Word("create_project")), ImVec2(134, 28), "secondary"))
     {
-        memset(m_State.aCreateName, 0, sizeof(m_State.aCreateName));
-        snprintf(m_State.aCreatePath, sizeof(m_State.aCreatePath), "%s", ProjectsRoot());
-        m_State.ShowCreate = true;
+        memset(m_State.m_aCreateName, 0, sizeof(m_State.m_aCreateName));
+        snprintf(m_State.m_aCreatePath, sizeof(m_State.m_aCreatePath), "%s", ProjectsRoot());
+        m_State.m_ShowCreate = true;
     }
 
     ImGui::SameLine();
@@ -638,7 +637,7 @@ void CHubApp::DrawHeader()
     if (ImGui::Button("Plugins", ImVec2(80, 28)))
     {
         RefreshPlugins();
-        m_State.ShowPluginManager = true;
+        m_State.m_ShowPluginManager = true;
     }
 
     ImGui::Separator();
@@ -647,10 +646,10 @@ void CHubApp::DrawHeader()
 
 void CHubApp::DrawCreatePopup()
 {
-    if (m_State.ShowCreate)
+    if (m_State.m_ShowCreate)
     {
         ImGui::OpenPopup(lang.Word("create_project"));
-        m_State.ShowCreate = false;
+        m_State.m_ShowCreate = false;
     }
 
     ImGui::SetNextWindowSize(ImVec2(460, 182), ImGuiCond_Always);
@@ -666,12 +665,12 @@ void CHubApp::DrawCreatePopup()
     ImGui::Spacing();
     ImGui::Text("%s", lang.Word("project_name"));
     ImGui::SetNextItemWidth(-1);
-    ImGui::InputText("##cname", m_State.aCreateName, sizeof(m_State.aCreateName));
+    ImGui::InputText("##cname", m_State.m_aCreateName, sizeof(m_State.m_aCreateName));
 
     ImGui::Spacing();
     ImGui::Text("%s", lang.Word("location"));
     ImGui::SetNextItemWidth(-64);
-    ImGui::InputText("##cpath", m_State.aCreatePath, sizeof(m_State.aCreatePath));
+    ImGui::InputText("##cpath", m_State.m_aCreatePath, sizeof(m_State.m_aCreatePath));
     ImGui::SameLine();
 
     if (ImGui::Button("Browse", ImVec2(56, 0)))
@@ -679,7 +678,7 @@ void CHubApp::DrawCreatePopup()
         const std::string picked = BrowseFolder();
         if (!picked.empty())
         {
-            snprintf(m_State.aCreatePath, sizeof(m_State.aCreatePath), "%s", picked.c_str());
+            snprintf(m_State.m_aCreatePath, sizeof(m_State.m_aCreatePath), "%s", picked.c_str());
         }
     }
 
@@ -687,7 +686,7 @@ void CHubApp::DrawCreatePopup()
     ImGui::Separator();
     ImGui::Spacing();
 
-    const bool canCreate = m_State.aCreateName[0] != '\0' && m_State.aCreatePath[0] != '\0';
+    const bool canCreate = m_State.m_aCreateName[0] != '\0' && m_State.m_aCreatePath[0] != '\0';
     if (!canCreate)
     {
         ImGui::BeginDisabled();
@@ -695,7 +694,7 @@ void CHubApp::DrawCreatePopup()
 
     if (ThemedButton(lang.Word("create"), ImVec2(110, 30), "primary", !canCreate))
     {
-        CreateProject(m_State.aCreateName, m_State.aCreatePath);
+        CreateProject(m_State.m_aCreateName, m_State.m_aCreatePath);
         Refresh();
         ImGui::CloseCurrentPopup();
     }
@@ -716,10 +715,10 @@ void CHubApp::DrawCreatePopup()
 
 void CHubApp::DrawRenamePopup()
 {
-    if (m_State.ShowRename)
+    if (m_State.m_ShowRename)
     {
         ImGui::OpenPopup(lang.Word("rename_project"));
-        m_State.ShowRename = false;
+        m_State.m_ShowRename = false;
     }
 
     ImGui::SetNextWindowSize(ImVec2(380, 130), ImGuiCond_Always);
@@ -735,20 +734,20 @@ void CHubApp::DrawRenamePopup()
     ImGui::Spacing();
     ImGui::Text("%s", lang.Word("new_name"));
     ImGui::SetNextItemWidth(-1);
-    ImGui::InputText("##rname", m_State.aRenameBuffer, sizeof(m_State.aRenameBuffer));
+    ImGui::InputText("##rname", m_State.m_aRenameBuffer, sizeof(m_State.m_aRenameBuffer));
     ImGui::Spacing();
     ImGui::Separator();
     ImGui::Spacing();
 
     if (ImGui::Button(lang.Word("rename"), ImVec2(110, 28)))
     {
-        if (m_State.RenameProjectIndex >= 0 && m_State.aRenameBuffer[0] != '\0')
+        if (m_State.m_RenameProjectIndex >= 0 && m_State.m_aRenameBuffer[0] != '\0')
         {
             RenameProject(
-                m_State.vProjects[m_State.RenameProjectIndex].Path,
-                m_State.aRenameBuffer);
+                m_State.m_vProjects[m_State.m_RenameProjectIndex].m_Path,
+                m_State.m_aRenameBuffer);
             Refresh();
-            m_State.SelectedProject = -1;
+            m_State.m_SelectedProject = -1;
         }
         ImGui::CloseCurrentPopup();
     }
@@ -764,10 +763,10 @@ void CHubApp::DrawRenamePopup()
 
 void CHubApp::DrawDeletePopup()
 {
-    if (m_State.ShowDelete)
+    if (m_State.m_ShowDelete)
     {
         ImGui::OpenPopup(lang.Word("delete_project"));
-        m_State.ShowDelete = false;
+        m_State.m_ShowDelete = false;
     }
 
     ImGui::SetNextWindowSize(ImVec2(380, 105), ImGuiCond_Always);
@@ -781,11 +780,11 @@ void CHubApp::DrawDeletePopup()
     }
 
     ImGui::Spacing();
-    if (m_State.SelectedProject >= 0 &&
-        m_State.SelectedProject < static_cast<int>(m_State.vProjects.size()))
+    if (m_State.m_SelectedProject >= 0 &&
+        m_State.m_SelectedProject < static_cast<int>(m_State.m_vProjects.size()))
     {
         ImGui::Text(lang.Word("delete_project_ask"),
-            m_State.vProjects[m_State.SelectedProject].Name.c_str());
+                    m_State.m_vProjects[m_State.m_SelectedProject].m_Name.c_str());
     }
 
     ImGui::Spacing();
@@ -794,11 +793,11 @@ void CHubApp::DrawDeletePopup()
 
     if (ThemedButton(lang.Word("delete"), ImVec2(110, 28), "danger"))
     {
-        if (m_State.SelectedProject >= 0)
+        if (m_State.m_SelectedProject >= 0)
         {
-            DeleteProject(m_State.vProjects[m_State.SelectedProject].Path);
+            DeleteProject(m_State.m_vProjects[m_State.m_SelectedProject].m_Path);
             Refresh();
-            m_State.SelectedProject = -1;
+            m_State.m_SelectedProject = -1;
         }
         ImGui::CloseCurrentPopup();
     }
@@ -814,10 +813,10 @@ void CHubApp::DrawDeletePopup()
 
 void CHubApp::DrawVersionWarningPopup()
 {
-    if (m_State.ShowVersionWarning)
+    if (m_State.m_ShowVersionWarning)
     {
         ImGui::OpenPopup(lang.Word("version_mismatch"));
-        m_State.ShowVersionWarning = false;
+        m_State.m_ShowVersionWarning = false;
     }
 
     ImGui::SetNextWindowSize(ImVec2(480, 155), ImGuiCond_Always);
@@ -832,14 +831,14 @@ void CHubApp::DrawVersionWarningPopup()
 
     ImGui::Spacing();
     ImGui::TextWrapped(lang.Word("version_mismatch_msg"),
-        m_State.SavedVersion.c_str(), QUARK_ENGINE_VERSION);
+                       m_State.m_SavedVersion.c_str(), QUARK_ENGINE_VERSION);
     ImGui::Spacing();
     ImGui::Separator();
     ImGui::Spacing();
 
     if (ImGui::Button(lang.Word("open_anyway"), ImVec2(130, 28)))
     {
-        m_PendingResult = m_State.PendingOpenPath;
+        m_PendingResult = m_State.m_PendingOpenPath;
         m_ShouldExit = true;
         ImGui::CloseCurrentPopup();
     }
@@ -847,7 +846,7 @@ void CHubApp::DrawVersionWarningPopup()
     ImGui::SameLine();
     if (ImGui::Button(lang.Word("cancel"), ImVec2(110, 28)))
     {
-        m_State.PendingOpenPath.clear();
+        m_State.m_PendingOpenPath.clear();
         ImGui::CloseCurrentPopup();
     }
 
@@ -856,7 +855,7 @@ void CHubApp::DrawVersionWarningPopup()
 
 void CHubApp::DrawPluginManager()
 {
-    if (!m_State.ShowPluginManager)
+    if (!m_State.m_ShowPluginManager)
     {
         return;
     }
@@ -875,8 +874,8 @@ void CHubApp::DrawPluginManager()
 
     if (!open)
     {
-        m_State.ShowPluginManager = false;
-        m_State.SelectedPlugin = -1;
+        m_State.m_ShowPluginManager = false;
+        m_State.m_SelectedPlugin = -1;
         ImGui::End();
         return;
     }
@@ -887,7 +886,7 @@ void CHubApp::DrawPluginManager()
         {
             ImGui::BeginChild("##pmgr_list", ImVec2(220, -1), true);
 
-            if (m_State.vPlugins.empty())
+            if (m_State.m_vPlugins.empty())
             {
                 const ImVec2 available = ImGui::GetContentRegionAvail();
                 const char* pMessage = "No plugins installed.";
@@ -898,12 +897,12 @@ void CHubApp::DrawPluginManager()
                 ImGui::TextDisabled("%s", pMessage);
             }
 
-            for (int index = 0; index < static_cast<int>(m_State.vPlugins.size()); index++)
+            for (int index = 0; index < static_cast<int>(m_State.m_vPlugins.size()); index++)
             {
-                SHubPlugin& plugin = m_State.vPlugins[index];
+                SHubPlugin& plugin = m_State.m_vPlugins[index];
                 ImGui::PushID(index);
 
-                const bool isSelected = m_State.SelectedPlugin == index;
+                const bool isSelected = m_State.m_SelectedPlugin == index;
                 const ImVec2 cardPos = ImGui::GetCursorScreenPos();
                 const float cardWidth = ImGui::GetContentRegionAvail().x;
                 const float cardHeight = 46.0f;
@@ -915,8 +914,7 @@ void CHubApp::DrawPluginManager()
                 const bool isClicked = ImGui::IsItemClicked();
                 const ImGuiStyle& style = ImGui::GetStyle();
                 ImDrawList* pDrawList = ImGui::GetWindowDrawList();
-                const ImVec4& fill = isSelected ? style.HubCardSelected :
-                    (isHovered ? style.HubCardHovered : style.HubCard);
+                const ImVec4& fill = isSelected ? style.HubCardSelected : (isHovered ? style.HubCardHovered : style.HubCard);
                 const ImVec4& border = isSelected ? style.HubCardSelectedBorder : style.HubCardBorder;
                 pDrawList->AddRectFilled(
                     cardPos, cardMax, ImGui::ColorConvertFloat4ToU32(fill), style.HubCardRounding);
@@ -927,16 +925,16 @@ void CHubApp::DrawPluginManager()
                         style.HubCardRounding, 0, style.HubCardBorderSize);
                 }
 
-                const ImVec4 badge = PluginBadgeColor(plugin.Name);
+                const ImVec4 badge = PluginBadgeColor(plugin.m_Name);
                 const ImVec2 badgeMin = ImVec2(cardPos.x + 8, cardPos.y + 10);
                 const ImVec2 badgeMax = ImVec2(badgeMin.x + 26, badgeMin.y + 26);
 
-                char aLetter[2] = { static_cast<char>(toupper(static_cast<unsigned char>(plugin.Name[0]))), '\0' };
+                char aLetter[2] = { static_cast<char>(toupper(static_cast<unsigned char>(plugin.m_Name[0]))), '\0' };
                 const ImVec2 letterSize = ImGui::CalcTextSize(aLetter);
 
-                if (plugin.Icon.id != 0)
+                if (plugin.m_Icon.id != 0)
                 {
-                    QcImGuiAddImage(ImGui::GetWindowDrawList(), &plugin.Icon, badgeMin, badgeMax);
+                    QcImGuiAddImage(ImGui::GetWindowDrawList(), &plugin.m_Icon, badgeMin, badgeMax);
                 }
                 else
                 {
@@ -949,25 +947,25 @@ void CHubApp::DrawPluginManager()
                         IM_COL32(255, 255, 255, 230), aLetter);
                 }
 
-                if (!plugin.Enabled)
+                if (!plugin.m_Enabled)
                 {
                     ImGui::GetWindowDrawList()->AddCircleFilled(
                         ImVec2(badgeMax.x - 2, badgeMin.y + 2), 5.0f, IM_COL32(200, 60, 60, 255));
                 }
 
                 ImGui::SetCursorScreenPos(ImVec2(cardPos.x + 44, cardPos.y + 14));
-                if (!plugin.Enabled)
+                if (!plugin.m_Enabled)
                 {
-                    ImGui::TextDisabled("%s", plugin.Name.c_str());
+                    ImGui::TextDisabled("%s", plugin.m_Name.c_str());
                 }
                 else
                 {
-                    ImGui::Text("%s", plugin.Name.c_str());
+                    ImGui::Text("%s", plugin.m_Name.c_str());
                 }
 
                 if (isClicked)
                 {
-                    m_State.SelectedPlugin = index;
+                    m_State.m_SelectedPlugin = index;
                 }
 
                 ImGui::SetCursorScreenPos(ImVec2(cardPos.x, cardPos.y + cardHeight + 3));
@@ -979,8 +977,8 @@ void CHubApp::DrawPluginManager()
             ImGui::SameLine();
             ImGui::BeginChild("##pmgr_detail", ImVec2(-1, -1), false);
 
-            if (m_State.SelectedPlugin < 0 ||
-                m_State.SelectedPlugin >= static_cast<int>(m_State.vPlugins.size()))
+            if (m_State.m_SelectedPlugin < 0 ||
+                m_State.m_SelectedPlugin >= static_cast<int>(m_State.m_vPlugins.size()))
             {
                 const ImVec2 available = ImGui::GetContentRegionAvail();
                 const char* pMessage = "Select a plugin to view details.";
@@ -992,7 +990,7 @@ void CHubApp::DrawPluginManager()
             }
             else
             {
-                SHubPlugin& plugin = m_State.vPlugins[m_State.SelectedPlugin];
+                SHubPlugin& plugin = m_State.m_vPlugins[m_State.m_SelectedPlugin];
                 ImDrawList* pDrawList = ImGui::GetWindowDrawList();
 
                 ImVec2 iconPos = ImGui::GetCursorScreenPos();
@@ -1000,13 +998,13 @@ void CHubApp::DrawPluginManager()
                 iconPos.y += 8;
                 const ImVec2 iconMax = ImVec2(iconPos.x + 64, iconPos.y + 64);
 
-                const ImVec4 badge = PluginBadgeColor(plugin.Name);
-                char aLetter[2] = { static_cast<char>(toupper(static_cast<unsigned char>(plugin.Name[0]))), '\0' };
+                const ImVec4 badge = PluginBadgeColor(plugin.m_Name);
+                char aLetter[2] = { static_cast<char>(toupper(static_cast<unsigned char>(plugin.m_Name[0]))), '\0' };
                 const ImVec2 letterSize = ImGui::CalcTextSize(aLetter);
 
-                if (plugin.Icon.id != 0)
+                if (plugin.m_Icon.id != 0)
                 {
-                    QcImGuiAddImage(pDrawList, &plugin.Icon, iconPos, iconMax);
+                    QcImGuiAddImage(pDrawList, &plugin.m_Icon, iconPos, iconMax);
                 }
                 else
                 {
@@ -1021,10 +1019,10 @@ void CHubApp::DrawPluginManager()
                 }
 
                 ImGui::SetCursorScreenPos(ImVec2(iconMax.x + 14, iconPos.y + 4));
-                ImGui::Text("%s", plugin.Name.c_str());
+                ImGui::Text("%s", plugin.m_Name.c_str());
 
                 ImGui::SetCursorScreenPos(ImVec2(iconMax.x + 14, iconPos.y + 26));
-                if (plugin.Enabled)
+                if (plugin.m_Enabled)
                 {
                     ImGui::TextColored(ImVec4(0.3f, 0.8f, 0.4f, 1.0f), "Enabled");
                 }
@@ -1036,30 +1034,28 @@ void CHubApp::DrawPluginManager()
                 ImGui::SetCursorScreenPos(ImVec2(iconPos.x - 8, iconMax.y + 18));
                 ImGui::Separator();
                 ImGui::Spacing();
-                ImGui::TextWrapped("%s", plugin.Description.c_str());
+                ImGui::TextWrapped("%s", plugin.m_Description.c_str());
                 ImGui::Spacing();
-                ImGui::TextDisabled("Path: %s", plugin.Path.c_str());
+                ImGui::TextDisabled("Path: %s", plugin.m_Path.c_str());
 
                 const float bottomY = ImGui::GetWindowPos().y + ImGui::GetWindowHeight() - 44;
                 ImGui::SetCursorScreenPos(ImVec2(iconPos.x - 8, bottomY));
                 ImGui::Separator();
                 ImGui::Spacing();
 
-                const char* pToggleLabel = plugin.Enabled ? "Disable" : "Enable";
-                const ImVec4 toggleColor = plugin.Enabled
+                const char* pToggleLabel = plugin.m_Enabled ? "Disable" : "Enable";
+                const ImVec4 toggleColor = plugin.m_Enabled
                     ? ImVec4(0.70f, 0.30f, 0.30f, 1.0f)
                     : ImVec4(0.20f, 0.60f, 0.30f, 1.0f);
 
                 ImGui::PushStyleColor(ImGuiCol_Button, toggleColor);
-                ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImVec4(
-                    toggleColor.x + 0.1f, toggleColor.y + 0.1f, toggleColor.z + 0.1f, 1.0f));
-                ImGui::PushStyleColor(ImGuiCol_ButtonActive, ImVec4(
-                    toggleColor.x - 0.05f, toggleColor.y - 0.05f, toggleColor.z - 0.05f, 1.0f));
+                ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImVec4(toggleColor.x + 0.1f, toggleColor.y + 0.1f, toggleColor.z + 0.1f, 1.0f));
+                ImGui::PushStyleColor(ImGuiCol_ButtonActive, ImVec4(toggleColor.x - 0.05f, toggleColor.y - 0.05f, toggleColor.z - 0.05f, 1.0f));
 
                 if (ImGui::Button(pToggleLabel, ImVec2(110, 28)))
                 {
-                    plugin.Enabled = !plugin.Enabled;
-                    PluginSetEnabled(plugin.Path, plugin.Enabled);
+                    plugin.m_Enabled = !plugin.m_Enabled;
+                    PluginSetEnabled(plugin.m_Path, plugin.m_Enabled);
                 }
                 ImGui::PopStyleColor(3);
 
@@ -1075,10 +1071,10 @@ void CHubApp::DrawPluginManager()
                     ImGuiCond_Always, ImVec2(0.5f, 0.5f));
 
                 if (ImGui::BeginPopupModal("Confirm Delete", nullptr,
-                    ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoMove))
+                                           ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoMove))
                 {
                     ImGui::Spacing();
-                    ImGui::Text("Delete plugin \"%s\"?", plugin.Name.c_str());
+                    ImGui::Text("Delete plugin \"%s\"?", plugin.m_Name.c_str());
                     ImGui::TextDisabled("This removes the file from disk.");
                     ImGui::Spacing();
                     ImGui::Separator();
@@ -1086,12 +1082,12 @@ void CHubApp::DrawPluginManager()
 
                     if (ThemedButton("Delete", ImVec2(90, 26), "danger"))
                     {
-                        if (plugin.Icon.id != 0)
+                        if (plugin.m_Icon.id != 0)
                         {
-                            UnloadTexture(plugin.Icon);
+                            UnloadTexture(plugin.m_Icon);
                         }
 
-                        const fs::path binary(plugin.Path);
+                        const fs::path binary(plugin.m_Path);
                         const fs::path parent = binary.parent_path();
                         const fs::path pluginsRoot = fs::canonical("plugins");
 
@@ -1170,14 +1166,14 @@ std::string CHubApp::Run(CPreferences& preferences)
             }
 
             SHubProject project;
-            project.Name = entry.path().filename().string();
-            project.Path = fs::absolute(entry.path()).string();
-            m_State.vProjects.push_back(project);
+            project.m_Name = entry.path().filename().string();
+            project.m_Path = fs::absolute(entry.path()).string();
+            m_State.m_vProjects.push_back(project);
         }
     }
 
     Refresh();
-    snprintf(m_State.aCreatePath, sizeof(m_State.aCreatePath), "%s", ProjectsRoot());
+    snprintf(m_State.m_aCreatePath, sizeof(m_State.m_aCreatePath), "%s", ProjectsRoot());
 
     m_PendingResult.clear();
     m_ShouldExit = false;
@@ -1202,9 +1198,9 @@ std::string CHubApp::Run(CPreferences& preferences)
             static_cast<float>(GetScreenHeight())));
         ImGui::Begin(
             "##hub", nullptr,
-            ImGuiWindowFlags_NoResize   | ImGuiWindowFlags_NoMove       |
-            ImGuiWindowFlags_NoTitleBar | ImGuiWindowFlags_NoScrollbar  |
-            ImGuiWindowFlags_NoBringToFrontOnFocus);
+            ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoMove |
+                ImGuiWindowFlags_NoTitleBar | ImGuiWindowFlags_NoScrollbar |
+                ImGuiWindowFlags_NoBringToFrontOnFocus);
 
         DrawHeader();
         DrawProjectList();

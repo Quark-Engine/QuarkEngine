@@ -23,17 +23,17 @@
 #include <utility>
 
 #ifdef _WIN32
-    #define NOMINMAX
-    #define WIN32_LEAN_AND_MEAN
-    #define NOGDI
-    #define NOUSER
+#define NOMINMAX
+#define WIN32_LEAN_AND_MEAN
+#define NOGDI
+#define NOUSER
 
-    #include <windows.h>
-    #include <shellapi.h>
+#include <windows.h>
+#include <shellapi.h>
 
-    #undef CloseWindow
-    #undef ShowCursor
-    #undef Rectangle
+#undef CloseWindow
+#undef ShowCursor
+#undef Rectangle
 #endif
 
 #define lang CLanguageManager::Get()
@@ -42,199 +42,197 @@ namespace fs = std::filesystem;
 namespace
 {
 
-constexpr float kIconSize = 64.0f;
+    constexpr float ICON_SIZE = 64.0f;
 
-std::string Lowercase(std::string value)
-{
-    std::transform(value.begin(), value.end(), value.begin(), [](unsigned char character)
+    std::string Lowercase(std::string value)
     {
-        return static_cast<char>(std::tolower(character));
-    });
-    return value;
-}
-
-bool SaveEntityBranchToDirectory(CEditor& editor, int entityIndex, const fs::path& targetDir)
-{
-    if (entityIndex < 0 || entityIndex >= static_cast<int>(editor.m_Scene.m_vEntities.size()))
-    {
-        return false;
+        std::transform(value.begin(), value.end(), value.begin(), [](unsigned char character)
+                       {
+                           return static_cast<char>(std::tolower(character));
+                       });
+        return value;
     }
 
-    fs::path savedPath;
-    if (!CEntityFactory::SavePrefab(editor.m_Scene, entityIndex, targetDir, &savedPath))
+    bool SaveEntityBranchToDirectory(CEditor& editor, int entityIndex, const fs::path& targetDir)
     {
-        return false;
+        if (entityIndex < 0 || entityIndex >= static_cast<int>(editor.m_Scene.m_vEntities.size()))
+        {
+            return false;
+        }
+
+        fs::path savedPath;
+        if (!CEntityFactory::SavePrefab(editor.m_Scene, entityIndex, targetDir, &savedPath))
+        {
+            return false;
+        }
+
+        editor.m_Ui.m_AssetBrowser.m_AssetListCacheDirty = true;
+        editor.m_Assets.RequestRefresh(editor.m_ProjectPath);
+        editor.SetStatusMessage(TextFormat("Saved prefab: %s", savedPath.filename().string().c_str()));
+        return true;
     }
 
-    editor.m_Ui.m_AssetBrowser.AssetListCacheDirty = true;
-    editor.m_Assets.RequestRefresh(editor.m_ProjectPath);
-    editor.SetStatusMessage(TextFormat("Saved prefab: %s", savedPath.filename().string().c_str()));
-    return true;
-}
+    bool SpawnPrefabInScene(CEditor& editor, const fs::path& prefabPath)
+    {
+        std::ifstream file(prefabPath);
+        if (!file.is_open())
+        {
+            return false;
+        }
+        std::stringstream buffer;
+        buffer << file.rdbuf();
+        if (!quark::CSceneDocument::ParsePrefab(buffer.str()).m_IsValid)
+        {
+            return false;
+        }
 
-bool SpawnPrefabInScene(CEditor& editor, const fs::path& prefabPath)
-{
-    std::ifstream file(prefabPath);
-    if (!file.is_open())
-    {
-        return false;
-    }
-    std::stringstream buffer;
-    buffer << file.rdbuf();
-    if (!quark::CSceneDocument::ParsePrefab(buffer.str()).IsValid)
-    {
-        return false;
-    }
+        editor.SaveState();
+        const std::vector<int> vCreatedIndices = CEntityFactory::InstantiatePrefab(
+            editor.m_Scene, editor.m_Assets, prefabPath, editor.m_ComponentFactories, -1);
+        if (vCreatedIndices.empty())
+        {
+            return false;
+        }
 
-    editor.SaveState();
-    const std::vector<int> vCreatedIndices = CEntityFactory::InstantiatePrefab(
-        editor.m_Scene, editor.m_Assets, prefabPath, editor.m_ComponentFactories, -1);
-    if (vCreatedIndices.empty())
-    {
-        return false;
-    }
-
-    editor.m_Scene.SelectEntity(vCreatedIndices.front(), false);
-    for (int createdIndex : vCreatedIndices)
-    {
-        DispatchPluginEvent(PLUGIN_EVENT_ENTITY_CREATED, createdIndex);
-    }
-    editor.m_SceneDirty = true;
-    editor.RequestSceneRedraw();
-    return true;
-}
-
-void CreateScriptFiles(const fs::path& directory, const std::string& scriptName)
-{
-    std::string safeName = scriptName;
-    while (!safeName.empty() && (safeName.front() == ' ' || safeName.front() == '\t'))
-    {
-        safeName.erase(safeName.begin());
-    }
-    while (!safeName.empty() && (safeName.back() == ' ' || safeName.back() == '\t'))
-    {
-        safeName.pop_back();
-    }
-    if (safeName.empty())
-    {
-        return;
+        editor.m_Scene.SelectEntity(vCreatedIndices.front(), false);
+        for (int createdIndex : vCreatedIndices)
+        {
+            DispatchPluginEvent(PLUGIN_EVENT_ENTITY_CREATED, createdIndex);
+        }
+        editor.m_SceneDirty = true;
+        editor.RequestSceneRedraw();
+        return true;
     }
 
-    std::string upperName = safeName;
-    for (char& c : upperName)
+    void CreateScriptFiles(const fs::path& directory, const std::string& scriptName)
     {
-        c = static_cast<char>(std::toupper(static_cast<unsigned char>(c)));
+        std::string safeName = scriptName;
+        while (!safeName.empty() && (safeName.front() == ' ' || safeName.front() == '\t'))
+        {
+            safeName.erase(safeName.begin());
+        }
+        while (!safeName.empty() && (safeName.back() == ' ' || safeName.back() == '\t'))
+        {
+            safeName.pop_back();
+        }
+        if (safeName.empty())
+        {
+            return;
+        }
+
+        std::string upperName = safeName;
+        for (char& c : upperName)
+        {
+            c = static_cast<char>(std::toupper(static_cast<unsigned char>(c)));
+        }
+
+        const fs::path hppPath = directory / (safeName + ".hpp");
+        const fs::path cppPath = directory / (safeName + ".cpp");
+
+        std::ofstream hppOut(hppPath);
+        hppOut << "#ifndef __" << upperName << "_HPP__\n";
+        hppOut << "#define __" << upperName << "_HPP__\n\n";
+        hppOut << "#include \"QuarkEngine/SDK.h\"\n\n";
+        hppOut << "class " << safeName << " : public IScript\n";
+        hppOut << "{\n";
+        hppOut << "public:\n";
+        hppOut << "    void OnCreate() override;\n";
+        hppOut << "    void OnStart() override;\n";
+        hppOut << "    void OnUpdate(float deltaTime) override;\n";
+        hppOut << "    void OnDestroy() override;\n";
+        hppOut << "};\n\n";
+        hppOut << "#endif // __" << upperName << "_HPP__\n";
+        hppOut.close();
+
+        std::ofstream cppOut(cppPath);
+        cppOut << "#include \"" << safeName << ".hpp\"\n\n";
+        cppOut << "void " << safeName << "::OnCreate()\n";
+        cppOut << "{\n";
+        cppOut << "    // Script created\n";
+        cppOut << "}\n\n";
+        cppOut << "void " << safeName << "::OnStart()\n";
+        cppOut << "{\n";
+        cppOut << "    // Script initialized\n";
+        cppOut << "}\n\n";
+        cppOut << "void " << safeName << "::OnUpdate(float deltaTime)\n";
+        cppOut << "{\n";
+        cppOut << "    // Script updating...\n";
+        cppOut << "}\n\n";
+        cppOut << "void " << safeName << "::OnDestroy()\n";
+        cppOut << "{\n";
+        cppOut << "    // Script destroying\n";
+        cppOut << "}\n\n";
+        cppOut << "REGISTER_SCRIPT(" << safeName << ");\n";
+        cppOut.close();
     }
 
-    const fs::path hppPath = directory / (safeName + ".hpp");
-    const fs::path cppPath = directory / (safeName + ".cpp");
-
-    std::ofstream hppOut(hppPath);
-    hppOut << "#ifndef __" << upperName << "_HPP__\n";
-    hppOut << "#define __" << upperName << "_HPP__\n\n";
-    hppOut << "#include \"QuarkEngine/SDK.h\"\n\n";
-    hppOut << "class " << safeName << " : public IScript\n";
-    hppOut << "{\n";
-    hppOut << "public:\n";
-    hppOut << "    void OnCreate() override;\n";
-    hppOut << "    void OnStart() override;\n";
-    hppOut << "    void OnUpdate(float deltaTime) override;\n";
-    hppOut << "    void OnDestroy() override;\n";
-    hppOut << "};\n\n";
-    hppOut << "#endif // __" << upperName << "_HPP__\n";
-    hppOut.close();
-
-    std::ofstream cppOut(cppPath);
-    cppOut << "#include \"" << safeName << ".hpp\"\n\n";
-    cppOut << "void " << safeName << "::OnCreate()\n";
-    cppOut << "{\n";
-    cppOut << "    // Script created\n";
-    cppOut << "}\n\n";
-    cppOut << "void " << safeName << "::OnStart()\n";
-    cppOut << "{\n";
-    cppOut << "    // Script initialized\n";
-    cppOut << "}\n\n";
-    cppOut << "void " << safeName << "::OnUpdate(float deltaTime)\n";
-    cppOut << "{\n";
-    cppOut << "    // Script updating...\n";
-    cppOut << "}\n\n";
-    cppOut << "void " << safeName << "::OnDestroy()\n";
-    cppOut << "{\n";
-    cppOut << "    // Script destroying\n";
-    cppOut << "}\n\n";
-    cppOut << "REGISTER_SCRIPT(" << safeName << ");\n";
-    cppOut.close();
-}
-
-bool MatchesAssetFilter(const SLocalEntry& entry, int filter, const std::string& search)
-{
-    if (entry.IsDirectory)
+    bool MatchesAssetFilter(const SLocalEntry& entry, int filter, const std::string& search)
     {
-        return filter == 0 &&
-            (search.empty() || Lowercase(entry.FileName).find(search) != std::string::npos);
+        if (entry.m_IsDirectory)
+        {
+            return filter == 0 &&
+                (search.empty() || Lowercase(entry.m_FileName).find(search) != std::string::npos);
+        }
+
+        bool matchesType = false;
+        switch (filter)
+        {
+            case 0:
+                matchesType = !entry.m_IsTextureMeta;
+                break;
+            case 1:
+                matchesType = entry.m_IsImage || entry.m_IsModel;
+                break;
+            case 2:
+                matchesType = entry.m_IsMaterial;
+                break;
+            case 3:
+                matchesType = entry.m_IsTextureMeta;
+                break;
+            case 4:
+                matchesType = entry.m_IsPrefab;
+                break;
+            default:
+                matchesType = true;
+                break;
+        }
+
+        if (!matchesType)
+        {
+            return false;
+        }
+
+        return search.empty() || Lowercase(entry.m_FileName).find(search) != std::string::npos;
     }
 
-    bool matchesType = false;
-    switch (filter)
+    void OpenInSystemFileExplorer(const fs::path& path, bool bIsDirectory)
     {
-    case 0:
-        matchesType = !entry.IsTextureMeta;
-        break;
-    case 1:
-        matchesType = entry.IsImage || entry.IsModel;
-        break;
-    case 2:
-        matchesType = entry.IsMaterial;
-        break;
-    case 3:
-        matchesType = entry.IsTextureMeta;
-        break;
-    case 4:
-        matchesType = entry.isPrefab;
-        break;
-    default:
-        matchesType = true;
-        break;
-    }
-
-    if (!matchesType)
-    {
-        return false;
-    }
-
-    return search.empty() || Lowercase(entry.FileName).find(search) != std::string::npos;
-}
-
-void OpenInSystemFileExplorer(const fs::path& path, bool bIsDirectory)
-{
 #ifdef _WIN32
-    if (bIsDirectory)
-    {
-        ShellExecuteW(nullptr, L"open", path.wstring().c_str(), nullptr, nullptr, 1);
-    }
-    else
-    {
-        const std::wstring arguments = L"/select,\"" + path.wstring() + L"\"";
-        ShellExecuteW(nullptr, L"open", L"explorer.exe", arguments.c_str(), nullptr, 1);
-    }
+        if (bIsDirectory)
+        {
+            ShellExecuteW(nullptr, L"open", path.wstring().c_str(), nullptr, nullptr, 1);
+        }
+        else
+        {
+            const std::wstring arguments = L"/select,\"" + path.wstring() + L"\"";
+            ShellExecuteW(nullptr, L"open", L"explorer.exe", arguments.c_str(), nullptr, 1);
+        }
 #elif defined(__APPLE__)
-    const std::string command = "open \"" + path.string() + "\"";
-    const int result = std::system(command.c_str());
-    if (result != 0)
-    {
-        TraceLog(LogLevel::Error, "EDITOR", TextFormat("Failed to open file explorer for: %s",
-            path.string().c_str()));
-    }
+        const std::string command = "open \"" + path.string() + "\"";
+        const int result = std::system(command.c_str());
+        if (result != 0)
+        {
+            TraceLog(LogLevel::Error, "EDITOR", TextFormat("Failed to open file explorer for: %s", path.string().c_str()));
+        }
 #elif defined(__linux__)
-    const std::string command = "xdg-open \"" + path.string() + "\"";
-    const int result = std::system(command.c_str());
-    if (result != 0)
-    {
-        TraceLog(LogLevel::Error, "EDITOR", TextFormat("Failed to open file explorer for: %s",
-            path.string().c_str()));
-    }
+        const std::string command = "xdg-open \"" + path.string() + "\"";
+        const int result = std::system(command.c_str());
+        if (result != 0)
+        {
+            TraceLog(LogLevel::Error, "EDITOR", TextFormat("Failed to open file explorer for: %s", path.string().c_str()));
+        }
 #endif
-}
+    }
 
 } // anonymous
 
@@ -288,7 +286,7 @@ static RenderTexture2D CreateModelPreview(const CModelAsset& asset, int previewS
         }
     }
 
-    Vec3 center = {0, 0, 0};
+    Vec3 center = { 0, 0, 0 };
     float distance = 3.0f;
     if (hasVertices)
     {
@@ -410,13 +408,13 @@ static RenderTexture2D CreateMaterialPreview(CEditor& editor, const std::string&
     std::ifstream file(mtlPath);
     if (!file.is_open())
     {
-        return {0};
+        return { 0 };
     }
 
     Model sphere = LoadModelFromMesh(GenMeshSphere(1.0f, 64, 64));
 
     Color albedo = WHITE;
-    Texture2D tex = {0};
+    Texture2D tex = { 0 };
     std::string texPath;
 
     std::string line;
@@ -433,7 +431,7 @@ static RenderTexture2D CreateMaterialPreview(CEditor& editor, const std::string&
 
         if (type == "Kd")
         {
-            float r=1,g=1,b=1;
+            float r = 1, g = 1, b = 1;
             ss >> r >> g >> b;
             albedo = {
                 (unsigned char)(r * 255),
@@ -466,7 +464,7 @@ static RenderTexture2D CreateMaterialPreview(CEditor& editor, const std::string&
     RenderTexture2D rt = LoadRenderTexture(128, 128);
     if (rt.id == 0)
     {
-        mat.maps[MATERIAL_MAP_DIFFUSE].texture = {0};
+        mat.maps[MATERIAL_MAP_DIFFUSE].texture = { 0 };
         UnloadModel(sphere);
         return rt;
     }
@@ -474,21 +472,21 @@ static RenderTexture2D CreateMaterialPreview(CEditor& editor, const std::string&
     Camera3D cam = {};
     cam.fovy = 45.0f;
     cam.projection = CAMERA_PERSPECTIVE;
-    cam.target = {0, 0, 0};
-    cam.up = {0, 1, 0};
-    cam.position = {2, 2, 2};
+    cam.target = { 0, 0, 0 };
+    cam.up = { 0, 1, 0 };
+    cam.position = { 2, 2, 2 };
 
     BeginTextureMode(rt);
-    ClearBackground({40, 40, 45, 255});
+    ClearBackground({ 40, 40, 45, 255 });
     BeginMode3D(cam);
 
-    DrawModel(sphere, {0, 0, 0}, 1.0f, WHITE);
-    DrawModelWires(sphere, {0, 0, 0}, 1.0f, DARKGRAY);
+    DrawModel(sphere, { 0, 0, 0 }, 1.0f, WHITE);
+    DrawModelWires(sphere, { 0, 0, 0 }, 1.0f, DARKGRAY);
 
     EndMode3D();
     EndTextureMode();
 
-    sphere.materials[0].maps[MATERIAL_MAP_DIFFUSE].texture = {0};
+    sphere.materials[0].maps[MATERIAL_MAP_DIFFUSE].texture = { 0 };
     UnloadModel(sphere);
     return rt;
 }
@@ -530,7 +528,7 @@ static Texture GetMaterialPreview(CEditor& editor, const std::string& mtlPath)
 void DrawAssetsUi(CEditor& editor)
 {
     if (!ImGui::Begin(lang.Word("assets"), &editor.m_Preferences.m_ShowAssets,
-        ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoMove))
+                      ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoMove))
     {
         ImGui::End();
         return;
@@ -541,15 +539,14 @@ void DrawAssetsUi(CEditor& editor)
     std::string popupName = std::string(lang.Word("create_new")) + "##CreateNew";
 
     SAssetBrowserState& browser = editor.m_Ui.m_AssetBrowser;
-    SAssetBrowserMarquee& marquee = browser.Marquee;
-    SAssetBrowserDrag& drag = browser.Drag;
-    SAssetBrowserCreatePopup& create = browser.Create;
-
+    SAssetBrowserMarquee& marquee = browser.m_Marquee;
+    SAssetBrowserDrag& drag = browser.m_Drag;
+    SAssetBrowserCreatePopup& create = browser.m_Create;
 
     if (editor.m_CurrentAssetPath.empty() && !editor.m_ProjectPath.empty())
     {
         editor.m_CurrentAssetPath = fs::path(editor.m_ProjectPath) / "resources";
-        browser.AssetListCacheDirty = true;
+        browser.m_AssetListCacheDirty = true;
         std::error_code ec;
         fs::create_directories(editor.m_CurrentAssetPath, ec);
     }
@@ -576,8 +573,7 @@ void DrawAssetsUi(CEditor& editor)
         bool clicked = ImGui::SmallButton(label.c_str());
         const ImVec2 btnMax = ImVec2(
             btnMin.x + ImGui::GetItemRectSize().x,
-            btnMin.y + ImGui::GetItemRectSize().y
-        );
+            btnMin.y + ImGui::GetItemRectSize().y);
 
         if (ImGui::BeginDragDropTarget())
         {
@@ -594,52 +590,51 @@ void DrawAssetsUi(CEditor& editor)
 
         ImGui::PopID();
 
-        if (editor.m_Ui.m_Layout.FileDragging && ImGui::IsMouseHoveringRect(btnMin, btnMax))
+        if (editor.m_Ui.m_Layout.m_FileDragging && ImGui::IsMouseHoveringRect(btnMin, btnMax))
         {
             ImGui::GetWindowDrawList()->AddRectFilled(
                 btnMin,
                 btnMax,
-                IM_COL32(100, 200, 100, 120)
-            );
+                IM_COL32(100, 200, 100, 120));
 
             ImGui::SetMouseCursor(ImGuiMouseCursor_Hand);
         }
 
-        if (editor.m_Ui.m_Layout.FileDragging && ImGui::IsMouseReleased(0) && ImGui::IsMouseHoveringRect(btnMin, btnMax) && !drag.FilePath.empty())
+        if (editor.m_Ui.m_Layout.m_FileDragging && ImGui::IsMouseReleased(0) && ImGui::IsMouseHoveringRect(btnMin, btnMax) && !drag.m_FilePath.empty())
         {
-            fs::path dest = rebuilt / drag.FilePath.filename();
+            fs::path dest = rebuilt / drag.m_FilePath.filename();
 
             if (fs::exists(dest))
             {
-                browser.DuplicatePopupOpen = true;
-                browser.DuplicateName = drag.FilePath.filename().string();
+                browser.m_DuplicatePopupOpen = true;
+                browser.m_DuplicateName = drag.m_FilePath.filename().string();
             }
             else
             {
                 std::error_code ec;
-                fs::rename(drag.FilePath, dest, ec);
+                fs::rename(drag.m_FilePath, dest, ec);
 
                 if (!ec)
                 {
-                    if (CTextureMetadataStore::IsImageFile(drag.FilePath) && fs::exists(drag.FilePath.string() + ".meta"))
+                    if (CTextureMetadataStore::IsImageFile(drag.m_FilePath) && fs::exists(drag.m_FilePath.string() + ".meta"))
                     {
-                        fs::rename(drag.FilePath.string() + ".meta", dest.string() + ".meta", ec);
+                        fs::rename(drag.m_FilePath.string() + ".meta", dest.string() + ".meta", ec);
                     }
                     editor.m_Assets.RequestRefresh(editor.m_ProjectPath);
-                    browser.AssetListCacheDirty = true;
+                    browser.m_AssetListCacheDirty = true;
                     editor.m_SelectedAssetIndex = -1;
                 }
             }
 
-            editor.m_Ui.m_Layout.FileDragging = false;
-            drag.FilePath.clear();
-            editor.m_Ui.m_Layout.DraggedFileIndex = -1;
+            editor.m_Ui.m_Layout.m_FileDragging = false;
+            drag.m_FilePath.clear();
+            editor.m_Ui.m_Layout.m_DraggedFileIndex = -1;
         }
 
         if (clicked)
         {
             editor.m_CurrentAssetPath = rebuilt;
-            browser.AssetListCacheDirty = true;
+            browser.m_AssetListCacheDirty = true;
             editor.m_SelectedAssetIndex = -1;
             editor.m_SelectedAssetName.clear();
 
@@ -657,18 +652,18 @@ void DrawAssetsUi(CEditor& editor)
     };
     ImGui::SetNextItemWidth(150.0f);
     if (ImGui::Combo("##asset_type_filter_browser", &editor.m_Preferences.m_AssetFilter,
-        apAssetFilterNames, IM_ARRAYSIZE(apAssetFilterNames)))
+                     apAssetFilterNames, IM_ARRAYSIZE(apAssetFilterNames)))
     {
         editor.m_Preferences.Save();
     }
     ImGui::SameLine();
     ImGui::SetNextItemWidth(-1.0f);
-    ImGui::InputTextWithHint("##asset_search", lang.Word("search_assets"), browser.aSearchBuffer,
-        IM_ARRAYSIZE(browser.aSearchBuffer));
+    ImGui::InputTextWithHint("##asset_search", lang.Word("search_assets"), browser.m_aSearchBuffer,
+                             IM_ARRAYSIZE(browser.m_aSearchBuffer));
 
-    const std::string search = Lowercase(browser.aSearchBuffer);
-    if (browser.AssetListCacheDirty || browser.CachedPath != editor.m_CurrentAssetPath ||
-        browser.CachedFilter != editor.m_Preferences.m_AssetFilter || browser.CachedSearch != search)
+    const std::string search = Lowercase(browser.m_aSearchBuffer);
+    if (browser.m_AssetListCacheDirty || browser.m_CachedPath != editor.m_CurrentAssetPath ||
+        browser.m_CachedFilter != editor.m_Preferences.m_AssetFilter || browser.m_CachedSearch != search)
     {
         std::vector<SLocalEntry> vDirectories;
         std::vector<SLocalEntry> vFiles;
@@ -676,11 +671,11 @@ void DrawAssetsUi(CEditor& editor)
         for (const auto& path : fs::directory_iterator(editor.m_CurrentAssetPath, dirError))
         {
             SLocalEntry entry = {};
-            entry.FileName = path.path().filename().string();
-            entry.IsDirectory = path.is_directory();
-            entry.IsDirectoryEmpty = entry.IsDirectory && fs::is_empty(path.path(), dirError);
-            entry.IsImage = CTextureMetadataStore::IsImageFile(path.path());
-            entry.IsModel = CModelService::IsModelFile(path.path());
+            entry.m_FileName = path.path().filename().string();
+            entry.m_IsDirectory = path.is_directory();
+            entry.m_IsDirectoryEmpty = entry.m_IsDirectory && fs::is_empty(path.path(), dirError);
+            entry.m_IsImage = CTextureMetadataStore::IsImageFile(path.path());
+            entry.m_IsModel = CModelService::IsModelFile(path.path());
 
             std::string ext = path.path().extension().string();
             if (!ext.empty() && ext[0] == '.')
@@ -688,15 +683,15 @@ void DrawAssetsUi(CEditor& editor)
                 ext.erase(ext.begin());
             }
             ext = Lowercase(std::move(ext));
-            entry.Extension = ext;
-            entry.IsMaterial = entry.Extension == "mtl";
-            entry.IsTextureMeta = entry.Extension == "meta" && CTextureMetadataStore::IsImageFile(path.path().stem());
-            if (entry.IsTextureMeta && !fs::exists(path.path().parent_path() / path.path().stem()))
+            entry.m_Extension = ext;
+            entry.m_IsMaterial = entry.m_Extension == "mtl";
+            entry.m_IsTextureMeta = entry.m_Extension == "meta" && CTextureMetadataStore::IsImageFile(path.path().stem());
+            if (entry.m_IsTextureMeta && !fs::exists(path.path().parent_path() / path.path().stem()))
             {
                 continue;
             }
-            entry.isPrefab = entry.Extension == "prefab";
-            if (entry.Extension == "meta" && !entry.IsTextureMeta)
+            entry.m_IsPrefab = entry.m_Extension == "prefab";
+            if (entry.m_Extension == "meta" && !entry.m_IsTextureMeta)
             {
                 continue;
             }
@@ -705,7 +700,7 @@ void DrawAssetsUi(CEditor& editor)
                 continue;
             }
 
-            if (entry.IsDirectory)
+            if (entry.m_IsDirectory)
             {
                 vDirectories.push_back(entry);
             }
@@ -715,25 +710,25 @@ void DrawAssetsUi(CEditor& editor)
             }
         }
 
-        browser.vCachedEntries.clear();
-        browser.vCachedEntries.reserve(vDirectories.size() + vFiles.size());
-        browser.vCachedEntries.insert(browser.vCachedEntries.end(), vDirectories.begin(), vDirectories.end());
-        browser.vCachedEntries.insert(browser.vCachedEntries.end(), vFiles.begin(), vFiles.end());
-        browser.CachedPath = editor.m_CurrentAssetPath;
-        browser.CachedFilter = editor.m_Preferences.m_AssetFilter;
-        browser.CachedSearch = search;
-        browser.AssetListCacheDirty = false;
+        browser.m_vCachedEntries.clear();
+        browser.m_vCachedEntries.reserve(vDirectories.size() + vFiles.size());
+        browser.m_vCachedEntries.insert(browser.m_vCachedEntries.end(), vDirectories.begin(), vDirectories.end());
+        browser.m_vCachedEntries.insert(browser.m_vCachedEntries.end(), vFiles.begin(), vFiles.end());
+        browser.m_CachedPath = editor.m_CurrentAssetPath;
+        browser.m_CachedFilter = editor.m_Preferences.m_AssetFilter;
+        browser.m_CachedSearch = search;
+        browser.m_AssetListCacheDirty = false;
     }
 
-    const std::vector<SLocalEntry>& vEntries = browser.vCachedEntries;
+    const std::vector<SLocalEntry>& vEntries = browser.m_vCachedEntries;
 
     if (!editor.m_SelectedAssetName.empty())
     {
         const auto selectedEntry = std::find_if(vEntries.begin(), vEntries.end(),
-            [&editor](const SLocalEntry& entry)
-            {
-                return entry.FileName == editor.m_SelectedAssetName;
-            });
+                                                [&editor](const SLocalEntry& entry)
+                                                {
+                                                    return entry.m_FileName == editor.m_SelectedAssetName;
+                                                });
         editor.m_SelectedAssetIndex = selectedEntry == vEntries.end()
             ? -1
             : static_cast<int>(std::distance(vEntries.begin(), selectedEntry));
@@ -780,45 +775,43 @@ void DrawAssetsUi(CEditor& editor)
                     IM_COL32(80, 180, 255, 255),
                     2.0f,
                     0,
-                    2.0f
-                );
+                    2.0f);
             }
 
             ImGui::EndDragDropTarget();
         }
 
         const char* pText = search.empty() ? lang.Word("empty_folder") : "No matching assets.";
-        const ImVec2 ts   = ImGui::CalcTextSize(pText);
-        const ImVec2 wp   = ImGui::GetWindowPos();
-        const ImVec2 ws   = ImGui::GetWindowSize();
+        const ImVec2 ts = ImGui::CalcTextSize(pText);
+        const ImVec2 wp = ImGui::GetWindowPos();
+        const ImVec2 ws = ImGui::GetWindowSize();
         ImGui::GetWindowDrawList()->AddText(
             ImVec2(wp.x + (ws.x - ts.x) * 0.5f, wp.y + (ws.y - ts.y) * 0.5f),
             IM_COL32(255, 255, 255, 255),
-            pText
-        );
+            pText);
 
         if (ImGui::BeginPopupContextItem("AssetBgContextEmpty", ImGuiPopupFlags_MouseButtonRight | ImGuiPopupFlags_NoOpenOverItems))
         {
             if (ImGui::MenuItem(TextFormat("%s##empty_new_file", lang.Word("new_file"))))
             {
-                create.CreatingFolder = false;
-                create.aNewItemName[0] = '\0';
-                create.Open = true;
+                create.m_CreatingFolder = false;
+                create.m_aNewItemName[0] = '\0';
+                create.m_Open = true;
             }
 
             if (ImGui::MenuItem(TextFormat("%s##empty_new_script", lang.Word("new_script"))))
             {
-                create.CreatingFolder = false;
-                create.CreatingScript = true;
-                create.aNewItemName[0] = '\0';
-                create.Open = true;
+                create.m_CreatingFolder = false;
+                create.m_CreatingScript = true;
+                create.m_aNewItemName[0] = '\0';
+                create.m_Open = true;
             }
 
             if (ImGui::MenuItem(TextFormat("%s##empty_new_folder", lang.Word("new_folder"))))
             {
-                create.CreatingFolder = true;
-                create.aNewItemName[0] = '\0';
-                create.Open = true;
+                create.m_CreatingFolder = true;
+                create.m_aNewItemName[0] = '\0';
+                create.m_Open = true;
             }
 
             ImGui::EndPopup();
@@ -828,733 +821,728 @@ void DrawAssetsUi(CEditor& editor)
     }
     else
     {
-    ImGui::BeginChild("AssetScroll", ImVec2(0, 0), false, ImGuiWindowFlags_AlwaysVerticalScrollbar);
+        ImGui::BeginChild("AssetScroll", ImVec2(0, 0), false, ImGuiWindowFlags_AlwaysVerticalScrollbar);
 
-    if (ImGui::IsWindowHovered() && !editor.m_Ui.m_Layout.FileDragging)
-    {
-        if (ImGui::IsMouseClicked(0))
+        if (ImGui::IsWindowHovered() && !editor.m_Ui.m_Layout.m_FileDragging)
         {
-            marquee.Start = ImGui::GetMousePos();
-            marquee.End = marquee.Start;
-            marquee.Active = true;
+            if (ImGui::IsMouseClicked(0))
+            {
+                marquee.m_Start = ImGui::GetMousePos();
+                marquee.m_End = marquee.m_Start;
+                marquee.m_Active = true;
+            }
+            if (ImGui::IsMouseDown(0) && marquee.m_Active)
+            {
+                marquee.m_End = ImGui::GetMousePos();
+            }
+            if (ImGui::IsMouseReleased(0))
+            {
+                marquee.m_Active = false;
+            }
         }
-        if (ImGui::IsMouseDown(0) && marquee.Active)
+
+        editor.m_Ui.m_Layout.m_DraggedTargetFolderIndex = -1;
+        bool entityDroppedOnSubfolder = false;
+        const float itemSpacingX = ImGui::GetStyle().ItemSpacing.x;
+        const float itemSpacingY = ImGui::GetStyle().ItemSpacing.y;
+        const float itemWidth = ICON_SIZE + itemSpacingX;
+        const float contentWidth = std::max(ImGui::GetContentRegionAvail().x, ICON_SIZE);
+        const int columnCount = std::max(1, static_cast<int>((contentWidth + itemSpacingX) / itemWidth));
+        const int rowCount = (static_cast<int>(vEntries.size()) + columnCount - 1) / columnCount;
+        ImGuiListClipper clipper;
+        clipper.Begin(rowCount, ICON_SIZE + 20.0f + itemSpacingY);
+        while (clipper.Step())
         {
-            marquee.End = ImGui::GetMousePos();
+            const int firstItem = clipper.DisplayStart * columnCount;
+            const int lastItem = std::min(clipper.DisplayEnd * columnCount, static_cast<int>(vEntries.size()));
+            for (int i = firstItem; i < lastItem; ++i)
+            {
+                auto& entry = vEntries[i];
+                ImGui::PushID(i);
+                ImGui::BeginGroup();
+
+                const ImVec2 pos = ImGui::GetCursorScreenPos();
+                const ImVec2 size(ICON_SIZE, ICON_SIZE + 20.0f);
+                ImGui::InvisibleButton("asset_btn", size);
+
+                if (entry.m_IsDirectory && ImGui::BeginDragDropTarget())
+                {
+                    if (const ImGuiPayload* pPayload = ImGui::AcceptDragDropPayload("ENTITY_INDEX"))
+                    {
+                        if (pPayload->IsDelivery() && pPayload->DataSize == sizeof(int))
+                        {
+                            const int entityIdx = *static_cast<const int*>(pPayload->Data);
+                            SaveEntityBranchToDirectory(editor, entityIdx, editor.m_CurrentAssetPath / entry.m_FileName);
+                            entityDroppedOnSubfolder = true;
+                        }
+                    }
+                    if (ImGui::IsDragDropPayloadBeingAccepted())
+                    {
+                        ImGui::GetWindowDrawList()->AddRect(
+                            pos,
+                            ImVec2(pos.x + size.x, pos.y + size.y),
+                            IM_COL32(80, 180, 255, 255),
+                            2.0f,
+                            0,
+                            2.0f);
+                    }
+                    ImGui::EndDragDropTarget();
+                }
+
+                const bool itemActive = ImGui::IsItemActive();
+                const bool itemHovered = ImGui::IsItemHovered();
+                if (itemHovered)
+                {
+                    ImGui::SetTooltip("%s", entry.m_FileName.c_str());
+                }
+                if (ImGui::IsItemClicked() && !ImGui::IsMouseDragging(0))
+                {
+                    editor.m_SelectedAssetIndex = i;
+                    editor.m_SelectedAssetName = entry.m_FileName;
+                    editor.m_Scene.m_Selected = -1;
+                    editor.m_Scene.m_vSelectedEntities.clear();
+                }
+
+                if (entry.m_IsDirectory && itemHovered && ImGui::IsMouseDoubleClicked(0))
+                {
+                    editor.m_CurrentAssetPath /= entry.m_FileName;
+                    browser.m_AssetListCacheDirty = true;
+                    editor.m_SelectedAssetIndex = -1;
+                    editor.m_SelectedAssetName.clear();
+                    editor.m_Previews.InvalidateModelPreviews();
+
+                    ImGui::EndGroup();
+                    ImGui::PopID();
+                    navigated = true;
+                    break;
+                }
+
+                if (!entry.m_IsDirectory && itemHovered && ImGui::IsMouseDoubleClicked(0))
+                {
+                    const fs::path fullPath = editor.m_CurrentAssetPath / entry.m_FileName;
+                    if (entry.m_IsModel)
+                    {
+                        CModelAsset* pAsset = editor.m_Assets.FindModelByPath(fullPath, editor.m_ProjectPath);
+                        if (pAsset)
+                        {
+                            OpenModelViewerForAsset(editor.m_Ui.m_ModelViewer, *pAsset);
+                        }
+                    }
+                    else if (entry.m_IsMaterial)
+                    {
+                        OpenMaterialViewerForPath(editor, editor.m_Ui.m_MaterialViewer, fullPath);
+                    }
+                    else if (entry.m_IsPrefab)
+                    {
+                        SpawnPrefabInScene(editor, fullPath);
+                    }
+                    else
+                    {
+#ifdef _WIN32
+                        ShellExecuteA(nullptr, "open", fullPath.string().c_str(), nullptr, nullptr, 1);
+#elif defined(__APPLE__)
+                        std::string cmd = "open \"" + fullPath.string() + "\"";
+                        const int result = std::system(cmd.c_str());
+                        if (result != 0)
+                        {
+                            TraceLog(LogLevel::Error, "EDITOR", TextFormat("Failed to open file: %s", fullPath.string().c_str()));
+                        }
+#elif defined(__linux__)
+                        std::string cmd = "xdg-open \"" + fullPath.string() + "\"";
+                        const int result = std::system(cmd.c_str());
+                        if (result != 0)
+                        {
+                            TraceLog(LogLevel::Error, "EDITOR", TextFormat("Failed to open file: %s", fullPath.string().c_str()));
+                        }
+#endif
+                    }
+                }
+
+                if (ImGui::BeginPopupContextItem("AssetContext"))
+                {
+                    if (entry.m_IsPrefab)
+                    {
+                        if (ImGui::MenuItem(TextFormat(lang.Word("spawn"), entry.m_FileName.c_str())))
+                        {
+                            SpawnPrefabInScene(editor, editor.m_CurrentAssetPath / entry.m_FileName);
+                        }
+                        ImGui::Separator();
+                    }
+
+                    if (ImGui::MenuItem(lang.Word("open_file_explorer")))
+                    {
+                        OpenInSystemFileExplorer(editor.m_CurrentAssetPath / entry.m_FileName, entry.m_IsDirectory);
+                    }
+
+                    ImGui::Separator();
+
+                    if (ImGui::MenuItem(lang.Word("delete")))
+                    {
+                        editor.SaveState();
+
+                        const fs::path target = editor.m_CurrentAssetPath / entry.m_FileName;
+                        std::error_code ec;
+                        if (entry.m_IsDirectory)
+                        {
+                            fs::remove_all(target, ec);
+                        }
+                        else
+                        {
+                            fs::remove(target, ec);
+                        }
+                        if (entry.m_IsMaterial)
+                        {
+                            fs::remove(target.string() + ".meta", ec);
+                        }
+                        if (entry.m_IsTextureMeta)
+                        {
+                            fs::remove(CTextureMetadataStore::PathFromMeta(target), ec);
+                        }
+
+                        editor.m_Assets.RequestRefresh(editor.m_ProjectPath);
+                        browser.m_AssetListCacheDirty = true;
+                        editor.m_SelectedAssetIndex = -1;
+                        editor.m_SelectedAssetName.clear();
+                        navigated = true;
+
+                        ImGui::EndPopup();
+                        ImGui::EndGroup();
+                        ImGui::PopID();
+                        break;
+                    }
+
+                    if (ImGui::MenuItem(lang.Word("rename")))
+                    {
+                        browser.m_RenameTarget = i;
+                        const size_t copied = entry.m_FileName.copy(editor.m_Ui.m_MeshEdit.m_aRenameBuffer, sizeof(editor.m_Ui.m_MeshEdit.m_aRenameBuffer) - 1);
+                        editor.m_Ui.m_MeshEdit.m_aRenameBuffer[copied] = '\0';
+                        ImGui::OpenPopup(("%s##RenameAsset", lang.Word("rename_asset")));
+                    }
+
+                    ImGui::Separator();
+
+                    if (ImGui::MenuItem(TextFormat("%s##empty_new_file", lang.Word("new_file"))))
+                    {
+                        create.m_CreatingFolder = false;
+                        create.m_aNewItemName[0] = '\0';
+                        create.m_Open = true;
+                    }
+
+                    if (ImGui::MenuItem(TextFormat("%s##empty_new_script", lang.Word("new_script"))))
+                    {
+                        create.m_CreatingFolder = false;
+                        create.m_CreatingScript = true;
+                        create.m_aNewItemName[0] = '\0';
+                        create.m_Open = true;
+                    }
+
+                    if (ImGui::MenuItem(TextFormat("%s##empty_new_folder", lang.Word("new_folder"))))
+                    {
+                        create.m_CreatingFolder = true;
+                        create.m_aNewItemName[0] = '\0';
+                        create.m_Open = true;
+                    }
+
+                    ImGui::EndPopup();
+                }
+
+                bool selected = editor.m_SelectedAssetIndex == i;
+                if (marquee.m_Active && (fabsf(marquee.m_Start.x - marquee.m_End.x) > 5.0f || fabsf(marquee.m_Start.y - marquee.m_End.y) > 5.0f))
+                {
+                    const ImVec2 min(std::min(marquee.m_Start.x, marquee.m_End.x), std::min(marquee.m_Start.y, marquee.m_End.y));
+                    const ImVec2 max(std::max(marquee.m_Start.x, marquee.m_End.x), std::max(marquee.m_Start.y, marquee.m_End.y));
+                    if (!(pos.x + size.x < min.x || pos.x > max.x || pos.y + size.y < min.y || pos.y > max.y))
+                    {
+                        selected = true;
+                    }
+                }
+
+                if (selected)
+                {
+                    ImGui::GetWindowDrawList()->AddRectFilled(pos, ImVec2(pos.x + size.x, pos.y + size.y), IM_COL32(80, 140, 255, 100));
+                }
+
+                ImGui::SetCursorScreenPos(pos);
+                if (entry.m_IsDirectory)
+                {
+                    const Texture texture = entry.m_IsDirectoryEmpty ? editor.m_Previews.IconFolder() : editor.m_Previews.IconFullFolder();
+                    if (texture.id != 0)
+                    {
+                        QcImGuiImage(&texture, ImVec2(ICON_SIZE, ICON_SIZE));
+                    }
+                    else
+                    {
+                        ImGui::Button(lang.Word("folder"), ImVec2(ICON_SIZE, ICON_SIZE));
+                    }
+                }
+                else if (entry.m_IsImage)
+                {
+                    const std::string full = (editor.m_CurrentAssetPath / entry.m_FileName).string();
+                    const Texture2D* pTexture = nullptr;
+                    if (ImGui::IsRectVisible(pos, ImVec2(pos.x + ICON_SIZE, pos.y + ICON_SIZE)))
+                    {
+                        pTexture = editor.m_Textures.Load(full);
+                    }
+                    else
+                    {
+                        pTexture = editor.m_Textures.Find(full);
+                    }
+                    if (pTexture)
+                    {
+                        QcImGuiImage(pTexture, ImVec2(ICON_SIZE, ICON_SIZE));
+                    }
+                }
+                else if (entry.m_IsModel)
+                {
+                    const std::string full = (editor.m_CurrentAssetPath / entry.m_FileName).string();
+                    Texture previewTexture = { 0 };
+                    bool loadFailed = false;
+
+                    if (editor.m_Previews.HasModelPreview(full))
+                    {
+                        previewTexture = editor.m_Previews.ModelPreview(full);
+                    }
+                    else if (ImGui::IsRectVisible(pos, ImVec2(pos.x + ICON_SIZE, pos.y + ICON_SIZE)))
+                    {
+                        CModelAsset* pAsset = editor.m_Assets.FindModelByPath(editor.m_CurrentAssetPath / entry.m_FileName, editor.m_ProjectPath);
+                        if (pAsset)
+                        {
+                            previewTexture = GetModelPreview(editor, *pAsset, full);
+                            if (previewTexture.id == 0)
+                            {
+                                loadFailed = true;
+                            }
+                        }
+                        else
+                        {
+                            loadFailed = true;
+                        }
+                    }
+
+                    if (previewTexture.id != 0)
+                    {
+                        QcImGuiImage(&previewTexture, ImVec2(ICON_SIZE, ICON_SIZE));
+                    }
+                    else
+                    {
+                        ImDrawList* pDrawList = ImGui::GetWindowDrawList();
+                        pDrawList->AddRectFilled(pos, ImVec2(pos.x + ICON_SIZE, pos.y + ICON_SIZE), loadFailed ? IM_COL32(80, 80, 90, 255) : IM_COL32(100, 100, 120, 255));
+                        if (loadFailed)
+                        {
+                            pDrawList->AddLine(ImVec2(pos.x + 10, pos.y + 10), ImVec2(pos.x + ICON_SIZE - 10, pos.y + ICON_SIZE - 10), IM_COL32(255, 100, 100, 200), 2.0f);
+                            pDrawList->AddLine(ImVec2(pos.x + ICON_SIZE - 10, pos.y + 10), ImVec2(pos.x + 10, pos.y + ICON_SIZE - 10), IM_COL32(255, 100, 100, 200), 2.0f);
+                        }
+                    }
+                }
+                else if (entry.m_IsMaterial)
+                {
+                    const std::string full = (editor.m_CurrentAssetPath / entry.m_FileName).string();
+
+                    Texture preview = { 0 };
+
+                    if (editor.m_Previews.HasMaterialPreview(full))
+                    {
+                        preview = editor.m_Previews.MaterialPreview(full);
+                    }
+                    else if (ImGui::IsRectVisible(pos, ImVec2(pos.x + ICON_SIZE, pos.y + ICON_SIZE)))
+                    {
+                        preview = GetMaterialPreview(editor, full);
+                    }
+
+                    if (preview.id != 0)
+                    {
+                        QcImGuiImage(&preview, ImVec2(ICON_SIZE, ICON_SIZE));
+                    }
+                    else
+                    {
+                        ImGui::Button("MAT", ImVec2(ICON_SIZE, ICON_SIZE));
+                    }
+                }
+                else
+                {
+                    if (editor.m_Previews.IconFile().id != 0)
+                    {
+                        QcImGuiImage(&editor.m_Previews.IconFile(), ImVec2(ICON_SIZE, ICON_SIZE));
+                    }
+                    else
+                    {
+                        ImGui::Button(entry.m_FileName.empty() ? "file" : entry.m_FileName.c_str(), ImVec2(ICON_SIZE, ICON_SIZE));
+                    }
+                }
+
+                if (!entry.m_IsDirectory && !entry.m_FileName.empty())
+                {
+                    ImDrawList* pDrawList = ImGui::GetWindowDrawList();
+                    std::string extDisplay = entry.m_IsPrefab ? "PFB" : entry.m_Extension;
+                    if (extDisplay.size() > 3)
+                    {
+                        extDisplay.resize(3);
+                    }
+                    const ImVec2 extTextSize = ImGui::CalcTextSize(extDisplay.c_str());
+                    const ImVec2 extPos(pos.x + ICON_SIZE - extTextSize.x - 2.0f, pos.y + ICON_SIZE - extTextSize.y - 2.0f);
+                    const ImU32 badgeBg = entry.m_IsPrefab ? IM_COL32(30, 120, 200, 220) : IM_COL32(0, 0, 0, 180);
+                    pDrawList->AddRectFilled(ImVec2(extPos.x - 2.0f, extPos.y - 1.0f), ImVec2(pos.x + ICON_SIZE, pos.y + ICON_SIZE), badgeBg);
+                    pDrawList->AddText(extPos, IM_COL32(255, 255, 255, 255), extDisplay.c_str());
+                }
+
+                if (itemHovered && ImGui::IsMouseClicked(ImGuiMouseButton_Left) && !editor.m_Ui.m_Layout.m_FileDragging)
+                {
+                    drag.m_FileName = entry.m_FileName;
+                    drag.m_StartPos = ImGui::GetMousePos();
+
+                    editor.m_Ui.m_Layout.m_DraggedFileIndex = i;
+                    drag.m_FilePath = editor.m_CurrentAssetPath / entry.m_FileName;
+                }
+
+                if (drag.m_FileName == entry.m_FileName && ImGui::IsMouseDown(0))
+                {
+                    ImVec2 mousePos = ImGui::GetMousePos();
+                    ImVec2 delta = ImVec2(mousePos.x - drag.m_StartPos.x, mousePos.y - drag.m_StartPos.y);
+                    if (fabsf(delta.x) > 5.0f || fabsf(delta.y) > 5.0f)
+                    {
+                        editor.m_Ui.m_Layout.m_FileDragging = true;
+                        editor.m_Ui.m_Layout.m_DraggedFileIndex = i;
+
+                        if (entry.m_IsModel)
+                        {
+                            editor.m_Ui.m_Layout.m_SceneAssetDragging = true;
+                            editor.m_Ui.m_Layout.m_DraggedSceneAssetName = (editor.m_CurrentAssetPath / entry.m_FileName).string();
+                        }
+
+                        if (entry.m_Extension == "prefab")
+                        {
+                            editor.m_Ui.m_Layout.m_SceneAssetDragging = true;
+                            editor.m_Ui.m_Layout.m_DraggedSceneAssetName = (editor.m_CurrentAssetPath / entry.m_FileName).string();
+                        }
+
+                        if (CModelService::IsModelFile(fs::path(entry.m_FileName)))
+                        {
+                            const std::string assetName = CAssetLibrary::AssetNameForPath(fs::path(editor.m_ProjectPath), editor.m_CurrentAssetPath / entry.m_FileName);
+                            editor.m_Ui.m_Layout.m_SceneAssetDragging = true;
+                            editor.m_Ui.m_Layout.m_DraggedSceneAssetName = assetName;
+                        }
+                    }
+                }
+
+                const bool hasValidDraggedFile = editor.m_Ui.m_Layout.m_DraggedFileIndex >= 0 &&
+                    editor.m_Ui.m_Layout.m_DraggedFileIndex < static_cast<int>(vEntries.size());
+                if (entry.m_IsDirectory && editor.m_Ui.m_Layout.m_FileDragging && hasValidDraggedFile &&
+                    vEntries[editor.m_Ui.m_Layout.m_DraggedFileIndex].m_FileName != entry.m_FileName)
+                {
+                    ImVec2 mousePos = ImGui::GetMousePos();
+                    bool mouseOverFolder = mousePos.x >= pos.x && mousePos.x <= pos.x + size.x &&
+                        mousePos.y >= pos.y && mousePos.y <= pos.y + size.y;
+
+                    if (mouseOverFolder)
+                    {
+                        ImGui::GetWindowDrawList()->AddRectFilled(pos, ImVec2(pos.x + size.x, pos.y + size.y), IM_COL32(100, 200, 100, 150));
+                        editor.m_Ui.m_Layout.m_DraggedTargetFolderIndex = i;
+                    }
+                }
+
+                if (editor.m_Ui.m_Layout.m_SceneAssetDragging &&
+                    !entry.m_IsDirectory && (entry.m_IsModel || entry.m_IsMaterial || entry.m_IsPrefab))
+                {
+                    if (entry.m_IsPrefab)
+                    {
+                        const std::string fullPrefabPath = (editor.m_CurrentAssetPath / entry.m_FileName).string();
+                        if (editor.m_Ui.m_Layout.m_DraggedSceneAssetName == fullPrefabPath)
+                        {
+                            ImGui::SetTooltip(lang.Word("spawn"), entry.m_FileName.c_str());
+                        }
+                    }
+                    else
+                    {
+                        const std::string assetName = CAssetLibrary::AssetNameForPath(fs::path(editor.m_ProjectPath), editor.m_CurrentAssetPath / entry.m_FileName);
+
+                        if (editor.m_Ui.m_Layout.m_SceneAssetDragging && editor.m_Ui.m_Layout.m_DraggedSceneAssetName == assetName)
+                        {
+                            if (entry.m_IsModel)
+                            {
+                                ImGui::SetTooltip(lang.Word("spawn"), editor.m_Ui.m_Layout.m_DraggedSceneAssetName.c_str());
+                            }
+                        }
+                    }
+                }
+
+                std::string label = entry.m_FileName;
+                if (label.size() > 10)
+                {
+                    label = label.substr(0, 8) + "..";
+                }
+                const ImVec2 labelSize = ImGui::CalcTextSize(label.c_str());
+                ImGui::SetCursorScreenPos(ImVec2(pos.x + (ICON_SIZE - labelSize.x) * 0.5f, pos.y + ICON_SIZE + 2.0f));
+                ImGui::TextUnformatted(label.c_str());
+                ImGui::EndGroup();
+
+                if (i + 1 < lastItem)
+                {
+                    ImGui::SameLine();
+                }
+                ImGui::PopID();
+            }
+
+            if (navigated)
+            {
+                break;
+            }
         }
-        if (ImGui::IsMouseReleased(0))
-        {
-            marquee.Active = false;
-        }
-    }
+        clipper.End();
 
-    editor.m_Ui.m_Layout.DraggedTargetFolderIndex = -1;
-    bool entityDroppedOnSubfolder = false;
-    const float itemSpacingX = ImGui::GetStyle().ItemSpacing.x;
-    const float itemSpacingY = ImGui::GetStyle().ItemSpacing.y;
-    const float itemWidth = kIconSize + itemSpacingX;
-    const float contentWidth = std::max(ImGui::GetContentRegionAvail().x, kIconSize);
-    const int columnCount = std::max(1, static_cast<int>((contentWidth + itemSpacingX) / itemWidth));
-    const int rowCount = (static_cast<int>(vEntries.size()) + columnCount - 1) / columnCount;
-    ImGuiListClipper clipper;
-    clipper.Begin(rowCount, kIconSize + 20.0f + itemSpacingY);
-    while (clipper.Step())
-    {
-        const int firstItem = clipper.DisplayStart * columnCount;
-        const int lastItem = std::min(clipper.DisplayEnd * columnCount, static_cast<int>(vEntries.size()));
-        for (int i = firstItem; i < lastItem; ++i)
-        {
-        auto& entry = vEntries[i];
-        ImGui::PushID(i);
-        ImGui::BeginGroup();
-
-        const ImVec2 pos = ImGui::GetCursorScreenPos();
-        const ImVec2 size(kIconSize, kIconSize + 20.0f);
-        ImGui::InvisibleButton("asset_btn", size);
-
-        if (entry.IsDirectory && ImGui::BeginDragDropTarget())
+        const ImVec2 scrollWindowPos = ImGui::GetWindowPos();
+        const ImVec2 scrollWindowSize = ImGui::GetWindowSize();
+        const ImRect assetDropZone(
+            scrollWindowPos,
+            ImVec2(scrollWindowPos.x + scrollWindowSize.x, scrollWindowPos.y + scrollWindowSize.y));
+        if (!entityDroppedOnSubfolder &&
+            ImGui::BeginDragDropTargetCustom(assetDropZone, ImGui::GetID("##AssetBrowserEntityDropZone")))
         {
             if (const ImGuiPayload* pPayload = ImGui::AcceptDragDropPayload("ENTITY_INDEX"))
             {
                 if (pPayload->IsDelivery() && pPayload->DataSize == sizeof(int))
                 {
-                    const int entityIdx = *static_cast<const int*>(pPayload->Data);
-                    SaveEntityBranchToDirectory(editor, entityIdx, editor.m_CurrentAssetPath / entry.FileName);
-                    entityDroppedOnSubfolder = true;
+                    const int idx = *static_cast<const int*>(pPayload->Data);
+                    SaveEntityBranchToDirectory(editor, idx, editor.m_CurrentAssetPath);
                 }
             }
             if (ImGui::IsDragDropPayloadBeingAccepted())
             {
                 ImGui::GetWindowDrawList()->AddRect(
-                    pos,
-                    ImVec2(pos.x + size.x, pos.y + size.y),
+                    assetDropZone.Min,
+                    assetDropZone.Max,
                     IM_COL32(80, 180, 255, 255),
                     2.0f,
                     0,
-                    2.0f
-                );
+                    2.0f);
             }
             ImGui::EndDragDropTarget();
         }
 
-        const bool itemActive = ImGui::IsItemActive();
-        const bool itemHovered = ImGui::IsItemHovered();
-        if (itemHovered)
-        {
-            ImGui::SetTooltip("%s", entry.FileName.c_str());
-        }
-        if (ImGui::IsItemClicked() && !ImGui::IsMouseDragging(0))
-        {
-            editor.m_SelectedAssetIndex = i;
-            editor.m_SelectedAssetName = entry.FileName;
-            editor.m_Scene.m_Selected = -1;
-            editor.m_Scene.m_vSelectedEntities.clear();
-        }
+        ImGui::SetNextItemAllowOverlap();
+        ImGui::SetCursorPos(ImVec2(0, 0));
 
-        if (entry.IsDirectory && itemHovered && ImGui::IsMouseDoubleClicked(0))
+        ImVec2 bgSize = ImGui::GetContentRegionMax();
+        if (bgSize.x < 1.f)
         {
-            editor.m_CurrentAssetPath /= entry.FileName;
-            browser.AssetListCacheDirty = true;
-            editor.m_SelectedAssetIndex = -1;
-            editor.m_SelectedAssetName.clear();
-            editor.m_Previews.InvalidateModelPreviews();
-
-            ImGui::EndGroup();
-            ImGui::PopID();
-            navigated = true;
-            break;
+            bgSize.x = 1.f;
+        }
+        if (bgSize.y < 1.f)
+        {
+            bgSize.y = 1.f;
         }
 
-        if (!entry.IsDirectory && itemHovered && ImGui::IsMouseDoubleClicked(0))
+        ImGui::InvisibleButton("##bg_drop_zone", bgSize);
+
+        if (!entityDroppedOnSubfolder && ImGui::BeginDragDropTarget())
         {
-            const fs::path fullPath = editor.m_CurrentAssetPath / entry.FileName;
-            if (entry.IsModel)
+            if (const ImGuiPayload* pPayload = ImGui::AcceptDragDropPayload("ENTITY_INDEX"))
             {
-                CModelAsset* pAsset = editor.m_Assets.FindModelByPath(fullPath, editor.m_ProjectPath);
-                if (pAsset)
+                if (pPayload->IsDelivery() && pPayload->DataSize == sizeof(int))
                 {
-                    OpenModelViewerForAsset(editor.m_Ui.m_ModelViewer, *pAsset);
+                    const int idx = *static_cast<const int*>(pPayload->Data);
+                    SaveEntityBranchToDirectory(editor, idx, editor.m_CurrentAssetPath);
                 }
             }
-            else if (entry.IsMaterial)
-            {
-                OpenMaterialViewerForPath(editor, editor.m_Ui.m_MaterialViewer, fullPath);
-            }
-            else if (entry.isPrefab)
-            {
-                SpawnPrefabInScene(editor, fullPath);
-            }
-            else
-            {
-                #ifdef _WIN32
-                    ShellExecuteA(nullptr, "open", fullPath.string().c_str(), nullptr, nullptr, 1);
-                #elif defined(__APPLE__)
-                    std::string cmd = "open \"" + fullPath.string() + "\"";
-                    const int result = std::system(cmd.c_str());
-                    if (result != 0)
-                    {
-                        TraceLog(LogLevel::Error, "EDITOR", TextFormat("Failed to open file: %s",
-                            fullPath.string().c_str()));
-                    }
-                #elif defined(__linux__)
-                    std::string cmd = "xdg-open \"" + fullPath.string() + "\"";
-                    const int result = std::system(cmd.c_str());
-                    if (result != 0)
-                    {
-                        TraceLog(LogLevel::Error, "EDITOR", TextFormat("Failed to open file: %s",
-                            fullPath.string().c_str()));
-                    }
-                #endif
-            }
+            ImGui::EndDragDropTarget();
         }
 
-        if (ImGui::BeginPopupContextItem("AssetContext"))
+        if (marquee.m_Active && (fabsf(marquee.m_Start.x - marquee.m_End.x) > 5.0f || fabsf(marquee.m_Start.y - marquee.m_End.y) > 5.0f))
         {
-            if (entry.isPrefab)
-            {
-                if (ImGui::MenuItem(TextFormat(lang.Word("spawn"), entry.FileName.c_str())))
-                {
-                    SpawnPrefabInScene(editor, editor.m_CurrentAssetPath / entry.FileName);
-                }
-                ImGui::Separator();
-            }
+            const ImVec2 min(std::min(marquee.m_Start.x, marquee.m_End.x), std::min(marquee.m_Start.y, marquee.m_End.y));
+            const ImVec2 max(std::max(marquee.m_Start.x, marquee.m_End.x), std::max(marquee.m_Start.y, marquee.m_End.y));
+            ImGui::GetForegroundDrawList()->AddRectFilled(min, max, IM_COL32(80, 140, 255, 40));
+        }
 
-            if (ImGui::MenuItem(lang.Word("open_file_explorer")))
-            {
-                OpenInSystemFileExplorer(editor.m_CurrentAssetPath / entry.FileName, entry.IsDirectory);
-            }
-
-            ImGui::Separator();
-
-            if (ImGui::MenuItem(lang.Word("delete")))
+        if (editor.m_Ui.m_Layout.m_FileDragging && !ImGui::IsMouseDown(ImGuiMouseButton_Left))
+        {
+            if (editor.m_Ui.m_Layout.m_DraggedTargetFolderIndex >= 0 &&
+                editor.m_Ui.m_Layout.m_DraggedFileIndex >= 0 &&
+                editor.m_Ui.m_Layout.m_DraggedFileIndex < static_cast<int>(vEntries.size()) &&
+                editor.m_Ui.m_Layout.m_DraggedTargetFolderIndex < static_cast<int>(vEntries.size()) &&
+                editor.m_Ui.m_Layout.m_DraggedFileIndex != editor.m_Ui.m_Layout.m_DraggedTargetFolderIndex &&
+                vEntries[editor.m_Ui.m_Layout.m_DraggedTargetFolderIndex].m_IsDirectory)
             {
                 editor.SaveState();
+                const fs::path sourcePath = editor.m_CurrentAssetPath / vEntries[editor.m_Ui.m_Layout.m_DraggedFileIndex].m_FileName;
+                const fs::path destDir = editor.m_CurrentAssetPath / vEntries[editor.m_Ui.m_Layout.m_DraggedTargetFolderIndex].m_FileName;
+                const fs::path destPath = destDir / fs::path(sourcePath).filename();
 
-                const fs::path target = editor.m_CurrentAssetPath / entry.FileName;
-                std::error_code ec;
-                if (entry.IsDirectory)
+                if (fs::exists(destPath))
                 {
-                    fs::remove_all(target, ec);
+                    browser.m_DuplicatePopupOpen = true;
+                    browser.m_DuplicateName = sourcePath.filename().string();
                 }
                 else
                 {
-                    fs::remove(target, ec);
+                    editor.SaveState();
+
+                    std::error_code ec;
+                    fs::rename(sourcePath, destPath, ec);
+
+                    if (!ec)
+                    {
+                        if (CTextureMetadataStore::IsImageFile(sourcePath) && fs::exists(sourcePath.string() + ".meta"))
+                        {
+                            fs::rename(sourcePath.string() + ".meta", destPath.string() + ".meta", ec);
+                        }
+                        editor.m_Assets.RequestRefresh(editor.m_ProjectPath);
+                        browser.m_AssetListCacheDirty = true;
+                        editor.m_SelectedAssetIndex = -1;
+                    }
                 }
-                if (entry.IsMaterial)
+            }
+            editor.m_Ui.m_Layout.m_FileDragging = false;
+            editor.m_Ui.m_Layout.m_DraggedFileIndex = -1;
+            editor.m_Ui.m_Layout.m_DraggedTargetFolderIndex = -1;
+            drag.m_FileName.clear();
+            drag.m_StartPos = ImVec2(0, 0);
+        }
+
+        if (browser.m_RenameTarget >= 0)
+        {
+            ImGui::OpenPopup(("%s##RenameAsset", lang.Word("rename_asset")));
+            browser.m_RenameTarget = -2;
+        }
+
+        if (browser.m_RenameTarget == -2 && ImGui::BeginPopupModal(("%s##RenameAsset", lang.Word("rename_asset")), nullptr, ImGuiWindowFlags_AlwaysAutoResize))
+        {
+            ImGui::InputText("##rename", editor.m_Ui.m_MeshEdit.m_aRenameBuffer, IM_ARRAYSIZE(editor.m_Ui.m_MeshEdit.m_aRenameBuffer));
+
+            if (ImGui::Button(lang.Word("ok")))
+            {
+                const std::string newFilename = editor.m_Ui.m_MeshEdit.m_aRenameBuffer;
+                if (browser.m_LastAppliedRename != newFilename)
                 {
-                    fs::remove(target.string() + ".meta", ec);
+                    editor.SaveState();
+                    browser.m_LastAppliedRename = newFilename;
+
+                    if (editor.m_SelectedAssetIndex >= 0 && editor.m_SelectedAssetIndex < static_cast<int>(vEntries.size()))
+                    {
+                        const fs::path oldPath = editor.m_CurrentAssetPath / vEntries[editor.m_SelectedAssetIndex].m_FileName;
+                        const fs::path newPath = editor.m_CurrentAssetPath / editor.m_Ui.m_MeshEdit.m_aRenameBuffer;
+
+                        if (editor.m_Ui.m_MeshEdit.m_aRenameBuffer[0] != '\0' && oldPath != newPath && fs::exists(oldPath))
+                        {
+                            try
+                            {
+                                fs::rename(oldPath, newPath);
+                                if (CTextureMetadataStore::IsImageFile(oldPath) && fs::exists(oldPath.string() + ".meta"))
+                                {
+                                    fs::rename(oldPath.string() + ".meta", newPath.string() + ".meta");
+                                }
+                                editor.m_Assets.RequestRefresh(editor.m_ProjectPath);
+                                browser.m_AssetListCacheDirty = true;
+                                editor.m_SelectedAssetIndex = -1;
+                                editor.m_SelectedAssetName.clear();
+                            }
+                            catch (...)
+                            {
+                            }
+                        }
+                    }
                 }
-                if (entry.IsTextureMeta)
-                {
-                    fs::remove(CTextureMetadataStore::PathFromMeta(target), ec);
-                }
 
-                editor.m_Assets.RequestRefresh(editor.m_ProjectPath);
-                browser.AssetListCacheDirty = true;
-                editor.m_SelectedAssetIndex = -1;
-                editor.m_SelectedAssetName.clear();
-                navigated = true;
-
-                ImGui::EndPopup();
-                ImGui::EndGroup();
-                ImGui::PopID();
-                break;
+                browser.m_RenameTarget = -1;
+                ImGui::CloseCurrentPopup();
             }
 
-            if (ImGui::MenuItem(lang.Word("rename")))
+            ImGui::SameLine();
+            if (ImGui::Button(lang.Word("cancel")))
             {
-                browser.RenameTarget = i;
-                const size_t copied = entry.FileName.copy(editor.m_Ui.m_MeshEdit.aRenameBuffer, sizeof(editor.m_Ui.m_MeshEdit.aRenameBuffer) - 1);
-                editor.m_Ui.m_MeshEdit.aRenameBuffer[copied] = '\0';
-                ImGui::OpenPopup(("%s##RenameAsset", lang.Word("rename_asset")));
-            }
-
-            ImGui::Separator();
-
-            if (ImGui::MenuItem(TextFormat("%s##empty_new_file", lang.Word("new_file"))))
-            {
-                create.CreatingFolder = false;
-                create.aNewItemName[0] = '\0';
-                create.Open = true;
-            }
-
-            if (ImGui::MenuItem(TextFormat("%s##empty_new_script", lang.Word("new_script"))))
-            {
-                create.CreatingFolder = false;
-                create.CreatingScript = true;
-                create.aNewItemName[0] = '\0';
-                create.Open = true;
-            }
-
-            if (ImGui::MenuItem(TextFormat("%s##empty_new_folder", lang.Word("new_folder"))))
-            {
-                create.CreatingFolder = true;
-                create.aNewItemName[0] = '\0';
-                create.Open = true;
+                browser.m_RenameTarget = -1;
+                ImGui::CloseCurrentPopup();
             }
 
             ImGui::EndPopup();
         }
 
-        bool selected = editor.m_SelectedAssetIndex == i;
-        if (marquee.Active && (fabsf(marquee.Start.x - marquee.End.x) > 5.0f || fabsf(marquee.Start.y - marquee.End.y) > 5.0f))
+        if (ImGui::BeginPopupContextItem("AssetBgContext", ImGuiPopupFlags_MouseButtonRight | ImGuiPopupFlags_NoOpenOverItems))
         {
-            const ImVec2 min(std::min(marquee.Start.x, marquee.End.x), std::min(marquee.Start.y, marquee.End.y));
-            const ImVec2 max(std::max(marquee.Start.x, marquee.End.x), std::max(marquee.Start.y, marquee.End.y));
-            if (!(pos.x + size.x < min.x || pos.x > max.x || pos.y + size.y < min.y || pos.y > max.y))
+            if (ImGui::MenuItem(TextFormat("%s##bg_new_file", lang.Word("new_file"))))
             {
-                selected = true;
+                create.m_CreatingFolder = false;
+                create.m_aNewItemName[0] = '\0';
+                create.m_Open = true;
             }
+
+            if (ImGui::MenuItem(TextFormat("%s##bg_new_script", lang.Word("new_script"))))
+            {
+                create.m_CreatingFolder = false;
+                create.m_CreatingScript = true;
+                create.m_aNewItemName[0] = '\0';
+                create.m_Open = true;
+            }
+
+            if (ImGui::MenuItem(TextFormat("%s##bg_new_folder", lang.Word("new_folder"))))
+            {
+                create.m_CreatingFolder = true;
+                create.m_aNewItemName[0] = '\0';
+                create.m_Open = true;
+            }
+
+            ImGui::EndPopup();
         }
 
-        if (selected)
+        if (ImGui::IsMouseReleased(ImGuiMouseButton_Left))
         {
-            ImGui::GetWindowDrawList()->AddRectFilled(pos, ImVec2(pos.x + size.x, pos.y + size.y), IM_COL32(80, 140, 255, 100));
+            editor.m_Ui.m_Layout.m_FileDragging = false;
+            editor.m_Ui.m_Layout.m_SceneAssetDragging = false;
+            editor.m_Ui.m_Layout.m_DraggedFileIndex = -1;
+            editor.m_Ui.m_Layout.m_DraggedTargetFolderIndex = -1;
+            drag.m_FileName.clear();
+            drag.m_FilePath.clear();
+            drag.m_StartPos = ImVec2(0, 0);
         }
 
-        ImGui::SetCursorScreenPos(pos);
-        if (entry.IsDirectory)
+        if (browser.m_DuplicatePopupOpen)
         {
-            const Texture texture = entry.IsDirectoryEmpty ? editor.m_Previews.IconFolder() : editor.m_Previews.IconFullFolder();
-            if (texture.id != 0)
-            {
-                QcImGuiImage(&texture, ImVec2(kIconSize, kIconSize));
-            }
-            else
-            {
-                ImGui::Button(lang.Word("folder"), ImVec2(kIconSize, kIconSize));
-            }
+            ImGui::OpenPopup(("%s##DuplicateName", lang.Word("move_error")));
+            browser.m_DuplicatePopupOpen = false;
         }
-        else if (entry.IsImage)
+
+        if (ImGui::BeginPopupModal(("%s##DuplicateName", lang.Word("move_error")), nullptr, ImGuiWindowFlags_AlwaysAutoResize))
         {
-            const std::string full = (editor.m_CurrentAssetPath / entry.FileName).string();
-            const Texture2D* pTexture = nullptr;
-            if (ImGui::IsRectVisible(pos, ImVec2(pos.x + kIconSize, pos.y + kIconSize)))
-            {
-                pTexture = editor.m_Textures.Load(full);
-            }
-            else
-            {
-                pTexture = editor.m_Textures.Find(full);
-            }
-            if (pTexture)
-            {
-                QcImGuiImage(pTexture, ImVec2(kIconSize, kIconSize));
-            }
-        }
-        else if (entry.IsModel)
-        {
-            const std::string full = (editor.m_CurrentAssetPath / entry.FileName).string();
-            Texture previewTexture = {0};
-            bool loadFailed = false;
+            ImGui::Text("%s", lang.Word("unable_to_move"));
+            ImGui::TextColored(ImVec4(1, 0.4f, 0.4f, 1), "%s", browser.m_DuplicateName.c_str());
+            ImGui::Spacing();
+            ImGui::Text("%s", lang.Word("path_already_exists"));
 
-            if (editor.m_Previews.HasModelPreview(full))
+            ImGui::Spacing();
+
+            if (ImGui::Button(lang.Word("ok"), ImVec2(120, 0)))
             {
-                previewTexture = editor.m_Previews.ModelPreview(full);
-            }
-            else if (ImGui::IsRectVisible(pos, ImVec2(pos.x + kIconSize, pos.y + kIconSize)))
-            {
-                CModelAsset* pAsset = editor.m_Assets.FindModelByPath(editor.m_CurrentAssetPath / entry.FileName, editor.m_ProjectPath);
-                if (pAsset)
-                {
-                    previewTexture = GetModelPreview(editor, *pAsset, full);
-                    if (previewTexture.id == 0)
-                    {
-                        loadFailed = true;
-                    }
-                }
-                else
-                {
-                    loadFailed = true;
-                }
+                ImGui::CloseCurrentPopup();
             }
 
-            if (previewTexture.id != 0)
-            {
-                QcImGuiImage(&previewTexture, ImVec2(kIconSize, kIconSize));
-            }
-            else
-            {
-                ImDrawList* pDrawList = ImGui::GetWindowDrawList();
-                pDrawList->AddRectFilled(pos, ImVec2(pos.x + kIconSize, pos.y + kIconSize), loadFailed ? IM_COL32(80, 80, 90, 255) : IM_COL32(100, 100, 120, 255));
-                if (loadFailed)
-                {
-                    pDrawList->AddLine(ImVec2(pos.x + 10, pos.y + 10), ImVec2(pos.x + kIconSize - 10, pos.y + kIconSize - 10), IM_COL32(255, 100, 100, 200), 2.0f);
-                    pDrawList->AddLine(ImVec2(pos.x + kIconSize - 10, pos.y + 10), ImVec2(pos.x + 10, pos.y + kIconSize - 10), IM_COL32(255, 100, 100, 200), 2.0f);
-                }
-            }
-        }
-        else if (entry.IsMaterial)
-        {
-            const std::string full = (editor.m_CurrentAssetPath / entry.FileName).string();
-
-            Texture preview = {0};
-
-            if (editor.m_Previews.HasMaterialPreview(full))
-            {
-                preview = editor.m_Previews.MaterialPreview(full);
-            }
-            else if (ImGui::IsRectVisible(pos, ImVec2(pos.x + kIconSize, pos.y + kIconSize)))
-            {
-                preview = GetMaterialPreview(editor, full);
-            }
-
-            if (preview.id != 0)
-            {
-                QcImGuiImage(&preview, ImVec2(kIconSize, kIconSize));
-            }
-            else
-            {
-                ImGui::Button("MAT", ImVec2(kIconSize, kIconSize));
-            }
-        }
-        else
-        {
-            if (editor.m_Previews.IconFile().id != 0)
-            {
-                QcImGuiImage(&editor.m_Previews.IconFile(), ImVec2(kIconSize, kIconSize));
-            }
-            else
-            {
-                ImGui::Button(entry.FileName.empty() ? "file" : entry.FileName.c_str(), ImVec2(kIconSize, kIconSize));
-            }
+            ImGui::EndPopup();
         }
 
-        if (!entry.IsDirectory && !entry.FileName.empty())
-        {
-            ImDrawList* pDrawList = ImGui::GetWindowDrawList();
-            std::string extDisplay = entry.isPrefab ? "PFB" : entry.Extension;
-            if (extDisplay.size() > 3)
-            {
-                extDisplay.resize(3);
-            }
-            const ImVec2 extTextSize = ImGui::CalcTextSize(extDisplay.c_str());
-            const ImVec2 extPos(pos.x + kIconSize - extTextSize.x - 2.0f, pos.y + kIconSize - extTextSize.y - 2.0f);
-            const ImU32 badgeBg = entry.isPrefab ? IM_COL32(30, 120, 200, 220) : IM_COL32(0, 0, 0, 180);
-            pDrawList->AddRectFilled(ImVec2(extPos.x - 2.0f, extPos.y - 1.0f), ImVec2(pos.x + kIconSize, pos.y + kIconSize), badgeBg);
-            pDrawList->AddText(extPos, IM_COL32(255, 255, 255, 255), extDisplay.c_str());
-        }
-
-        if (itemHovered && ImGui::IsMouseClicked(ImGuiMouseButton_Left) && !editor.m_Ui.m_Layout.FileDragging)
-        {
-            drag.FileName = entry.FileName;
-            drag.StartPos = ImGui::GetMousePos();
-
-            editor.m_Ui.m_Layout.DraggedFileIndex = i;
-            drag.FilePath = editor.m_CurrentAssetPath / entry.FileName;
-        }
-
-        if (drag.FileName == entry.FileName && ImGui::IsMouseDown(0))
-        {
-            ImVec2 mousePos = ImGui::GetMousePos();
-            ImVec2 delta = ImVec2(mousePos.x - drag.StartPos.x, mousePos.y - drag.StartPos.y);
-            if (fabsf(delta.x) > 5.0f || fabsf(delta.y) > 5.0f)
-            {
-                editor.m_Ui.m_Layout.FileDragging = true;
-                editor.m_Ui.m_Layout.DraggedFileIndex = i;
-
-                if (entry.IsModel)
-                {
-                    editor.m_Ui.m_Layout.SceneAssetDragging = true;
-                    editor.m_Ui.m_Layout.DraggedSceneAssetName = (editor.m_CurrentAssetPath / entry.FileName).string();
-                }
-
-                if (entry.Extension == "prefab")
-                {
-                    editor.m_Ui.m_Layout.SceneAssetDragging = true;
-                    editor.m_Ui.m_Layout.DraggedSceneAssetName = (editor.m_CurrentAssetPath / entry.FileName).string();
-                }
-
-                if (CModelService::IsModelFile(fs::path(entry.FileName)))
-                {
-                    const std::string assetName = CAssetLibrary::AssetNameForPath(fs::path(editor.m_ProjectPath), editor.m_CurrentAssetPath / entry.FileName);
-                    editor.m_Ui.m_Layout.SceneAssetDragging = true;
-                    editor.m_Ui.m_Layout.DraggedSceneAssetName = assetName;
-                }
-            }
-        }
-
-        const bool hasValidDraggedFile = editor.m_Ui.m_Layout.DraggedFileIndex >= 0 &&
-            editor.m_Ui.m_Layout.DraggedFileIndex < static_cast<int>(vEntries.size());
-        if (entry.IsDirectory && editor.m_Ui.m_Layout.FileDragging && hasValidDraggedFile &&
-            vEntries[editor.m_Ui.m_Layout.DraggedFileIndex].FileName != entry.FileName)
-            {
-            ImVec2 mousePos = ImGui::GetMousePos();
-            bool mouseOverFolder = mousePos.x >= pos.x && mousePos.x <= pos.x + size.x &&
-                                    mousePos.y >= pos.y && mousePos.y <= pos.y + size.y;
-
-            if (mouseOverFolder)
-            {
-                ImGui::GetWindowDrawList()->AddRectFilled(pos, ImVec2(pos.x + size.x, pos.y + size.y), IM_COL32(100, 200, 100, 150));
-                editor.m_Ui.m_Layout.DraggedTargetFolderIndex = i;
-            }
-        }
-
-        if (editor.m_Ui.m_Layout.SceneAssetDragging &&
-            !entry.IsDirectory && (entry.IsModel || entry.IsMaterial || entry.isPrefab))
-        {
-            if (entry.isPrefab)
-            {
-                const std::string fullPrefabPath = (editor.m_CurrentAssetPath / entry.FileName).string();
-                if (editor.m_Ui.m_Layout.DraggedSceneAssetName == fullPrefabPath)
-                {
-                    ImGui::SetTooltip(lang.Word("spawn"), entry.FileName.c_str());
-                }
-            }
-            else
-            {
-                const std::string assetName = CAssetLibrary::AssetNameForPath(fs::path(editor.m_ProjectPath), editor.m_CurrentAssetPath / entry.FileName);
-
-                if (editor.m_Ui.m_Layout.SceneAssetDragging && editor.m_Ui.m_Layout.DraggedSceneAssetName == assetName)
-                {
-                    if (entry.IsModel)
-                    {
-                        ImGui::SetTooltip(lang.Word("spawn"), editor.m_Ui.m_Layout.DraggedSceneAssetName.c_str());
-                    }
-                }
-            }
-        }
-
-        std::string label = entry.FileName;
-        if (label.size() > 10)
-        {
-            label = label.substr(0, 8) + "..";
-        }
-        const ImVec2 labelSize = ImGui::CalcTextSize(label.c_str());
-        ImGui::SetCursorScreenPos(ImVec2(pos.x + (kIconSize - labelSize.x) * 0.5f, pos.y + kIconSize + 2.0f));
-        ImGui::TextUnformatted(label.c_str());
-        ImGui::EndGroup();
-
-        if (i + 1 < lastItem)
-        {
-            ImGui::SameLine();
-        }
-        ImGui::PopID();
-        }
-
-        if (navigated)
-        {
-            break;
-        }
-    }
-    clipper.End();
-
-    const ImVec2 scrollWindowPos = ImGui::GetWindowPos();
-    const ImVec2 scrollWindowSize = ImGui::GetWindowSize();
-    const ImRect assetDropZone(
-        scrollWindowPos,
-        ImVec2(scrollWindowPos.x + scrollWindowSize.x, scrollWindowPos.y + scrollWindowSize.y));
-    if (!entityDroppedOnSubfolder &&
-        ImGui::BeginDragDropTargetCustom(assetDropZone, ImGui::GetID("##AssetBrowserEntityDropZone")))
-    {
-        if (const ImGuiPayload* pPayload = ImGui::AcceptDragDropPayload("ENTITY_INDEX"))
-        {
-            if (pPayload->IsDelivery() && pPayload->DataSize == sizeof(int))
-            {
-                const int idx = *static_cast<const int*>(pPayload->Data);
-                SaveEntityBranchToDirectory(editor, idx, editor.m_CurrentAssetPath);
-            }
-        }
-        if (ImGui::IsDragDropPayloadBeingAccepted())
-        {
-            ImGui::GetWindowDrawList()->AddRect(
-                assetDropZone.Min,
-                assetDropZone.Max,
-                IM_COL32(80, 180, 255, 255),
-                2.0f,
-                0,
-                2.0f
-            );
-        }
-        ImGui::EndDragDropTarget();
+        ImGui::EndChild();
     }
 
-    ImGui::SetNextItemAllowOverlap();
-    ImGui::SetCursorPos(ImVec2(0, 0));
-
-    ImVec2 bgSize = ImGui::GetContentRegionMax();
-    if (bgSize.x < 1.f)
-    {
-        bgSize.x = 1.f;
-    }
-    if (bgSize.y < 1.f)
-    {
-        bgSize.y = 1.f;
-    }
-
-    ImGui::InvisibleButton("##bg_drop_zone", bgSize);
-
-    if (!entityDroppedOnSubfolder && ImGui::BeginDragDropTarget())
-    {
-        if (const ImGuiPayload* pPayload = ImGui::AcceptDragDropPayload("ENTITY_INDEX"))
-        {
-            if (pPayload->IsDelivery() && pPayload->DataSize == sizeof(int))
-            {
-                const int idx = *static_cast<const int*>(pPayload->Data);
-                SaveEntityBranchToDirectory(editor, idx, editor.m_CurrentAssetPath);
-            }
-        }
-        ImGui::EndDragDropTarget();
-    }
-
-    if (marquee.Active && (fabsf(marquee.Start.x - marquee.End.x) > 5.0f || fabsf(marquee.Start.y - marquee.End.y) > 5.0f))
-    {
-        const ImVec2 min(std::min(marquee.Start.x, marquee.End.x), std::min(marquee.Start.y, marquee.End.y));
-        const ImVec2 max(std::max(marquee.Start.x, marquee.End.x), std::max(marquee.Start.y, marquee.End.y));
-        ImGui::GetForegroundDrawList()->AddRectFilled(min, max, IM_COL32(80, 140, 255, 40));
-    }
-
-    if (editor.m_Ui.m_Layout.FileDragging && !ImGui::IsMouseDown(ImGuiMouseButton_Left))
-    {
-        if (editor.m_Ui.m_Layout.DraggedTargetFolderIndex >= 0 &&
-            editor.m_Ui.m_Layout.DraggedFileIndex >= 0 &&
-            editor.m_Ui.m_Layout.DraggedFileIndex < static_cast<int>(vEntries.size()) &&
-            editor.m_Ui.m_Layout.DraggedTargetFolderIndex < static_cast<int>(vEntries.size()) &&
-            editor.m_Ui.m_Layout.DraggedFileIndex != editor.m_Ui.m_Layout.DraggedTargetFolderIndex &&
-            vEntries[editor.m_Ui.m_Layout.DraggedTargetFolderIndex].IsDirectory)
-            {
-
-            editor.SaveState();
-            const fs::path sourcePath = editor.m_CurrentAssetPath / vEntries[editor.m_Ui.m_Layout.DraggedFileIndex].FileName;
-            const fs::path destDir = editor.m_CurrentAssetPath / vEntries[editor.m_Ui.m_Layout.DraggedTargetFolderIndex].FileName;
-            const fs::path destPath = destDir / fs::path(sourcePath).filename();
-
-            if (fs::exists(destPath))
-            {
-                browser.DuplicatePopupOpen = true;
-                browser.DuplicateName = sourcePath.filename().string();
-            }
-            else
-            {
-                editor.SaveState();
-
-                std::error_code ec;
-                fs::rename(sourcePath, destPath, ec);
-
-                if (!ec)
-                {
-                    if (CTextureMetadataStore::IsImageFile(sourcePath) && fs::exists(sourcePath.string() + ".meta"))
-                    {
-                        fs::rename(sourcePath.string() + ".meta", destPath.string() + ".meta", ec);
-                    }
-                    editor.m_Assets.RequestRefresh(editor.m_ProjectPath);
-                    browser.AssetListCacheDirty = true;
-                    editor.m_SelectedAssetIndex = -1;
-                }
-            }
-        }
-        editor.m_Ui.m_Layout.FileDragging = false;
-        editor.m_Ui.m_Layout.DraggedFileIndex = -1;
-        editor.m_Ui.m_Layout.DraggedTargetFolderIndex = -1;
-        drag.FileName.clear();
-        drag.StartPos = ImVec2(0, 0);
-    }
-
-    if (browser.RenameTarget >= 0)
-    {
-        ImGui::OpenPopup(("%s##RenameAsset", lang.Word("rename_asset")));
-        browser.RenameTarget = -2;
-    }
-
-    if (browser.RenameTarget == -2 && ImGui::BeginPopupModal(("%s##RenameAsset", lang.Word("rename_asset")), nullptr, ImGuiWindowFlags_AlwaysAutoResize))
-    {
-        ImGui::InputText("##rename", editor.m_Ui.m_MeshEdit.aRenameBuffer, IM_ARRAYSIZE(editor.m_Ui.m_MeshEdit.aRenameBuffer));
-
-        if (ImGui::Button(lang.Word("ok")))
-        {
-            const std::string newFilename = editor.m_Ui.m_MeshEdit.aRenameBuffer;
-            if (browser.LastAppliedRename != newFilename)
-            {
-                editor.SaveState();
-                browser.LastAppliedRename = newFilename;
-
-                if (editor.m_SelectedAssetIndex >= 0 && editor.m_SelectedAssetIndex < static_cast<int>(vEntries.size()))
-                {
-                    const fs::path oldPath = editor.m_CurrentAssetPath / vEntries[editor.m_SelectedAssetIndex].FileName;
-                    const fs::path newPath = editor.m_CurrentAssetPath / editor.m_Ui.m_MeshEdit.aRenameBuffer;
-
-                    if (editor.m_Ui.m_MeshEdit.aRenameBuffer[0] != '\0' && oldPath != newPath && fs::exists(oldPath))
-                    {
-                        try
-                        {
-                            fs::rename(oldPath, newPath);
-                            if (CTextureMetadataStore::IsImageFile(oldPath) && fs::exists(oldPath.string() + ".meta"))
-                            {
-                                fs::rename(oldPath.string() + ".meta", newPath.string() + ".meta");
-                            }
-                            editor.m_Assets.RequestRefresh(editor.m_ProjectPath);
-                            browser.AssetListCacheDirty = true;
-                            editor.m_SelectedAssetIndex = -1;
-                            editor.m_SelectedAssetName.clear();
-                        } catch (...)
-                        {
-                        }
-                    }
-                }
-            }
-
-            browser.RenameTarget = -1;
-            ImGui::CloseCurrentPopup();
-        }
-
-        ImGui::SameLine();
-        if (ImGui::Button(lang.Word("cancel")))
-        {
-            browser.RenameTarget = -1;
-            ImGui::CloseCurrentPopup();
-        }
-
-        ImGui::EndPopup();
-    }
-
-    if (ImGui::BeginPopupContextItem("AssetBgContext", ImGuiPopupFlags_MouseButtonRight | ImGuiPopupFlags_NoOpenOverItems))
-    {
-        if (ImGui::MenuItem(TextFormat("%s##bg_new_file", lang.Word("new_file"))))
-        {
-            create.CreatingFolder = false;
-            create.aNewItemName[0] = '\0';
-            create.Open = true;
-        }
-
-        if (ImGui::MenuItem(TextFormat("%s##bg_new_script", lang.Word("new_script"))))
-        {
-            create.CreatingFolder = false;
-            create.CreatingScript = true;
-            create.aNewItemName[0] = '\0';
-            create.Open = true;
-        }
-
-        if (ImGui::MenuItem(TextFormat("%s##bg_new_folder", lang.Word("new_folder"))))
-        {
-            create.CreatingFolder = true;
-            create.aNewItemName[0] = '\0';
-            create.Open = true;
-        }
-
-        ImGui::EndPopup();
-    }
-
-    if (ImGui::IsMouseReleased(ImGuiMouseButton_Left))
-    {
-        editor.m_Ui.m_Layout.FileDragging = false;
-        editor.m_Ui.m_Layout.SceneAssetDragging = false;
-        editor.m_Ui.m_Layout.DraggedFileIndex = -1;
-        editor.m_Ui.m_Layout.DraggedTargetFolderIndex = -1;
-        drag.FileName.clear();
-        drag.FilePath.clear();
-        drag.StartPos = ImVec2(0, 0);
-    }
-
-    if (browser.DuplicatePopupOpen)
-    {
-        ImGui::OpenPopup(("%s##DuplicateName", lang.Word("move_error")));
-        browser.DuplicatePopupOpen = false;
-    }
-
-    if (ImGui::BeginPopupModal(("%s##DuplicateName", lang.Word("move_error")), nullptr, ImGuiWindowFlags_AlwaysAutoResize))
-    {
-        ImGui::Text("%s", lang.Word("unable_to_move"));
-        ImGui::TextColored(ImVec4(1, 0.4f, 0.4f, 1), "%s", browser.DuplicateName.c_str());
-        ImGui::Spacing();
-        ImGui::Text("%s", lang.Word("path_already_exists"));
-
-        ImGui::Spacing();
-
-        if (ImGui::Button(lang.Word("ok"), ImVec2(120, 0)))
-        {
-            ImGui::CloseCurrentPopup();
-        }
-
-        ImGui::EndPopup();
-    }
-
-    ImGui::EndChild();
-    }
-
-    if (create.Open && !navigated)
+    if (create.m_Open && !navigated)
     {
         ImGui::OpenPopup(popupName.c_str());
-        create.Open = false;
+        create.m_Open = false;
     }
 
     if (ImGui::BeginPopupModal(popupName.c_str(), nullptr, ImGuiWindowFlags_AlwaysAutoResize))
     {
-        const char* pModalTitle = create.CreatingScript ? lang.Word("new_script") :
-            (create.CreatingFolder ? lang.Word("new_folder") : lang.Word("new_file"));
+        const char* pModalTitle = create.m_CreatingScript ? lang.Word("new_script") : (create.m_CreatingFolder ? lang.Word("new_folder") : lang.Word("new_file"));
         ImGui::TextUnformatted(pModalTitle);
-        const char* pFieldLabel = create.CreatingScript ? lang.Word("script_name") : lang.Word("name");
-        ImGui::InputText(pFieldLabel, create.aNewItemName, IM_ARRAYSIZE(create.aNewItemName));
+        const char* pFieldLabel = create.m_CreatingScript ? lang.Word("script_name") : lang.Word("name");
+        ImGui::InputText(pFieldLabel, create.m_aNewItemName, IM_ARRAYSIZE(create.m_aNewItemName));
         ImGui::Spacing();
 
         if (ImGui::Button(lang.Word("ok"), ImVec2(120, 0)))
         {
-            if (create.aNewItemName[0] != '\0')
+            if (create.m_aNewItemName[0] != '\0')
             {
                 fs::path path;
 
-                if (create.CreatingScript)
+                if (create.m_CreatingScript)
                 {
-                    std::string scriptName = create.aNewItemName;
+                    std::string scriptName = create.m_aNewItemName;
                     if (scriptName.size() > 4 && scriptName.substr(scriptName.size() - 4) == ".hpp")
                     {
                         scriptName = scriptName.substr(0, scriptName.size() - 4);
@@ -1566,17 +1554,17 @@ void DrawAssetsUi(CEditor& editor)
 
                     CreateScriptFiles(editor.m_CurrentAssetPath, scriptName);
                     editor.m_Assets.RequestRefresh(editor.m_ProjectPath);
-                    browser.AssetListCacheDirty = true;
-                    create.CreatingScript = false;
+                    browser.m_AssetListCacheDirty = true;
+                    create.m_CreatingScript = false;
                 }
-                else if (create.CreatingFolder)
+                else if (create.m_CreatingFolder)
                 {
-                    path = editor.m_CurrentAssetPath / create.aNewItemName;
+                    path = editor.m_CurrentAssetPath / create.m_aNewItemName;
 
                     int suffix = 1;
                     while (fs::exists(path))
                     {
-                        path = editor.m_CurrentAssetPath / (std::string(create.aNewItemName) + "_" + std::to_string(suffix++));
+                        path = editor.m_CurrentAssetPath / (std::string(create.m_aNewItemName) + "_" + std::to_string(suffix++));
                     }
 
                     std::error_code ec;
@@ -1584,7 +1572,7 @@ void DrawAssetsUi(CEditor& editor)
                 }
                 else
                 {
-                    std::string filename = create.aNewItemName;
+                    std::string filename = create.m_aNewItemName;
                     if (filename.find('.') == std::string::npos)
                     {
                         filename += ".txt";
@@ -1595,7 +1583,7 @@ void DrawAssetsUi(CEditor& editor)
                     int suffix = 1;
                     while (fs::exists(path))
                     {
-                        path = editor.m_CurrentAssetPath / (std::string(create.aNewItemName) + "_" + std::to_string(suffix++) + ".txt");
+                        path = editor.m_CurrentAssetPath / (std::string(create.m_aNewItemName) + "_" + std::to_string(suffix++) + ".txt");
                     }
 
                     std::ofstream f(path);
@@ -1603,7 +1591,7 @@ void DrawAssetsUi(CEditor& editor)
                 }
 
                 editor.m_Assets.RequestRefresh(editor.m_ProjectPath);
-                browser.AssetListCacheDirty = true;
+                browser.m_AssetListCacheDirty = true;
             }
 
             ImGui::CloseCurrentPopup();
@@ -1642,11 +1630,11 @@ static void DrawAssetDependencies(CEditor& editor, const fs::path& selected)
     const std::string selectedRelative = fs::relative(selected, resourceDir, relativeError).generic_string();
     std::vector<std::pair<int, std::string>> vEntityReferences;
     SAssetBrowserState& browser = editor.m_Ui.m_AssetBrowser;
-    if (browser.dependencyCachePath != selected.string())
+    if (browser.m_DependencyCachePath != selected.string())
     {
-        browser.dependencyCachePath = selected.string();
-        browser.vCachedFileDependencies.clear();
-        browser.dependencyCacheReady = false;
+        browser.m_DependencyCachePath = selected.string();
+        browser.m_vCachedFileDependencies.clear();
+        browser.m_DependencyCacheReady = false;
     }
 
     const bool isMaterial = Lowercase(selected.extension().string()) == ".mtl";
@@ -1658,9 +1646,9 @@ static void DrawAssetDependencies(CEditor& editor, const fs::path& selected)
     {
         for (const STextureOption& option : editor.m_Assets.Textures())
         {
-            if (option.Name == selectedRelative)
+            if (option.m_Name == selectedRelative)
             {
-                textureId = option.Texture.id;
+                textureId = option.m_Texture.id;
                 break;
             }
         }
@@ -1696,7 +1684,7 @@ static void DrawAssetDependencies(CEditor& editor, const fs::path& selected)
         }
     }
 
-    if (!browser.dependencyCacheReady && isPrefab)
+    if (!browser.m_DependencyCacheReady && isPrefab)
     {
         std::ifstream prefabFile(selected);
         if (prefabFile.is_open())
@@ -1704,10 +1692,10 @@ static void DrawAssetDependencies(CEditor& editor, const fs::path& selected)
             std::stringstream buffer;
             buffer << prefabFile.rdbuf();
             const quark::SParsedSceneDocument parsed = quark::CSceneDocument::ParsePrefab(buffer.str());
-            if (parsed.IsValid && parsed.Document.contains("entities"))
+            if (parsed.m_IsValid && parsed.m_Document.contains("entities"))
             {
-                const auto& entities = parsed.Document["entities"];
-                browser.vCachedFileDependencies.push_back(
+                const auto& entities = parsed.m_Document["entities"];
+                browser.m_vCachedFileDependencies.push_back(
                     "Entities in prefab: " + std::to_string(entities.size()));
                 for (const auto& ej : entities)
                 {
@@ -1728,7 +1716,7 @@ static void DrawAssetDependencies(CEditor& editor, const fs::path& selected)
                             const std::string assetName = data["asset_name"].get<std::string>();
                             if (!assetName.empty())
                             {
-                                browser.vCachedFileDependencies.push_back("Uses model: " + assetName);
+                                browser.m_vCachedFileDependencies.push_back("Uses model: " + assetName);
                             }
                         }
                         else if (compType == "Material")
@@ -1737,11 +1725,11 @@ static void DrawAssetDependencies(CEditor& editor, const fs::path& selected)
                             const std::string tex = data.value("texture_name", "");
                             if (!albedo.empty())
                             {
-                                browser.vCachedFileDependencies.push_back("Uses texture: " + albedo);
+                                browser.m_vCachedFileDependencies.push_back("Uses texture: " + albedo);
                             }
                             else if (!tex.empty())
                             {
-                                browser.vCachedFileDependencies.push_back("Uses material/texture: " + tex);
+                                browser.m_vCachedFileDependencies.push_back("Uses material/texture: " + tex);
                             }
                         }
                     }
@@ -1749,7 +1737,7 @@ static void DrawAssetDependencies(CEditor& editor, const fs::path& selected)
             }
         }
     }
-    else if (!browser.dependencyCacheReady && isObjModel)
+    else if (!browser.m_DependencyCacheReady && isObjModel)
     {
         std::ifstream modelFile(selected);
         std::string line;
@@ -1766,12 +1754,12 @@ static void DrawAssetDependencies(CEditor& editor, const fs::path& selected)
             std::string materialName;
             while (stream >> materialName)
             {
-                browser.vCachedFileDependencies.push_back("Uses material: " +
-                    (selected.parent_path() / materialName).lexically_normal().string());
+                browser.m_vCachedFileDependencies.push_back("Uses material: " +
+                                                            (selected.parent_path() / materialName).lexically_normal().string());
             }
         }
     }
-    else if (!browser.dependencyCacheReady && isMaterial)
+    else if (!browser.m_DependencyCacheReady && isMaterial)
     {
         std::ifstream materialFile(selected);
         std::string line;
@@ -1789,16 +1777,16 @@ static void DrawAssetDependencies(CEditor& editor, const fs::path& selected)
             std::getline(stream >> std::ws, textureName);
             if (!textureName.empty())
             {
-                browser.vCachedFileDependencies.push_back("Uses texture: " +
-                    (selected.parent_path() / fs::path(textureName)).lexically_normal().string());
+                browser.m_vCachedFileDependencies.push_back("Uses texture: " +
+                                                            (selected.parent_path() / fs::path(textureName)).lexically_normal().string());
             }
         }
     }
-    else if (!browser.dependencyCacheReady && isTexture)
+    else if (!browser.m_DependencyCacheReady && isTexture)
     {
         std::error_code scanError;
         for (const fs::directory_entry& entry : fs::recursive_directory_iterator(
-            resourceDir, fs::directory_options::skip_permission_denied, scanError))
+                 resourceDir, fs::directory_options::skip_permission_denied, scanError))
         {
             std::error_code entryError;
             if (!entry.is_regular_file(entryError) || entryError ||
@@ -1824,16 +1812,16 @@ static void DrawAssetDependencies(CEditor& editor, const fs::path& selected)
                 if (!textureName.empty() &&
                     PathsReferToSameFile(entry.path().parent_path() / fs::path(textureName), selected))
                 {
-                    browser.vCachedFileDependencies.push_back("Used by material: " + entry.path().string());
+                    browser.m_vCachedFileDependencies.push_back("Used by material: " + entry.path().string());
                 }
             }
         }
     }
-    browser.dependencyCacheReady = true;
+    browser.m_DependencyCacheReady = true;
 
     ImGui::Separator();
     ImGui::TextUnformatted(lang.Word("dependencies"));
-    for (const std::string& reference : browser.vCachedFileDependencies)
+    for (const std::string& reference : browser.m_vCachedFileDependencies)
     {
         ImGui::TextWrapped("%s", reference.c_str());
     }
@@ -1846,7 +1834,7 @@ static void DrawAssetDependencies(CEditor& editor, const fs::path& selected)
         }
         ImGui::PopID();
     }
-    if (browser.vCachedFileDependencies.empty() && vEntityReferences.empty())
+    if (browser.m_vCachedFileDependencies.empty() && vEntityReferences.empty())
     {
         ImGui::TextDisabled("%s", lang.Word("no_references_found"));
     }
@@ -1885,13 +1873,13 @@ void DrawSelectedTextureInspector(CEditor& editor)
     ImGui::Separator();
     ImGui::TextUnformatted(lang.Word("texture_importer"));
     ImGui::TextWrapped("%s", texturePath.filename().string().c_str());
-    ImGui::TextDisabled("GUID: %s", meta.Guid.c_str());
+    ImGui::TextDisabled("GUID: %s", meta.m_Guid.c_str());
 
     bool changed = false;
-    changed |= ImGui::Checkbox(lang.Word("enable_mip_maps"), &meta.EnableMipMap);
-    changed |= ImGui::Checkbox(lang.Word("srgb_texture"), &meta.SrgbTexture);
-    changed |= ImGui::Checkbox(lang.Word("readable"), &meta.IsReadable);
-    changed |= ImGui::Checkbox(lang.Word("alpha_transparency"), &meta.AlphaIsTransparency);
+    changed |= ImGui::Checkbox(lang.Word("enable_mip_maps"), &meta.m_EnableMipMap);
+    changed |= ImGui::Checkbox(lang.Word("srgb_texture"), &meta.m_SrgbTexture);
+    changed |= ImGui::Checkbox(lang.Word("readable"), &meta.m_IsReadable);
+    changed |= ImGui::Checkbox(lang.Word("alpha_transparency"), &meta.m_AlphaIsTransparency);
     const char* apFilterModes[] = { lang.Word("nearest"), lang.Word("linear") };
     const char* apWrapModes[] = { lang.Word("repeat"), lang.Word("clamp") };
     const char* apSpriteModes[] = { lang.Word("none"), lang.Word("single"), lang.Word("multiple") };
@@ -1900,13 +1888,13 @@ void DrawSelectedTextureInspector(CEditor& editor)
         lang.Word("cookie"), lang.Word("lightmap"), lang.Word("shadowmask"), lang.Word("directional"),
         lang.Word("single_channel")
     };
-    changed |= ImGui::Combo(lang.Word("filter_mode"), &meta.FilterMode, apFilterModes, IM_ARRAYSIZE(apFilterModes));
-    changed |= ImGui::Combo(lang.Word("wrap_u"), &meta.WrapU, apWrapModes, IM_ARRAYSIZE(apWrapModes));
-    changed |= ImGui::Combo(lang.Word("wrap_v"), &meta.WrapV, apWrapModes, IM_ARRAYSIZE(apWrapModes));
-    changed |= ImGui::SliderInt(lang.Word("max_texture_size"), &meta.MaxTextureSize, 32, 8192);
-    changed |= ImGui::SliderInt(lang.Word("compression_quality"), &meta.CompressionQuality, 0, 100);
-    changed |= ImGui::Combo(lang.Word("sprite_mode"), &meta.SpriteMode, apSpriteModes, IM_ARRAYSIZE(apSpriteModes));
-    changed |= ImGui::Combo(lang.Word("texture_type"), &meta.TextureType, apTextureTypes, IM_ARRAYSIZE(apTextureTypes));
+    changed |= ImGui::Combo(lang.Word("filter_mode"), &meta.m_FilterMode, apFilterModes, IM_ARRAYSIZE(apFilterModes));
+    changed |= ImGui::Combo(lang.Word("wrap_u"), &meta.m_WrapU, apWrapModes, IM_ARRAYSIZE(apWrapModes));
+    changed |= ImGui::Combo(lang.Word("wrap_v"), &meta.m_WrapV, apWrapModes, IM_ARRAYSIZE(apWrapModes));
+    changed |= ImGui::SliderInt(lang.Word("max_texture_size"), &meta.m_MaxTextureSize, 32, 8192);
+    changed |= ImGui::SliderInt(lang.Word("compression_quality"), &meta.m_CompressionQuality, 0, 100);
+    changed |= ImGui::Combo(lang.Word("sprite_mode"), &meta.m_SpriteMode, apSpriteModes, IM_ARRAYSIZE(apSpriteModes));
+    changed |= ImGui::Combo(lang.Word("texture_type"), &meta.m_TextureType, apTextureTypes, IM_ARRAYSIZE(apTextureTypes));
 
     if (changed)
     {
@@ -1914,9 +1902,9 @@ void DrawSelectedTextureInspector(CEditor& editor)
         const std::string relativeName = fs::relative(texturePath, fs::path(editor.m_ProjectPath) / "resources").generic_string();
         for (auto& option : editor.m_Assets.Textures())
         {
-            if (option.Name == relativeName)
+            if (option.m_Name == relativeName)
             {
-                CTextureMetadataStore::ApplyToTexture(option.Texture, meta);
+                CTextureMetadataStore::ApplyToTexture(option.m_Texture, meta);
             }
         }
     }

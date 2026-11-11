@@ -48,7 +48,7 @@ std::string CSceneEntityCommands::MakeDuplicateName(const CScene& scene, const s
         }
         return false;
     };
-    for (int suffix = start; ; ++suffix)
+    for (int suffix = start;; ++suffix)
     {
         const std::string candidate = base + " (" + std::to_string(suffix) + ")";
         if (!isTaken(candidate))
@@ -68,10 +68,8 @@ CEntity CSceneEntityCommands::CloneInstance(const CEntity& source, CScene& scene
         pMesh->m_OwnsModelInstance = false;
         pMesh->m_OwnsMaterials = false;
 
-        if (pMesh->m_pAsset && (pMesh->m_pAsset->m_IsProcedural
-            ? static_cast<bool>(pMesh->m_pAsset->pfnGenerator)
-            : !pMesh->m_pAsset->m_FilePath.empty()))
-            {
+        if (pMesh->m_pAsset && (pMesh->m_pAsset->m_IsProcedural ? static_cast<bool>(pMesh->m_pAsset->pfnGenerator) : !pMesh->m_pAsset->m_FilePath.empty()))
+        {
             if (pMesh->m_pAsset->m_IsProcedural)
             {
                 pMesh->m_Model = pMesh->m_pAsset->pfnGenerator(pMesh->m_Segments);
@@ -171,8 +169,8 @@ void CSceneEntityCommands::Delete(CEditor& editor, CEntity* pEntity)
     }
     if (editor.m_Preferences.m_ConfirmDelete)
     {
-        modal.PendingDelete.pEditor = &editor;
-        modal.PendingDelete.pEntity = pEntity;
+        modal.m_PendingDelete.m_pEditor = &editor;
+        modal.m_PendingDelete.m_pEntity = pEntity;
         return;
     }
 

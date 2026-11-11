@@ -71,22 +71,21 @@ void CGizmoController::Draw(CEditor& editor, CFlyCamera& camera)
     const Mat4 view = Mat4::lookAt(
         camera.GetCamera().position,
         camera.GetCamera().target,
-        camera.GetCamera().up
-    );
+        camera.GetCamera().up);
 
     const Mat4 projection = editor.m_Scene2DMode
         ? Mat4::ortho(
-            -camera.GetCamera().fovy * viewport.m_WindowSize.x / viewport.m_WindowSize.y * 0.5f,
-            camera.GetCamera().fovy * viewport.m_WindowSize.x / viewport.m_WindowSize.y * 0.5f,
-            -camera.GetCamera().fovy * 0.5f,
-            camera.GetCamera().fovy * 0.5f,
-            0.1f,
-            1000.0f)
+              -camera.GetCamera().fovy * viewport.m_WindowSize.x / viewport.m_WindowSize.y * 0.5f,
+              camera.GetCamera().fovy * viewport.m_WindowSize.x / viewport.m_WindowSize.y * 0.5f,
+              -camera.GetCamera().fovy * 0.5f,
+              camera.GetCamera().fovy * 0.5f,
+              0.1f,
+              1000.0f)
         : Mat4::perspective(
-            camera.GetCamera().fovy * DEG2RAD,
-            viewport.m_WindowSize.x / viewport.m_WindowSize.y,
-            0.1f,
-            1000.0f);
+              camera.GetCamera().fovy * DEG2RAD,
+              viewport.m_WindowSize.x / viewport.m_WindowSize.y,
+              0.1f,
+              1000.0f);
 
     float aViewMat4[16] = {};
     float aProjectionMat4[16] = {};
@@ -97,27 +96,26 @@ void CGizmoController::Draw(CEditor& editor, CFlyCamera& camera)
 
     CMeshEditor::DrawOverlay(editor, camera.GetCamera());
 
-    if (pMesh && edit.Enabled && HasValidModelData(pMesh->m_Model))
+    if (pMesh && edit.m_Enabled && HasValidModelData(pMesh->m_Model))
     {
-        if (edit.MeshIndex >= pMesh->m_Model.meshCount)
+        if (edit.m_MeshIndex >= pMesh->m_Model.meshCount)
         {
-            edit.MeshIndex = 0;
+            edit.m_MeshIndex = 0;
         }
 
         int vertexIndex = -1;
         if (CMeshEditor::GetSelectedVertexIndex(
-            *pEntity,
-            edit.MeshIndex,
-            edit.TriangleIndex,
-            edit.VertexCorner,
-            vertexIndex))
+                *pEntity,
+                edit.m_MeshIndex,
+                edit.m_TriangleIndex,
+                edit.m_VertexCorner,
+                vertexIndex))
         {
             const Vec3 vertexWorld = CMeshEditor::GetVertexWorldPosition(
                 editor.m_Scene,
                 *pEntity,
-                edit.MeshIndex,
-                vertexIndex
-            );
+                edit.m_MeshIndex,
+                vertexIndex);
 
             float aVertexTranslation[3] = { vertexWorld.x, vertexWorld.y, vertexWorld.z };
             float aVertexRotation[3] = { 0.0f, 0.0f, 0.0f };
@@ -127,8 +125,7 @@ void CGizmoController::Draw(CEditor& editor, CFlyCamera& camera)
                 aVertexTranslation,
                 aVertexRotation,
                 aVertexScale,
-                aTransformMat4
-            );
+                aTransformMat4);
 
             ImGuizmo::Manipulate(
                 aViewMat4,
@@ -137,10 +134,9 @@ void CGizmoController::Draw(CEditor& editor, CFlyCamera& camera)
                 ImGuizmo::WORLD,
                 aTransformMat4,
                 nullptr,
-                gizmoSnapEnabled ? aTranslationSnap : nullptr
-            );
+                gizmoSnapEnabled ? aTranslationSnap : nullptr);
 
-            if (ImGuizmo::IsUsing() && !gizmo.WasUsingMeshEdit)
+            if (ImGuizmo::IsUsing() && !gizmo.m_WasUsingMeshEdit)
             {
                 editor.SaveState();
             }
@@ -154,19 +150,17 @@ void CGizmoController::Draw(CEditor& editor, CFlyCamera& camera)
                     aTransformMat4,
                     aNextTranslation,
                     aNextRotation,
-                    aNextScale
-                );
+                    aNextScale);
 
                 CMeshEditor::SetVertexWorldPosition(
                     editor.m_Scene,
                     *pEntity,
-                    edit.MeshIndex,
+                    edit.m_MeshIndex,
                     vertexIndex,
-                    { aNextTranslation[0], aNextTranslation[1], aNextTranslation[2] }
-                );
+                    { aNextTranslation[0], aNextTranslation[1], aNextTranslation[2] });
             }
 
-            gizmo.WasUsingMeshEdit = ImGuizmo::IsUsing();
+            gizmo.m_WasUsingMeshEdit = ImGuizmo::IsUsing();
             return;
         }
     }
@@ -179,17 +173,16 @@ void CGizmoController::Draw(CEditor& editor, CFlyCamera& camera)
     ImGuizmo::Manipulate(
         aViewMat4,
         aProjectionMat4,
-        editor.m_Ui.m_MeshEdit.GizmoMode,
+        editor.m_Ui.m_MeshEdit.m_GizmoMode,
         ImGuizmo::WORLD,
         aTransformMat4,
         nullptr,
         gizmoSnapEnabled
-            ? (editor.m_Ui.m_MeshEdit.GizmoMode == ImGuizmo::TRANSLATE ? aTranslationSnap :
-               editor.m_Ui.m_MeshEdit.GizmoMode == ImGuizmo::ROTATE ? aRotationSnap : aScaleSnap)
-            : nullptr
-    );
+            ? (editor.m_Ui.m_MeshEdit.m_GizmoMode == ImGuizmo::TRANSLATE ? aTranslationSnap : editor.m_Ui.m_MeshEdit.m_GizmoMode == ImGuizmo::ROTATE ? aRotationSnap
+                                                                                                                                                     : aScaleSnap)
+            : nullptr);
 
-    if (ImGuizmo::IsUsing() && !gizmo.WasUsingTransform)
+    if (ImGuizmo::IsUsing() && !gizmo.m_WasUsingTransform)
     {
         editor.SaveState();
     }
@@ -208,17 +201,17 @@ void CGizmoController::Draw(CEditor& editor, CFlyCamera& camera)
             pTransform->SetLocalMatrixOverride(inverseParent * worldTransform);
         }
 
-        const Vec3 positionDelta = pTransform->m_Position - Vec3{aTranslation[0], aTranslation[1], aTranslation[2]};
+        const Vec3 positionDelta = pTransform->m_Position - Vec3{ aTranslation[0], aTranslation[1], aTranslation[2] };
         if (editor.m_Scene.m_vSelectedEntities.size() > 1)
         {
-            for (int selected_index : editor.m_Scene.m_vSelectedEntities)
+            for (int selectedIndex : editor.m_Scene.m_vSelectedEntities)
             {
-                if (selected_index == editor.m_Scene.m_Selected ||
-                    selected_index < 0 || selected_index >= static_cast<int>(editor.m_Scene.m_vEntities.size()))
+                if (selectedIndex == editor.m_Scene.m_Selected ||
+                    selectedIndex < 0 || selectedIndex >= static_cast<int>(editor.m_Scene.m_vEntities.size()))
                 {
                     continue;
                 }
-                CEntity& selectedEntity = editor.m_Scene.m_vEntities[selected_index];
+                CEntity& selectedEntity = editor.m_Scene.m_vEntities[selectedIndex];
                 CTransformComponent* pSelectedTransform = selectedEntity.GetTransformComponent();
                 if (!pSelectedTransform)
                 {
@@ -231,8 +224,8 @@ void CGizmoController::Draw(CEditor& editor, CFlyCamera& camera)
                     pSelectedTransform->m_LocalMatrixOverride.m[13] += positionDelta.y;
                     pSelectedTransform->m_LocalMatrixOverride.m[14] += positionDelta.z;
                 }
-                DispatchPluginEvent(PLUGIN_EVENT_TRANSFORM_CHANGED, selected_index);
-CEntityTextureService::MarkEntityBoundsDirty(&selectedEntity);
+                DispatchPluginEvent(PLUGIN_EVENT_TRANSFORM_CHANGED, selectedIndex);
+                CEntityTextureService::MarkEntityBoundsDirty(&selectedEntity);
                 if (CMaterialComponent* pSelectedMaterial = selectedEntity.GetMaterialComponent();
                     pSelectedMaterial && !pSelectedMaterial->m_TextureStretch)
                 {
@@ -242,7 +235,7 @@ CEntityTextureService::MarkEntityBoundsDirty(&selectedEntity);
         }
 
         DispatchPluginEvent(PLUGIN_EVENT_TRANSFORM_CHANGED,
-            static_cast<int>(pEntity - editor.m_Scene.m_vEntities.data()));
+                            static_cast<int>(pEntity - editor.m_Scene.m_vEntities.data()));
 
         CMaterialComponent* pMaterial = pEntity->GetMaterialComponent();
         if (pMaterial && !pMaterial->m_TextureStretch)
@@ -251,6 +244,6 @@ CEntityTextureService::MarkEntityBoundsDirty(&selectedEntity);
         }
     }
 
-    gizmo.WasUsingTransform = ImGuizmo::IsUsing();
-    gizmo.WasUsingMeshEdit = false;
+    gizmo.m_WasUsingTransform = ImGuizmo::IsUsing();
+    gizmo.m_WasUsingMeshEdit = false;
 }

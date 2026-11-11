@@ -6,16 +6,16 @@
 
 struct SEditableVertex
 {
-    Vec3 Position;
-    float U = 0.0f;
-    float V = 0.0f;
+    Vec3 m_Position;
+    float m_U = 0.0f;
+    float m_V = 0.0f;
 };
 
 struct SEditableTriangle
 {
-    int A;
-    int B;
-    int C;
+    int m_A;
+    int m_B;
+    int m_C;
 };
 
 class CEditableMesh
@@ -27,11 +27,11 @@ public:
 
 struct SEditableMeshBuildData
 {
-    std::vector<float> vVertices;
-    std::vector<float> vNormals;
-    std::vector<float> vTexcoords;
-    std::vector<unsigned short> vIndices;
-    bool IsValid = true;
+    std::vector<float> m_vVertices;
+    std::vector<float> m_vNormals;
+    std::vector<float> m_vTexcoords;
+    std::vector<unsigned short> m_vIndices;
+    bool m_IsValid = true;
 };
 
 SEditableMeshBuildData BuildEditableMeshData(const CEditableMesh& editableMesh);

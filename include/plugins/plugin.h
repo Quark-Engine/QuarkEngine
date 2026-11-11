@@ -17,9 +17,9 @@
  * LoadLibrary / dlopen.
  */
 #ifdef _WIN32
-    #define PLUGIN_EXPORT extern "C" __declspec(dllexport)
+#define PLUGIN_EXPORT extern "C" __declspec(dllexport)
 #else
-    #define PLUGIN_EXPORT extern "C" __attribute__((visibility("default")))
+#define PLUGIN_EXPORT extern "C" __attribute__((visibility("default")))
 #endif
 
 struct SPluginContext;
@@ -53,12 +53,12 @@ enum EUIRegion
  */
 enum EPluginEvent
 {
-    PLUGIN_EVENT_ENTITY_CREATED,    /**< A new entity was appended to the scene. */
-    PLUGIN_EVENT_ENTITY_DELETED,    /**< An entity is about to be removed. */
-    PLUGIN_EVENT_ENTITY_SELECTED,   /**< The active or multi-selection changed. */
+    PLUGIN_EVENT_ENTITY_CREATED, /**< A new entity was appended to the scene. */
+    PLUGIN_EVENT_ENTITY_DELETED, /**< An entity is about to be removed. */
+    PLUGIN_EVENT_ENTITY_SELECTED, /**< The active or multi-selection changed. */
     PLUGIN_EVENT_TRANSFORM_CHANGED, /**< Position, rotation, or scale changed. */
-    PLUGIN_EVENT_SCENE_LOADED,      /**< The current scene finished loading. */
-    PLUGIN_EVENT_SCENE_SAVED,       /**< The current scene finished saving. */
+    PLUGIN_EVENT_SCENE_LOADED, /**< The current scene finished loading. */
+    PLUGIN_EVENT_SCENE_SAVED, /**< The current scene finished saving. */
 };
 
 /**
@@ -70,21 +70,21 @@ enum EPluginEvent
  */
 enum EPluginUiColor
 {
-    PLUGIN_UI_COLOR_TEXT,               /**< Main text color. */
-    PLUGIN_UI_COLOR_TEXT_DISABLED,      /**< Disabled text color. */
-    PLUGIN_UI_COLOR_WINDOW_BACKGROUND,  /**< Main window background. */
-    PLUGIN_UI_COLOR_CHILD_BACKGROUND,   /**< Child window background. */
-    PLUGIN_UI_COLOR_POPUP_BACKGROUND,   /**< Popup and menu background. */
-    PLUGIN_UI_COLOR_BORDER,             /**< Window and widget border. */
-    PLUGIN_UI_COLOR_FRAME_BACKGROUND,   /**< Input, slider, and checkbox background. */
-    PLUGIN_UI_COLOR_FRAME_HOVERED,      /**< Hovered input/frame background. */
-    PLUGIN_UI_COLOR_FRAME_ACTIVE,       /**< Active input/frame background. */
-    PLUGIN_UI_COLOR_BUTTON,             /**< Button background. */
-    PLUGIN_UI_COLOR_BUTTON_HOVERED,     /**< Hovered button background. */
-    PLUGIN_UI_COLOR_BUTTON_ACTIVE,      /**< Active button background. */
-    PLUGIN_UI_COLOR_HEADER,             /**< Tree, selectable, and section header. */
-    PLUGIN_UI_COLOR_HEADER_HOVERED,     /**< Hovered tree/header background. */
-    PLUGIN_UI_COLOR_HEADER_ACTIVE       /**< Active tree/header background. */
+    PLUGIN_UI_COLOR_TEXT, /**< Main text color. */
+    PLUGIN_UI_COLOR_TEXT_DISABLED, /**< Disabled text color. */
+    PLUGIN_UI_COLOR_WINDOW_BACKGROUND, /**< Main window background. */
+    PLUGIN_UI_COLOR_CHILD_BACKGROUND, /**< Child window background. */
+    PLUGIN_UI_COLOR_POPUP_BACKGROUND, /**< Popup and menu background. */
+    PLUGIN_UI_COLOR_BORDER, /**< Window and widget border. */
+    PLUGIN_UI_COLOR_FRAME_BACKGROUND, /**< Input, slider, and checkbox background. */
+    PLUGIN_UI_COLOR_FRAME_HOVERED, /**< Hovered input/frame background. */
+    PLUGIN_UI_COLOR_FRAME_ACTIVE, /**< Active input/frame background. */
+    PLUGIN_UI_COLOR_BUTTON, /**< Button background. */
+    PLUGIN_UI_COLOR_BUTTON_HOVERED, /**< Hovered button background. */
+    PLUGIN_UI_COLOR_BUTTON_ACTIVE, /**< Active button background. */
+    PLUGIN_UI_COLOR_HEADER, /**< Tree, selectable, and section header. */
+    PLUGIN_UI_COLOR_HEADER_HOVERED, /**< Hovered tree/header background. */
+    PLUGIN_UI_COLOR_HEADER_ACTIVE /**< Active tree/header background. */
 };
 
 /**
@@ -96,16 +96,16 @@ enum EPluginUiColor
  */
 enum EPluginUiStyleVar
 {
-    PLUGIN_UI_STYLE_ALPHA,                /**< Global UI alpha multiplier. */
-    PLUGIN_UI_STYLE_WINDOW_ROUNDING,      /**< Window corner rounding. */
-    PLUGIN_UI_STYLE_FRAME_ROUNDING,       /**< Widget frame corner rounding. */
-    PLUGIN_UI_STYLE_SCROLLBAR_ROUNDING,   /**< Scrollbar grab corner rounding. */
-    PLUGIN_UI_STYLE_GRAB_ROUNDING,        /**< Slider and scrollbar grab rounding. */
-    PLUGIN_UI_STYLE_WINDOW_PADDING,       /**< Window inner padding (two-dimensional). */
-    PLUGIN_UI_STYLE_FRAME_PADDING,        /**< Widget inner padding (two-dimensional). */
-    PLUGIN_UI_STYLE_ITEM_SPACING,         /**< Spacing between widgets (two-dimensional). */
-    PLUGIN_UI_STYLE_ITEM_INNER_SPACING,   /**< Spacing within compound widgets (two-dimensional). */
-    PLUGIN_UI_STYLE_CELL_PADDING          /**< Table cell padding (two-dimensional). */
+    PLUGIN_UI_STYLE_ALPHA, /**< Global UI alpha multiplier. */
+    PLUGIN_UI_STYLE_WINDOW_ROUNDING, /**< Window corner rounding. */
+    PLUGIN_UI_STYLE_FRAME_ROUNDING, /**< Widget frame corner rounding. */
+    PLUGIN_UI_STYLE_SCROLLBAR_ROUNDING, /**< Scrollbar grab corner rounding. */
+    PLUGIN_UI_STYLE_GRAB_ROUNDING, /**< Slider and scrollbar grab rounding. */
+    PLUGIN_UI_STYLE_WINDOW_PADDING, /**< Window inner padding (two-dimensional). */
+    PLUGIN_UI_STYLE_FRAME_PADDING, /**< Widget inner padding (two-dimensional). */
+    PLUGIN_UI_STYLE_ITEM_SPACING, /**< Spacing between widgets (two-dimensional). */
+    PLUGIN_UI_STYLE_ITEM_INNER_SPACING, /**< Spacing within compound widgets (two-dimensional). */
+    PLUGIN_UI_STYLE_CELL_PADDING /**< Table cell padding (two-dimensional). */
 };
 
 /**
@@ -126,15 +126,15 @@ enum EPluginUiDirection
  */
 enum EPluginUiWindowOption
 {
-    PLUGIN_UI_WINDOW_NO_TITLE_BAR       = 1 << 0, /**< Hide the title bar. */
-    PLUGIN_UI_WINDOW_NO_RESIZE          = 1 << 1, /**< Disable user resizing. */
-    PLUGIN_UI_WINDOW_NO_MOVE            = 1 << 2, /**< Disable user moving. */
-    PLUGIN_UI_WINDOW_NO_SCROLLBAR       = 1 << 3, /**< Hide the scrollbar. */
-    PLUGIN_UI_WINDOW_NO_COLLAPSE        = 1 << 4, /**< Disable title-bar collapse. */
-    PLUGIN_UI_WINDOW_NO_BACKGROUND      = 1 << 5, /**< Hide the window background. */
-    PLUGIN_UI_WINDOW_NO_SAVED_SETTINGS  = 1 << 6, /**< Do not persist window state. */
-    PLUGIN_UI_WINDOW_MENU_BAR           = 1 << 7, /**< Enable the window menu bar. */
-    PLUGIN_UI_WINDOW_NO_BRING_TO_FRONT  = 1 << 8  /**< Do not raise on focus. */
+    PLUGIN_UI_WINDOW_NO_TITLE_BAR = 1 << 0, /**< Hide the title bar. */
+    PLUGIN_UI_WINDOW_NO_RESIZE = 1 << 1, /**< Disable user resizing. */
+    PLUGIN_UI_WINDOW_NO_MOVE = 1 << 2, /**< Disable user moving. */
+    PLUGIN_UI_WINDOW_NO_SCROLLBAR = 1 << 3, /**< Hide the scrollbar. */
+    PLUGIN_UI_WINDOW_NO_COLLAPSE = 1 << 4, /**< Disable title-bar collapse. */
+    PLUGIN_UI_WINDOW_NO_BACKGROUND = 1 << 5, /**< Hide the window background. */
+    PLUGIN_UI_WINDOW_NO_SAVED_SETTINGS = 1 << 6, /**< Do not persist window state. */
+    PLUGIN_UI_WINDOW_MENU_BAR = 1 << 7, /**< Enable the window menu bar. */
+    PLUGIN_UI_WINDOW_NO_BRING_TO_FRONT = 1 << 8 /**< Do not raise on focus. */
 };
 
 /**
@@ -143,12 +143,12 @@ enum EPluginUiWindowOption
  */
 enum EPluginUiTreeNodeOption
 {
-    PLUGIN_UI_TREE_SELECTED          = 1 << 0, /**< Render the node as selected. */
-    PLUGIN_UI_TREE_DEFAULT_OPEN      = 1 << 1, /**< Open the node on first use. */
-    PLUGIN_UI_TREE_LEAF              = 1 << 2, /**< Render as a leaf without a toggle. */
-    PLUGIN_UI_TREE_BULLET            = 1 << 3, /**< Render a bullet instead of an arrow. */
-    PLUGIN_UI_TREE_FRAMED            = 1 << 4, /**< Render a full-width framed node. */
-    PLUGIN_UI_TREE_SPAN_AVAILABLE    = 1 << 5  /**< Extend the hit area across available width. */
+    PLUGIN_UI_TREE_SELECTED = 1 << 0, /**< Render the node as selected. */
+    PLUGIN_UI_TREE_DEFAULT_OPEN = 1 << 1, /**< Open the node on first use. */
+    PLUGIN_UI_TREE_LEAF = 1 << 2, /**< Render as a leaf without a toggle. */
+    PLUGIN_UI_TREE_BULLET = 1 << 3, /**< Render a bullet instead of an arrow. */
+    PLUGIN_UI_TREE_FRAMED = 1 << 4, /**< Render a full-width framed node. */
+    PLUGIN_UI_TREE_SPAN_AVAILABLE = 1 << 5 /**< Extend the hit area across available width. */
 };
 
 /**
@@ -304,7 +304,7 @@ enum EPluginUiBuiltinStyle
  *
  * @param pCtx Current host-provided context; valid only for this invocation.
  */
-using FPluginUICallback = void(*)(SPluginContext*);
+using FPluginUICallback = void (*)(SPluginContext*);
 
 /**
  * @typedef FPluginEventCallback
@@ -320,7 +320,7 @@ using FPluginUICallback = void(*)(SPluginContext*);
  * @param entityIndex Related entity index, or -1 when the event concerns the
  *                    scene rather than one entity.
  */
-using FPluginEventCallback = void(*)(SPluginContext* pCtx, EPluginEvent event, int entityIndex);
+using FPluginEventCallback = void (*)(SPluginContext* pCtx, EPluginEvent event, int entityIndex);
 
 /**
  * @typedef FPluginComponentFactory
@@ -336,7 +336,7 @@ using FPluginEventCallback = void(*)(SPluginContext* pCtx, EPluginEvent event, i
  *
  * @return Newly allocated component instance, or nullptr on failure.
  */
-using FPluginComponentFactory = void*(*)();
+using FPluginComponentFactory = void* (*)();
 
 /**
  * @struct SPluginThreadUsage
@@ -348,15 +348,15 @@ using FPluginComponentFactory = void*(*)();
 struct SPluginThreadUsage
 {
     /** @brief Human-readable thread role, owned by the host. */
-    const char* pName;
+    const char* m_pName;
     /** @brief Description of the task most recently observed on this thread. */
-    const char* pCurrentTask;
+    const char* m_pCurrentTask;
     /** @brief Measured busy percentage for the host's current sampling window. */
-    float utilizationPercent;
+    float m_UtilizationPercent;
     /** @brief Pointer to the host-maintained recent utilization samples. */
-    const float* pHistory;
+    const float* m_pHistory;
     /** @brief Number of samples available in @p pHistory. */
-    int historyCount;
+    int m_HistoryCount;
 };
 
 /**
@@ -368,18 +368,18 @@ struct SPluginThreadUsage
  */
 struct SPluginFrameTimings
 {
-    float updateFrameMs = 0.0f;
-    float sceneRendererUpdateMs = 0.0f;
-    float shadowPassMs = 0.0f;
-    float main3dPassMs = 0.0f;
-    float imguiEditorMs = 0.0f;
-    float endDrawingMs = 0.0f;
-    float hierarchyMs = 0.0f;
-    float inspectorMs = 0.0f;
-    float scenePanelMs = 0.0f;
-    float assetsMs = 0.0f;
-    float modelViewerMs = 0.0f;
-    float pluginUpdateMs = 0.0f;
+    float m_UpdateFrameMs = 0.0f;
+    float m_SceneRendererUpdateMs = 0.0f;
+    float m_ShadowPassMs = 0.0f;
+    float m_Main3dPassMs = 0.0f;
+    float m_ImguiEditorMs = 0.0f;
+    float m_EndDrawingMs = 0.0f;
+    float m_HierarchyMs = 0.0f;
+    float m_InspectorMs = 0.0f;
+    float m_ScenePanelMs = 0.0f;
+    float m_AssetsMs = 0.0f;
+    float m_ModelViewerMs = 0.0f;
+    float m_PluginUpdateMs = 0.0f;
 };
 
 /**
@@ -405,10 +405,10 @@ struct SPluginContext
      * @note Use this value to scale frame-dependent plugin updates. It is
      *       refreshed for each frame callback and should not be cached.
      */
-    float deltaTime;
+    float m_DeltaTime;
 
     /** @brief CPU timings for the previous completed editor frame. */
-    SPluginFrameTimings frameTimings;
+    SPluginFrameTimings m_FrameTimings;
 
     /**
      * @brief Number of entities in the scene associated with this context.
@@ -416,7 +416,7 @@ struct SPluginContext
      *       the half-open range [0, entityCount). Re-read it after operations
      *       that add or remove entities.
      */
-    int entityCount;
+    int m_EntityCount;
 
     /**
      * @brief Host-owned pointer to the primary selected entity index.
@@ -427,7 +427,7 @@ struct SPluginContext
      * @note Do not free, retain, or modify this pointer; use scene selection
      *       API functions when changing selection.
      */
-    int* pSelected;
+    int* m_pSelected;
 
     // -------------------------------------------------------------------------
     // UI — thin wrapper over an ImGui-style immediate-mode UI
@@ -471,7 +471,7 @@ struct SPluginContext
      * @note Pair with pfnUiEndMenu() only when this function returns true.
      */
     bool (*pfnUiBeginMenu)(const char* pLabel);
-    
+
     /**
      * @brief Ends the menu opened by the most recent successful
      *        pfnUiBeginMenu() call.
@@ -641,7 +641,7 @@ struct SPluginContext
      * @note Call only while a plugin UI callback is active.
      */
     void (*pfnUiSameLine)();
-    
+
     /**
      * @brief Gets the display name stored on an entity.
      *
@@ -722,7 +722,7 @@ struct SPluginContext
      *          pointers; all must be valid.
      */
     void (*pfnEntityGetColor)(CScene* pScene, int index, unsigned char* pR, unsigned char* pG,
-                             unsigned char* pB, unsigned char* pA);
+                              unsigned char* pB, unsigned char* pA);
 
     // -------------------------------------------------------------------------
     // Entity write — mutate entity state by index
@@ -795,7 +795,7 @@ struct SPluginContext
      *          non-null scene and a currently valid index.
      */
     void (*pfnEntitySetColor)(CScene* pScene, int index, unsigned char r, unsigned char g,
-                             unsigned char b, unsigned char a);
+                              unsigned char b, unsigned char a);
 
     /**
      * @brief Replaces an entity's display name.
@@ -818,7 +818,7 @@ struct SPluginContext
      * must not delete it or retain it beyond the callback. A scene load may
      * replace the host's current scene.
      */
-    CScene* pScene;
+    CScene* m_pScene;
 
     /**
      * @brief Serializes the supplied scene to the project's scene file.
@@ -877,7 +877,7 @@ struct SPluginContext
      * The host owns it; plugins must not delete or retain it beyond their
      * loaded lifetime. Check for nullptr when supporting older host versions.
      */
-    CComponentFactoryRegistry* pComponentRegistry;
+    CComponentFactoryRegistry* m_pComponentRegistry;
 
     /**
      * @brief Borrowed pointer to the host plugin manager.
@@ -886,7 +886,7 @@ struct SPluginContext
      * manager. Plugins must not delete or retain it beyond their loaded
      * lifetime. Check for nullptr when supporting older host versions.
      */
-    CPluginManager* pPluginManager;
+    CPluginManager* m_pPluginManager;
 
     /**
      * @brief Borrowed pointer to the host's model asset library.
@@ -895,7 +895,7 @@ struct SPluginContext
      * owns it; plugins must not delete it or retain it beyond their loaded
      * lifetime. Check for nullptr when supporting older host versions.
      */
-    CAssetLibrary* pAssets;
+    CAssetLibrary* m_pAssets;
 
     /**
      * @brief Borrowed, null-terminated path for the project currently open.
@@ -904,7 +904,7 @@ struct SPluginContext
      * string is host-owned; do not modify, free, or retain it beyond the
      * callback. Check for nullptr when supporting older host versions.
      */
-    const char* pProjectPath;
+    const char* m_pProjectPath;
 
     // -------------------------------------------------------------------------
     // ABI extension fields. Keep new function pointers at the end of the
@@ -1327,10 +1327,10 @@ struct SPluginContext
      *       and valid only for the duration of the current plugin callback.
      *       Copy any values a plugin needs to retain.
      */
-    const SPluginThreadUsage* pThreadUsages;
+    const SPluginThreadUsage* m_pThreadUsages;
 
     /** @brief Number of entries in @p pThreadUsages. */
-    int threadUsageCount;
+    int m_ThreadUsageCount;
 
     /**
      * @brief Displays a single-line editor for a caller-owned UTF-8 string.
@@ -1407,7 +1407,7 @@ struct SPluginContext
      *                       updates it when the user selects another item.
      * @return true when the selected index changes; otherwise false.
      */
-    bool (*pfnUiCombo)(const char* pLabel, const char* const* pItems,
+    bool (*pfnUiCombo)(const char* pLabel, const char* const* ppItems,
                        int itemCount, int* pSelectedIndex);
 
     /**
@@ -2037,7 +2037,7 @@ struct SPluginContext
      * @return true when the selected index changes; otherwise false.
      * @note The labels and strings are read only during this call.
      */
-    bool (*pfnUiListBox)(const char* pLabel, const char* const* pItems,
+    bool (*pfnUiListBox)(const char* pLabel, const char* const* ppItems,
                          int itemCount, int* pSelectedIndex, int heightInItems);
 
     /**
@@ -2202,7 +2202,7 @@ struct SPluginContext
      *                       [0, @p itemCount); updated when changed.
      * @return true when the selection changes; otherwise false.
      */
-    bool (*pfnUiRadioButtonGroup)(const char* pLabel, const char* const* pItems,
+    bool (*pfnUiRadioButtonGroup)(const char* pLabel, const char* const* ppItems,
                                   int itemCount, int* pSelectedIndex);
 
     /**
@@ -2677,7 +2677,7 @@ struct SPluginContext
      * @return true when the value changes; otherwise false.
      */
     bool (*pfnUiVSliderInt)(const char* pLabel, float width, float height,
-                             int* pValue, int minimum, int maximum);
+                            int* pValue, int minimum, int maximum);
 
     /**
      * @brief Edits a three-channel color with a full color picker.
@@ -3794,14 +3794,14 @@ struct SPlugin
      *       library is unloaded. A string literal or static storage is
      *       recommended.
      */
-    const char* pName;
+    const char* m_pName;
 
     /**
      * @brief Human-readable plugin version, conventionally semantic versioning.
      * @note Displayed with @ref pName and borrowed by the host; keep the string
      *       valid until the library is unloaded.
      */
-    const char* pVersion;
+    const char* m_pVersion;
 
     /**
      * @brief Called once after the shared library is loaded.

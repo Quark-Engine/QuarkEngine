@@ -9,24 +9,24 @@
 namespace
 {
 
-void ExpectIndices(const std::vector<int>& vActual, const std::vector<int>& vExpected)
-{
-    std::vector<int> vSortedActual = vActual;
-    std::vector<int> vSortedExpected = vExpected;
-    std::sort(vSortedActual.begin(), vSortedActual.end());
-    std::sort(vSortedExpected.begin(), vSortedExpected.end());
-    CHECK(vSortedActual == vSortedExpected);
-}
+    void ExpectIndices(const std::vector<int>& vActual, const std::vector<int>& vExpected)
+    {
+        std::vector<int> vSortedActual = vActual;
+        std::vector<int> vSortedExpected = vExpected;
+        std::sort(vSortedActual.begin(), vSortedActual.end());
+        std::sort(vSortedExpected.begin(), vSortedExpected.end());
+        CHECK(vSortedActual == vSortedExpected);
+    }
 
-int Add(CScene& target, const std::string& name, int parentId, bool isGroup = false)
-{
-    CEntity added(static_cast<int>(target.m_vEntities.size()));
-    added.m_Name = name;
-    added.m_ParentId = parentId;
-    added.m_IsGroup = isGroup;
-    target.m_vEntities.push_back(added);
-    return static_cast<int>(target.m_vEntities.size()) - 1;
-}
+    int Add(CScene& target, const std::string& name, int parentId, bool isGroup = false)
+    {
+        CEntity added(static_cast<int>(target.m_vEntities.size()));
+        added.m_Name = name;
+        added.m_ParentId = parentId;
+        added.m_IsGroup = isGroup;
+        target.m_vEntities.push_back(added);
+        return static_cast<int>(target.m_vEntities.size()) - 1;
+    }
 
 } // anonymous
 
@@ -130,7 +130,7 @@ TEST(MoveEntityToParent, refuses_to_parent_an_entity_to_its_own_descendant)
     MoveEntityToParent(sceneUnderTest, 0, 2);
 
     CHECK_MSG(sceneUnderTest.m_vEntities[0].m_ParentId == -1,
-        "a must not become a child of c, that would build a cycle");
+              "a must not become a child of c, that would build a cycle");
 }
 
 TEST(MoveEntityToParent, keeps_the_world_position_when_reparenting)
@@ -190,7 +190,7 @@ TEST(DeleteGroup, reparents_children_to_the_grandparent_by_default)
     CHECK(static_cast<int>(sceneUnderTest.m_vEntities.size()) == 2);
     CHECK(sceneUnderTest.m_vEntities[1].m_Name == "child");
     CHECK_MSG(sceneUnderTest.m_vEntities[1].m_ParentId == 0,
-        "child must point at the erased group's parent");
+              "child must point at the erased group's parent");
 }
 
 TEST(DeleteGroup, preserves_child_world_transform_under_a_non_uniform_parent)

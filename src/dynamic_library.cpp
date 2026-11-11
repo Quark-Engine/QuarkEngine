@@ -1,28 +1,28 @@
 #include "dynamic_library.h"
 
 #ifdef _WIN32
-    #ifndef NOMINMAX
-        #define NOMINMAX
-    #endif
-    #ifndef WIN32_LEAN_AND_MEAN
-        #define WIN32_LEAN_AND_MEAN
-    #endif
-    #include <windows.h>
-    #ifdef near
-        #undef near
-    #endif
-    #ifdef far
-        #undef far
-    #endif
-    #ifdef min
-        #undef min
-    #endif
-    #ifdef max
-        #undef max
-    #endif
-    #undef CloseWindow
-    #undef ShowCursor
-    #undef Rectangle
+#ifndef NOMINMAX
+#define NOMINMAX
+#endif
+#ifndef WIN32_LEAN_AND_MEAN
+#define WIN32_LEAN_AND_MEAN
+#endif
+#include <windows.h>
+#ifdef near
+#undef near
+#endif
+#ifdef far
+#undef far
+#endif
+#ifdef min
+#undef min
+#endif
+#ifdef max
+#undef max
+#endif
+#undef CloseWindow
+#undef ShowCursor
+#undef Rectangle
 #endif
 
 #include <filesystem>
@@ -34,10 +34,10 @@ CDynamicLibrary::~CDynamicLibrary()
 }
 
 CDynamicLibrary::CDynamicLibrary(CDynamicLibrary&& other) noexcept
-    : m_Handle(other.m_Handle),
+    : m_pHandle(other.m_pHandle),
       m_Error(std::move(other.m_Error))
 {
-    other.m_Handle = nullptr;
+    other.m_pHandle = nullptr;
 }
 
 CDynamicLibrary& CDynamicLibrary::operator=(CDynamicLibrary&& other) noexcept
@@ -49,9 +49,9 @@ CDynamicLibrary& CDynamicLibrary::operator=(CDynamicLibrary&& other) noexcept
 
     Close();
 
-    m_Handle = other.m_Handle;
+    m_pHandle = other.m_pHandle;
     m_Error = std::move(other.m_Error);
-    other.m_Handle = nullptr;
+    other.m_pHandle = nullptr;
 
     return *this;
 }
@@ -63,8 +63,8 @@ bool CDynamicLibrary::Open(const std::string& path)
 
 #ifdef _WIN32
     std::filesystem::path fsPath(path);
-    m_Handle = LoadLibraryW(fsPath.wstring().c_str());
-    if (!m_Handle)
+    m_pHandle = LoadLibraryW(fsPath.wstring().c_str());
+    if (!m_pHandle)
     {
         const DWORD errorCode = GetLastError();
         char aMessage[256] = {};
@@ -73,8 +73,8 @@ bool CDynamicLibrary::Open(const std::string& path)
         return false;
     }
 #else
-    m_Handle = dlopen(path.c_str(), RTLD_NOW);
-    if (!m_Handle)
+    m_pHandle = dlopen(path.c_str(), RTLD_NOW);
+    if (!m_pHandle)
     {
         const char* pError = dlerror();
         m_Error = pError ? pError : "unknown error";
@@ -87,41 +87,41 @@ bool CDynamicLibrary::Open(const std::string& path)
 
 void CDynamicLibrary::Close()
 {
-    if (!m_Handle)
+    if (!m_pHandle)
     {
         return;
     }
 
 #ifdef _WIN32
-    FreeLibrary(m_Handle);
+    FreeLibrary(m_pHandle);
 #else
-    dlclose(m_Handle);
+    dlclose(m_pHandle);
 #endif
 
-    m_Handle = nullptr;
+    m_pHandle = nullptr;
 }
 
 bool CDynamicLibrary::IsOpen() const
 {
-    return m_Handle != nullptr;
+    return m_pHandle != nullptr;
 }
 
 LibHandle CDynamicLibrary::GetHandle() const
 {
-    return m_Handle;
+    return m_pHandle;
 }
 
 void* CDynamicLibrary::GetSymbol(const char* pName) const
 {
-    if (!m_Handle)
+    if (!m_pHandle)
     {
         return nullptr;
     }
 
 #ifdef _WIN32
-    return reinterpret_cast<void*>(GetProcAddress(m_Handle, pName));
+    return reinterpret_cast<void*>(GetProcAddress(m_pHandle, pName));
 #else
-    return dlsym(m_Handle, pName);
+    return dlsym(m_pHandle, pName);
 #endif
 }
 

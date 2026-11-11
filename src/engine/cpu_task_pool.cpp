@@ -17,14 +17,10 @@ CTaskPool::CTaskPool(size_t workerCount)
     workerCount = std::max<size_t>(workerCount, 1);
     m_vWorkers.reserve(workerCount);
     m_vThreadUsage.reserve(workerCount + 1);
-    m_vThreadUsage.push_back({
-        "Main thread: editor, scene, rendering and GPU resource uploads"
-    });
+    m_vThreadUsage.push_back({ "Main thread: editor, scene, rendering and GPU resource uploads" });
     for (size_t workerIndex = 0; workerIndex < workerCount; ++workerIndex)
     {
-        m_vThreadUsage.push_back({
-            "CPU task worker " + std::to_string(workerIndex + 1)
-        });
+        m_vThreadUsage.push_back({ "CPU task worker " + std::to_string(workerIndex + 1) });
     }
 
     try
@@ -32,9 +28,9 @@ CTaskPool::CTaskPool(size_t workerCount)
         for (size_t workerIndex = 0; workerIndex < workerCount; ++workerIndex)
         {
             m_vWorkers.emplace_back([this, workerIndex]()
-            {
-                WorkerLoop(workerIndex);
-            });
+                                    {
+                                        WorkerLoop(workerIndex);
+                                    });
         }
     }
     catch (...)
@@ -116,7 +112,7 @@ std::chrono::nanoseconds CTaskPool::CurrentThreadCpuTime()
 void CTaskPool::SetMainThreadTask(const std::string& taskName)
 {
     std::lock_guard<std::mutex> lock(m_UsageMutex);
-    m_vThreadUsage.front().currentTask = taskName;
+    m_vThreadUsage.front().m_CurrentTask = taskName;
 }
 
 void CTaskPool::RecordMainThreadBusy(std::chrono::nanoseconds duration)
@@ -126,7 +122,7 @@ void CTaskPool::RecordMainThreadBusy(std::chrono::nanoseconds duration)
         return;
     }
     std::lock_guard<std::mutex> lock(m_UsageMutex);
-    m_vThreadUsage.front().accumulatedBusy += duration;
+    m_vThreadUsage.front().m_AccumulatedBusy += duration;
 }
 
 void CTaskPool::SampleUsage(std::chrono::nanoseconds interval)
@@ -142,17 +138,17 @@ void CTaskPool::SampleUsage(std::chrono::nanoseconds interval)
     const float alpha = 1.0f - std::exp(-elapsedSeconds / SMOOTHING_TIME_SECONDS);
     for (SThreadUsage& thread : m_vThreadUsage)
     {
-        const double ratio = static_cast<double>(thread.accumulatedBusy.count()) /
+        const double ratio = static_cast<double>(thread.m_AccumulatedBusy.count()) /
             static_cast<double>(interval.count());
         const float measuredPercent = static_cast<float>(std::clamp(ratio * 100.0, 0.0, 100.0));
-        thread.smoothedUtilizationPercent +=
-            alpha * (measuredPercent - thread.smoothedUtilizationPercent);
-        thread.history.push_back(thread.smoothedUtilizationPercent);
-        if (thread.history.size() > 120)
+        thread.m_SmoothedUtilizationPercent +=
+            alpha * (measuredPercent - thread.m_SmoothedUtilizationPercent);
+        thread.m_History.push_back(thread.m_SmoothedUtilizationPercent);
+        if (thread.m_History.size() > 120)
         {
-            thread.history.pop_front();
+            thread.m_History.pop_front();
         }
-        thread.accumulatedBusy = std::chrono::nanoseconds::zero();
+        thread.m_AccumulatedBusy = std::chrono::nanoseconds::zero();
     }
 }
 
@@ -164,10 +160,10 @@ std::vector<SThreadUsageSnapshot> CTaskPool::GetThreadUsageSnapshot() const
     for (const SThreadUsage& thread : m_vThreadUsage)
     {
         SThreadUsageSnapshot snapshot;
-        snapshot.name = thread.name;
-        snapshot.currentTask = thread.currentTask;
-        snapshot.utilizationPercent = thread.smoothedUtilizationPercent;
-        snapshot.vHistory.assign(thread.history.begin(), thread.history.end());
+        snapshot.m_Name = thread.m_Name;
+        snapshot.m_CurrentTask = thread.m_CurrentTask;
+        snapshot.m_UtilizationPercent = thread.m_SmoothedUtilizationPercent;
+        snapshot.m_vHistory.assign(thread.m_History.begin(), thread.m_History.end());
         vSnapshot.push_back(std::move(snapshot));
     }
     return vSnapshot;
@@ -181,9 +177,9 @@ void CTaskPool::WorkerLoop(size_t workerIndex)
         {
             std::unique_lock<std::mutex> lock(m_Mutex);
             m_Condition.wait(lock, [this]()
-            {
-                return m_Stopping || !m_Tasks.empty();
-            });
+                             {
+                                 return m_Stopping || !m_Tasks.empty();
+                             });
             if (m_Stopping && m_Tasks.empty())
             {
                 return;
@@ -196,17 +192,17 @@ void CTaskPool::WorkerLoop(size_t workerIndex)
         {
             std::lock_guard<std::mutex> lock(m_UsageMutex);
             SThreadUsage& thread = m_vThreadUsage[workerIndex + 1];
-            thread.currentTask = task.name;
-            thread.isBusy = true;
+            thread.m_CurrentTask = task.m_Name;
+            thread.m_IsBusy = true;
         }
-        task.execute();
+        task.pfnExecute();
         const std::chrono::nanoseconds taskEnd = CurrentThreadCpuTime();
         {
             std::lock_guard<std::mutex> lock(m_UsageMutex);
             SThreadUsage& thread = m_vThreadUsage[workerIndex + 1];
-            thread.accumulatedBusy += taskEnd - taskStart;
-            thread.isBusy = false;
-            thread.currentTask.clear();
+            thread.m_AccumulatedBusy += taskEnd - taskStart;
+            thread.m_IsBusy = false;
+            thread.m_CurrentTask.clear();
         }
     }
 }

@@ -59,7 +59,7 @@ void CMaterialViewerState::ReleasePreviewModel()
 
     if (m_PreviewSphere.materialCount > 0 && m_PreviewSphere.materials && m_PreviewSphere.materials[0].maps)
     {
-        m_PreviewSphere.materials[0].maps[MATERIAL_MAP_DIFFUSE].texture = {0};
+        m_PreviewSphere.materials[0].maps[MATERIAL_MAP_DIFFUSE].texture = { 0 };
     }
 
     UnloadModel(m_PreviewSphere);
@@ -91,11 +91,11 @@ bool OpenModelViewerForAsset(CModelViewerState& state, const CModelAsset& asset)
 
     state.m_AssetName = asset.m_Name;
     state.m_Visible = true;
-    state.m_Orbit.Radius = 5.0f;
-    state.m_Orbit.Phi = 20.0f;
-    state.m_Orbit.Theta = 45.0f;
-    state.m_Orbit.Target = Vec3(0, 0, 0);
-    state.m_Orbit.ModelRotation = { 0, 0, 0 };
+    state.m_Orbit.m_Radius = 5.0f;
+    state.m_Orbit.m_Phi = 20.0f;
+    state.m_Orbit.m_Theta = 45.0f;
+    state.m_Orbit.m_Target = Vec3(0, 0, 0);
+    state.m_Orbit.m_ModelRotation = { 0, 0, 0 };
 
     const BoundingBox box = GetModelBoundingBox(state.m_PreviewModel);
     state.m_ModelCenter = {
@@ -118,7 +118,7 @@ bool OpenMaterialViewerForPath(CEditor& editor, CMaterialViewerState& state, con
     state.m_CurrentPath = materialPath;
     state.m_DiffuseTextureName = "";
 
-    state.m_DiffuseTexture = {0};
+    state.m_DiffuseTexture = { 0 };
 
     state.ReleasePreviewModel();
 
@@ -185,11 +185,11 @@ bool OpenMaterialViewerForPath(CEditor& editor, CMaterialViewerState& state, con
 
     RebuildMaterialPreviewMesh(state);
     state.m_Visible = true;
-    state.m_Orbit.Radius = 2.5f;
-    state.m_Orbit.Phi = 20.0f;
-    state.m_Orbit.Theta = 45.0f;
-    state.m_Orbit.Target = Vec3(0, 0, 0);
-    state.m_Orbit.ModelRotation = { 0, 0, 0 };
+    state.m_Orbit.m_Radius = 2.5f;
+    state.m_Orbit.m_Phi = 20.0f;
+    state.m_Orbit.m_Theta = 45.0f;
+    state.m_Orbit.m_Target = Vec3(0, 0, 0);
+    state.m_Orbit.m_ModelRotation = { 0, 0, 0 };
     return true;
 }
 
@@ -210,7 +210,8 @@ std::vector<std::string> GetAllMaterialsInProject()
         }
 
         std::sort(vMaterials.begin(), vMaterials.end());
-    } catch (const std::exception&)
+    }
+    catch (const std::exception&)
     {
     }
 
@@ -245,13 +246,19 @@ static void RebuildMaterialPreviewMesh(CMaterialViewerState& state)
 {
     state.ReleasePreviewModel();
 
-    Mesh mesh = {0};
+    Mesh mesh = { 0 };
 
     switch (state.m_PreviewPrimitive)
     {
-        case 0: mesh = GenMeshSphere(1.0f, 64, 64); break;
-        case 1: mesh = GenMeshCube(2.0f, 2.0f, 2.0f); break;
-        case 2: mesh = GenMeshPlane(3.0f, 3.0f, 1, 1); break;
+        case 0:
+            mesh = GenMeshSphere(1.0f, 64, 64);
+            break;
+        case 1:
+            mesh = GenMeshCube(2.0f, 2.0f, 2.0f);
+            break;
+        case 2:
+            mesh = GenMeshPlane(3.0f, 3.0f, 1, 1);
+            break;
     }
 
     state.m_PreviewSphere = LoadModelFromMesh(mesh);
@@ -316,7 +323,7 @@ static void LoadTexturesInDirectory(CMaterialViewerState& state)
         return;
     }
 
-    const std::vector<std::string> vImageExtensions = {".png", ".jpg", ".jpeg", ".bmp", ".tga", ".dds"};
+    const std::vector<std::string> vImageExtensions = { ".png", ".jpg", ".jpeg", ".bmp", ".tga", ".dds" };
 
     try
     {
@@ -365,8 +372,6 @@ static void LoadMaterialTexture(CEditor& editor, CMaterialViewerState& state, co
     ApplyMaterialSettings(state);
 }
 
-
-
 void DrawModelViewerWindow(CModelViewerState& state)
 {
     if (!state.m_Visible)
@@ -404,10 +409,10 @@ void DrawModelViewerWindow(CModelViewerState& state)
 
         if (isHovered)
         {
-            state.m_Orbit.Radius -= ImGui::GetIO().MouseWheel * 1.5f;
-            if (state.m_Orbit.Radius < 0.1f)
+            state.m_Orbit.m_Radius -= ImGui::GetIO().MouseWheel * 1.5f;
+            if (state.m_Orbit.m_Radius < 0.1f)
             {
-                state.m_Orbit.Radius = 0.1f;
+                state.m_Orbit.m_Radius = 0.1f;
             }
         }
 
@@ -417,34 +422,34 @@ void DrawModelViewerWindow(CModelViewerState& state)
 
             if (ImGui::IsMouseDown(ImGuiMouseButton_Left))
             {
-                state.m_Orbit.ModelRotation.y += delta.x * 0.5f;
-                state.m_Orbit.ModelRotation.x += delta.y * 0.5f;
+                state.m_Orbit.m_ModelRotation.y += delta.x * 0.5f;
+                state.m_Orbit.m_ModelRotation.x += delta.y * 0.5f;
             }
 
             if (ImGui::IsMouseDown(ImGuiMouseButton_Right))
             {
-                state.m_Orbit.Theta -= delta.x * 0.5f;
-                state.m_Orbit.Phi -= delta.y * 0.5f;
+                state.m_Orbit.m_Theta -= delta.x * 0.5f;
+                state.m_Orbit.m_Phi -= delta.y * 0.5f;
             }
 
-            if (state.m_Orbit.Phi > 89.0f)
+            if (state.m_Orbit.m_Phi > 89.0f)
             {
-                state.m_Orbit.Phi = 89.0f;
+                state.m_Orbit.m_Phi = 89.0f;
             }
-            if (state.m_Orbit.Phi < -89.0f)
+            if (state.m_Orbit.m_Phi < -89.0f)
             {
-                state.m_Orbit.Phi = -89.0f;
+                state.m_Orbit.m_Phi = -89.0f;
             }
         }
 
         Camera3D cam;
         cam.fovy = 45.0f;
         cam.projection = CAMERA_PERSPECTIVE;
-        cam.target = state.m_Orbit.Target;
+        cam.target = state.m_Orbit.m_Target;
         cam.up = { 0, 1, 0 };
-        cam.position.x = state.m_Orbit.Target.x + state.m_Orbit.Radius * cosf(state.m_Orbit.Phi * DEG2RAD) * sinf(state.m_Orbit.Theta * DEG2RAD);
-        cam.position.y = state.m_Orbit.Target.y + state.m_Orbit.Radius * sinf(state.m_Orbit.Phi * DEG2RAD);
-        cam.position.z = state.m_Orbit.Target.z + state.m_Orbit.Radius * cosf(state.m_Orbit.Phi * DEG2RAD) * cosf(state.m_Orbit.Theta * DEG2RAD);
+        cam.position.x = state.m_Orbit.m_Target.x + state.m_Orbit.m_Radius * cosf(state.m_Orbit.m_Phi * DEG2RAD) * sinf(state.m_Orbit.m_Theta * DEG2RAD);
+        cam.position.y = state.m_Orbit.m_Target.y + state.m_Orbit.m_Radius * sinf(state.m_Orbit.m_Phi * DEG2RAD);
+        cam.position.z = state.m_Orbit.m_Target.z + state.m_Orbit.m_Radius * cosf(state.m_Orbit.m_Phi * DEG2RAD) * cosf(state.m_Orbit.m_Theta * DEG2RAD);
 
         BeginTextureMode(state.m_RenderTexture);
         ClearBackground({ 40, 40, 45, 255 });
@@ -454,12 +459,11 @@ void DrawModelViewerWindow(CModelViewerState& state)
             Mat4 matCenter = Mat4::translation(
                 -state.m_ModelCenter.x,
                 -state.m_ModelCenter.y,
-                -state.m_ModelCenter.z
-            );
+                -state.m_ModelCenter.z);
 
             Mat4 matRotation =
-                Mat4::rotationX(state.m_Orbit.ModelRotation.x * DEG2RAD) *
-                Mat4::rotationY(state.m_Orbit.ModelRotation.y * DEG2RAD);
+                Mat4::rotationX(state.m_Orbit.m_ModelRotation.x * DEG2RAD) *
+                Mat4::rotationY(state.m_Orbit.m_ModelRotation.y * DEG2RAD);
 
             state.m_PreviewModel.transform = matCenter * matRotation;
 
@@ -471,8 +475,7 @@ void DrawModelViewerWindow(CModelViewerState& state)
             state.m_RenderTexture.texture.width,
             state.m_RenderTexture.texture.height,
             1.0f,
-            DARKGRAY
-        );
+            DARKGRAY);
         EndMode3D();
         EndTextureMode();
 
@@ -497,7 +500,6 @@ void DrawMaterialViewerWindow(CEditor& editor, CMaterialViewerState& state, CEnt
 
     if (ImGui::Begin(lang.Word("material_editor"), &state.m_Visible))
     {
-
         ImGui::Columns(2, nullptr, true);
 
         ImGui::BeginChild("MaterialSettings");
@@ -605,8 +607,7 @@ void DrawMaterialViewerWindow(CEditor& editor, CMaterialViewerState& state, CEnt
         if (state.m_RenderTexture.id == 0 ||
             state.m_RenderTexture.texture.width != (int)size.x ||
             state.m_RenderTexture.texture.height != (int)size.y)
-            {
-
+        {
             if (state.m_RenderTexture.id != 0)
             {
                 UnloadRenderTexture(state.m_RenderTexture);
@@ -617,14 +618,14 @@ void DrawMaterialViewerWindow(CEditor& editor, CMaterialViewerState& state, CEnt
         ImVec2 viewportPos = ImGui::GetCursorScreenPos();
 
         ImGui::InvisibleButton("Viewport", size,
-            ImGuiButtonFlags_MouseButtonLeft | ImGuiButtonFlags_MouseButtonRight);
+                               ImGuiButtonFlags_MouseButtonLeft | ImGuiButtonFlags_MouseButtonRight);
 
         if (ImGui::IsItemHovered())
         {
-            state.m_Orbit.Radius -= ImGui::GetIO().MouseWheel * 0.5f;
-            if (state.m_Orbit.Radius < 0.1f)
+            state.m_Orbit.m_Radius -= ImGui::GetIO().MouseWheel * 0.5f;
+            if (state.m_Orbit.m_Radius < 0.1f)
             {
-                state.m_Orbit.Radius = 0.1f;
+                state.m_Orbit.m_Radius = 0.1f;
             }
         }
 
@@ -634,28 +635,28 @@ void DrawMaterialViewerWindow(CEditor& editor, CMaterialViewerState& state, CEnt
 
             if (ImGui::IsMouseDown(ImGuiMouseButton_Left))
             {
-                state.m_Orbit.ModelRotation.y += delta.x * 0.5f;
-                state.m_Orbit.ModelRotation.x += delta.y * 0.5f;
+                state.m_Orbit.m_ModelRotation.y += delta.x * 0.5f;
+                state.m_Orbit.m_ModelRotation.x += delta.y * 0.5f;
             }
 
             if (ImGui::IsMouseDown(ImGuiMouseButton_Right))
             {
-                state.m_Orbit.Theta -= delta.x * 0.5f;
-                state.m_Orbit.Phi -= delta.y * 0.5f;
+                state.m_Orbit.m_Theta -= delta.x * 0.5f;
+                state.m_Orbit.m_Phi -= delta.y * 0.5f;
             }
 
-            state.m_Orbit.Phi = Clamp(state.m_Orbit.Phi, -89.0f, 89.0f);
+            state.m_Orbit.m_Phi = Clamp(state.m_Orbit.m_Phi, -89.0f, 89.0f);
         }
 
         Camera3D cam;
         cam.fovy = 45.0f;
         cam.projection = CAMERA_PERSPECTIVE;
-        cam.target = state.m_Orbit.Target;
+        cam.target = state.m_Orbit.m_Target;
         cam.up = { 0, 1, 0 };
 
-        cam.position.x = state.m_Orbit.Target.x + state.m_Orbit.Radius * cosf(state.m_Orbit.Phi * DEG2RAD) * sinf(state.m_Orbit.Theta * DEG2RAD);
-        cam.position.y = state.m_Orbit.Target.y + state.m_Orbit.Radius * sinf(state.m_Orbit.Phi * DEG2RAD);
-        cam.position.z = state.m_Orbit.Target.z + state.m_Orbit.Radius * cosf(state.m_Orbit.Phi * DEG2RAD) * cosf(state.m_Orbit.Theta * DEG2RAD);
+        cam.position.x = state.m_Orbit.m_Target.x + state.m_Orbit.m_Radius * cosf(state.m_Orbit.m_Phi * DEG2RAD) * sinf(state.m_Orbit.m_Theta * DEG2RAD);
+        cam.position.y = state.m_Orbit.m_Target.y + state.m_Orbit.m_Radius * sinf(state.m_Orbit.m_Phi * DEG2RAD);
+        cam.position.z = state.m_Orbit.m_Target.z + state.m_Orbit.m_Radius * cosf(state.m_Orbit.m_Phi * DEG2RAD) * cosf(state.m_Orbit.m_Theta * DEG2RAD);
 
         BeginTextureMode(state.m_RenderTexture);
         ClearBackground({ 40, 40, 45, 255 });
@@ -665,11 +666,11 @@ void DrawMaterialViewerWindow(CEditor& editor, CMaterialViewerState& state, CEnt
         if (state.m_PreviewSphere.meshCount > 0)
         {
             Mat4 rot =
-                Mat4::rotationX(state.m_Orbit.ModelRotation.x * DEG2RAD) *
-                Mat4::rotationY(state.m_Orbit.ModelRotation.y * DEG2RAD);
+                Mat4::rotationX(state.m_Orbit.m_ModelRotation.x * DEG2RAD) *
+                Mat4::rotationY(state.m_Orbit.m_ModelRotation.y * DEG2RAD);
 
             state.m_PreviewSphere.transform = rot;
-            DrawModel(state.m_PreviewSphere, {0,0,0}, 1.0f, WHITE);
+            DrawModel(state.m_PreviewSphere, { 0, 0, 0 }, 1.0f, WHITE);
         }
 
         EndMode3D();

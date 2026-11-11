@@ -39,23 +39,35 @@ Vec3 GetSceneDropPosition(Camera3D camera)
 
 void ApplyNegativeScaleWinding(CEntity* pEntity)
 {
-    if (!pEntity) return;
+    if (!pEntity)
+    {
+        return;
+    }
 
     CTransformComponent* pTransform = pEntity->GetTransformComponent();
     CMeshComponent* pMeshComp = pEntity->GetMeshComponent();
-    if (!pTransform || !pMeshComp) return;
+    if (!pTransform || !pMeshComp)
+    {
+        return;
+    }
 
     float sx = pTransform->m_Scale.x;
     float sy = pTransform->m_Scale.y;
     float sz = pTransform->m_Scale.z;
 
     int negCount = (sx < 0.0f ? 1 : 0) + (sy < 0.0f ? 1 : 0) + (sz < 0.0f ? 1 : 0);
-    if (negCount % 2 == 0) return;
+    if (negCount % 2 == 0)
+    {
+        return;
+    }
 
     for (int m = 0; m < pMeshComp->m_Model.meshCount; m++)
     {
         Mesh& mesh = pMeshComp->m_Model.meshes[m];
-        if (!mesh.vertices || mesh.triangleCount <= 0) continue;
+        if (!mesh.vertices || mesh.triangleCount <= 0)
+        {
+            continue;
+        }
 
         if (mesh.indices)
         {
@@ -86,7 +98,9 @@ void ApplyNegativeScaleWinding(CEntity* pEntity)
             }
             UpdateMeshBuffer(mesh, 0, mesh.vertices, mesh.vertexCount * 3 * sizeof(float), 0);
             if (mesh.texcoords)
+            {
                 UpdateMeshBuffer(mesh, 2, mesh.texcoords, mesh.vertexCount * 2 * sizeof(float), 0);
+            }
         }
 
         CModelService::RebuildMeshNormals(mesh);

@@ -32,18 +32,18 @@ struct SPluginContext;
 
 struct SEditorUiTimings
 {
-    float hierarchyMs = 0.0f;
-    float inspectorMs = 0.0f;
-    float scenePanelMs = 0.0f;
-    float assetsMs = 0.0f;
-    float modelViewerMs = 0.0f;
+    float m_HierarchyMs = 0.0f;
+    float m_InspectorMs = 0.0f;
+    float m_ScenePanelMs = 0.0f;
+    float m_AssetsMs = 0.0f;
+    float m_ModelViewerMs = 0.0f;
 };
 
 struct SBuildTaskResult
 {
-    bool succeeded = false;
-    std::string outputPath;
-    std::string errorMessage;
+    bool m_Succeeded = false;
+    std::string m_OutputPath;
+    std::string m_ErrorMessage;
 };
 
 class CEditor
@@ -56,7 +56,10 @@ public:
     CEditor& operator=(const CEditor&) = delete;
 
     void DrawUi(Shader shader, CFlyCamera& camera, SPluginContext* pCtx);
-    SEditorUiTimings GetUiTimings() const { return m_UiTimings; }
+    SEditorUiTimings GetUiTimings() const
+    {
+        return m_UiTimings;
+    }
     void DrawAssetsUi();
     void HandleInput();
     void SaveState();

@@ -3,15 +3,15 @@
 #include "imgui.h"
 #include "QuarkCore/QuarkCore.hpp"
 #if defined(_WIN32)
-    #if defined(QUARKENGINE_BUILD)
-        #define QCIMGUI_API
-    #elif defined(BUILD_LIBTYPE_SHARED)
-        #define QCIMGUI_API __declspec(dllexport)
-    #else
-        #define QCIMGUI_API __declspec(dllimport)
-    #endif
+#if defined(QUARKENGINE_BUILD)
+#define QCIMGUI_API
+#elif defined(BUILD_LIBTYPE_SHARED)
+#define QCIMGUI_API __declspec(dllexport)
 #else
-    #define QCIMGUI_API
+#define QCIMGUI_API __declspec(dllimport)
+#endif
+#else
+#define QCIMGUI_API
 #endif
 
 QCIMGUI_API bool QcImGuiSetup(bool darkTheme);

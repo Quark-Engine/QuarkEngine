@@ -16,35 +16,38 @@ class CTaskPool;
 
 struct SSceneRendererTimings
 {
-    float updateMs = 0.0f;
-    float shadowPassMs = 0.0f;
+    float m_UpdateMs = 0.0f;
+    float m_ShadowPassMs = 0.0f;
 };
 
 struct SSceneEntityFrameData
 {
-    Mat4 worldTransform{};
-    Mat4 meshWorldTransform{};
-    BoundingBox worldBounds{};
-    bool hasMesh = false;
+    Mat4 m_WorldTransform{};
+    Mat4 m_MeshWorldTransform{};
+    BoundingBox m_WorldBounds{};
+    bool m_HasMesh = false;
 };
 
 class CSceneRenderer
 {
 public:
     void Initialize(int shadowMapSize, bool shadowsEnabled,
-        float shadowBias, int shadowFilterQuality,
-        const std::filesystem::path& shaderDirectory = {});
+                    float shadowBias, int shadowFilterQuality,
+                    const std::filesystem::path& shaderDirectory = {});
 
     void Update(CScene& scene, CLightRegistry& lights, const Vec3& cameraPosition,
-        bool shadowsEnabled, float shadowBias, int shadowFilterQuality);
+                bool shadowsEnabled, float shadowBias, int shadowFilterQuality);
 
     void PrepareFrameCache(CScene& scene);
-    void SetTaskPool(CTaskPool& taskPool) { m_pTaskPool = &taskPool; }
+    void SetTaskPool(CTaskPool& taskPool)
+    {
+        m_pTaskPool = &taskPool;
+    }
 
     void EnsureLightingShader(CMeshComponent* pMesh);
 
     bool IsMeshVisible(CMeshComponent* pMesh, const Mat4& worldTransform,
-        const Camera3D& camera, float aspectRatio) const;
+                       const Camera3D& camera, float aspectRatio) const;
     bool IsMeshVisible(int entityIndex, const Camera3D& camera, float aspectRatio) const;
 
     const Mat4& GetCachedWorldTransform(int entityIndex) const;
@@ -55,8 +58,14 @@ public:
     void BeginLightingPass();
     void EndLightingPass();
 
-    Shader GetLightingShader() const { return m_LightingShader; }
-    SSceneRendererTimings GetTimings() const { return m_Timings; }
+    Shader GetLightingShader() const
+    {
+        return m_LightingShader;
+    }
+    SSceneRendererTimings GetTimings() const
+    {
+        return m_Timings;
+    }
 
     void Unload();
 
@@ -64,7 +73,7 @@ private:
     void UnloadShaders();
     void UnloadShadowMaps();
     void WriteVulkanGlobals(CScene& scene, bool shadowsEnabled,
-        float shadowBias, int shadowFilterQuality);
+                            float shadowBias, int shadowFilterQuality);
 
     Shader m_LightingShader{};
     Shader m_ShadowShader{};

@@ -2,12 +2,12 @@
 #include "component.h"
 namespace
 {
-bool OwnsLoadedModel(const CModelAsset& asset)
-{
-    return !asset.m_IsProcedural &&
-           asset.m_LoadedModel.meshCount > 0 &&
-           asset.m_LoadedModel.meshes != nullptr;
-}
+    bool OwnsLoadedModel(const CModelAsset& asset)
+    {
+        return !asset.m_IsProcedural &&
+            asset.m_LoadedModel.meshCount > 0 &&
+            asset.m_LoadedModel.meshes != nullptr;
+    }
 } // anonymous
 
 CModelAsset::CModelAsset() = default;
@@ -69,13 +69,20 @@ const char* ObjectTypeName(EObjectType type)
 {
     switch (type)
     {
-        case OBJECT_CUBE:      return "Cube";
-        case OBJECT_SPHERE:    return "Sphere";
-        case OBJECT_CONE:      return "Cone";
-        case OBJECT_CYLINDER:  return "Cylinder";
-        case OBJECT_HEMISPHERE: return "Hemisphere";
-        case OBJECT_TORUS:     return "Torus";
-        default:               return "Cube";
+        case OBJECT_CUBE:
+            return "Cube";
+        case OBJECT_SPHERE:
+            return "Sphere";
+        case OBJECT_CONE:
+            return "Cone";
+        case OBJECT_CYLINDER:
+            return "Cylinder";
+        case OBJECT_HEMISPHERE:
+            return "Hemisphere";
+        case OBJECT_TORUS:
+            return "Torus";
+        default:
+            return "Cube";
     }
 }
 

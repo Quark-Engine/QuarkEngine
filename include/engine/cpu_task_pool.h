@@ -18,10 +18,10 @@
 
 struct SThreadUsageSnapshot
 {
-    std::string name;
-    std::string currentTask;
-    float utilizationPercent = 0.0f;
-    std::vector<float> vHistory;
+    std::string m_Name;
+    std::string m_CurrentTask;
+    float m_UtilizationPercent = 0.0f;
+    std::vector<float> m_vHistory;
 };
 
 class CTaskPool
@@ -40,13 +40,13 @@ public:
     void SampleUsage(std::chrono::nanoseconds interval);
     std::vector<SThreadUsageSnapshot> GetThreadUsageSnapshot() const;
 
-    template<typename F>
+    template <typename F>
     auto Submit(F&& function) -> std::future<std::invoke_result_t<F>>
     {
         return Submit("General CPU task", std::forward<F>(function));
     }
 
-    template<typename F>
+    template <typename F>
     auto Submit(const std::string& taskName, F&& function) -> std::future<std::invoke_result_t<F>>
     {
         using TResult = std::invoke_result_t<F>;
@@ -60,9 +60,9 @@ public:
                 throw std::runtime_error("Cannot submit a task to a stopped task pool");
             }
             m_Tasks.push_back({ taskName, [pTask]()
-            {
-                (*pTask)();
-            } });
+                                {
+                                    (*pTask)();
+                                } });
         }
         m_Condition.notify_one();
         return future;
@@ -73,18 +73,18 @@ private:
 
     struct SThreadUsage
     {
-        std::string name;
-        std::string currentTask;
-        std::chrono::nanoseconds accumulatedBusy{0};
-        float smoothedUtilizationPercent = 0.0f;
-        bool isBusy = false;
-        std::deque<float> history;
+        std::string m_Name;
+        std::string m_CurrentTask;
+        std::chrono::nanoseconds m_AccumulatedBusy{ 0 };
+        float m_SmoothedUtilizationPercent = 0.0f;
+        bool m_IsBusy = false;
+        std::deque<float> m_History;
     };
 
     struct SQueuedTask
     {
-        std::string name;
-        std::function<void()> execute;
+        std::string m_Name;
+        std::function<void()> pfnExecute;
     };
 
     std::mutex m_Mutex;

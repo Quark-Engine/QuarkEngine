@@ -13,11 +13,11 @@ public:
     static void SyncState(CEditor& editor);
 
     static bool GetSelectedVertexIndex(const CEntity& entity, int meshIndex, int triangleIndex,
-        int vertexCorner, int& outVertexIndex);
+                                       int vertexCorner, int& outVertexIndex);
     static Vec3 GetVertexWorldPosition(const CScene& scene, const CEntity& entity, int meshIndex,
-        int vertexIndex);
+                                       int vertexIndex);
     static bool SetVertexWorldPosition(const CScene& scene, CEntity& entity, int meshIndex,
-        int vertexIndex, const Vec3& worldPosition);
+                                       int vertexIndex, const Vec3& worldPosition);
 
     static void ResetModel(CEntity& entity, const CFreetypeTextMesh& textMesh);
 
@@ -25,10 +25,10 @@ public:
 
 private:
     static bool GetSelectedTriangleVertices(const CEntity& entity, int meshIndex, int triangleIndex,
-        int aOutIndices[3]);
+                                            int aOutIndices[3]);
     static Vec3 GetVertexLocalPosition(const CEntity& entity, int meshIndex, int vertexIndex);
     static bool SetVertexLocalPosition(CEntity& entity, int meshIndex, int vertexIndex,
-        const Vec3& localPosition);
+                                       const Vec3& localPosition);
     static bool EnsureReady(CEntity& entity);
 };
 

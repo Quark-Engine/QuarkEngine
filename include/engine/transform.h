@@ -7,25 +7,25 @@
 namespace quark
 {
 
-Mat4 ComposeLocal(const CTransformComponent& transform);
-Mat4 ComposeLocal(const CEntity& entity);
+    Mat4 ComposeLocal(const CTransformComponent& transform);
+    Mat4 ComposeLocal(const CEntity& entity);
 
-int IndexOfEntity(const CScene& scene, const CEntity& entity);
+    int IndexOfEntity(const CScene& scene, const CEntity& entity);
 
-Mat4 ComposeWorld(const CScene& scene, int entityIndex);
-Mat4 ComposeWorld(const CScene& scene, const CEntity& entity);
+    Mat4 ComposeWorld(const CScene& scene, int entityIndex);
+    Mat4 ComposeWorld(const CScene& scene, const CEntity& entity);
 
-Mat4 ComposeMeshWorld(const CScene& scene, const CEntity& entity);
+    Mat4 ComposeMeshWorld(const CScene& scene, const CEntity& entity);
 
-Mat4 ParentWorld(const CScene& scene, const CEntity& entity);
+    Mat4 ParentWorld(const CScene& scene, const CEntity& entity);
 
-bool TryInvertAffine(const Mat4& matrix, Mat4& inverse);
-bool HasNegativeDeterminant(const Mat4& matrix);
+    bool TryInvertAffine(const Mat4& matrix, Mat4& inverse);
+    bool HasNegativeDeterminant(const Mat4& matrix);
 
-void DecomposeLocal(const Mat4& parentWorld, const Mat4& world, CTransformComponent& out);
-void DecomposeWorld(const Mat4& world, CTransformComponent& out);
+    void DecomposeLocal(const Mat4& parentWorld, const Mat4& world, CTransformComponent& out);
+    void DecomposeWorld(const Mat4& world, CTransformComponent& out);
 
-Mat4 ComposeWorld(const CScene& scene, int entityIndex, std::vector<int>& vStack);
+    Mat4 ComposeWorld(const CScene& scene, int entityIndex, std::vector<int>& vStack);
 
 } // quark
 

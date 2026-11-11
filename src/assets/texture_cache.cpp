@@ -53,7 +53,7 @@ const Texture2D* CTextureCache::Load(const std::string& imagePath)
     if (texture.id == 0)
     {
         TraceLog(LogLevel::Error, "ASSETS",
-            TextFormat("Failed to load texture file: %s", imagePath.c_str()));
+                 TextFormat("Failed to load texture file: %s", imagePath.c_str()));
         return existing != m_Textures.end() ? &existing->second : nullptr;
     }
 

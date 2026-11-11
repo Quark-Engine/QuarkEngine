@@ -16,7 +16,10 @@
 class CEntity;
 class CModelAsset;
 class CComponentFactoryRegistry;
-namespace quark::script { class CScriptComponent; }
+namespace quark::script
+{
+    class CScriptComponent;
+} // quark::script
 using CScriptComponent = ::quark::script::CScriptComponent;
 
 enum EObjectType
@@ -69,8 +72,8 @@ public:
     IComponent() = default;
     IComponent(EComponentType typeVal, const std::string& nameVal)
         : m_Name(nameVal), m_Type(typeVal)
-        {
-        }
+    {
+    }
 
     virtual ~IComponent() = default;
     virtual void Serialize(nlohmann::json& json) const
@@ -97,9 +100,9 @@ using FComponentFactory = std::function<std::shared_ptr<IComponent>()>;
 class CTransformComponent : public IComponent
 {
 public:
-    Vec3 m_Position = {0, 0, 0};
-    Vec3 m_Rotation = {0, 0, 0};
-    Vec3 m_Scale = {1, 1, 1};
+    Vec3 m_Position = { 0, 0, 0 };
+    Vec3 m_Rotation = { 0, 0, 0 };
+    Vec3 m_Scale = { 1, 1, 1 };
     Mat4 m_LocalMatrixOverride = Mat4::identity();
     bool m_HasLocalMatrixOverride = false;
 
@@ -131,9 +134,9 @@ public:
 
     void Serialize(nlohmann::json& json) const override
     {
-        json["position"] = {m_Position.x, m_Position.y, m_Position.z};
-        json["rotation"] = {m_Rotation.x, m_Rotation.y, m_Rotation.z};
-        json["scale"] = {m_Scale.x, m_Scale.y, m_Scale.z};
+        json["position"] = { m_Position.x, m_Position.y, m_Position.z };
+        json["rotation"] = { m_Rotation.x, m_Rotation.y, m_Rotation.z };
+        json["scale"] = { m_Scale.x, m_Scale.y, m_Scale.z };
         if (m_HasLocalMatrixOverride)
         {
             json["local_matrix_override"] = m_LocalMatrixOverride.m;
@@ -145,17 +148,17 @@ public:
         if (json.contains("position"))
         {
             auto& p = json["position"];
-            m_Position = {p[0], p[1], p[2]};
+            m_Position = { p[0], p[1], p[2] };
         }
         if (json.contains("rotation"))
         {
             auto& r = json["rotation"];
-            m_Rotation = {r[0], r[1], r[2]};
+            m_Rotation = { r[0], r[1], r[2] };
         }
         if (json.contains("scale"))
         {
             auto& s = json["scale"];
-            m_Scale = {s[0], s[1], s[2]};
+            m_Scale = { s[0], s[1], s[2] };
         }
         if (json.contains("local_matrix_override") && json["local_matrix_override"].is_array() &&
             json["local_matrix_override"].size() == 16)
@@ -190,7 +193,7 @@ public:
     bool m_OwnsMaterials = false;
     bool m_UvDirty = true;
     bool m_BoundsDirty = true;
-    BoundingBox m_CachedLocalBounds = {{0, 0, 0}, {0, 0, 0}};
+    BoundingBox m_CachedLocalBounds = { { 0, 0, 0 }, { 0, 0, 0 } };
 
     CEditableMesh m_EditableMesh;
     bool m_IsEditableMesh = false;
@@ -224,7 +227,10 @@ public:
 
     CMeshComponent& operator=(const CMeshComponent& other)
     {
-        if (this == &other) return *this;
+        if (this == &other)
+        {
+            return *this;
+        }
 
         IComponent::operator=(other);
         m_Model = {};
@@ -315,7 +321,7 @@ public:
 class CMaterialComponent : public IComponent
 {
 public:
-    Texture2D m_Texture = {0};
+    Texture2D m_Texture = { 0 };
     ETextureSource m_TextureSource = TEXTURE_NONE;
     std::string m_AlbedoTextureName;
     std::string m_TextureName;
@@ -332,7 +338,7 @@ public:
     float m_TextureRepeatU = 1.0f;
     float m_TextureRepeatV = 1.0f;
 
-    Vec2 m_UvScale = {1, 1};
+    Vec2 m_UvScale = { 1, 1 };
     std::vector<std::vector<float>> m_vOriginalTexcoords;
     std::vector<Texture2D> m_vOriginalMaterialTextures;
 
@@ -385,18 +391,51 @@ public:
             m_OutlineColor = { c[0], c[1], c[2], c[3] };
         }
 
-        if (json.contains("texture_source")) m_TextureSource = static_cast<ETextureSource>(json["texture_source"].get<int>());
-        if (json.contains("albedo_texture_name")) m_AlbedoTextureName = json["albedo_texture_name"];
-        if (json.contains("texture_name")) m_TextureName = json["texture_name"];
-        if (json.contains("normal_texture_name")) m_NormalTextureName = json["normal_texture_name"];
-        if (json.contains("roughness_texture_name")) m_RoughnessTextureName = json["roughness_texture_name"];
-        if (json.contains("metallic_texture_name")) m_MetallicTextureName = json["metallic_texture_name"];
-        if (json.contains("material_slot_sources")) m_vMaterialSlotSources = json["material_slot_sources"].get<std::vector<std::string>>();
-        if (json.contains("texture_stretch")) m_TextureStretch = json["texture_stretch"];
+        if (json.contains("texture_source"))
+        {
+            m_TextureSource = static_cast<ETextureSource>(json["texture_source"].get<int>());
+        }
+        if (json.contains("albedo_texture_name"))
+        {
+            m_AlbedoTextureName = json["albedo_texture_name"];
+        }
+        if (json.contains("texture_name"))
+        {
+            m_TextureName = json["texture_name"];
+        }
+        if (json.contains("normal_texture_name"))
+        {
+            m_NormalTextureName = json["normal_texture_name"];
+        }
+        if (json.contains("roughness_texture_name"))
+        {
+            m_RoughnessTextureName = json["roughness_texture_name"];
+        }
+        if (json.contains("metallic_texture_name"))
+        {
+            m_MetallicTextureName = json["metallic_texture_name"];
+        }
+        if (json.contains("material_slot_sources"))
+        {
+            m_vMaterialSlotSources = json["material_slot_sources"].get<std::vector<std::string>>();
+        }
+        if (json.contains("texture_stretch"))
+        {
+            m_TextureStretch = json["texture_stretch"];
+        }
 
-        if (json.contains("auto_uv")) m_AutoUv = json["auto_uv"];
-        if (json.contains("repeat_u")) m_TextureRepeatU = json["repeat_u"];
-        if (json.contains("repeat_v")) m_TextureRepeatV = json["repeat_v"];
+        if (json.contains("auto_uv"))
+        {
+            m_AutoUv = json["auto_uv"];
+        }
+        if (json.contains("repeat_u"))
+        {
+            m_TextureRepeatU = json["repeat_u"];
+        }
+        if (json.contains("repeat_v"))
+        {
+            m_TextureRepeatV = json["repeat_v"];
+        }
         if (json.contains("uv_scale"))
         {
             auto& scale = json["uv_scale"];
@@ -435,15 +474,15 @@ public:
     bool m_Visualize = true;
 
     // box
-    Vec3 m_Size = {1, 1, 1};
+    Vec3 m_Size = { 1, 1, 1 };
 
     // sphere/capsule
     float m_Radius = 0.5f;
     float m_Height = 2.0f;
 
-    Vec3 m_Center = {0, 0, 0};
+    Vec3 m_Center = { 0, 0, 0 };
 
-    BoundingBox m_WorldBounds = {{0, 0, 0}, {0, 0, 0}};
+    BoundingBox m_WorldBounds = { { 0, 0, 0 }, { 0, 0, 0 } };
     bool m_Dirty = true;
 
     CCollisionComponent()
@@ -606,7 +645,7 @@ public:
 class CUiComponent : public IComponent
 {
 public:
-    EGuiWidgetType m_WidgetType = EGuiWidgetType::Button;
+    EGuiWidgetType m_WidgetType = EGuiWidgetType::BUTTON;
     std::string m_Placeholder = "InputField";
     std::vector<std::string> m_vItems = { "Combo" };
     int m_SelectedIndex = 0;
@@ -639,12 +678,12 @@ public:
     {
         switch (m_WidgetType)
         {
-        case EGuiWidgetType::Button:
-            return "Ui Button";
-        case EGuiWidgetType::InputField:
-            return "Ui Inputfield";
-        case EGuiWidgetType::Combo:
-            return "Ui Combo";
+            case EGuiWidgetType::BUTTON:
+                return "Ui Button";
+            case EGuiWidgetType::INPUT_FIELD:
+                return "Ui Inputfield";
+            case EGuiWidgetType::COMBO:
+                return "Ui Combo";
         }
         return "Ui Button";
     }
@@ -652,59 +691,59 @@ public:
     void SyncToRuntimeDesc(const CUiRectTransformComponent* pRectTransform,
                            const CTextComponent* pTextComponent)
     {
-        m_RuntimeDesc.widgetId = reinterpret_cast<uint64_t>(this);
-        m_RuntimeDesc.widgetType = m_WidgetType;
+        m_RuntimeDesc.m_WidgetId = reinterpret_cast<uint64_t>(this);
+        m_RuntimeDesc.m_WidgetType = m_WidgetType;
         if (pRectTransform)
         {
-            m_RuntimeDesc.position = pRectTransform->m_Position;
-            m_RuntimeDesc.size = pRectTransform->m_Size;
+            m_RuntimeDesc.m_Position = pRectTransform->m_Position;
+            m_RuntimeDesc.m_Size = pRectTransform->m_Size;
         }
         else
         {
-            m_RuntimeDesc.position = { 40.0f, 40.0f };
-            m_RuntimeDesc.size = { 160.0f, 30.0f };
+            m_RuntimeDesc.m_Position = { 40.0f, 40.0f };
+            m_RuntimeDesc.m_Size = { 160.0f, 30.0f };
         }
         if (pTextComponent)
         {
-            m_RuntimeDesc.text = pTextComponent->m_Text;
-            m_RuntimeDesc.textFontSize = pTextComponent->m_FontSize;
-            m_RuntimeDesc.textLineSpacing = pTextComponent->m_LineSpacing;
-            m_RuntimeDesc.textColor = pTextComponent->m_Color;
-            m_RuntimeDesc.textHorizontalAlignment = static_cast<int>(pTextComponent->m_HorizontalAlignment);
-            m_RuntimeDesc.textVerticalAlignment = static_cast<int>(pTextComponent->m_VerticalAlignment);
+            m_RuntimeDesc.m_Text = pTextComponent->m_Text;
+            m_RuntimeDesc.m_TextFontSize = pTextComponent->m_FontSize;
+            m_RuntimeDesc.m_TextLineSpacing = pTextComponent->m_LineSpacing;
+            m_RuntimeDesc.m_TextColor = pTextComponent->m_Color;
+            m_RuntimeDesc.m_TextHorizontalAlignment = static_cast<int>(pTextComponent->m_HorizontalAlignment);
+            m_RuntimeDesc.m_TextVerticalAlignment = static_cast<int>(pTextComponent->m_VerticalAlignment);
         }
         else
         {
-            m_RuntimeDesc.text.clear();
-            m_RuntimeDesc.textFontSize = 16.0f;
-            m_RuntimeDesc.textLineSpacing = 1.0f;
-            m_RuntimeDesc.textColor = { 235, 235, 235, 255 };
-            m_RuntimeDesc.textHorizontalAlignment = 1;
-            m_RuntimeDesc.textVerticalAlignment = 1;
+            m_RuntimeDesc.m_Text.clear();
+            m_RuntimeDesc.m_TextFontSize = 16.0f;
+            m_RuntimeDesc.m_TextLineSpacing = 1.0f;
+            m_RuntimeDesc.m_TextColor = { 235, 235, 235, 255 };
+            m_RuntimeDesc.m_TextHorizontalAlignment = 1;
+            m_RuntimeDesc.m_TextVerticalAlignment = 1;
         }
-        m_RuntimeDesc.placeholder = m_Placeholder;
-        m_RuntimeDesc.vItems = m_vItems;
-        m_RuntimeDesc.selectedIndex = m_SelectedIndex;
-        m_RuntimeDesc.buttonInteractable = m_Interactable;
-        m_RuntimeDesc.buttonTransition = m_Transition;
-        m_RuntimeDesc.buttonNormalColor = m_NormalColor;
-        m_RuntimeDesc.buttonHighlightedColor = m_HighlightedColor;
-        m_RuntimeDesc.buttonPressedColor = m_PressedColor;
-        m_RuntimeDesc.buttonSelectedColor = m_SelectedColor;
-        m_RuntimeDesc.buttonDisabledColor = m_DisabledColor;
-        m_RuntimeDesc.buttonColorMultiplier = m_ColorMultiplier;
-        m_RuntimeDesc.buttonFadeDuration = m_FadeDuration;
-        m_RuntimeDesc.buttonNavigation = m_Navigation;
-        m_RuntimeDesc.showNavigationVisualization = m_ShowNavigationVisualization;
+        m_RuntimeDesc.m_Placeholder = m_Placeholder;
+        m_RuntimeDesc.m_vItems = m_vItems;
+        m_RuntimeDesc.m_SelectedIndex = m_SelectedIndex;
+        m_RuntimeDesc.m_ButtonInteractable = m_Interactable;
+        m_RuntimeDesc.m_ButtonTransition = m_Transition;
+        m_RuntimeDesc.m_ButtonNormalColor = m_NormalColor;
+        m_RuntimeDesc.m_ButtonHighlightedColor = m_HighlightedColor;
+        m_RuntimeDesc.m_ButtonPressedColor = m_PressedColor;
+        m_RuntimeDesc.m_ButtonSelectedColor = m_SelectedColor;
+        m_RuntimeDesc.m_ButtonDisabledColor = m_DisabledColor;
+        m_RuntimeDesc.m_ButtonColorMultiplier = m_ColorMultiplier;
+        m_RuntimeDesc.m_ButtonFadeDuration = m_FadeDuration;
+        m_RuntimeDesc.m_ButtonNavigation = m_Navigation;
+        m_RuntimeDesc.m_ShowNavigationVisualization = m_ShowNavigationVisualization;
     }
 
     void SyncFromRuntimeDesc(CTextComponent* pTextComponent)
     {
         if (pTextComponent)
         {
-            pTextComponent->m_Text = m_RuntimeDesc.text;
+            pTextComponent->m_Text = m_RuntimeDesc.m_Text;
         }
-        m_SelectedIndex = m_RuntimeDesc.selectedIndex;
+        m_SelectedIndex = m_RuntimeDesc.m_SelectedIndex;
     }
 
     void Serialize(nlohmann::json& json) const override;
@@ -762,13 +801,16 @@ public:
         return m_vComponents.size();
     }
 
-    template<typename T>
+    template <typename T>
     std::shared_ptr<T> GetComponentOfType()
     {
-        for (auto& comp : m_vComponents)
+        for (auto& pComp : m_vComponents)
         {
-            auto casted = std::dynamic_pointer_cast<T>(comp);
-            if (casted) return casted;
+            auto casted = std::dynamic_pointer_cast<T>(pComp);
+            if (casted)
+            {
+                return casted;
+            }
         }
         return nullptr;
     }
@@ -830,13 +872,13 @@ public:
     void Serialize(nlohmann::json& json) const
     {
         json["components"] = nlohmann::json::array();
-        for (const auto& comp : m_vComponents)
+        for (const auto& pComp : m_vComponents)
         {
             nlohmann::json compJson;
-            compJson["type"] = comp->GetTypeName();
-            compJson["enabled"] = comp->m_Enabled;
+            compJson["type"] = pComp->GetTypeName();
+            compJson["enabled"] = pComp->m_Enabled;
             nlohmann::json data;
-            comp->Serialize(data);
+            pComp->Serialize(data);
             compJson["data"] = data;
             json["components"].push_back(compJson);
         }
@@ -858,7 +900,8 @@ public:
 
     CText3DComponent()
     {
-        m_Name = "3D Text"; m_Type = COMPONENT_CUSTOM;
+        m_Name = "3D Text";
+        m_Type = COMPONENT_CUSTOM;
     }
 
     std::string GetTypeName() const override
@@ -881,11 +924,26 @@ public:
 
     void Deserialize(const nlohmann::json& j) override
     {
-        if (j.contains("text")) m_Text = j["text"];
-        if (j.contains("size")) m_Size = j["size"];
-        if (j.contains("thickness")) m_Thickness = j["thickness"];
-        if (j.contains("letter_spacing")) m_LetterSpacing = j["letter_spacing"];
-        if (j.contains("font_path")) m_FontPath = j["font_path"];
+        if (j.contains("text"))
+        {
+            m_Text = j["text"];
+        }
+        if (j.contains("size"))
+        {
+            m_Size = j["size"];
+        }
+        if (j.contains("thickness"))
+        {
+            m_Thickness = j["thickness"];
+        }
+        if (j.contains("letter_spacing"))
+        {
+            m_LetterSpacing = j["letter_spacing"];
+        }
+        if (j.contains("font_path"))
+        {
+            m_FontPath = j["font_path"];
+        }
     }
 };
 

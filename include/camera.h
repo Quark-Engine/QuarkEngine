@@ -16,7 +16,7 @@ public:
     float m_Sensitivity = 0.003f;
     float m_ZoomSensitivity = 1.0f;
     bool m_Active = false;
-    
+
     CFlyCamera();
     ~CFlyCamera();
     void InitializeCursors();

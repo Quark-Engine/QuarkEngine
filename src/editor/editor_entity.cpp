@@ -12,34 +12,34 @@
 namespace
 {
 
-std::string SanitizePrefabFileName(const std::string& rawName)
-{
-    std::string sanitized;
-    sanitized.reserve(rawName.size());
-    for (unsigned char ch : rawName)
+    std::string SanitizePrefabFileName(const std::string& rawName)
     {
-        if (ch < 32 || ch == '<' || ch == '>' || ch == ':' || ch == '"' ||
-            ch == '/' || ch == '\\' || ch == '|' || ch == '?' || ch == '*')
+        std::string sanitized;
+        sanitized.reserve(rawName.size());
+        for (unsigned char ch : rawName)
         {
-            sanitized.push_back('_');
+            if (ch < 32 || ch == '<' || ch == '>' || ch == ':' || ch == '"' ||
+                ch == '/' || ch == '\\' || ch == '|' || ch == '?' || ch == '*')
+            {
+                sanitized.push_back('_');
+            }
+            else
+            {
+                sanitized.push_back(static_cast<char>(ch));
+            }
         }
-        else
+
+        while (!sanitized.empty() && (sanitized.back() == ' ' || sanitized.back() == '.'))
         {
-            sanitized.push_back(static_cast<char>(ch));
+            sanitized.pop_back();
         }
-    }
 
-    while (!sanitized.empty() && (sanitized.back() == ' ' || sanitized.back() == '.'))
-    {
-        sanitized.pop_back();
+        if (sanitized.empty())
+        {
+            return "Prefab";
+        }
+        return sanitized;
     }
-
-    if (sanitized.empty())
-    {
-        return "Prefab";
-    }
-    return sanitized;
-}
 
 } // anonymous
 
@@ -129,7 +129,7 @@ CEntity CEntityFactory::FromAsset(CScene& scene, CModelAsset& asset)
         }
     }
 
-    pMat->m_Texture = {0};
+    pMat->m_Texture = { 0 };
     return entity;
 }
 
@@ -151,7 +151,7 @@ CEntity CEntityFactory::Light(CScene& scene, int parentIndex)
     }
 
     auto pLight = std::make_shared<CLightComponent>();
-    pLight->m_Light = CreateLighting({0, 0, 0}, WHITE);
+    pLight->m_Light = CreateLighting({ 0, 0, 0 }, WHITE);
     pCm->AddComponent(pLight);
 
     return entity;
@@ -184,11 +184,11 @@ CEntity CEntityFactory::Camera(CScene& scene, int parentIndex)
 CEntity CEntityFactory::UiWidget(CScene& scene, EGuiWidgetType widgetType, int parentIndex)
 {
     const char* baseName = "Ui Button";
-    if (widgetType == EGuiWidgetType::InputField)
+    if (widgetType == EGuiWidgetType::INPUT_FIELD)
     {
         baseName = "Ui Inputfield";
     }
-    else if (widgetType == EGuiWidgetType::Combo)
+    else if (widgetType == EGuiWidgetType::COMBO)
     {
         baseName = "Ui Combo";
     }
@@ -219,24 +219,24 @@ CEntity CEntityFactory::UiWidget(CScene& scene, EGuiWidgetType widgetType, int p
 
     switch (widgetType)
     {
-    case EGuiWidgetType::Button:
-        pRectTransform->m_Size = { 150.0f, 30.0f };
-        pText->m_Text = "Button";
-        pText->m_HorizontalAlignment = EUiTextAlignment::CENTER;
-        break;
-    case EGuiWidgetType::InputField:
-        pRectTransform->m_Size = { 260.0f, 30.0f };
-        pText->m_Text.clear();
-        pText->m_HorizontalAlignment = EUiTextAlignment::LEFT;
-        pUi->m_Placeholder = "InputField";
-        break;
-    case EGuiWidgetType::Combo:
-        pRectTransform->m_Size = { 260.0f, 30.0f };
-        pUi->m_vItems = { "Combo" };
-        pUi->m_SelectedIndex = 0;
-        pText->m_Text = "Combo";
-        pText->m_HorizontalAlignment = EUiTextAlignment::LEFT;
-        break;
+        case EGuiWidgetType::BUTTON:
+            pRectTransform->m_Size = { 150.0f, 30.0f };
+            pText->m_Text = "Button";
+            pText->m_HorizontalAlignment = EUiTextAlignment::CENTER;
+            break;
+        case EGuiWidgetType::INPUT_FIELD:
+            pRectTransform->m_Size = { 260.0f, 30.0f };
+            pText->m_Text.clear();
+            pText->m_HorizontalAlignment = EUiTextAlignment::LEFT;
+            pUi->m_Placeholder = "InputField";
+            break;
+        case EGuiWidgetType::COMBO:
+            pRectTransform->m_Size = { 260.0f, 30.0f };
+            pUi->m_vItems = { "Combo" };
+            pUi->m_SelectedIndex = 0;
+            pText->m_Text = "Combo";
+            pText->m_HorizontalAlignment = EUiTextAlignment::LEFT;
+            break;
     }
 
     pCm->AddComponent(pUi);

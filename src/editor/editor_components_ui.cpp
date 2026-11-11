@@ -24,7 +24,7 @@ void CComponentUIHelper::DrawEntityInspector(CEditor& editor, CEntity& entity, S
     {
         auto pComponentsManager = entity.GetComponents();
         size_t componentCount = pComponentsManager->GetComponentCount();
-        editor.m_Ui.m_Inspector.ComponentToRemove = -1;
+        editor.m_Ui.m_Inspector.m_ComponentToRemove = -1;
 
         for (size_t i = 0; i < componentCount; ++i)
         {
@@ -120,7 +120,7 @@ void CComponentUIHelper::DrawEntityInspector(CEditor& editor, CEntity& entity, S
                     ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImVec4(1.0f, 0.3f, 0.3f, 1.0f));
                     if (ImGui::Button(lang.Word("remove_component"), ImVec2(-1, 0)))
                     {
-                        editor.m_Ui.m_Inspector.ComponentToRemove = static_cast<int>(i);
+                        editor.m_Ui.m_Inspector.m_ComponentToRemove = static_cast<int>(i);
                     }
                     ImGui::PopStyleColor(2);
                 }
@@ -306,12 +306,12 @@ void CComponentUIHelper::DrawEntityInspector(CEditor& editor, CEntity& entity, S
             ImGui::EndPopup();
         }
 
-    if (editor.m_Ui.m_Inspector.ComponentToRemove != -1)
-    {
-        const int componentToRemove = editor.m_Ui.m_Inspector.ComponentToRemove;
-        const int entityIndex = static_cast<int>(&entity - editor.m_Scene.m_vEntities.data());
-        editor.SaveState();
-        std::shared_ptr<IComponent> pComp = pComponentsManager->GetComponent(componentToRemove);
+        if (editor.m_Ui.m_Inspector.m_ComponentToRemove != -1)
+        {
+            const int componentToRemove = editor.m_Ui.m_Inspector.m_ComponentToRemove;
+            const int entityIndex = static_cast<int>(&entity - editor.m_Scene.m_vEntities.data());
+            editor.SaveState();
+            std::shared_ptr<IComponent> pComp = pComponentsManager->GetComponent(componentToRemove);
 
             if (std::shared_ptr<CLightComponent> pLight = std::dynamic_pointer_cast<CLightComponent>(pComp))
             {
@@ -327,8 +327,8 @@ void CComponentUIHelper::DrawEntityInspector(CEditor& editor, CEntity& entity, S
                 }
             }
 
-        pComponentsManager->RemoveComponent(componentToRemove);
-        editor.m_Ui.m_Inspector.ComponentToRemove = -1;
+            pComponentsManager->RemoveComponent(componentToRemove);
+            editor.m_Ui.m_Inspector.m_ComponentToRemove = -1;
         }
     }
 }
@@ -348,16 +348,16 @@ void CComponentUIHelper::DrawTransformComponent(CEditor& editor, CEntity& entity
         }
     };
 
-    float aPosition[3] = {pTransform->m_Position.x, pTransform->m_Position.y, pTransform->m_Position.z};
-    float aRotation[3] = {pTransform->m_Rotation.x, pTransform->m_Rotation.y, pTransform->m_Rotation.z};
-    float aScale[3] = {pTransform->m_Scale.x, pTransform->m_Scale.y, pTransform->m_Scale.z};
+    float aPosition[3] = { pTransform->m_Position.x, pTransform->m_Position.y, pTransform->m_Position.z };
+    float aRotation[3] = { pTransform->m_Rotation.x, pTransform->m_Rotation.y, pTransform->m_Rotation.z };
+    float aScale[3] = { pTransform->m_Scale.x, pTransform->m_Scale.y, pTransform->m_Scale.z };
 
     if (ImGui::DragFloat3(lang.Word("position"), aPosition, 0.1f))
     {
         pTransform->ClearLocalMatrixOverride();
         pTransform->m_Position = Vec3(aPosition[0], aPosition[1], aPosition[2]);
         DispatchPluginEvent(PLUGIN_EVENT_TRANSFORM_CHANGED,
-            static_cast<int>(&entity - editor.m_Scene.m_vEntities.data()));
+                            static_cast<int>(&entity - editor.m_Scene.m_vEntities.data()));
         CEntityTextureService::MarkEntityBoundsDirty(&entity);
     }
     trackTransformEdit();
@@ -367,7 +367,7 @@ void CComponentUIHelper::DrawTransformComponent(CEditor& editor, CEntity& entity
         pTransform->ClearLocalMatrixOverride();
         pTransform->m_Rotation = Vec3(aRotation[0], aRotation[1], aRotation[2]);
         DispatchPluginEvent(PLUGIN_EVENT_TRANSFORM_CHANGED,
-            static_cast<int>(&entity - editor.m_Scene.m_vEntities.data()));
+                            static_cast<int>(&entity - editor.m_Scene.m_vEntities.data()));
         CEntityTextureService::MarkEntityBoundsDirty(&entity);
     }
     trackTransformEdit();
@@ -377,7 +377,7 @@ void CComponentUIHelper::DrawTransformComponent(CEditor& editor, CEntity& entity
         pTransform->ClearLocalMatrixOverride();
         pTransform->m_Scale = Vec3(aScale[0], aScale[1], aScale[2]);
         DispatchPluginEvent(PLUGIN_EVENT_TRANSFORM_CHANGED,
-            static_cast<int>(&entity - editor.m_Scene.m_vEntities.data()));
+                            static_cast<int>(&entity - editor.m_Scene.m_vEntities.data()));
         CEntityTextureService::MarkEntityBoundsDirty(&entity);
         CEntityTextureService::MarkEntityUVDirty(&entity);
     }
@@ -492,18 +492,18 @@ void CComponentUIHelper::DrawMeshComponent(CEditor& editor, CEntity& entity, CMe
             for (int i = 0; i < m.vertexCount; i++)
             {
                 Vec3 pos = {
-                    m.vertices[i*3+0],
-                    m.vertices[i*3+1],
-                    m.vertices[i*3+2]
+                    m.vertices[i * 3 + 0],
+                    m.vertices[i * 3 + 1],
+                    m.vertices[i * 3 + 2]
                 };
 
                 vRemap[i] = (int)pMesh->m_EditableMesh.m_vVertices.size();
                 SEditableVertex ev;
-                ev.Position = pos;
+                ev.m_Position = pos;
                 if (m.texcoords)
                 {
-                    ev.U = m.texcoords[i * 2 + 0];
-                    ev.V = m.texcoords[i * 2 + 1];
+                    ev.m_U = m.texcoords[i * 2 + 0];
+                    ev.m_V = m.texcoords[i * 2 + 1];
                 }
                 pMesh->m_EditableMesh.m_vVertices.push_back(ev);
             }
@@ -513,15 +513,15 @@ void CComponentUIHelper::DrawMeshComponent(CEditor& editor, CEntity& entity, CMe
                 int ia, ib, ic;
                 if (m.indices)
                 {
-                    ia = m.indices[t*3+0];
-                    ib = m.indices[t*3+1];
-                    ic = m.indices[t*3+2];
+                    ia = m.indices[t * 3 + 0];
+                    ib = m.indices[t * 3 + 1];
+                    ic = m.indices[t * 3 + 2];
                 }
                 else
                 {
-                    ia = t*3+0;
-                    ib = t*3+1;
-                    ic = t*3+2;
+                    ia = t * 3 + 0;
+                    ib = t * 3 + 1;
+                    ic = t * 3 + 2;
                 }
 
                 if (ia >= m.vertexCount || ib >= m.vertexCount || ic >= m.vertexCount)
@@ -530,11 +530,11 @@ void CComponentUIHelper::DrawMeshComponent(CEditor& editor, CEntity& entity, CMe
                 }
 
                 SEditableTriangle tri;
-                tri.A = vRemap[ia];
-                tri.B = vRemap[ib];
-                tri.C = vRemap[ic];
+                tri.m_A = vRemap[ia];
+                tri.m_B = vRemap[ib];
+                tri.m_C = vRemap[ic];
 
-                if (tri.A == tri.B || tri.B == tri.C || tri.A == tri.C)
+                if (tri.m_A == tri.m_B || tri.m_B == tri.m_C || tri.m_A == tri.m_C)
                 {
                     continue;
                 }
@@ -542,9 +542,9 @@ void CComponentUIHelper::DrawMeshComponent(CEditor& editor, CEntity& entity, CMe
                 pMesh->m_EditableMesh.m_vTriangles.push_back(tri);
             }
 
-            if (edit.vSelectedVertices.empty() && !pMesh->m_EditableMesh.m_vVertices.empty())
+            if (edit.m_vSelectedVertices.empty() && !pMesh->m_EditableMesh.m_vVertices.empty())
             {
-                edit.vSelectedVertices.push_back(0);
+                edit.m_vSelectedVertices.push_back(0);
             }
         }
     }
@@ -554,10 +554,10 @@ void CComponentUIHelper::DrawMeshComponent(CEditor& editor, CEntity& entity, CMe
         ImGui::Text(lang.Word("vertices"), (int)pMesh->m_EditableMesh.m_vVertices.size());
         ImGui::Text(lang.Word("triangles"), (int)pMesh->m_EditableMesh.m_vTriangles.size());
 
-        if (!edit.vSelectedVertices.empty())
+        if (!edit.m_vSelectedVertices.empty())
         {
-            SEditableVertex& selectedVertex = pMesh->m_EditableMesh.m_vVertices[edit.vSelectedVertices[0]];
-            float aVertexPos[3] = { selectedVertex.Position.x, selectedVertex.Position.y, selectedVertex.Position.z };
+            SEditableVertex& selectedVertex = pMesh->m_EditableMesh.m_vVertices[edit.m_vSelectedVertices[0]];
+            float aVertexPos[3] = { selectedVertex.m_Position.x, selectedVertex.m_Position.y, selectedVertex.m_Position.z };
 
             ImGui::Separator();
 
@@ -565,9 +565,9 @@ void CComponentUIHelper::DrawMeshComponent(CEditor& editor, CEntity& entity, CMe
             {
                 editor.SaveState();
 
-                selectedVertex.Position = Vec3(aVertexPos[0],
-                    aVertexPos[1],
-                    aVertexPos[2]);
+                selectedVertex.m_Position = Vec3(aVertexPos[0],
+                                                 aVertexPos[1],
+                                                 aVertexPos[2]);
 
                 RebuildMeshFromEditable(pMesh->m_Model, pMesh->m_EditableMesh);
 
@@ -612,34 +612,33 @@ void CComponentUIHelper::DrawMaterialComponent(CEditor& editor, CEntity& entity,
         const bool hasRoughness = material.maps && material.maps[MATERIAL_MAP_ROUGHNESS].texture.valid;
         const bool hasMetallic = material.maps && material.maps[MATERIAL_MAP_METALNESS].texture.valid;
         ImGui::Text("Slot %d: Albedo %s | Normal %s | Roughness %s | Metallic %s",
-            slot,
-            hasAlbedo ? "yes" : "no",
-            hasNormal ? "yes" : "no",
-            hasRoughness ? "yes" : "no",
-            hasMetallic ? "yes" : "no");
+                    slot,
+                    hasAlbedo ? "yes" : "no",
+                    hasNormal ? "yes" : "no",
+                    hasRoughness ? "yes" : "no",
+                    hasMetallic ? "yes" : "no");
     }
 
     SMaterialPickerState& picker = editor.m_Ui.m_MaterialPicker;
 
-    if (picker.NeedsUpdate)
+    if (picker.m_NeedsUpdate)
     {
-        picker.vMaterialPaths = GetAllMaterialsInProject();
-        picker.vMaterialPaths.insert(picker.vMaterialPaths.begin(), "None");
-        picker.vDisplayNames.clear();
-        picker.vMaterialNames.clear();
+        picker.m_vMaterialPaths = GetAllMaterialsInProject();
+        picker.m_vMaterialPaths.insert(picker.m_vMaterialPaths.begin(), "None");
+        picker.m_vDisplayNames.clear();
+        picker.m_vMaterialNames.clear();
 
-        for (const auto& matPath : picker.vMaterialPaths)
+        for (const auto& matPath : picker.m_vMaterialPaths)
         {
-            picker.vDisplayNames.push_back(
-                matPath == "None" ? "None" : std::filesystem::path(matPath).filename().generic_string()
-            );
+            picker.m_vDisplayNames.push_back(
+                matPath == "None" ? "None" : std::filesystem::path(matPath).filename().generic_string());
         }
-        for (const auto& displayName : picker.vDisplayNames)
+        for (const auto& displayName : picker.m_vDisplayNames)
         {
-            picker.vMaterialNames.push_back(displayName.c_str());
+            picker.m_vMaterialNames.push_back(displayName.c_str());
         }
 
-        picker.NeedsUpdate = false;
+        picker.m_NeedsUpdate = false;
     }
 
     if (pMesh->m_Model.materialCount > 0)
@@ -650,9 +649,9 @@ void CComponentUIHelper::DrawMaterialComponent(CEditor& editor, CEntity& entity,
         for (int slot = 0; slot < pMesh->m_Model.materialCount; ++slot)
         {
             int slotMaterialIndex = 0;
-            for (int i = 1; i < static_cast<int>(picker.vMaterialPaths.size()); ++i)
+            for (int i = 1; i < static_cast<int>(picker.m_vMaterialPaths.size()); ++i)
             {
-                if (picker.vMaterialPaths[i] == pMat->m_vMaterialSlotSources[slot])
+                if (picker.m_vMaterialPaths[i] == pMat->m_vMaterialSlotSources[slot])
                 {
                     slotMaterialIndex = i;
                     break;
@@ -662,32 +661,32 @@ void CComponentUIHelper::DrawMaterialComponent(CEditor& editor, CEntity& entity,
             ImGui::PushID(slot);
             ImGui::Text("Slot %d", slot);
             ImGui::SameLine();
-            if (ImGui::Combo("##slot_material", &slotMaterialIndex, picker.vMaterialNames.data(),
-                             static_cast<int>(picker.vMaterialNames.size())))
-                             {
+            if (ImGui::Combo("##slot_material", &slotMaterialIndex, picker.m_vMaterialNames.data(),
+                             static_cast<int>(picker.m_vMaterialNames.size())))
+            {
                 editor.SaveState();
                 if (slotMaterialIndex == 0)
                 {
                     if (pMesh->m_Model.materials && pMesh->m_Model.materials[slot].maps)
                     {
-                        pMesh->m_Model.materials[slot].maps[MATERIAL_MAP_ALBEDO].texture = {0};
-                        pMesh->m_Model.materials[slot].maps[MATERIAL_MAP_NORMAL].texture = {0};
-                        pMesh->m_Model.materials[slot].maps[MATERIAL_MAP_ROUGHNESS].texture = {0};
-                        pMesh->m_Model.materials[slot].maps[MATERIAL_MAP_METALNESS].texture = {0};
+                        pMesh->m_Model.materials[slot].maps[MATERIAL_MAP_ALBEDO].texture = { 0 };
+                        pMesh->m_Model.materials[slot].maps[MATERIAL_MAP_NORMAL].texture = { 0 };
+                        pMesh->m_Model.materials[slot].maps[MATERIAL_MAP_ROUGHNESS].texture = { 0 };
+                        pMesh->m_Model.materials[slot].maps[MATERIAL_MAP_METALNESS].texture = { 0 };
                     }
                     pMat->m_vMaterialSlotSources[slot].clear();
                 }
-                else if (slotMaterialIndex < static_cast<int>(picker.vMaterialPaths.size()))
+                else if (slotMaterialIndex < static_cast<int>(picker.m_vMaterialPaths.size()))
                 {
-                    LoadMaterialToEntity(&entity, picker.vMaterialPaths[slotMaterialIndex], slot);
-                    pMat->m_vMaterialSlotSources[slot] = picker.vMaterialPaths[slotMaterialIndex];
+                    LoadMaterialToEntity(&entity, picker.m_vMaterialPaths[slotMaterialIndex], slot);
+                    pMat->m_vMaterialSlotSources[slot] = picker.m_vMaterialPaths[slotMaterialIndex];
                 }
             }
             ImGui::PopID();
         }
     }
 
-    picker.SelectedIndex = 0;
+    picker.m_SelectedIndex = 0;
     if (!pMat->m_TextureName.empty())
     {
         const std::filesystem::path currentPath = std::filesystem::current_path();
@@ -703,33 +702,33 @@ void CComponentUIHelper::DrawMaterialComponent(CEditor& editor, CEntity& entity,
         }
 
         const std::string displayPath = materialPath.generic_string();
-        for (int i = 1; i < static_cast<int>(picker.vMaterialPaths.size()); ++i)
+        for (int i = 1; i < static_cast<int>(picker.m_vMaterialPaths.size()); ++i)
         {
-            if (picker.vMaterialPaths[i] == displayPath)
+            if (picker.m_vMaterialPaths[i] == displayPath)
             {
-                picker.SelectedIndex = i;
+                picker.m_SelectedIndex = i;
                 break;
             }
         }
     }
 
     ImGui::Text("%s", lang.Word("material_file"));
-    if (!picker.vMaterialNames.empty())
+    if (!picker.m_vMaterialNames.empty())
     {
-        if (ImGui::Combo("##material_combo", &picker.SelectedIndex, picker.vMaterialNames.data(),
-                         static_cast<int>(picker.vMaterialNames.size())))
-                         {
+        if (ImGui::Combo("##material_combo", &picker.m_SelectedIndex, picker.m_vMaterialNames.data(),
+                         static_cast<int>(picker.m_vMaterialNames.size())))
+        {
             editor.SaveState();
-            if (picker.SelectedIndex == 0)
+            if (picker.m_SelectedIndex == 0)
             {
                 CEntityTextureService::ClearMaterialTextures(&entity);
                 pMat->m_TextureName.clear();
-                pMat->m_Texture = {0};
+                pMat->m_Texture = { 0 };
                 pMat->m_TextureSource = TEXTURE_NONE;
             }
-            else if (picker.SelectedIndex > 0 && picker.SelectedIndex < static_cast<int>(picker.vMaterialPaths.size()))
+            else if (picker.m_SelectedIndex > 0 && picker.m_SelectedIndex < static_cast<int>(picker.m_vMaterialPaths.size()))
             {
-                const std::string& selectedPath = picker.vMaterialPaths[picker.SelectedIndex];
+                const std::string& selectedPath = picker.m_vMaterialPaths[picker.m_SelectedIndex];
                 if (std::filesystem::exists(selectedPath))
                 {
                     LoadMaterialToEntity(&entity, selectedPath);
@@ -744,26 +743,25 @@ void CComponentUIHelper::DrawMaterialComponent(CEditor& editor, CEntity& entity,
 
     std::vector<const char*> vTextureNames;
     vTextureNames.reserve(editor.m_Assets.TextureCount());
-    editor.m_Ui.m_Inspector.SelectedTextureIndex = 0;
+    editor.m_Ui.m_Inspector.m_SelectedTextureIndex = 0;
     for (size_t i = 0; i < editor.m_Assets.TextureCount(); ++i)
     {
-        vTextureNames.push_back(editor.m_Assets.TextureByIndex(i).Name.c_str());
-        if (editor.m_Assets.TextureByIndex(i).Name == pMat->m_AlbedoTextureName)
+        vTextureNames.push_back(editor.m_Assets.TextureByIndex(i).m_Name.c_str());
+        if (editor.m_Assets.TextureByIndex(i).m_Name == pMat->m_AlbedoTextureName)
         {
-            editor.m_Ui.m_Inspector.SelectedTextureIndex = static_cast<int>(i);
+            editor.m_Ui.m_Inspector.m_SelectedTextureIndex = static_cast<int>(i);
         }
     }
 
     ImGui::Text("Direct texture");
-    if (!vTextureNames.empty() && ImGui::Combo("##direct_texture", &editor.m_Ui.m_Inspector.SelectedTextureIndex,
-        vTextureNames.data(), static_cast<int>(vTextureNames.size())))
-        {
+    if (!vTextureNames.empty() && ImGui::Combo("##direct_texture", &editor.m_Ui.m_Inspector.m_SelectedTextureIndex, vTextureNames.data(), static_cast<int>(vTextureNames.size())))
+    {
         editor.SaveState();
-        const int selectedTextureIndex = editor.m_Ui.m_Inspector.SelectedTextureIndex;
+        const int selectedTextureIndex = editor.m_Ui.m_Inspector.m_SelectedTextureIndex;
         if (selectedTextureIndex == 0)
         {
             pMat->m_AlbedoTextureName.clear();
-            pMat->m_Texture = {0};
+            pMat->m_Texture = { 0 };
             if (pMat->m_TextureName.empty())
             {
                 pMat->m_TextureSource = TEXTURE_NONE;
@@ -776,29 +774,28 @@ void CComponentUIHelper::DrawMaterialComponent(CEditor& editor, CEntity& entity,
         }
         else
         {
-            pMat->m_AlbedoTextureName = editor.m_Assets.TextureByIndex(selectedTextureIndex).Name;
+            pMat->m_AlbedoTextureName = editor.m_Assets.TextureByIndex(selectedTextureIndex).m_Name;
             pMat->m_TextureName.clear();
-            pMat->m_Texture = editor.m_Assets.TextureByIndex(selectedTextureIndex).Texture;
+            pMat->m_Texture = editor.m_Assets.TextureByIndex(selectedTextureIndex).m_Texture;
             pMat->m_TextureSource = TEXTURE_EXTERNAL;
         }
         CEntityTextureService::MarkEntityUVDirty(&entity);
     }
 
-    editor.m_Ui.m_Inspector.SelectedNormalIndex = 0;
+    editor.m_Ui.m_Inspector.m_SelectedNormalIndex = 0;
     for (size_t i = 0; i < editor.m_Assets.TextureCount(); ++i)
     {
-        if (editor.m_Assets.TextureByIndex(i).Name == pMat->m_NormalTextureName)
+        if (editor.m_Assets.TextureByIndex(i).m_Name == pMat->m_NormalTextureName)
         {
-            editor.m_Ui.m_Inspector.SelectedNormalIndex = static_cast<int>(i);
+            editor.m_Ui.m_Inspector.m_SelectedNormalIndex = static_cast<int>(i);
             break;
         }
     }
     ImGui::Text("Normal map");
-    if (!vTextureNames.empty() && ImGui::Combo("##normal_map", &editor.m_Ui.m_Inspector.SelectedNormalIndex,
-        vTextureNames.data(), static_cast<int>(vTextureNames.size())))
-        {
+    if (!vTextureNames.empty() && ImGui::Combo("##normal_map", &editor.m_Ui.m_Inspector.m_SelectedNormalIndex, vTextureNames.data(), static_cast<int>(vTextureNames.size())))
+    {
         editor.SaveState();
-        const int selectedNormalIndex = editor.m_Ui.m_Inspector.SelectedNormalIndex;
+        const int selectedNormalIndex = editor.m_Ui.m_Inspector.m_SelectedNormalIndex;
         if (selectedNormalIndex == 0)
         {
             pMat->m_NormalTextureName.clear();
@@ -806,14 +803,14 @@ void CComponentUIHelper::DrawMaterialComponent(CEditor& editor, CEntity& entity,
             {
                 if (pMesh->m_Model.materials[m].maps)
                 {
-                    pMesh->m_Model.materials[m].maps[MATERIAL_MAP_NORMAL].texture = {0};
+                    pMesh->m_Model.materials[m].maps[MATERIAL_MAP_NORMAL].texture = { 0 };
                 }
             }
         }
         else
         {
-            pMat->m_NormalTextureName = editor.m_Assets.TextureByIndex(selectedNormalIndex).Name;
-            const Texture2D normalTexture = editor.m_Assets.TextureByIndex(selectedNormalIndex).Texture;
+            pMat->m_NormalTextureName = editor.m_Assets.TextureByIndex(selectedNormalIndex).m_Name;
+            const Texture2D normalTexture = editor.m_Assets.TextureByIndex(selectedNormalIndex).m_Texture;
             for (int m = 0; m < pMesh->m_Model.materialCount; ++m)
             {
                 if (pMesh->m_Model.materials[m].maps)
@@ -826,7 +823,7 @@ void CComponentUIHelper::DrawMaterialComponent(CEditor& editor, CEntity& entity,
 
     if (!pMat->m_TextureName.empty() && pMat->m_TextureName.length() > 4 &&
         pMat->m_TextureName.substr(pMat->m_TextureName.length() - 4) == ".mtl")
-        {
+    {
         ImGui::TextDisabled("%s: %s", lang.Word("current"), pMat->m_TextureName.c_str());
     }
     else
@@ -871,11 +868,11 @@ void CComponentUIHelper::DrawMaterialComponent(CEditor& editor, CEntity& entity,
             uvChanged = true;
         }
 
-        float aUvScale[2] = {pMat->m_UvScale.x, pMat->m_UvScale.y};
+        float aUvScale[2] = { pMat->m_UvScale.x, pMat->m_UvScale.y };
         if (ImGui::DragFloat2(lang.Word("uv_scale_x"), aUvScale, 0.1f, 0.1f, 5.0f))
         {
             trackMaterialEdit();
-            pMat->m_UvScale = {aUvScale[0], aUvScale[1]};
+            pMat->m_UvScale = { aUvScale[0], aUvScale[1] };
             uvChanged = true;
         }
     }
@@ -1140,41 +1137,41 @@ void CComponentUIHelper::Draw3dTextComponent(CEditor& editor, CEntity& entity, C
         }
     };
 
-    drag("Size",           pText->m_Size,           0.01f, 0.05f, 10.f);
-    drag("Thickness",      pText->m_Thickness,      0.01f, 0.01f,  5.f);
+    drag("Size", pText->m_Size, 0.01f, 0.05f, 10.f);
+    drag("Thickness", pText->m_Thickness, 0.01f, 0.01f, 5.f);
     drag("Letter Spacing", pText->m_LetterSpacing, 0.005f, 0.f, 100);
 
     ImGui::Separator();
 
     SFontPickerState& fonts = editor.m_Ui.m_FontPicker;
 
-    if (!fonts.Scanned)
+    if (!fonts.m_Scanned)
     {
-        fonts.vFonts = CFreetypeTextMesh::GetSystemFonts();
-        fonts.vFontNames.clear();
-        for (auto& f : fonts.vFonts)
+        fonts.m_vFonts = CFreetypeTextMesh::GetSystemFonts();
+        fonts.m_vFontNames.clear();
+        for (auto& f : fonts.m_vFonts)
         {
-            fonts.vFontNames.push_back(f.first.c_str());
+            fonts.m_vFontNames.push_back(f.first.c_str());
         }
 
-        for (int i = 0; i < (int)fonts.vFonts.size(); i++)
+        for (int i = 0; i < (int)fonts.m_vFonts.size(); i++)
         {
-            if (fonts.vFonts[i].second == pText->m_FontPath)
+            if (fonts.m_vFonts[i].second == pText->m_FontPath)
             {
-                fonts.SelectedIndex = i;
+                fonts.m_SelectedIndex = i;
                 break;
             }
         }
-        fonts.Scanned = true;
+        fonts.m_Scanned = true;
     }
 
     ImGui::Text("Font");
-    if (!fonts.vFontNames.empty())
+    if (!fonts.m_vFontNames.empty())
     {
-        if (ImGui::Combo("##font", &fonts.SelectedIndex, fonts.vFontNames.data(), (int)fonts.vFontNames.size()))
+        if (ImGui::Combo("##font", &fonts.m_SelectedIndex, fonts.m_vFontNames.data(), (int)fonts.m_vFontNames.size()))
         {
             editor.SaveState();
-            pText->m_FontPath = fonts.vFonts[fonts.SelectedIndex].second;
+            pText->m_FontPath = fonts.m_vFonts[fonts.m_SelectedIndex].second;
             CModelService::UpdateModel(&entity, editor.m_Text);
             CEntityTextureService::MarkEntityBoundsDirty(&entity);
         }
@@ -1210,8 +1207,8 @@ void CComponentUIHelper::DrawScriptComponent(CEditor& editor, CEntity& entity, C
 
     for (size_t i = 0; i < vAvailable.size(); ++i)
     {
-        vScriptNames.push_back(vAvailable[i].className);
-        if (vAvailable[i].className == pScript->m_ScriptName)
+        vScriptNames.push_back(vAvailable[i].m_ClassName);
+        if (vAvailable[i].m_ClassName == pScript->m_ScriptName)
         {
             selectedIndex = static_cast<int>(i) + 1;
         }
@@ -1237,7 +1234,7 @@ void CComponentUIHelper::DrawScriptComponent(CEditor& editor, CEntity& entity, C
                 quark::script::SParsedScriptInfo headerInfo;
                 if (quark::script::CScriptHeaderParser::ParseHeader(headerPath, headerInfo))
                 {
-                    pScript->SyncWithHeaderFields(headerInfo.vFields);
+                    pScript->SyncWithHeaderFields(headerInfo.m_vFields);
                 }
             }
         }
@@ -1255,9 +1252,9 @@ void CComponentUIHelper::DrawScriptComponent(CEditor& editor, CEntity& entity, C
         else
         {
             const auto& selectedInfo = vAvailable[comboIndex - 1];
-            pScript->m_ScriptName = selectedInfo.className;
-            pScript->m_ScriptPath = selectedInfo.headerPath;
-            pScript->SyncWithHeaderFields(selectedInfo.vFields);
+            pScript->m_ScriptName = selectedInfo.m_ClassName;
+            pScript->m_ScriptPath = selectedInfo.m_HeaderPath;
+            pScript->SyncWithHeaderFields(selectedInfo.m_vFields);
         }
         editor.m_SceneDirty = true;
     }
@@ -1272,11 +1269,11 @@ void CComponentUIHelper::DrawScriptComponent(CEditor& editor, CEntity& entity, C
     {
         for (const auto& info : vAvailable)
         {
-            if (info.className == pScript->m_ScriptName)
+            if (info.m_ClassName == pScript->m_ScriptName)
             {
-                if (!info.vFields.empty())
+                if (!info.m_vFields.empty())
                 {
-                    pScript->SyncWithHeaderFields(info.vFields);
+                    pScript->SyncWithHeaderFields(info.m_vFields);
                 }
                 break;
             }
@@ -1299,60 +1296,60 @@ void CComponentUIHelper::DrawScriptComponent(CEditor& editor, CEntity& entity, C
         auto& field = pScript->m_vFields[fIdx];
         ImGui::PushID(static_cast<int>(fIdx));
 
-        switch (field.type)
+        switch (field.m_Type)
         {
-        case quark::script::EScriptFieldType::FLOAT:
-        {
-            float val = field.floatValue;
-            if (ImGui::DragFloat(field.name.c_str(), &val, 0.1f))
+            case quark::script::EScriptFieldType::FLOAT:
             {
-                field.floatValue = val;
-                valueChanged = true;
+                float val = field.m_FloatValue;
+                if (ImGui::DragFloat(field.m_Name.c_str(), &val, 0.1f))
+                {
+                    field.m_FloatValue = val;
+                    valueChanged = true;
+                }
+                break;
             }
-            break;
-        }
-        case quark::script::EScriptFieldType::INT:
-        {
-            int val = field.intValue;
-            if (ImGui::DragInt(field.name.c_str(), &val, 1))
+            case quark::script::EScriptFieldType::INT:
             {
-                field.intValue = val;
-                valueChanged = true;
+                int val = field.m_IntValue;
+                if (ImGui::DragInt(field.m_Name.c_str(), &val, 1))
+                {
+                    field.m_IntValue = val;
+                    valueChanged = true;
+                }
+                break;
             }
-            break;
-        }
-        case quark::script::EScriptFieldType::BOOL:
-        {
-            bool val = field.boolValue;
-            if (ImGui::Checkbox(field.name.c_str(), &val))
+            case quark::script::EScriptFieldType::BOOL:
             {
-                field.boolValue = val;
-                valueChanged = true;
+                bool val = field.m_BoolValue;
+                if (ImGui::Checkbox(field.m_Name.c_str(), &val))
+                {
+                    field.m_BoolValue = val;
+                    valueChanged = true;
+                }
+                break;
             }
-            break;
-        }
-        case quark::script::EScriptFieldType::STRING:
-        {
-            char aBuf[256];
-            size_t copied = field.stringValue.copy(aBuf, sizeof(aBuf) - 1);
-            aBuf[copied] = '\0';
-            if (ImGui::InputText(field.name.c_str(), aBuf, sizeof(aBuf)))
+            case quark::script::EScriptFieldType::STRING:
             {
-                field.stringValue = aBuf;
-                valueChanged = true;
+                char aBuf[256];
+                size_t copied = field.m_StringValue.copy(aBuf, sizeof(aBuf) - 1);
+                aBuf[copied] = '\0';
+                if (ImGui::InputText(field.m_Name.c_str(), aBuf, sizeof(aBuf)))
+                {
+                    field.m_StringValue = aBuf;
+                    valueChanged = true;
+                }
+                break;
             }
-            break;
-        }
-        case quark::script::EScriptFieldType::VEC3:
-        {
-            float aVec[3] = {field.vec3Value.x, field.vec3Value.y, field.vec3Value.z};
-            if (ImGui::DragFloat3(field.name.c_str(), aVec, 0.1f))
+            case quark::script::EScriptFieldType::VEC3:
             {
-                field.vec3Value = {aVec[0], aVec[1], aVec[2]};
-                valueChanged = true;
+                float aVec[3] = { field.m_Vec3Value.x, field.m_Vec3Value.y, field.m_Vec3Value.z };
+                if (ImGui::DragFloat3(field.m_Name.c_str(), aVec, 0.1f))
+                {
+                    field.m_Vec3Value = { aVec[0], aVec[1], aVec[2] };
+                    valueChanged = true;
+                }
+                break;
             }
-            break;
-        }
         }
 
         ImGui::PopID();
@@ -1378,35 +1375,36 @@ void CComponentUIHelper::DrawScriptComponent(CEditor& editor, CEntity& entity, C
             if (quark::script::CScriptHeaderParser::ParseHeader(headerPath, headerInfo))
             {
                 editor.SaveState();
-                pScript->SyncWithHeaderFields(headerInfo.vFields);
+                pScript->SyncWithHeaderFields(headerInfo.m_vFields);
                 editor.m_SceneDirty = true;
             }
         }
     }
 }
 
-namespace {
-
-bool EditGuiColor4(const char* label, Color& c)
+namespace
 {
-    float rgba[4] = {
-        c.r / 255.0f,
-        c.g / 255.0f,
-        c.b / 255.0f,
-        c.a / 255.0f
-    };
-    if (ImGui::ColorEdit4(label, rgba, ImGuiColorEditFlags_NoInputs))
-    {
-        c.r = static_cast<unsigned char>(std::clamp(rgba[0] * 255.0f, 0.0f, 255.0f));
-        c.g = static_cast<unsigned char>(std::clamp(rgba[1] * 255.0f, 0.0f, 255.0f));
-        c.b = static_cast<unsigned char>(std::clamp(rgba[2] * 255.0f, 0.0f, 255.0f));
-        c.a = static_cast<unsigned char>(std::clamp(rgba[3] * 255.0f, 0.0f, 255.0f));
-        return true;
-    }
-    return false;
-}
 
-} // namespace
+    bool EditGuiColor4(const char* label, Color& c)
+    {
+        float rgba[4] = {
+            c.r / 255.0f,
+            c.g / 255.0f,
+            c.b / 255.0f,
+            c.a / 255.0f
+        };
+        if (ImGui::ColorEdit4(label, rgba, ImGuiColorEditFlags_NoInputs))
+        {
+            c.r = static_cast<unsigned char>(std::clamp(rgba[0] * 255.0f, 0.0f, 255.0f));
+            c.g = static_cast<unsigned char>(std::clamp(rgba[1] * 255.0f, 0.0f, 255.0f));
+            c.b = static_cast<unsigned char>(std::clamp(rgba[2] * 255.0f, 0.0f, 255.0f));
+            c.a = static_cast<unsigned char>(std::clamp(rgba[3] * 255.0f, 0.0f, 255.0f));
+            return true;
+        }
+        return false;
+    }
+
+} // anonymous
 
 void CComponentUIHelper::DrawUiRectTransformComponent(
     CEditor& editor,
@@ -1555,7 +1553,7 @@ void CComponentUIHelper::DrawUiComponent(CEditor& editor, CEntity& entity, CUiCo
         auto pComponents = entity.GetComponents();
         auto pText = pComponents->GetComponentOfType<CTextComponent>();
         auto pRectTransform = pComponents->GetComponentOfType<CUiRectTransformComponent>();
-        if (pUi->m_WidgetType == EGuiWidgetType::Button)
+        if (pUi->m_WidgetType == EGuiWidgetType::BUTTON)
         {
             if (pText)
             {
@@ -1567,7 +1565,7 @@ void CComponentUIHelper::DrawUiComponent(CEditor& editor, CEntity& entity, CUiCo
                 pRectTransform->m_Size = { 150.0f, 30.0f };
             }
         }
-        else if (pUi->m_WidgetType == EGuiWidgetType::InputField)
+        else if (pUi->m_WidgetType == EGuiWidgetType::INPUT_FIELD)
         {
             pUi->m_Placeholder = "InputField";
             if (pText)
@@ -1580,7 +1578,7 @@ void CComponentUIHelper::DrawUiComponent(CEditor& editor, CEntity& entity, CUiCo
                 pRectTransform->m_Size = { 260.0f, 30.0f };
             }
         }
-        else if (pUi->m_WidgetType == EGuiWidgetType::Combo)
+        else if (pUi->m_WidgetType == EGuiWidgetType::COMBO)
         {
             pUi->m_vItems = { "Combo" };
             pUi->m_SelectedIndex = 0;
@@ -1597,7 +1595,7 @@ void CComponentUIHelper::DrawUiComponent(CEditor& editor, CEntity& entity, CUiCo
         changed = true;
     }
 
-    if (pUi->m_WidgetType == EGuiWidgetType::Button)
+    if (pUi->m_WidgetType == EGuiWidgetType::BUTTON)
     {
         ImGui::Spacing();
         ImGui::Separator();
@@ -1643,7 +1641,7 @@ void CComponentUIHelper::DrawUiComponent(CEditor& editor, CEntity& entity, CUiCo
         }
     }
 
-    if (pUi->m_WidgetType == EGuiWidgetType::InputField)
+    if (pUi->m_WidgetType == EGuiWidgetType::INPUT_FIELD)
     {
         char phBuf[256] = {};
         std::snprintf(phBuf, sizeof(phBuf), "%s", pUi->m_Placeholder.c_str());
@@ -1653,7 +1651,7 @@ void CComponentUIHelper::DrawUiComponent(CEditor& editor, CEntity& entity, CUiCo
             changed = true;
         }
     }
-    else if (pUi->m_WidgetType == EGuiWidgetType::Combo)
+    else if (pUi->m_WidgetType == EGuiWidgetType::COMBO)
     {
         ImGui::Spacing();
         ImGui::TextDisabled("Combo Items");
@@ -1697,16 +1695,16 @@ void CComponentUIHelper::DrawUiComponent(CEditor& editor, CEntity& entity, CUiCo
             if (ImGui::SliderInt("Selected Index", &sel, 0, static_cast<int>(pUi->m_vItems.size()) - 1))
             {
                 pUi->m_SelectedIndex = sel;
-                pUi->m_RuntimeDesc.selectedIndex = sel;
+                pUi->m_RuntimeDesc.m_SelectedIndex = sel;
                 changed = true;
             }
         }
     }
 
-    if (pUi->m_WidgetType == EGuiWidgetType::Button)
+    if (pUi->m_WidgetType == EGuiWidgetType::BUTTON)
     {
         ImGui::Spacing();
-        ImGui::TextDisabled("Clicks in Play Mode: %d", pUi->m_RuntimeDesc.clickCount);
+        ImGui::TextDisabled("Clicks in Play Mode: %d", pUi->m_RuntimeDesc.m_ClickCount);
     }
 
     if (changed)

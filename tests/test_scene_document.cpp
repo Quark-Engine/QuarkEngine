@@ -12,22 +12,22 @@
 namespace
 {
 
-int AddEntity(CScene& target, const std::string& name, int parentId, bool isGroup = false)
-{
-    CEntity added(static_cast<int>(target.m_vEntities.size()));
-    added.m_Name = name;
-    added.m_ParentId = parentId;
-    added.m_IsGroup = isGroup;
-    target.m_vEntities.push_back(added);
-    return static_cast<int>(target.m_vEntities.size()) - 1;
-}
+    int AddEntity(CScene& target, const std::string& name, int parentId, bool isGroup = false)
+    {
+        CEntity added(static_cast<int>(target.m_vEntities.size()));
+        added.m_Name = name;
+        added.m_ParentId = parentId;
+        added.m_IsGroup = isGroup;
+        target.m_vEntities.push_back(added);
+        return static_cast<int>(target.m_vEntities.size()) - 1;
+    }
 
-void ExpectVecNear(const Vec3& actual, const Vec3& expected, double eps)
-{
-    CHECK_NEAR(actual.x, expected.x, eps);
-    CHECK_NEAR(actual.y, expected.y, eps);
-    CHECK_NEAR(actual.z, expected.z, eps);
-}
+    void ExpectVecNear(const Vec3& actual, const Vec3& expected, double eps)
+    {
+        CHECK_NEAR(actual.x, expected.x, eps);
+        CHECK_NEAR(actual.y, expected.y, eps);
+        CHECK_NEAR(actual.z, expected.z, eps);
+    }
 
 } // anonymous
 
@@ -64,7 +64,7 @@ TEST(CSceneDocumentParse, parses_snapshots_for_worker_thread_deserialization)
     const std::string document = quark::CSceneDocument::Serialize(source, 0);
     const quark::SParsedSceneDocument parsed = quark::CSceneDocument::Parse(document);
 
-    CHECK(parsed.IsValid);
+    CHECK(parsed.m_IsValid);
     CComponentFactoryRegistry registry;
     CScene restored;
     CHECK(quark::CSceneDocument::Deserialize(parsed, restored, registry));
@@ -74,12 +74,14 @@ TEST(CSceneDocumentParse, parses_snapshots_for_worker_thread_deserialization)
 
 TEST(CSceneDocumentParse, rejects_invalid_documents)
 {
-    CHECK(!quark::CSceneDocument::Parse("not json").IsValid);
-    CHECK(!quark::CSceneDocument::Parse("{\"version\":\"1\"}").IsValid);
+    CHECK(!quark::CSceneDocument::Parse("not json").m_IsValid);
+    CHECK(!quark::CSceneDocument::Parse("{\"version\":\"1\"}").m_IsValid);
     CHECK(!quark::CSceneDocument::Parse(
-        "{\"entities\":[{\"components\":{}}]}").IsValid);
+               "{\"entities\":[{\"components\":{}}]}")
+               .m_IsValid);
     CHECK(!quark::CSceneDocument::Parse(
-        "{\"entities\":[{\"tags\":[1]}]}").IsValid);
+               "{\"entities\":[{\"tags\":[1]}]}")
+               .m_IsValid);
 }
 
 TEST(SceneSnapshot, round_trips_entity_identity_and_hierarchy)
@@ -271,21 +273,21 @@ TEST(SceneSnapshot, round_trips_editable_mesh_vertices)
     pMesh->m_IsEditableMesh = true;
     pMesh->m_AssetName = "some.obj";
     SEditableVertex vertex;
-    vertex.Position = { 0.25f, 0.5f, 0.75f };
-    vertex.U = 0.125f;
-    vertex.V = 0.875f;
+    vertex.m_Position = { 0.25f, 0.5f, 0.75f };
+    vertex.m_U = 0.125f;
+    vertex.m_V = 0.875f;
     pMesh->m_EditableMesh.m_vVertices.push_back(vertex);
     pMesh->m_EditableMesh.m_vTriangles.push_back({ 0, 0, 0 });
 
     const std::string document = quark::CSceneDocument::Serialize(source);
     const quark::SParsedSceneDocument parsed = quark::CSceneDocument::Parse(document);
-    CHECK(parsed.IsValid);
-    CHECK(parsed.vEditableMeshes.size() == 1);
-    if (!parsed.vEditableMeshes.empty())
+    CHECK(parsed.m_IsValid);
+    CHECK(parsed.m_vEditableMeshes.size() == 1);
+    if (!parsed.m_vEditableMeshes.empty())
     {
-        CHECK(parsed.vEditableMeshes[0].EntityIndex == static_cast<size_t>(index));
-        CHECK(parsed.vEditableMeshes[0].Mesh.m_vVertices.size() == 1);
-        CHECK(parsed.vEditableMeshes[0].Mesh.m_vTriangles.size() == 1);
+        CHECK(parsed.m_vEditableMeshes[0].m_EntityIndex == static_cast<size_t>(index));
+        CHECK(parsed.m_vEditableMeshes[0].m_Mesh.m_vVertices.size() == 1);
+        CHECK(parsed.m_vEditableMeshes[0].m_Mesh.m_vTriangles.size() == 1);
     }
 
     CScene restored;
@@ -301,9 +303,9 @@ TEST(SceneSnapshot, round_trips_editable_mesh_vertices)
     CHECK(pRestored->m_AssetName == "some.obj");
     CHECK(pRestored->m_EditableMesh.m_vVertices.size() == 1);
     CHECK(pRestored->m_EditableMesh.m_vTriangles.size() == 1);
-    ExpectVecNear(pRestored->m_EditableMesh.m_vVertices[0].Position, Vec3{ 0.25f, 0.5f, 0.75f }, 1e-6);
-    CHECK_NEAR(pRestored->m_EditableMesh.m_vVertices[0].U, 0.125f, 1e-6);
-    CHECK_NEAR(pRestored->m_EditableMesh.m_vVertices[0].V, 0.875f, 1e-6);
+    ExpectVecNear(pRestored->m_EditableMesh.m_vVertices[0].m_Position, Vec3{ 0.25f, 0.5f, 0.75f }, 1e-6);
+    CHECK_NEAR(pRestored->m_EditableMesh.m_vVertices[0].m_U, 0.125f, 1e-6);
+    CHECK_NEAR(pRestored->m_EditableMesh.m_vVertices[0].m_V, 0.875f, 1e-6);
 }
 
 TEST(SceneSnapshot, keeps_entities_that_have_no_mesh)
@@ -358,11 +360,11 @@ TEST(CSceneDocumentCaptureSnapshot, carries_selection_alongside_the_document)
     sceneUnderTest.m_vSelectedEntities = { 0, 1 };
 
     const quark::SSceneSnapshot snapshot = quark::CSceneDocument::CaptureSnapshot(sceneUnderTest);
-    CHECK(snapshot.Selected == 1);
-    CHECK(snapshot.vSelectedEntities.size() == 2);
-    CHECK(snapshot.vSelectedEntities[0] == 0);
-    CHECK(snapshot.vSelectedEntities[1] == 1);
-    CHECK(!snapshot.Document.empty());
+    CHECK(snapshot.m_Selected == 1);
+    CHECK(snapshot.m_vSelectedEntities.size() == 2);
+    CHECK(snapshot.m_vSelectedEntities[0] == 0);
+    CHECK(snapshot.m_vSelectedEntities[1] == 1);
+    CHECK(!snapshot.m_Document.empty());
 }
 
 TEST(CSceneDocumentCaptureSnapshot, document_restores_into_an_identical_scene)
@@ -387,19 +389,16 @@ TEST(CSceneDocumentCaptureSnapshot, document_restores_into_an_identical_scene)
     source.m_Selected = 5;
     source.m_vSelectedEntities = { 7 };
 
-    CHECK(quark::CSceneDocument::Deserialize(before.Document, source, registry));
-    source.m_Selected = before.Selected;
-    source.m_vSelectedEntities = before.vSelectedEntities;
+    CHECK(quark::CSceneDocument::Deserialize(before.m_Document, source, registry));
+    source.m_Selected = before.m_Selected;
+    source.m_vSelectedEntities = before.m_vSelectedEntities;
 
     CHECK(source.m_vEntities.size() == 2);
     CHECK(source.m_vEntities[child].m_Name == "child");
     CHECK(source.m_vEntities[child].m_vTags.size() == 2);
-    ExpectVecNear(source.m_vEntities[child].GetTransformComponent()->m_Position, Vec3
-    { 9.0f, 8.0f, 7.0f }, 1e-6);
-    ExpectVecNear(source.m_vEntities[child].GetTransformComponent()->m_Rotation, Vec3
-    { 1.0f, 2.0f, 3.0f }, 1e-6);
-    ExpectVecNear(source.m_vEntities[child].GetTransformComponent()->m_Scale, Vec3
-    { 4.0f, 5.0f, 6.0f }, 1e-6);
+    ExpectVecNear(source.m_vEntities[child].GetTransformComponent()->m_Position, Vec3{ 9.0f, 8.0f, 7.0f }, 1e-6);
+    ExpectVecNear(source.m_vEntities[child].GetTransformComponent()->m_Rotation, Vec3{ 1.0f, 2.0f, 3.0f }, 1e-6);
+    ExpectVecNear(source.m_vEntities[child].GetTransformComponent()->m_Scale, Vec3{ 4.0f, 5.0f, 6.0f }, 1e-6);
     CHECK(source.m_Selected == child);
     CHECK(source.m_vSelectedEntities.size() == 2);
     CHECK(source.m_vSelectedEntities[0] == root);
@@ -409,73 +408,72 @@ TEST(CSceneDocumentCaptureSnapshot, document_restores_into_an_identical_scene)
 namespace
 {
 
-class SSnapshotHistory
-{
-public:
-    explicit SSnapshotHistory(CScene& scene, const CComponentFactoryRegistry& registries)
-        : m_Scene(scene)
-        , m_Registry(registries)
+    class CSnapshotHistory
     {
-    }
-
-    void Save()
-    {
-        m_Undo.push(quark::CSceneDocument::CaptureSnapshot(m_Scene));
-        while (!m_Redo.empty())
+    public:
+        explicit CSnapshotHistory(CScene& scene, const CComponentFactoryRegistry& registries)
+            : m_Scene(scene), m_Registry(registries)
         {
+        }
+
+        void Save()
+        {
+            m_Undo.push(quark::CSceneDocument::CaptureSnapshot(m_Scene));
+            while (!m_Redo.empty())
+            {
+                m_Redo.pop();
+            }
+        }
+
+        bool Undo()
+        {
+            if (m_Undo.empty())
+            {
+                return false;
+            }
+            const quark::SSceneSnapshot previous = m_Undo.top();
+            m_Undo.pop();
+            m_Redo.push(quark::CSceneDocument::CaptureSnapshot(m_Scene));
+            Restore(previous);
+            return true;
+        }
+
+        bool Redo()
+        {
+            if (m_Redo.empty())
+            {
+                return false;
+            }
+            const quark::SSceneSnapshot next = m_Redo.top();
             m_Redo.pop();
+            m_Undo.push(quark::CSceneDocument::CaptureSnapshot(m_Scene));
+            Restore(next);
+            return true;
         }
-    }
 
-    bool Undo()
-    {
-        if (m_Undo.empty())
+    private:
+        void Restore(const quark::SSceneSnapshot& snapshot)
         {
-            return false;
+            CHECK(quark::CSceneDocument::Deserialize(snapshot.m_Document, m_Scene, m_Registry));
+            m_Scene.m_Selected = snapshot.m_Selected;
+            m_Scene.m_vSelectedEntities = snapshot.m_vSelectedEntities;
         }
-        const quark::SSceneSnapshot previous = m_Undo.top();
-        m_Undo.pop();
-        m_Redo.push(quark::CSceneDocument::CaptureSnapshot(m_Scene));
-        Restore(previous);
-        return true;
-    }
 
-    bool Redo()
+        CScene& m_Scene;
+        const CComponentFactoryRegistry& m_Registry;
+        std::stack<quark::SSceneSnapshot> m_Undo;
+        std::stack<quark::SSceneSnapshot> m_Redo;
+    };
+
+    int CountEntities(const CScene& scene)
     {
-        if (m_Redo.empty())
-        {
-            return false;
-        }
-        const quark::SSceneSnapshot next = m_Redo.top();
-        m_Redo.pop();
-        m_Undo.push(quark::CSceneDocument::CaptureSnapshot(m_Scene));
-        Restore(next);
-        return true;
+        return static_cast<int>(scene.m_vEntities.size());
     }
 
-private:
-    void Restore(const quark::SSceneSnapshot& snapshot)
+    std::string NameAt(const CScene& scene, int index)
     {
-        CHECK(quark::CSceneDocument::Deserialize(snapshot.Document, m_Scene, m_Registry));
-        m_Scene.m_Selected = snapshot.Selected;
-        m_Scene.m_vSelectedEntities = snapshot.vSelectedEntities;
+        return scene.m_vEntities[index].m_Name;
     }
-
-    CScene& m_Scene;
-    const CComponentFactoryRegistry& m_Registry;
-    std::stack<quark::SSceneSnapshot> m_Undo;
-    std::stack<quark::SSceneSnapshot> m_Redo;
-};
-
-int CountEntities(const CScene& scene)
-{
-    return static_cast<int>(scene.m_vEntities.size());
-}
-
-std::string NameAt(const CScene& scene, int index)
-{
-    return scene.m_vEntities[index].m_Name;
-}
 
 } // anonymous
 
@@ -483,7 +481,7 @@ TEST(SnapshotHistory, undo_and_redo_walk_a_multi_edit_session_backwards_and_forw
 {
     CScene scene;
     CComponentFactoryRegistry registry;
-    SSnapshotHistory history(scene, registry);
+    CSnapshotHistory history(scene, registry);
 
     AddEntity(scene, "before", -1);
     history.Save();
@@ -528,7 +526,7 @@ TEST(SnapshotHistory, saving_after_undo_drops_the_redo_branch)
 {
     CScene scene;
     CComponentFactoryRegistry registry;
-    SSnapshotHistory history(scene, registry);
+    CSnapshotHistory history(scene, registry);
 
     AddEntity(scene, "one", -1);
     history.Save();
@@ -549,7 +547,7 @@ TEST(SnapshotHistory, undo_and_redo_on_empty_history_are_noops)
 {
     CScene scene;
     CComponentFactoryRegistry registry;
-    SSnapshotHistory history(scene, registry);
+    CSnapshotHistory history(scene, registry);
 
     CHECK(!history.Undo());
     CHECK(!history.Redo());
@@ -578,47 +576,53 @@ TEST(SnapshotHistory, undo_and_redo_on_empty_history_are_noops)
 namespace
 {
 
-class CTestGaugeComponent : public IComponent
-{
-public:
-    int m_Reading = 0;
-    std::string m_Label;
-
-    CTestGaugeComponent() = default;
-
-    std::string GetTypeName() const override
+    class CTestGaugeComponent : public IComponent
     {
-        return "Test Gauge";
-    }
-    EComponentType GetType() const override
-    {
-        return COMPONENT_CUSTOM;
-    }
+    public:
+        int m_Reading = 0;
+        std::string m_Label;
 
-    void Serialize(nlohmann::json& json) const override
-    {
-        json["reading"] = m_Reading;
-        json["label"] = m_Label;
-    }
+        CTestGaugeComponent() = default;
 
-    void Deserialize(const nlohmann::json& json) override
-    {
-        if (json.contains("reading")) m_Reading = json["reading"];
-        if (json.contains("label")) m_Label = json["label"];
-    }
-};
+        std::string GetTypeName() const override
+        {
+            return "Test Gauge";
+        }
+        EComponentType GetType() const override
+        {
+            return COMPONENT_CUSTOM;
+        }
 
-const char* const s_GaugeTypeName = "Test Gauge";
+        void Serialize(nlohmann::json& json) const override
+        {
+            json["reading"] = m_Reading;
+            json["label"] = m_Label;
+        }
+
+        void Deserialize(const nlohmann::json& json) override
+        {
+            if (json.contains("reading"))
+            {
+                m_Reading = json["reading"];
+            }
+            if (json.contains("label"))
+            {
+                m_Label = json["label"];
+            }
+        }
+    };
+
+    const char* const s_pGaugeTypeName = "Test Gauge";
 
 } // anonymous
 
 TEST(ComponentFactory, registered_custom_component_survives_a_snapshot_round_trip)
 {
     CComponentFactoryRegistry registry;
-    registry.Register(s_GaugeTypeName, []()
-    {
-        return std::make_shared<CTestGaugeComponent>();
-    });
+    registry.Register(s_pGaugeTypeName, []()
+                      {
+                          return std::make_shared<CTestGaugeComponent>();
+                      });
 
     CScene source;
     const int index = AddEntity(source, "gauged", -1);
@@ -632,7 +636,7 @@ TEST(ComponentFactory, registered_custom_component_survives_a_snapshot_round_tri
 
     source.m_vEntities.clear();
 
-    CHECK(quark::CSceneDocument::Deserialize(before.Document, source, registry));
+    CHECK(quark::CSceneDocument::Deserialize(before.m_Document, source, registry));
     CHECK(source.m_vEntities.size() == 1);
 
     const auto pRestored = source.m_vEntities[0].m_pComponents->GetComponentOfType<CTestGaugeComponent>();
@@ -644,7 +648,7 @@ TEST(ComponentFactory, registered_custom_component_survives_a_snapshot_round_tri
         CHECK(pRestored->m_Enabled == false);
     }
 
-    registry.Unregister(s_GaugeTypeName);
+    registry.Unregister(s_pGaugeTypeName);
 }
 
 TEST(ComponentFactory, unregistered_custom_component_is_dropped_without_losing_the_entity)
@@ -668,10 +672,10 @@ TEST(ComponentFactory, unregistered_custom_component_is_dropped_without_losing_t
 TEST(ComponentFactory, built_in_type_names_keep_resolving_alongside_plugin_registrations)
 {
     CComponentFactoryRegistry registry;
-    registry.Register(s_GaugeTypeName, []()
-    {
-        return std::make_shared<CTestGaugeComponent>();
-    });
+    registry.Register(s_pGaugeTypeName, []()
+                      {
+                          return std::make_shared<CTestGaugeComponent>();
+                      });
 
     CHECK(registry.Create("Transform") != nullptr);
     CHECK(registry.Create("Mesh") != nullptr);
@@ -683,7 +687,7 @@ TEST(ComponentFactory, built_in_type_names_keep_resolving_alongside_plugin_regis
     CHECK(registry.Create("Test Gauge") != nullptr);
     CHECK(registry.Create("Not A Real Component") == nullptr);
 
-    registry.Unregister(s_GaugeTypeName);
+    registry.Unregister(s_pGaugeTypeName);
     CHECK(registry.Create("Test Gauge") == nullptr);
     CHECK(registry.Create("Transform") != nullptr);
 }
@@ -692,9 +696,9 @@ TEST(ComponentFactory, empty_registrations_are_ignored)
 {
     CComponentFactoryRegistry registry;
     CHECK(!registry.Register("", []()
-    {
-        return std::make_shared<CTestGaugeComponent>();
-    }));
+                             {
+                                 return std::make_shared<CTestGaugeComponent>();
+                             }));
     CHECK(!registry.Register("Null Factory", nullptr));
     CHECK(registry.Create("") == nullptr);
     CHECK(registry.Create("Null Factory") == nullptr);
@@ -721,18 +725,18 @@ TEST(ComponentFactory, built_in_type_names_cannot_be_replaced_or_unregistered)
 TEST(ComponentFactory, IsBuiltIn_separates_reserved_type_names_from_registered_ones)
 {
     CComponentFactoryRegistry registry;
-    registry.Register(s_GaugeTypeName, []()
-    {
-        return std::make_shared<CTestGaugeComponent>();
-    });
+    registry.Register(s_pGaugeTypeName, []()
+                      {
+                          return std::make_shared<CTestGaugeComponent>();
+                      });
 
     CHECK(registry.IsBuiltIn("Transform"));
     CHECK(registry.IsBuiltIn("3D Text"));
-    CHECK(!registry.IsBuiltIn(s_GaugeTypeName));
+    CHECK(!registry.IsBuiltIn(s_pGaugeTypeName));
     CHECK(!registry.IsBuiltIn("Not A Real Component"));
 
-    registry.Unregister(s_GaugeTypeName);
-    CHECK(!registry.IsBuiltIn(s_GaugeTypeName));
+    registry.Unregister(s_pGaugeTypeName);
+    CHECK(!registry.IsBuiltIn(s_pGaugeTypeName));
 }
 
 TEST(ComponentFactory, TypeNames_lists_built_ins_and_registrations_in_a_stable_order)
@@ -752,15 +756,15 @@ TEST(ComponentFactory, TypeNames_lists_built_ins_and_registrations_in_a_stable_o
     CHECK(vBuiltIns.back() == "Ui Inputfield");
     CHECK(std::find(vBuiltIns.begin(), vBuiltIns.end(), "Camera") != vBuiltIns.end());
 
-    registry.Register(s_GaugeTypeName, []()
-    {
-        return std::make_shared<CTestGaugeComponent>();
-    });
+    registry.Register(s_pGaugeTypeName, []()
+                      {
+                          return std::make_shared<CTestGaugeComponent>();
+                      });
     const std::vector<std::string> vWithGauge = registry.TypeNames();
     CHECK(vWithGauge.size() == vBuiltIns.size() + 1);
     CHECK(std::is_sorted(vWithGauge.begin(), vWithGauge.end()));
 
-    registry.Unregister(s_GaugeTypeName);
+    registry.Unregister(s_pGaugeTypeName);
     CHECK(registry.TypeNames() == vBuiltIns);
 }
 
@@ -778,17 +782,7 @@ TEST(ComponentFactory, legacy_ui_fields_migrate_to_text_and_rect_transform)
     CComponentFactoryRegistry registry;
     CComponentManager components;
     nlohmann::json legacyComponents = {
-        { "components", nlohmann::json::array({
-            {
-                { "type", "UI" },
-                { "data", {
-                    { "widget_type", static_cast<int>(EGuiWidgetType::Button) },
-                    { "position", { 12.0f, 34.0f } },
-                    { "size", { 210.0f, 44.0f } },
-                    { "text", "Legacy button" }
-                } }
-            }
-        }) }
+        { "components", nlohmann::json::array({ { { "type", "UI" }, { "data", { { "widget_type", static_cast<int>(EGuiWidgetType::BUTTON) }, { "position", { 12.0f, 34.0f } }, { "size", { 210.0f, 44.0f } }, { "text", "Legacy button" } } } } }) }
     };
 
     components.Deserialize(legacyComponents, registry);
@@ -829,24 +823,23 @@ TEST(ComponentFactory, separate_registries_do_not_share_registrations)
     CComponentFactoryRegistry hostRegistry;
     CComponentFactoryRegistry pluginRegistry;
 
-    CHECK(hostRegistry.Register(s_GaugeTypeName, []()
-    {
-        return std::make_shared<CTestGaugeComponent>();
-    }));
+    CHECK(hostRegistry.Register(s_pGaugeTypeName, []()
+                                {
+                                    return std::make_shared<CTestGaugeComponent>();
+                                }));
 
-    CHECK(pluginRegistry.Create(s_GaugeTypeName) == nullptr);
-    CHECK(hostRegistry.Create(s_GaugeTypeName) != nullptr);
+    CHECK(pluginRegistry.Create(s_pGaugeTypeName) == nullptr);
+    CHECK(hostRegistry.Create(s_pGaugeTypeName) != nullptr);
     CHECK(pluginRegistry.Create("Transform") != nullptr);
 }
-
 
 TEST(PrefabDocument, serializes_and_instantiates_hierarchy_branch_with_descendants)
 {
     CComponentFactoryRegistry registry;
-    registry.Register(s_GaugeTypeName, []()
-    {
-        return std::make_shared<CTestGaugeComponent>();
-    });
+    registry.Register(s_pGaugeTypeName, []()
+                      {
+                          return std::make_shared<CTestGaugeComponent>();
+                      });
 
     CScene source;
     AddEntity(source, "Unrelated", -1);
@@ -870,7 +863,7 @@ TEST(PrefabDocument, serializes_and_instantiates_hierarchy_branch_with_descendan
     CHECK(!prefabJson.empty());
 
     const quark::SParsedSceneDocument parsed = quark::CSceneDocument::ParsePrefab(prefabJson);
-    CHECK(parsed.IsValid);
+    CHECK(parsed.m_IsValid);
 
     CScene target;
     AddEntity(target, "ExistingSceneEntity", -1);
@@ -910,7 +903,7 @@ TEST(PrefabDocument, serializes_and_instantiates_hierarchy_branch_with_descendan
         }
     }
 
-    registry.Unregister(s_GaugeTypeName);
+    registry.Unregister(s_pGaugeTypeName);
 }
 
 TEST(PrefabDocument, decomposes_world_transform_when_saving_nested_child_as_prefab_root)
@@ -1035,7 +1028,7 @@ TEST(PrefabDocument, rejects_invalid_or_cyclic_prefab_documents)
             { "name": "B", "parent_id": 0, "components": [] }
         ]
     })";
-    CHECK(!quark::CSceneDocument::ParsePrefab(cyclicPrefab).IsValid);
+    CHECK(!quark::CSceneDocument::ParsePrefab(cyclicPrefab).m_IsValid);
     CHECK(!quark::CSceneDocument::InstantiatePrefab(cyclicPrefab, emptyScene, registry));
     CHECK(emptyScene.m_vEntities.empty());
 }

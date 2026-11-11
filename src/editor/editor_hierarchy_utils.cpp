@@ -21,21 +21,21 @@ std::vector<int> GetEntityDescendants(const CScene& scene, int entityId)
 {
     std::vector<int> vDescendants;
     std::vector<int> vToProcess = GetEntityChildren(scene, entityId);
-    
+
     while (!vToProcess.empty())
     {
         int current = vToProcess.back();
         vToProcess.pop_back();
-        
+
         vDescendants.push_back(current);
-        
-        auto children = GetEntityChildren(scene, current);
-        for (int child : children)
+
+        auto vChildren = GetEntityChildren(scene, current);
+        for (int child : vChildren)
         {
             vToProcess.push_back(child);
         }
     }
-    
+
     return vDescendants;
 }
 
@@ -57,16 +57,19 @@ void MoveEntityToParent(CScene& scene, int entityId, int newParentId)
     {
         return;
     }
-    
+
     if (newParentId >= 0)
     {
-        auto descendants = GetEntityDescendants(scene, entityId);
-        for (int desc : descendants)
+        auto vDescendants = GetEntityDescendants(scene, entityId);
+        for (int desc : vDescendants)
         {
-            if (desc == newParentId) return;
+            if (desc == newParentId)
+            {
+                return;
+            }
         }
     }
-    
+
     const Mat4 worldTransform = quark::ComposeWorld(scene, entityId);
     const Mat4 parentTransform = newParentId >= 0
         ? quark::ComposeWorld(scene, newParentId)
@@ -93,7 +96,7 @@ int CreateGroup(CScene& scene, const std::string& name, int parentId)
     group.m_Name = name;
     group.m_ParentId = parentId;
     group.m_IsGroup = true;
-    
+
     scene.m_vEntities.push_back(group);
     DispatchPluginEvent(PLUGIN_EVENT_ENTITY_CREATED, group.m_Id);
     return group.m_Id;
@@ -105,7 +108,7 @@ void DeleteGroup(CScene& scene, int groupId, bool reparentToParent)
     {
         return;
     }
-    
+
     CEntity& group = scene.m_vEntities[groupId];
     if (!group.m_IsGroup)
     {
@@ -113,19 +116,19 @@ void DeleteGroup(CScene& scene, int groupId, bool reparentToParent)
     }
 
     int parentOfGroup = group.m_ParentId;
-    
+
     if (reparentToParent)
     {
-        auto children = GetEntityChildren(scene, groupId);
-        for (int child : children)
+        auto vChildren = GetEntityChildren(scene, groupId);
+        for (int child : vChildren)
         {
             MoveEntityToParent(scene, child, parentOfGroup);
         }
     }
-    
+
     DispatchPluginEvent(PLUGIN_EVENT_ENTITY_DELETED, groupId);
     scene.m_vEntities.erase(scene.m_vEntities.begin() + groupId);
-    
+
     for (int i = 0; i < static_cast<int>(scene.m_vEntities.size()); i++)
     {
         CEntity& entity = scene.m_vEntities[i];
@@ -142,7 +145,7 @@ bool IsEntityGroup(const CEntity& entity)
     return entity.m_IsGroup;
 }
 
-std::vector<int> GetRootEntities(const CScene& scene) 
+std::vector<int> GetRootEntities(const CScene& scene)
 {
     return GetEntityChildren(scene, -1);
 }

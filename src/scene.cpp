@@ -6,7 +6,10 @@
 #include <unordered_set>
 CEntity* CScene::GetSelected()
 {
-    if (m_Selected < 0 || m_Selected >= static_cast<int>(m_vEntities.size())) return nullptr;
+    if (m_Selected < 0 || m_Selected >= static_cast<int>(m_vEntities.size()))
+    {
+        return nullptr;
+    }
     return &m_vEntities[m_Selected];
 }
 
@@ -17,8 +20,14 @@ bool CScene::IsSelected(int entityIndex) const
 
 void CScene::SelectEntity(int entityIndex, bool additive)
 {
-    if (entityIndex < 0 || entityIndex >= static_cast<int>(m_vEntities.size())) return;
-    if (!additive) m_vSelectedEntities.clear();
+    if (entityIndex < 0 || entityIndex >= static_cast<int>(m_vEntities.size()))
+    {
+        return;
+    }
+    if (!additive)
+    {
+        m_vSelectedEntities.clear();
+    }
 
     auto it = std::find(m_vSelectedEntities.begin(), m_vSelectedEntities.end(), entityIndex);
     if (additive && it != m_vSelectedEntities.end())
@@ -29,7 +38,10 @@ void CScene::SelectEntity(int entityIndex, bool additive)
         return;
     }
 
-    if (it == m_vSelectedEntities.end()) m_vSelectedEntities.push_back(entityIndex);
+    if (it == m_vSelectedEntities.end())
+    {
+        m_vSelectedEntities.push_back(entityIndex);
+    }
     m_Selected = entityIndex;
     DispatchPluginEvent(PLUGIN_EVENT_ENTITY_SELECTED, entityIndex);
 }
@@ -40,17 +52,26 @@ std::string CScene::MakeUniqueName(const std::string& baseName) const
     {
         for (const auto& entity : m_vEntities)
         {
-            if (entity.m_Name == candidate) return true;
+            if (entity.m_Name == candidate)
+            {
+                return true;
+            }
         }
         return false;
     };
 
-    if (!isNameTaken(baseName)) return baseName;
+    if (!isNameTaken(baseName))
+    {
+        return baseName;
+    }
 
     for (int suffix = 1;; ++suffix)
     {
         const std::string candidate = baseName + " (" + std::to_string(suffix) + ")";
-        if (!isNameTaken(candidate)) return candidate;
+        if (!isNameTaken(candidate))
+        {
+            return candidate;
+        }
     }
 }
 
@@ -70,11 +91,17 @@ void CScene::ReleaseResources()
     {
         CMeshComponent* pMesh = entity.GetMeshComponent();
         CMaterialComponent* pMaterial = entity.GetMaterialComponent();
-        if (!pMesh) continue;
+        if (!pMesh)
+        {
+            continue;
+        }
 
         CEntityTextureService::RestoreModelTextures(&entity);
         pMesh->ReleaseOwnedResources();
-        if (pMaterial) pMaterial->m_Texture = {0};
+        if (pMaterial)
+        {
+            pMaterial->m_Texture = { 0 };
+        }
     }
 
     m_vEntities.clear();

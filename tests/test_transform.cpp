@@ -11,37 +11,37 @@
 namespace
 {
 
-void SetTransform(CEntity& target, Vec3 position, Vec3 rotationDegrees, Vec3 scale)
-{
-    CTransformComponent* pTransform = target.GetTransformComponent();
-    pTransform->m_Position = position;
-    pTransform->m_Rotation = rotationDegrees;
-    pTransform->m_Scale = scale;
-}
-
-void ExpectMatNear(const Mat4& actual, const Mat4& expected, double eps)
-{
-    for (int i = 0; i < 16; ++i)
+    void SetTransform(CEntity& target, Vec3 position, Vec3 rotationDegrees, Vec3 scale)
     {
-        CHECK_NEAR(actual.m[i], expected.m[i], eps);
+        CTransformComponent* pTransform = target.GetTransformComponent();
+        pTransform->m_Position = position;
+        pTransform->m_Rotation = rotationDegrees;
+        pTransform->m_Scale = scale;
     }
-}
 
-void ExpectVecNear(const Vec3& actual, const Vec3& expected, double eps)
-{
-    CHECK_NEAR(actual.x, expected.x, eps);
-    CHECK_NEAR(actual.y, expected.y, eps);
-    CHECK_NEAR(actual.z, expected.z, eps);
-}
+    void ExpectMatNear(const Mat4& actual, const Mat4& expected, double eps)
+    {
+        for (int i = 0; i < 16; ++i)
+        {
+            CHECK_NEAR(actual.m[i], expected.m[i], eps);
+        }
+    }
 
-int PushEntity(CScene& target, Vec3 position, Vec3 rotationDegrees, Vec3 scale, int parentId)
-{
-    CEntity added(static_cast<int>(target.m_vEntities.size()));
-    SetTransform(added, position, rotationDegrees, scale);
-    added.m_ParentId = parentId;
-    target.m_vEntities.push_back(added);
-    return static_cast<int>(target.m_vEntities.size()) - 1;
-}
+    void ExpectVecNear(const Vec3& actual, const Vec3& expected, double eps)
+    {
+        CHECK_NEAR(actual.x, expected.x, eps);
+        CHECK_NEAR(actual.y, expected.y, eps);
+        CHECK_NEAR(actual.z, expected.z, eps);
+    }
+
+    int PushEntity(CScene& target, Vec3 position, Vec3 rotationDegrees, Vec3 scale, int parentId)
+    {
+        CEntity added(static_cast<int>(target.m_vEntities.size()));
+        SetTransform(added, position, rotationDegrees, scale);
+        added.m_ParentId = parentId;
+        target.m_vEntities.push_back(added);
+        return static_cast<int>(target.m_vEntities.size()) - 1;
+    }
 
 } // anonymous
 
@@ -102,7 +102,7 @@ TEST(ComposeWorld, root_entity_world_equals_its_local_transform)
     const int index = PushEntity(sceneUnderTest, { 4.0f, 5.0f, 6.0f }, { 0.0f, 45.0f, 0.0f }, { 1.0f, 1.0f, 1.0f }, -1);
 
     ExpectMatNear(quark::ComposeWorld(sceneUnderTest, index),
-        quark::ComposeLocal(sceneUnderTest.m_vEntities[index]), 1e-6);
+                  quark::ComposeLocal(sceneUnderTest.m_vEntities[index]), 1e-6);
 }
 
 TEST(ComposeWorld, child_world_is_parent_world_times_child_local)
@@ -111,8 +111,7 @@ TEST(ComposeWorld, child_world_is_parent_world_times_child_local)
     PushEntity(sceneUnderTest, { 10.0f, 0.0f, 0.0f }, { 0.0f, 90.0f, 0.0f }, { 2.0f, 2.0f, 2.0f }, -1);
     const int child = PushEntity(sceneUnderTest, { 1.0f, 0.0f, 0.0f }, { 0.0f, 0.0f, 0.0f }, { 1.0f, 1.0f, 1.0f }, 0);
 
-    const Mat4 expected = quark::ComposeWorld(sceneUnderTest, 0)
-        * quark::ComposeLocal(sceneUnderTest.m_vEntities[child]);
+    const Mat4 expected = quark::ComposeWorld(sceneUnderTest, 0) * quark::ComposeLocal(sceneUnderTest.m_vEntities[child]);
     ExpectMatNear(quark::ComposeWorld(sceneUnderTest, child), expected, 1e-5);
 }
 
@@ -142,7 +141,7 @@ TEST(ComposeWorld, self_parent_is_treated_as_a_root)
     const int index = PushEntity(sceneUnderTest, { 2.0f, 0.0f, 0.0f }, { 0.0f, 0.0f, 0.0f }, { 3.0f, 3.0f, 3.0f }, 0);
 
     ExpectMatNear(quark::ComposeWorld(sceneUnderTest, index),
-        quark::ComposeLocal(sceneUnderTest.m_vEntities[index]), 1e-6);
+                  quark::ComposeLocal(sceneUnderTest.m_vEntities[index]), 1e-6);
 }
 
 TEST(ComposeWorld, two_node_cycle_terminates_with_a_finite_matrix)
@@ -150,7 +149,7 @@ TEST(ComposeWorld, two_node_cycle_terminates_with_a_finite_matrix)
     CScene sceneUnderTest;
     PushEntity(sceneUnderTest, { 1.0f, 0.0f, 0.0f }, { 0.0f, 0.0f, 0.0f }, { 2.0f, 2.0f, 2.0f }, -1);
     PushEntity(sceneUnderTest, { 0.0f, 1.0f, 0.0f }, { 0.0f, 0.0f, 0.0f }, { 2.0f, 2.0f, 2.0f }, 1);
-    sceneUnderTest.m_vEntities[0].m_ParentId = 1;  // 0 -> 1 -> 0
+    sceneUnderTest.m_vEntities[0].m_ParentId = 1; // 0 -> 1 -> 0
 
     const Mat4 result = quark::ComposeWorld(sceneUnderTest, 1);
     for (int i = 0; i < 16; ++i)
@@ -187,7 +186,7 @@ TEST(ComposeWorld, foreign_entity_falls_back_to_its_local_transform)
     SetTransform(foreign, { 1.0f, 0.0f, 0.0f }, { 0.0f, 0.0f, 0.0f }, { 1.0f, 1.0f, 1.0f });
 
     ExpectMatNear(quark::ComposeWorld(sceneUnderTest, foreign),
-        quark::ComposeLocal(foreign), 1e-6);
+                  quark::ComposeLocal(foreign), 1e-6);
 }
 
 TEST(ComposeWorld, entity_overload_matches_index_overload)
@@ -197,7 +196,7 @@ TEST(ComposeWorld, entity_overload_matches_index_overload)
     const int child = PushEntity(sceneUnderTest, { 0.0f, 2.0f, 0.0f }, { 15.0f, 0.0f, 0.0f }, { 1.5f, 1.5f, 1.5f }, 0);
 
     ExpectMatNear(quark::ComposeWorld(sceneUnderTest, sceneUnderTest.m_vEntities[child]),
-        quark::ComposeWorld(sceneUnderTest, child), 1e-6);
+                  quark::ComposeWorld(sceneUnderTest, child), 1e-6);
 }
 
 TEST(ComposeMeshWorld, multiplies_by_the_model_local_matrix)
@@ -211,8 +210,7 @@ TEST(ComposeMeshWorld, multiplies_by_the_model_local_matrix)
     const Mat4 expected = quark::ComposeWorld(sceneUnderTest, index) * pMesh->m_Model.transform;
     ExpectMatNear(quark::ComposeMeshWorld(sceneUnderTest, sceneUnderTest.m_vEntities[index]), expected, 1e-5);
 
-    const Vec3 origin = quark::ComposeMeshWorld(sceneUnderTest, sceneUnderTest.m_vEntities[index])
-        * Vec3{ 0.0f, 0.0f, 0.0f };
+    const Vec3 origin = quark::ComposeMeshWorld(sceneUnderTest, sceneUnderTest.m_vEntities[index]) * Vec3{ 0.0f, 0.0f, 0.0f };
     ExpectVecNear(origin, Vec3{ 7.0f, 0.0f, 0.0f }, 1e-4);
 }
 
@@ -317,7 +315,7 @@ TEST(ParentWorld, returns_the_whole_parent_chain_world_transform)
     const int leaf = PushEntity(sceneUnderTest, { 0.0f, 0.0f, 3.0f }, { 0.0f, 0.0f, 0.0f }, { 1.0f, 1.0f, 1.0f }, 1);
 
     ExpectMatNear(quark::ParentWorld(sceneUnderTest, sceneUnderTest.m_vEntities[leaf]),
-        quark::ComposeWorld(sceneUnderTest, 1), 1e-5);
+                  quark::ComposeWorld(sceneUnderTest, 1), 1e-5);
 }
 
 TEST(ParentWorld, times_local_equals_compose_world)
@@ -326,8 +324,7 @@ TEST(ParentWorld, times_local_equals_compose_world)
     PushEntity(sceneUnderTest, { 10.0f, -4.0f, 2.0f }, { 0.0f, 65.0f, 0.0f }, { 2.0f, 2.0f, 2.0f }, -1);
     const int child = PushEntity(sceneUnderTest, { 1.0f, 2.0f, 3.0f }, { 15.0f, 0.0f, -30.0f }, { 1.0f, 1.0f, 1.0f }, 0);
 
-    const Mat4 handRolled = quark::ParentWorld(sceneUnderTest, sceneUnderTest.m_vEntities[child])
-        * quark::ComposeLocal(sceneUnderTest.m_vEntities[child]);
+    const Mat4 handRolled = quark::ParentWorld(sceneUnderTest, sceneUnderTest.m_vEntities[child]) * quark::ComposeLocal(sceneUnderTest.m_vEntities[child]);
 
     ExpectMatNear(handRolled, quark::ComposeWorld(sceneUnderTest, child), 1e-4);
 }
@@ -385,7 +382,7 @@ TEST(DecomposeLocal, child_local_is_unchanged_by_a_parent_world_transform)
     const CTransformComponent original = *pChild;
 
     quark::DecomposeLocal(quark::ParentWorld(sceneUnderTest, sceneUnderTest.m_vEntities[1]),
-        quark::ComposeWorld(sceneUnderTest, 1), *pChild);
+                          quark::ComposeWorld(sceneUnderTest, 1), *pChild);
 
     ExpectVecNear(pChild->m_Position, original.m_Position, 1e-2);
     ExpectVecNear(pChild->m_Rotation, original.m_Rotation, 1.0);

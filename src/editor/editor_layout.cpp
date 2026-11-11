@@ -42,12 +42,12 @@ void CEditorLayout::EnsureInitialized(CEditor& editor, ImGuiID dockspaceId)
     const char* pIniFilename = ImGui::GetIO().IniFilename;
     const std::filesystem::path iniPath = pIniFilename ? pIniFilename : "imgui.ini";
     const std::filesystem::path layoutMarker = iniPath.parent_path() / ".quark_layout_initialized";
-    if (!editor.m_Ui.m_Layout.LayoutMarkerChecked && !std::filesystem::exists(layoutMarker))
+    if (!editor.m_Ui.m_Layout.m_LayoutMarkerChecked && !std::filesystem::exists(layoutMarker))
     {
         Reset(dockspaceId, editor.m_Preferences);
         std::ofstream(layoutMarker).close();
     }
-    editor.m_Ui.m_Layout.LayoutMarkerChecked = true;
+    editor.m_Ui.m_Layout.m_LayoutMarkerChecked = true;
 
     if (ImGui::DockBuilderGetNode(dockspaceId) == nullptr)
     {

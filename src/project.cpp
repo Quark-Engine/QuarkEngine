@@ -13,186 +13,186 @@
 #include <memory>
 #include <sstream>
 namespace fs = std::filesystem;
-using json = nlohmann::json;
+using Json = nlohmann::json;
 
 namespace
 {
 
-const char* QUARK_PROJECT_EXTENSION = ".quarkproj";
+    const char* QUARK_PROJECT_EXTENSION = ".quarkproj";
 
-fs::path ProjectManifestPathForRoot(const fs::path& rootPath)
-{
-    const std::string rootName = rootPath.filename().string();
-    const std::string manifestName = (rootName.empty() ? std::string("project") : rootName) + QUARK_PROJECT_EXTENSION;
-    return rootPath / manifestName;
-}
-
-fs::path FindProjectManifest(const fs::path& rootPath)
-{
-    std::error_code ec;
-
-    if (!fs::exists(rootPath, ec) || !fs::is_directory(rootPath, ec))
+    fs::path ProjectManifestPathForRoot(const fs::path& rootPath)
     {
+        const std::string rootName = rootPath.filename().string();
+        const std::string manifestName = (rootName.empty() ? std::string("project") : rootName) + QUARK_PROJECT_EXTENSION;
+        return rootPath / manifestName;
+    }
+
+    fs::path FindProjectManifest(const fs::path& rootPath)
+    {
+        std::error_code ec;
+
+        if (!fs::exists(rootPath, ec) || !fs::is_directory(rootPath, ec))
+        {
+            return {};
+        }
+
+        const fs::path preferredManifest = ProjectManifestPathForRoot(rootPath);
+        if (fs::exists(preferredManifest))
+        {
+            return preferredManifest;
+        }
+
+        for (const auto& entry : fs::directory_iterator(rootPath, ec))
+        {
+            if (ec)
+            {
+                break;
+            }
+            if (!entry.is_regular_file())
+            {
+                continue;
+            }
+            if (entry.path().extension() == QUARK_PROJECT_EXTENSION)
+            {
+                return entry.path();
+            }
+        }
+
         return {};
     }
 
-    const fs::path preferredManifest = ProjectManifestPathForRoot(rootPath);
-    if (fs::exists(preferredManifest))
+    Json ReadProjectManifest(const fs::path& rootPath)
     {
-        return preferredManifest;
-    }
-
-    for (const auto& entry : fs::directory_iterator(rootPath, ec))
-    {
-        if (ec)
+        const fs::path manifestPath = FindProjectManifest(rootPath);
+        if (manifestPath.empty())
         {
-            break;
+            return Json::object();
         }
-        if (!entry.is_regular_file())
+
+        std::ifstream manifestFile(manifestPath);
+        if (!manifestFile.is_open())
         {
-            continue;
+            return Json::object();
         }
-        if (entry.path().extension() == QUARK_PROJECT_EXTENSION)
+
+        try
         {
-            return entry.path();
+            Json manifest;
+            manifestFile >> manifest;
+            return manifest.is_object() ? manifest : Json::object();
+        }
+        catch (...)
+        {
+            return Json::object();
         }
     }
 
-    return {};
-}
-
-json ReadProjectManifest(const fs::path& rootPath)
-{
-    const fs::path manifestPath = FindProjectManifest(rootPath);
-    if (manifestPath.empty())
+    fs::path ResolveProjectRootPath(const fs::path& inputPath)
     {
-        return json::object();
-    }
-
-    std::ifstream manifestFile(manifestPath);
-    if (!manifestFile.is_open())
-    {
-        return json::object();
-    }
-
-    try
-    {
-        json manifest;
-        manifestFile >> manifest;
-        return manifest.is_object() ? manifest : json::object();
-    }
-    catch (...)
-    {
-        return json::object();
-    }
-}
-
-fs::path ResolveProjectRootPath(const fs::path& inputPath)
-{
-    if (inputPath.empty())
-    {
-        return {};
-    }
-
-    fs::path p = fs::absolute(inputPath);
-
-    std::error_code ec;
-
-    if (fs::is_directory(p, ec))
-    {
-        return p;
-    }
-
-    if (fs::is_regular_file(p, ec))
-    {
-        if (p.extension() == QUARK_PROJECT_EXTENSION)
+        if (inputPath.empty())
         {
+            return {};
+        }
+
+        fs::path p = fs::absolute(inputPath);
+
+        std::error_code ec;
+
+        if (fs::is_directory(p, ec))
+        {
+            return p;
+        }
+
+        if (fs::is_regular_file(p, ec))
+        {
+            if (p.extension() == QUARK_PROJECT_EXTENSION)
+            {
+                return p.parent_path();
+            }
+
             return p.parent_path();
         }
 
-        return p.parent_path();
+        return p;
     }
 
-    return p;
-}
-
-bool WriteProjectManifest(const fs::path& rootPath, const std::string& sceneFile = "scene.json")
-{
-    fs::create_directories(rootPath);
-
-    json manifest = ReadProjectManifest(rootPath);
-    manifest["format"] = "quark-project";
-    manifest["version"] = QUARK_ENGINE_VERSION;
-    manifest["name"] = rootPath.filename().string();
-    manifest["scene"] = sceneFile;
-    manifest["resources"] = "resources";
-
-    const fs::path manifestPath = ProjectManifestPathForRoot(rootPath);
-    std::ofstream manifestFile(manifestPath);
-    if (!manifestFile.is_open())
+    bool WriteProjectManifest(const fs::path& rootPath, const std::string& sceneFile = "scene.json")
     {
-        return false;
-    }
-    manifestFile << manifest.dump(4);
-    return true;
-}
+        fs::create_directories(rootPath);
 
-fs::path ResolveSceneJsonPath(const fs::path& inputPath)
-{
-    const fs::path rootPath = ResolveProjectRootPath(inputPath);
-    if (rootPath.empty())
-    {
-        return {};
-    }
+        Json manifest = ReadProjectManifest(rootPath);
+        manifest["format"] = "quark-project";
+        manifest["version"] = QUARK_ENGINE_VERSION;
+        manifest["name"] = rootPath.filename().string();
+        manifest["scene"] = sceneFile;
+        manifest["resources"] = "resources";
 
-    if (fs::is_regular_file(inputPath) && inputPath.extension() == ".json")
-    {
-        return fs::absolute(inputPath);
-    }
-
-    if (fs::is_regular_file(inputPath) && inputPath.extension() == QUARK_PROJECT_EXTENSION)
-    {
-        std::ifstream manifestFile(inputPath);
-        if (manifestFile.is_open())
+        const fs::path manifestPath = ProjectManifestPathForRoot(rootPath);
+        std::ofstream manifestFile(manifestPath);
+        if (!manifestFile.is_open())
         {
-            json manifest;
-            try
+            return false;
+        }
+        manifestFile << manifest.dump(4);
+        return true;
+    }
+
+    fs::path ResolveSceneJsonPath(const fs::path& inputPath)
+    {
+        const fs::path rootPath = ResolveProjectRootPath(inputPath);
+        if (rootPath.empty())
+        {
+            return {};
+        }
+
+        if (fs::is_regular_file(inputPath) && inputPath.extension() == ".json")
+        {
+            return fs::absolute(inputPath);
+        }
+
+        if (fs::is_regular_file(inputPath) && inputPath.extension() == QUARK_PROJECT_EXTENSION)
+        {
+            std::ifstream manifestFile(inputPath);
+            if (manifestFile.is_open())
             {
-                manifestFile >> manifest;
-                if (manifest.contains("scene") && manifest["scene"].is_string())
+                Json manifest;
+                try
                 {
-                    return rootPath / manifest["scene"].get<std::string>();
+                    manifestFile >> manifest;
+                    if (manifest.contains("scene") && manifest["scene"].is_string())
+                    {
+                        return rootPath / manifest["scene"].get<std::string>();
+                    }
+                }
+                catch (...)
+                {
                 }
             }
-            catch (...)
-            {
-            }
         }
-    }
 
-    const fs::path manifestPath = FindProjectManifest(rootPath);
-    if (!manifestPath.empty())
-    {
-        std::ifstream manifestFile(manifestPath);
-        if (manifestFile.is_open())
+        const fs::path manifestPath = FindProjectManifest(rootPath);
+        if (!manifestPath.empty())
         {
-            json manifest;
-            try
+            std::ifstream manifestFile(manifestPath);
+            if (manifestFile.is_open())
             {
-                manifestFile >> manifest;
-                if (manifest.contains("scene") && manifest["scene"].is_string())
+                Json manifest;
+                try
                 {
-                    return rootPath / manifest["scene"].get<std::string>();
+                    manifestFile >> manifest;
+                    if (manifest.contains("scene") && manifest["scene"].is_string())
+                    {
+                        return rootPath / manifest["scene"].get<std::string>();
+                    }
+                }
+                catch (...)
+                {
                 }
             }
-            catch (...)
-            {
-            }
         }
-    }
 
-    return rootPath / "scene.json";
-}
+        return rootPath / "scene.json";
+    }
 
 } // anonymous
 
@@ -263,7 +263,7 @@ std::vector<std::string> CProjectService::GetSceneFiles(const std::string& proje
 }
 
 bool CProjectService::LoadBuildSettings(const std::string& projectPath,
-                                       SProjectBuildSettings& settings)
+                                        SProjectBuildSettings& settings)
 {
     const fs::path rootPath = ResolveProjectRootPath(fs::path(projectPath));
     if (rootPath.empty())
@@ -271,41 +271,43 @@ bool CProjectService::LoadBuildSettings(const std::string& projectPath,
         return false;
     }
 
-    const json manifest = ReadProjectManifest(rootPath);
-    settings.startScene = fs::relative(
-        ResolveSceneJsonPath(rootPath), rootPath).generic_string();
-    settings.iconPath.clear();
+    const Json manifest = ReadProjectManifest(rootPath);
+    settings.m_StartScene = fs::relative(
+                                ResolveSceneJsonPath(rootPath), rootPath)
+                                .generic_string();
+    settings.m_IconPath.clear();
     std::string profile = "Release";
     if (manifest.contains("build_start_scene") && manifest["build_start_scene"].is_string())
     {
-        settings.startScene = manifest["build_start_scene"].get<std::string>();
+        settings.m_StartScene = manifest["build_start_scene"].get<std::string>();
     }
     if (manifest.contains("build_icon") && manifest["build_icon"].is_string())
     {
-        settings.iconPath = manifest["build_icon"].get<std::string>();
+        settings.m_IconPath = manifest["build_icon"].get<std::string>();
     }
     if (manifest.contains("build_profile") && manifest["build_profile"].is_string())
     {
         profile = manifest["build_profile"].get<std::string>();
     }
-    settings.profile = profile == "Debug"
-        ? EProjectBuildProfile::DEBUG : EProjectBuildProfile::RELEASE;
+    settings.m_Profile = profile == "Debug"
+        ? EProjectBuildProfile::DEBUG
+        : EProjectBuildProfile::RELEASE;
 
     const std::vector<std::string> vSceneFiles = GetSceneFiles(rootPath.string());
-    if (std::find(vSceneFiles.begin(), vSceneFiles.end(), settings.startScene) == vSceneFiles.end())
+    if (std::find(vSceneFiles.begin(), vSceneFiles.end(), settings.m_StartScene) == vSceneFiles.end())
     {
-        settings.startScene = "scene.json";
-        if (std::find(vSceneFiles.begin(), vSceneFiles.end(), settings.startScene) == vSceneFiles.end() &&
+        settings.m_StartScene = "scene.json";
+        if (std::find(vSceneFiles.begin(), vSceneFiles.end(), settings.m_StartScene) == vSceneFiles.end() &&
             !vSceneFiles.empty())
         {
-            settings.startScene = vSceneFiles.front();
+            settings.m_StartScene = vSceneFiles.front();
         }
     }
     return true;
 }
 
 bool CProjectService::SaveBuildSettings(const std::string& projectPath,
-                                       const SProjectBuildSettings& settings)
+                                        const SProjectBuildSettings& settings)
 {
     const fs::path rootPath = ResolveProjectRootPath(fs::path(projectPath));
     if (rootPath.empty())
@@ -314,13 +316,13 @@ bool CProjectService::SaveBuildSettings(const std::string& projectPath,
     }
 
     const std::vector<std::string> vSceneFiles = GetSceneFiles(rootPath.string());
-    if (std::find(vSceneFiles.begin(), vSceneFiles.end(), settings.startScene) == vSceneFiles.end())
+    if (std::find(vSceneFiles.begin(), vSceneFiles.end(), settings.m_StartScene) == vSceneFiles.end())
     {
         return false;
     }
-    if (!settings.iconPath.empty())
+    if (!settings.m_IconPath.empty())
     {
-        const fs::path iconPath(settings.iconPath);
+        const fs::path iconPath(settings.m_IconPath);
         if (iconPath.is_absolute() || iconPath.has_root_name())
         {
             return false;
@@ -338,16 +340,17 @@ bool CProjectService::SaveBuildSettings(const std::string& projectPath,
         }
     }
 
-    json manifest = ReadProjectManifest(rootPath);
+    Json manifest = ReadProjectManifest(rootPath);
     manifest["format"] = "quark-project";
     manifest["version"] = QUARK_ENGINE_VERSION;
     manifest["name"] = rootPath.filename().string();
     manifest["scene"] = fs::relative(ResolveSceneJsonPath(rootPath), rootPath).generic_string();
     manifest["resources"] = "resources";
-    manifest["build_start_scene"] = settings.startScene;
-    manifest["build_icon"] = settings.iconPath;
-    manifest["build_profile"] = settings.profile == EProjectBuildProfile::DEBUG
-        ? "Debug" : "Release";
+    manifest["build_start_scene"] = settings.m_StartScene;
+    manifest["build_icon"] = settings.m_IconPath;
+    manifest["build_profile"] = settings.m_Profile == EProjectBuildProfile::DEBUG
+        ? "Debug"
+        : "Release";
 
     std::ofstream manifestFile(ProjectManifestPathForRoot(rootPath), std::ios::trunc);
     if (!manifestFile.is_open())
@@ -472,7 +475,7 @@ bool CProjectService::Load(const std::string& folderPath, CScene& scene, CAssetL
         std::ifstream mf(manifestPath);
         if (mf.is_open())
         {
-            json manifest;
+            Json manifest;
             try
             {
                 mf >> manifest;
@@ -553,7 +556,7 @@ std::string CProjectService::GetVersion(const std::string& path)
         return "";
     }
 
-    json manifest;
+    Json manifest;
     try
     {
         f >> manifest;

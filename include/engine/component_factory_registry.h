@@ -15,7 +15,7 @@ public:
     CComponentFactoryRegistry(const CComponentFactoryRegistry&) = delete;
     CComponentFactoryRegistry& operator=(const CComponentFactoryRegistry&) = delete;
 
-    bool Register(const std::string& typeName, FComponentFactory create);
+    bool Register(const std::string& typeName, FComponentFactory pfnCreate);
 
     void Unregister(const std::string& typeName);
 
@@ -28,8 +28,8 @@ public:
 private:
     struct SEntry
     {
-        FComponentFactory create;
-        bool builtIn = false;
+        FComponentFactory pfnCreate;
+        bool m_BuiltIn = false;
     };
 
     void SeedBuiltIns();

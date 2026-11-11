@@ -11,22 +11,22 @@
 namespace quark
 {
 
-class CSceneRuntime
-{
-public:
-    static void RestoreEntityMaterial(CEntity& entity, const CAssetLibrary& assets);
+    class CSceneRuntime
+    {
+    public:
+        static void RestoreEntityMaterial(CEntity& entity, const CAssetLibrary& assets);
 
-    static void RestoreEntityModel(CEntity& entity, CAssetLibrary& assets,
-        const SEditableMeshBuildData* pEditableMeshBuildData = nullptr);
+        static void RestoreEntityModel(CEntity& entity, CAssetLibrary& assets,
+                                       const SEditableMeshBuildData* pEditableMeshBuildData = nullptr);
 
-    static void RestoreSceneEntityModels(CScene& scene, CAssetLibrary& assets,
-        CScene* pPreviousScene = nullptr,
-        const std::vector<std::optional<SEditableMeshBuildData>>* pvEditableMeshBuildData = nullptr);
-    static void RestoreSceneEntityMaterials(CScene& scene, const CAssetLibrary& assets);
+        static void RestoreSceneEntityModels(CScene& scene, CAssetLibrary& assets,
+                                             CScene* pPreviousScene = nullptr,
+                                             const std::vector<std::optional<SEditableMeshBuildData>>* pvEditableMeshBuildData = nullptr);
+        static void RestoreSceneEntityMaterials(CScene& scene, const CAssetLibrary& assets);
 
-    static void ResetEntityLightRuntime(CEntity& entity);
-    static void ResetSceneLightRuntime(CScene& scene, CLightRegistry& lights);
-};
+        static void ResetEntityLightRuntime(CEntity& entity);
+        static void ResetSceneLightRuntime(CScene& scene, CLightRegistry& lights);
+    };
 
 } // quark
 

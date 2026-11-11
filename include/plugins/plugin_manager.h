@@ -8,23 +8,23 @@
 
 struct SLoadedPlugin
 {
-    CDynamicLibrary Library;
-    SPlugin* pPlugin;
-    std::string FilePath;
+    CDynamicLibrary m_Library;
+    SPlugin* m_pPlugin;
+    std::string m_FilePath;
 };
 
 struct SRegisteredUICallback
 {
-    SPlugin* pPlugin;
-    EUIRegion region;
-    FPluginUICallback callback;
+    SPlugin* m_pPlugin;
+    EUIRegion m_Region;
+    FPluginUICallback pfnCallback;
 };
 
 struct SRegisteredEventCallback
 {
-    SPlugin* pPlugin;
-    EPluginEvent event;
-    FPluginEventCallback callback;
+    SPlugin* m_pPlugin;
+    EPluginEvent m_Event;
+    FPluginEventCallback pfnCallback;
 };
 
 class CPluginManager

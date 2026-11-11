@@ -10,7 +10,7 @@ void CMeshComponent::Serialize(nlohmann::json& json) const
 {
     json["segments"] = m_Segments;
     json["type"] = static_cast<int>(m_Type);
-    
+
     if (!m_AssetName.empty())
     {
         json["asset_name"] = m_AssetName;
@@ -21,32 +21,34 @@ void CMeshComponent::Serialize(nlohmann::json& json) const
 
     for (auto& v : m_EditableMesh.m_vVertices)
     {
-        json["editable_vertices"].push_back({
-            v.Position.x,
-            v.Position.y,
-            v.Position.z,
-            v.U,
-            v.V
-        });
+        json["editable_vertices"].push_back({ v.m_Position.x,
+                                              v.m_Position.y,
+                                              v.m_Position.z,
+                                              v.m_U,
+                                              v.m_V });
     }
 
     json["editable_triangles"] = nlohmann::json::array();
 
     for (auto& t : m_EditableMesh.m_vTriangles)
     {
-        json["editable_triangles"].push_back({
-            t.A,
-            t.B,
-            t.C
-        });
+        json["editable_triangles"].push_back({ t.m_A,
+                                               t.m_B,
+                                               t.m_C });
     }
 }
 
 void CMeshComponent::Deserialize(const nlohmann::json& json)
 {
-    if (json.contains("segments")) m_Segments = json["segments"];
-    if (json.contains("type")) m_Type = static_cast<EObjectType>(json["type"].get<int>());
-    
+    if (json.contains("segments"))
+    {
+        m_Segments = json["segments"];
+    }
+    if (json.contains("type"))
+    {
+        m_Type = static_cast<EObjectType>(json["type"].get<int>());
+    }
+
     if (json.contains("asset_name"))
     {
         m_AssetName = json["asset_name"];
@@ -63,13 +65,13 @@ void CMeshComponent::Deserialize(const nlohmann::json& json)
         for (auto& v : json["editable_vertices"])
         {
             SEditableVertex vert;
-            vert.Position = Vec3(v[0],
-                v[1],
-                v[2]);
+            vert.m_Position = Vec3(v[0],
+                                   v[1],
+                                   v[2]);
             if (v.size() >= 5)
             {
-                vert.U = v[3];
-                vert.V = v[4];
+                vert.m_U = v[3];
+                vert.m_V = v[4];
             }
 
             m_EditableMesh.m_vVertices.push_back(vert);
@@ -83,9 +85,9 @@ void CMeshComponent::Deserialize(const nlohmann::json& json)
         {
             SEditableTriangle tri;
 
-            tri.A = t[0];
-            tri.B = t[1];
-            tri.C = t[2];
+            tri.m_A = t[0];
+            tri.m_B = t[1];
+            tri.m_C = t[2];
 
             m_EditableMesh.m_vTriangles.push_back(tri);
         }
@@ -95,14 +97,14 @@ void CMeshComponent::Deserialize(const nlohmann::json& json)
 void CLightComponent::Serialize(nlohmann::json& json) const
 {
     json["light_enabled"] = m_Light.m_Enabled;
-    json["light_position"] = {m_Light.m_Position.x, m_Light.m_Position.y, m_Light.m_Position.z};
-    json["light_target"] = {m_Light.m_Target.x, m_Light.m_Target.y, m_Light.m_Target.z};
-    json["light_rotation"] = {m_Light.m_Rotation.x, m_Light.m_Rotation.y, m_Light.m_Rotation.z};
-    
+    json["light_position"] = { m_Light.m_Position.x, m_Light.m_Position.y, m_Light.m_Position.z };
+    json["light_target"] = { m_Light.m_Target.x, m_Light.m_Target.y, m_Light.m_Target.z };
+    json["light_rotation"] = { m_Light.m_Rotation.x, m_Light.m_Rotation.y, m_Light.m_Rotation.z };
+
     char aColorBuf[16];
     snprintf(aColorBuf, sizeof(aColorBuf), "%02X%02X%02X%02X", m_Light.m_Color.r, m_Light.m_Color.g, m_Light.m_Color.b, m_Light.m_Color.a);
     json["light_color"] = std::string(aColorBuf);
-    
+
     json["light_intensity"] = m_Light.m_Intensity;
     json["light_range"] = m_Light.m_Range;
     json["light_spot_angle"] = m_Light.m_SpotAngle;
@@ -111,12 +113,15 @@ void CLightComponent::Serialize(nlohmann::json& json) const
 
 CLightComponent::CLightComponent() : IComponent(COMPONENT_LIGHT, "Light"), m_Created(false)
 {
-    m_Light = CreateLighting({0, 0, 0}, WHITE);
+    m_Light = CreateLighting({ 0, 0, 0 }, WHITE);
 }
 
 void CLightComponent::Deserialize(const nlohmann::json& json)
 {
-    if (json.contains("light_enabled")) m_Light.m_Enabled = json["light_enabled"];
+    if (json.contains("light_enabled"))
+    {
+        m_Light.m_Enabled = json["light_enabled"];
+    }
     if (json.contains("light_position"))
     {
         auto& p = json["light_position"];
@@ -143,10 +148,22 @@ void CLightComponent::Deserialize(const nlohmann::json& json)
             static_cast<unsigned char>(rgba & 0xFF)
         };
     }
-    if (json.contains("light_intensity")) m_Light.m_Intensity = json["light_intensity"];
-    if (json.contains("light_range")) m_Light.m_Range = json["light_range"];
-    if (json.contains("light_spot_angle")) m_Light.m_SpotAngle = json["light_spot_angle"];
-    if (json.contains("light_type")) m_Light.m_Light.type = json["light_type"];
+    if (json.contains("light_intensity"))
+    {
+        m_Light.m_Intensity = json["light_intensity"];
+    }
+    if (json.contains("light_range"))
+    {
+        m_Light.m_Range = json["light_range"];
+    }
+    if (json.contains("light_spot_angle"))
+    {
+        m_Light.m_SpotAngle = json["light_spot_angle"];
+    }
+    if (json.contains("light_type"))
+    {
+        m_Light.m_Light.type = json["light_type"];
+    }
 }
 
 void CLightComponent::OnEntityTransformChanged()
@@ -158,17 +175,23 @@ void CCollisionComponent::Serialize(nlohmann::json& json) const
     json["collider_type"] = static_cast<int>(m_ColliderType);
     json["is_trigger"] = m_IsTrigger;
 
-    json["size"] = {m_Size.x, m_Size.y, m_Size.z};
+    json["size"] = { m_Size.x, m_Size.y, m_Size.z };
     json["radius"] = m_Radius;
     json["height"] = m_Height;
 
-    json["center"] = {m_Center.x, m_Center.y, m_Center.z};
+    json["center"] = { m_Center.x, m_Center.y, m_Center.z };
 }
 
 void CCollisionComponent::Deserialize(const nlohmann::json& json)
 {
-    if (json.contains("collider_type")) m_ColliderType = static_cast<EColliderType>(json["collider_type"].get<int>());
-    if (json.contains("is_trigger")) m_IsTrigger = json["is_trigger"];
+    if (json.contains("collider_type"))
+    {
+        m_ColliderType = static_cast<EColliderType>(json["collider_type"].get<int>());
+    }
+    if (json.contains("is_trigger"))
+    {
+        m_IsTrigger = json["is_trigger"];
+    }
 
     if (json.contains("size"))
     {
@@ -176,9 +199,15 @@ void CCollisionComponent::Deserialize(const nlohmann::json& json)
         m_Size = Vec3(s[0], s[1], s[2]);
     }
 
-    if (json.contains("radius")) m_Radius = json["radius"];
-    if (json.contains("height")) m_Height = json["height"];
-    
+    if (json.contains("radius"))
+    {
+        m_Radius = json["radius"];
+    }
+    if (json.contains("height"))
+    {
+        m_Height = json["height"];
+    }
+
     if (json.contains("center"))
     {
         auto& c = json["center"];
@@ -193,23 +222,24 @@ void CCollisionComponent::OnEntityTransformChanged()
     m_Dirty = true;
 }
 
-namespace {
-
-nlohmann::json SerializeGuiColor(Color c)
+namespace
 {
-    return nlohmann::json::array({ c.r, c.g, c.b, c.a });
-}
 
-void DeserializeGuiColor(const nlohmann::json& j, const char* key, Color& outColor)
-{
-    if (j.contains(key) && j[key].is_array() && j[key].size() >= 4)
+    nlohmann::json SerializeGuiColor(Color c)
     {
-        outColor.r = static_cast<unsigned char>(j[key][0].get<int>());
-        outColor.g = static_cast<unsigned char>(j[key][1].get<int>());
-        outColor.b = static_cast<unsigned char>(j[key][2].get<int>());
-        outColor.a = static_cast<unsigned char>(j[key][3].get<int>());
+        return nlohmann::json::array({ c.r, c.g, c.b, c.a });
     }
-}
+
+    void DeserializeGuiColor(const nlohmann::json& j, const char* key, Color& outColor)
+    {
+        if (j.contains(key) && j[key].is_array() && j[key].size() >= 4)
+        {
+            outColor.r = static_cast<unsigned char>(j[key][0].get<int>());
+            outColor.g = static_cast<unsigned char>(j[key][1].get<int>());
+            outColor.b = static_cast<unsigned char>(j[key][2].get<int>());
+            outColor.a = static_cast<unsigned char>(j[key][3].get<int>());
+        }
+    }
 
 } // anonymous
 
@@ -395,7 +425,10 @@ void CTextComponent::Deserialize(const nlohmann::json& json)
 
 void CComponentManager::Deserialize(const nlohmann::json& json, const CComponentFactoryRegistry& factories)
 {
-    if (!json.contains("components")) return;
+    if (!json.contains("components"))
+    {
+        return;
+    }
 
     m_vComponents.clear();
     nlohmann::json legacyUiData;
@@ -413,8 +446,8 @@ void CComponentManager::Deserialize(const nlohmann::json& json, const CComponent
         if (!pComp)
         {
             TraceLog(LogLevel::Warn, "COMPONENT",
-                TextFormat("Dropping component '%s': no factory is registered for this type name.",
-                    typeName.c_str()));
+                     TextFormat("Dropping component '%s': no factory is registered for this type name.",
+                                typeName.c_str()));
             continue;
         }
 
@@ -463,11 +496,11 @@ void CComponentManager::Deserialize(const nlohmann::json& json, const CComponent
             {
                 pText->m_Text = legacyUiData["text"].get<std::string>();
             }
-            else if (pUi->m_WidgetType == EGuiWidgetType::Button)
+            else if (pUi->m_WidgetType == EGuiWidgetType::BUTTON)
             {
                 pText->m_Text = "Button";
             }
-            else if (pUi->m_WidgetType == EGuiWidgetType::InputField)
+            else if (pUi->m_WidgetType == EGuiWidgetType::INPUT_FIELD)
             {
                 pText->m_Text.clear();
             }
@@ -475,7 +508,7 @@ void CComponentManager::Deserialize(const nlohmann::json& json, const CComponent
             {
                 pText->m_Text = "Combo";
             }
-            pText->m_HorizontalAlignment = pUi->m_WidgetType == EGuiWidgetType::Button
+            pText->m_HorizontalAlignment = pUi->m_WidgetType == EGuiWidgetType::BUTTON
                 ? EUiTextAlignment::CENTER
                 : EUiTextAlignment::LEFT;
             m_vComponents.push_back(pText);
@@ -506,58 +539,58 @@ void CComponentManager::CloneInto(const CComponentManager& source)
         std::shared_ptr<IComponent> pCloned;
         switch (pComponent->GetType())
         {
-        case COMPONENT_TRANSFORM:
-            pCloned = std::make_shared<CTransformComponent>(
-                *std::dynamic_pointer_cast<CTransformComponent>(pComponent));
-            break;
+            case COMPONENT_TRANSFORM:
+                pCloned = std::make_shared<CTransformComponent>(
+                    *std::dynamic_pointer_cast<CTransformComponent>(pComponent));
+                break;
 
-        case COMPONENT_MESH:
-            pCloned = std::make_shared<CMeshComponent>(
-                *std::dynamic_pointer_cast<CMeshComponent>(pComponent));
-            break;
+            case COMPONENT_MESH:
+                pCloned = std::make_shared<CMeshComponent>(
+                    *std::dynamic_pointer_cast<CMeshComponent>(pComponent));
+                break;
 
-        case COMPONENT_LIGHT:
-            pCloned = std::make_shared<CLightComponent>(
-                *std::dynamic_pointer_cast<CLightComponent>(pComponent));
-            break;
+            case COMPONENT_LIGHT:
+                pCloned = std::make_shared<CLightComponent>(
+                    *std::dynamic_pointer_cast<CLightComponent>(pComponent));
+                break;
 
-        case COMPONENT_MATERIAL:
-            pCloned = std::make_shared<CMaterialComponent>(
-                *std::dynamic_pointer_cast<CMaterialComponent>(pComponent));
-            break;
+            case COMPONENT_MATERIAL:
+                pCloned = std::make_shared<CMaterialComponent>(
+                    *std::dynamic_pointer_cast<CMaterialComponent>(pComponent));
+                break;
 
-        case COMPONENT_COLLISION:
-            pCloned = std::make_shared<CCollisionComponent>(
-                *std::dynamic_pointer_cast<CCollisionComponent>(pComponent));
-            break;
+            case COMPONENT_COLLISION:
+                pCloned = std::make_shared<CCollisionComponent>(
+                    *std::dynamic_pointer_cast<CCollisionComponent>(pComponent));
+                break;
 
-        case COMPONENT_CAMERA:
-            pCloned = std::make_shared<CCameraComponent>(
-                *std::dynamic_pointer_cast<CCameraComponent>(pComponent));
-            break;
+            case COMPONENT_CAMERA:
+                pCloned = std::make_shared<CCameraComponent>(
+                    *std::dynamic_pointer_cast<CCameraComponent>(pComponent));
+                break;
 
-        case COMPONENT_SCRIPT:
-            pCloned = std::make_shared<CScriptComponent>(
-                *std::dynamic_pointer_cast<CScriptComponent>(pComponent));
-            break;
+            case COMPONENT_SCRIPT:
+                pCloned = std::make_shared<CScriptComponent>(
+                    *std::dynamic_pointer_cast<CScriptComponent>(pComponent));
+                break;
 
-        case COMPONENT_UI:
-            pCloned = std::make_shared<CUiComponent>(
-                *std::dynamic_pointer_cast<CUiComponent>(pComponent));
-            break;
+            case COMPONENT_UI:
+                pCloned = std::make_shared<CUiComponent>(
+                    *std::dynamic_pointer_cast<CUiComponent>(pComponent));
+                break;
 
-        case COMPONENT_TEXT:
-            pCloned = std::make_shared<CTextComponent>(
-                *std::dynamic_pointer_cast<CTextComponent>(pComponent));
-            break;
+            case COMPONENT_TEXT:
+                pCloned = std::make_shared<CTextComponent>(
+                    *std::dynamic_pointer_cast<CTextComponent>(pComponent));
+                break;
 
-        case COMPONENT_UI_RECT_TRANSFORM:
-            pCloned = std::make_shared<CUiRectTransformComponent>(
-                *std::dynamic_pointer_cast<CUiRectTransformComponent>(pComponent));
-            break;
+            case COMPONENT_UI_RECT_TRANSFORM:
+                pCloned = std::make_shared<CUiRectTransformComponent>(
+                    *std::dynamic_pointer_cast<CUiRectTransformComponent>(pComponent));
+                break;
 
-        default:
-            break;
+            default:
+                break;
         }
 
         if (pCloned)

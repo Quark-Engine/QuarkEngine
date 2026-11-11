@@ -10,58 +10,55 @@
 namespace
 {
 
-constexpr int CAMERA_CURSOR_SIZE = 32;
+    constexpr int CAMERA_CURSOR_SIZE = 32;
 
-void SetCameraCapture(bool enabled)
-{
-    if (SDL_Window* pWindow = GetNativeWindow())
+    void SetCameraCapture(bool enabled)
     {
-        SDL_SetWindowRelativeMouseMode(pWindow, enabled);
-    }
-
-    if (enabled)
-    {
-        DisableCursor();
-    }
-    else
-    {
-        EnableCursor();
-    }
-}
-
-void SetOrbitCursor(SDL_Cursor* pCursor)
-{
-    if (SDL_Window* pWindow = GetNativeWindow())
-    {
-        if (!SDL_SetWindowRelativeMouseMode(pWindow, false))
+        if (SDL_Window* pWindow = GetNativeWindow())
         {
-            TraceLog(LogLevel::Error, "CAMERA", TextFormat(
-                "Failed to disable relative mouse mode: %s", SDL_GetError()));
+            SDL_SetWindowRelativeMouseMode(pWindow, enabled);
+        }
+
+        if (enabled)
+        {
+            DisableCursor();
+        }
+        else
+        {
+            EnableCursor();
         }
     }
 
-    EnableCursor();
-    if (pCursor != nullptr && !SDL_SetCursor(pCursor))
+    void SetOrbitCursor(SDL_Cursor* pCursor)
     {
-        TraceLog(LogLevel::Error, "CAMERA", TextFormat(
-            "Failed to set camera cursor: %s", SDL_GetError()));
+        if (SDL_Window* pWindow = GetNativeWindow())
+        {
+            if (!SDL_SetWindowRelativeMouseMode(pWindow, false))
+            {
+                TraceLog(LogLevel::Error, "CAMERA", TextFormat("Failed to disable relative mouse mode: %s", SDL_GetError()));
+            }
+        }
+
+        EnableCursor();
+        if (pCursor != nullptr && !SDL_SetCursor(pCursor))
+        {
+            TraceLog(LogLevel::Error, "CAMERA", TextFormat("Failed to set camera cursor: %s", SDL_GetError()));
+        }
     }
-}
 
 } // anonymous
 
 CFlyCamera::CFlyCamera()
 {
-    m_Cam.position = {5.0f, 5.0f, 5.0f};
-    m_Cam.target = {0.0f, 0.0f, 0.0f};
-    m_Cam.up = {0.0f, 1.0f, 0.0f};
+    m_Cam.position = { 5.0f, 5.0f, 5.0f };
+    m_Cam.target = { 0.0f, 0.0f, 0.0f };
+    m_Cam.up = { 0.0f, 1.0f, 0.0f };
     m_Cam.fovy = 45.0f;
     m_Cam.projection = CAMERA_PERSPECTIVE;
 
     Vec3 direction = m_Cam.target - m_Cam.position;
     m_Yaw = atan2f(direction.x, direction.z);
-    m_Pitch = asinf(direction.y / sqrtf(direction.x*direction.x + direction.y*direction.y + direction.z*direction.z));
-
+    m_Pitch = asinf(direction.y / sqrtf(direction.x * direction.x + direction.y * direction.y + direction.z * direction.z));
 }
 
 void CFlyCamera::InitializeCursors()
@@ -95,15 +92,13 @@ void CFlyCamera::InitializeCursors()
 
     if (m_pOrbitCursor == nullptr)
     {
-        TraceLog(LogLevel::Error, "CAMERA", TextFormat(
-            "Failed to create orbit cursor from assets/img/eye_icon.png: %s", SDL_GetError()));
+        TraceLog(LogLevel::Error, "CAMERA", TextFormat("Failed to create orbit cursor from assets/img/eye_icon.png: %s", SDL_GetError()));
     }
 
     m_pPanCursor = SDL_CreateSystemCursor(SDL_SYSTEM_CURSOR_POINTER);
     if (m_pPanCursor == nullptr)
     {
-        TraceLog(LogLevel::Warn, "CAMERA", TextFormat(
-            "System pan cursor is unavailable; using the default cursor: %s", SDL_GetError()));
+        TraceLog(LogLevel::Warn, "CAMERA", TextFormat("System pan cursor is unavailable; using the default cursor: %s", SDL_GetError()));
         m_pPanCursor = SDL_GetDefaultCursor();
     }
 }
@@ -197,8 +192,7 @@ void CFlyCamera::Update(CScene& scene, CPreferences& preferences)
             SetCameraCapture(false);
             if (!SDL_SetCursor(SDL_GetDefaultCursor()))
             {
-                TraceLog(LogLevel::Error, "CAMERA", TextFormat(
-                    "Failed to restore default cursor: %s", SDL_GetError()));
+                TraceLog(LogLevel::Error, "CAMERA", TextFormat("Failed to restore default cursor: %s", SDL_GetError()));
             }
             m_Active = false;
             m_ActiveMouseControl = EMouseControl::NONE;
@@ -249,15 +243,14 @@ void CFlyCamera::Update(CScene& scene, CPreferences& preferences)
         return;
     }
 
-    Vec2 mouseDelta = {relativeX, relativeY};
+    Vec2 mouseDelta = { relativeX, relativeY };
     if (fabs(mouseDelta.x) > 100 || fabs(mouseDelta.y) > 100)
     {
-        mouseDelta = {0, 0};
+        mouseDelta = { 0, 0 };
     }
 
     const float deltaTime = GetDeltaTime();
-    Vec3 forward =
-    {
+    Vec3 forward = {
         cosf(m_Pitch) * sinf(m_Yaw),
         sinf(m_Pitch),
         cosf(m_Pitch) * cosf(m_Yaw),
@@ -271,8 +264,7 @@ void CFlyCamera::Update(CScene& scene, CPreferences& preferences)
             m_Yaw -= mouseDelta.x * m_Sensitivity;
             m_Pitch = std::clamp(m_Pitch - mouseDelta.y * m_Sensitivity, -1.5f, 1.5f);
 
-            forward =
-            {
+            forward = {
                 cosf(m_Pitch) * sinf(m_Yaw),
                 sinf(m_Pitch),
                 cosf(m_Pitch) * cosf(m_Yaw),
@@ -299,15 +291,14 @@ void CFlyCamera::Update(CScene& scene, CPreferences& preferences)
         m_Yaw -= mouseDelta.x * m_Sensitivity;
         m_Pitch = std::clamp(m_Pitch - mouseDelta.y * m_Sensitivity, -1.5f, 1.5f);
 
-        forward =
-        {
+        forward = {
             cosf(m_Pitch) * sinf(m_Yaw),
             sinf(m_Pitch),
             cosf(m_Pitch) * cosf(m_Yaw),
         };
         forward.normalized();
 
-        const Vec3 right = {sinf(m_Yaw - PI / 2), 0, cosf(m_Yaw - PI / 2)};
+        const Vec3 right = { sinf(m_Yaw - PI / 2), 0, cosf(m_Yaw - PI / 2) };
         if (IsKeyDown(KEY_W))
         {
             m_Cam.position = m_Cam.position + (forward * (m_Speed * deltaTime));
@@ -347,8 +338,7 @@ void CFlyCamera::ApplyActiveCursor()
     EnableCursor();
     if (!SDL_SetCursor(pCursor))
     {
-        TraceLog(LogLevel::Error, "CAMERA", TextFormat(
-            "Failed to reapply camera cursor: %s", SDL_GetError()));
+        TraceLog(LogLevel::Error, "CAMERA", TextFormat("Failed to reapply camera cursor: %s", SDL_GetError()));
     }
 }
 
@@ -362,8 +352,7 @@ void CFlyCamera::ReleaseCapture()
     }
     if (!SDL_SetCursor(SDL_GetDefaultCursor()))
     {
-        TraceLog(LogLevel::Error, "CAMERA", TextFormat(
-            "Failed to restore default cursor: %s", SDL_GetError()));
+        TraceLog(LogLevel::Error, "CAMERA", TextFormat("Failed to restore default cursor: %s", SDL_GetError()));
     }
     m_Active = false;
     m_ActiveMouseControl = EMouseControl::NONE;
@@ -431,7 +420,7 @@ void CFlyCamera::SetImGuiCursorOverride(bool enabled)
 
 void CFlyCamera::FocusOn(const Vec3& point)
 {
-    m_Cam.position = point + Vec3{5.0f, 5.0f, 5.0f};
+    m_Cam.position = point + Vec3{ 5.0f, 5.0f, 5.0f };
     m_Cam.target = point;
 
     Vec3 direction = m_Cam.target - m_Cam.position;

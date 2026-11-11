@@ -15,141 +15,141 @@
 namespace
 {
 
-std::string LowercaseCopy(std::string value)
-{
-    std::transform(value.begin(), value.end(), value.begin(), [](unsigned char c)
+    std::string LowercaseCopy(std::string value)
     {
-        return static_cast<char>(std::tolower(c));
-    });
-    return value;
-}
-
-Vec3 SafeNormalize(Vec3 value)
-{
-    const float length = sqrtf(value.x*value.x + value.y*value.y + value.z*value.z);
-    if (length <= 0.000001f)
-    {
-        return { 0.0f, 1.0f, 0.0f };
-    }
-    return { value.x / length, value.y / length, value.z / length };
-}
-
-bool DetachSingleMeshTriangles(Mesh& mesh)
-{
-    if (!mesh.vertices || mesh.vertexCount <= 0 || mesh.triangleCount <= 0)
-    {
-        return false;
-    }
-    if (!mesh.indices)
-    {
-        return true;
+        std::transform(value.begin(), value.end(), value.begin(), [](unsigned char c)
+                       {
+                           return static_cast<char>(std::tolower(c));
+                       });
+        return value;
     }
 
-    const int detachedVertexCount = mesh.triangleCount * 3;
-    std::vector<float> vVertices(detachedVertexCount * 3);
-    std::vector<float> vTexcoords;
-    std::vector<float> vNormals;
-    std::vector<unsigned char> vColors;
-
-    if (mesh.texcoords)
+    Vec3 SafeNormalize(Vec3 value)
     {
-        vTexcoords.resize(detachedVertexCount * 2);
-    }
-    if (mesh.normals)
-    {
-        vNormals.resize(detachedVertexCount * 3);
-    }
-    if (mesh.colors)
-    {
-        vColors.resize(detachedVertexCount * 4);
+        const float length = sqrtf(value.x * value.x + value.y * value.y + value.z * value.z);
+        if (length <= 0.000001f)
+        {
+            return { 0.0f, 1.0f, 0.0f };
+        }
+        return { value.x / length, value.y / length, value.z / length };
     }
 
-    for (int triangleIndex = 0; triangleIndex < mesh.triangleCount; triangleIndex++)
+    bool DetachSingleMeshTriangles(Mesh& mesh)
     {
-        int aSourceIndices[3] = {};
-        if (!CMeshOverrideService::GetTriangleVertexIndices(mesh, triangleIndex, aSourceIndices))
+        if (!mesh.vertices || mesh.vertexCount <= 0 || mesh.triangleCount <= 0)
         {
             return false;
         }
-
-        for (int corner = 0; corner < 3; corner++)
+        if (!mesh.indices)
         {
-            const int srcIndex = aSourceIndices[corner];
-            const int dstIndex = triangleIndex * 3 + corner;
+            return true;
+        }
 
-            vVertices[dstIndex * 3 + 0] = mesh.vertices[srcIndex * 3 + 0];
-            vVertices[dstIndex * 3 + 1] = mesh.vertices[srcIndex * 3 + 1];
-            vVertices[dstIndex * 3 + 2] = mesh.vertices[srcIndex * 3 + 2];
+        const int detachedVertexCount = mesh.triangleCount * 3;
+        std::vector<float> vVertices(detachedVertexCount * 3);
+        std::vector<float> vTexcoords;
+        std::vector<float> vNormals;
+        std::vector<unsigned char> vColors;
 
-            if (mesh.texcoords)
+        if (mesh.texcoords)
+        {
+            vTexcoords.resize(detachedVertexCount * 2);
+        }
+        if (mesh.normals)
+        {
+            vNormals.resize(detachedVertexCount * 3);
+        }
+        if (mesh.colors)
+        {
+            vColors.resize(detachedVertexCount * 4);
+        }
+
+        for (int triangleIndex = 0; triangleIndex < mesh.triangleCount; triangleIndex++)
+        {
+            int aSourceIndices[3] = {};
+            if (!CMeshOverrideService::GetTriangleVertexIndices(mesh, triangleIndex, aSourceIndices))
             {
-                vTexcoords[dstIndex * 2 + 0] = mesh.texcoords[srcIndex * 2 + 0];
-                vTexcoords[dstIndex * 2 + 1] = mesh.texcoords[srcIndex * 2 + 1];
+                return false;
             }
 
-            if (mesh.normals)
+            for (int corner = 0; corner < 3; corner++)
             {
-                vNormals[dstIndex * 3 + 0] = mesh.normals[srcIndex * 3 + 0];
-                vNormals[dstIndex * 3 + 1] = mesh.normals[srcIndex * 3 + 1];
-                vNormals[dstIndex * 3 + 2] = mesh.normals[srcIndex * 3 + 2];
-            }
+                const int srcIndex = aSourceIndices[corner];
+                const int dstIndex = triangleIndex * 3 + corner;
 
-            if (mesh.colors)
-            {
-                vColors[dstIndex * 4 + 0] = mesh.colors[srcIndex * 4 + 0];
-                vColors[dstIndex * 4 + 1] = mesh.colors[srcIndex * 4 + 1];
-                vColors[dstIndex * 4 + 2] = mesh.colors[srcIndex * 4 + 2];
-                vColors[dstIndex * 4 + 3] = mesh.colors[srcIndex * 4 + 3];
+                vVertices[dstIndex * 3 + 0] = mesh.vertices[srcIndex * 3 + 0];
+                vVertices[dstIndex * 3 + 1] = mesh.vertices[srcIndex * 3 + 1];
+                vVertices[dstIndex * 3 + 2] = mesh.vertices[srcIndex * 3 + 2];
+
+                if (mesh.texcoords)
+                {
+                    vTexcoords[dstIndex * 2 + 0] = mesh.texcoords[srcIndex * 2 + 0];
+                    vTexcoords[dstIndex * 2 + 1] = mesh.texcoords[srcIndex * 2 + 1];
+                }
+
+                if (mesh.normals)
+                {
+                    vNormals[dstIndex * 3 + 0] = mesh.normals[srcIndex * 3 + 0];
+                    vNormals[dstIndex * 3 + 1] = mesh.normals[srcIndex * 3 + 1];
+                    vNormals[dstIndex * 3 + 2] = mesh.normals[srcIndex * 3 + 2];
+                }
+
+                if (mesh.colors)
+                {
+                    vColors[dstIndex * 4 + 0] = mesh.colors[srcIndex * 4 + 0];
+                    vColors[dstIndex * 4 + 1] = mesh.colors[srcIndex * 4 + 1];
+                    vColors[dstIndex * 4 + 2] = mesh.colors[srcIndex * 4 + 2];
+                    vColors[dstIndex * 4 + 3] = mesh.colors[srcIndex * 4 + 3];
+                }
             }
         }
-    }
 
-    Mesh detached = mesh;
-    detached.vertexCount = detachedVertexCount;
-    detached.vertices = new float[vVertices.size()];
-    detached.texcoords = mesh.texcoords ? new float[vTexcoords.size()] : nullptr;
-    detached.normals = mesh.normals ? new float[vNormals.size()] : nullptr;
-    detached.colors = mesh.colors ? new unsigned char[vColors.size()] : nullptr;
-    detached.indices = nullptr;
-    detached.animVertices = nullptr;
-    detached.animNormals = nullptr;
-    detached.boneWeights = nullptr;
-    detached.boneCount = 0;
-    detached.vaoId = 0;
-    detached.vboId = 0;
+        Mesh detached = mesh;
+        detached.vertexCount = detachedVertexCount;
+        detached.vertices = new float[vVertices.size()];
+        detached.texcoords = mesh.texcoords ? new float[vTexcoords.size()] : nullptr;
+        detached.normals = mesh.normals ? new float[vNormals.size()] : nullptr;
+        detached.colors = mesh.colors ? new unsigned char[vColors.size()] : nullptr;
+        detached.indices = nullptr;
+        detached.animVertices = nullptr;
+        detached.animNormals = nullptr;
+        detached.boneWeights = nullptr;
+        detached.boneCount = 0;
+        detached.vaoId = 0;
+        detached.vboId = 0;
 
-    if (!detached.vertices ||
-        (mesh.texcoords && !detached.texcoords) ||
-        (mesh.normals && !detached.normals) ||
-        (mesh.colors && !detached.colors))
-    {
-        delete[] detached.vertices;
-        delete[] detached.texcoords;
-        delete[] detached.normals;
-        delete[] detached.colors;
-        return false;
-    }
+        if (!detached.vertices ||
+            (mesh.texcoords && !detached.texcoords) ||
+            (mesh.normals && !detached.normals) ||
+            (mesh.colors && !detached.colors))
+        {
+            delete[] detached.vertices;
+            delete[] detached.texcoords;
+            delete[] detached.normals;
+            delete[] detached.colors;
+            return false;
+        }
 
-    memcpy(detached.vertices, vVertices.data(), vVertices.size() * sizeof(float));
-    if (detached.texcoords)
-    {
-        memcpy(detached.texcoords, vTexcoords.data(), vTexcoords.size() * sizeof(float));
-    }
-    if (detached.normals)
-    {
-        memcpy(detached.normals, vNormals.data(), vNormals.size() * sizeof(float));
-    }
-    if (detached.colors)
-    {
-        memcpy(detached.colors, vColors.data(), vColors.size() * sizeof(unsigned char));
-    }
+        memcpy(detached.vertices, vVertices.data(), vVertices.size() * sizeof(float));
+        if (detached.texcoords)
+        {
+            memcpy(detached.texcoords, vTexcoords.data(), vTexcoords.size() * sizeof(float));
+        }
+        if (detached.normals)
+        {
+            memcpy(detached.normals, vNormals.data(), vNormals.size() * sizeof(float));
+        }
+        if (detached.colors)
+        {
+            memcpy(detached.colors, vColors.data(), vColors.size() * sizeof(unsigned char));
+        }
 
-    CModelService::RebuildMeshNormals(detached);
-    UploadMesh(&detached, false);
-    UnloadMesh(mesh);
-    mesh = detached;
-    return true;
-}
+        CModelService::RebuildMeshNormals(detached);
+        UploadMesh(&detached, false);
+        UnloadMesh(mesh);
+        mesh = detached;
+        return true;
+    }
 
 } // anonymous
 
@@ -166,15 +166,9 @@ private:
 
     sigjmp_buf m_JumpBuffer;
     volatile sig_atomic_t m_IsArmed = 0;
-    struct sigaction m_PreviousSegv =
-    {
-    };
-    struct sigaction m_PreviousBus =
-    {
-    };
-    struct sigaction m_PreviousAbt =
-    {
-    };
+    struct sigaction m_PreviousSegv = {};
+    struct sigaction m_PreviousBus = {};
+    struct sigaction m_PreviousAbt = {};
 };
 
 CModelService::CModelLoadGuard CModelService::ms_LoadGuard;
@@ -190,9 +184,7 @@ void CModelService::CModelLoadGuard::HandleSignal(int signalCode)
 
 void CModelService::CModelLoadGuard::Install()
 {
-    struct sigaction action =
-    {
-    };
+    struct sigaction action = {};
     sigemptyset(&action.sa_mask);
     action.sa_handler = HandleSignal;
     action.sa_flags = 0;
@@ -416,7 +408,6 @@ bool CMeshOverrideService::Apply(CEntity& entity)
     return appliedAny;
 }
 
-
 bool CMeshOverrideService::DetachTriangles(CEntity& entity)
 {
     CMeshComponent* pMeshComponent = entity.GetMeshComponent();
@@ -535,8 +526,7 @@ void CModelService::UpdateModel(CEntity* pEntity, const CFreetypeTextMesh& textM
 
         RebuildMeshFromEditable(
             pMesh->m_Model,
-            pMesh->m_EditableMesh
-        );
+            pMesh->m_EditableMesh);
 
         pMesh->m_OwnsModelInstance = true;
         ApplyNegativeScaleWinding(pEntity);
@@ -549,14 +539,12 @@ void CModelService::UpdateModel(CEntity* pEntity, const CFreetypeTextMesh& textM
         return;
     }
 
-
     int maxSeg = 125;
 
     if (pMesh->m_Type == OBJECT_SPHERE || pMesh->m_Type == OBJECT_HEMISPHERE)
     {
         maxSeg = 100;
     }
-
 
     if (pMesh->m_Segments < 3)
     {

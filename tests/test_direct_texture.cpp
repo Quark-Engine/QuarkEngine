@@ -13,131 +13,130 @@
 namespace
 {
 
-Texture2D FakeTexture(unsigned int id)
-{
-    Texture2D texture = {};
-    texture.id = id;
-    texture.width = 4;
-    texture.height = 4;
-    texture.mipmaps = 1;
-    return texture;
-}
-
-std::vector<STextureOption> MakeTextureLibrary()
-{
-    std::vector<STextureOption> vLibrary;
-    vLibrary.push_back({ "None", {0} });
-    vLibrary.push_back({ "brick.png", FakeTexture(11) });
-    vLibrary.push_back({ "textures/rust.png", FakeTexture(22) });
-    return vLibrary;
-}
-
-int AddEntity(CScene& target, const std::string& name, int parentId = -1)
-{
-    CEntity added(static_cast<int>(target.m_vEntities.size()));
-    added.m_Name = name;
-    added.m_ParentId = parentId;
-    target.m_vEntities.push_back(added);
-    return static_cast<int>(target.m_vEntities.size()) - 1;
-}
-
-CMaterialComponent* MaterialOf(CScene& scene, int index)
-{
-    return scene.m_vEntities[index].GetMaterialComponent();
-}
-
-CMaterialComponent* EnsureMaterial(CScene& scene, int index)
-{
-    if (CMaterialComponent* pExisting = MaterialOf(scene, index))
+    Texture2D FakeTexture(unsigned int id)
     {
-        return pExisting;
-    }
-    CComponentManager* pComponents = scene.m_vEntities[index].GetComponents();
-    if (!pComponents)
-    {
-        return nullptr;
-    }
-    auto pMaterial = std::make_shared<CMaterialComponent>();
-    pComponents->AddComponent(pMaterial);
-    return pMaterial.get();
-}
-
-void AssignDirectTexture(CScene& scene, int index, const std::string& textureName,
-    unsigned int textureId = 11)
-{
-    CMaterialComponent* pMaterial = EnsureMaterial(scene, index);
-    if (!pMaterial)
-    {
-        return;
-    }
-    pMaterial->m_AlbedoTextureName = textureName;
-    pMaterial->m_TextureName.clear();
-    pMaterial->m_Texture = FakeTexture(textureId);
-    pMaterial->m_TextureSource = TEXTURE_EXTERNAL;
-}
-
-class SDirectTextureHistory
-{
-public:
-    SDirectTextureHistory(CScene& scene, const CComponentFactoryRegistry& registry)
-        : m_Scene(scene)
-        , m_Registry(registry)
-    {
+        Texture2D texture = {};
+        texture.id = id;
+        texture.width = 4;
+        texture.height = 4;
+        texture.mipmaps = 1;
+        return texture;
     }
 
-    void Save()
+    std::vector<STextureOption> MakeTextureLibrary()
     {
-        m_Undo.push(quark::CSceneDocument::CaptureSnapshot(m_Scene));
-        while (!m_Redo.empty())
+        std::vector<STextureOption> vLibrary;
+        vLibrary.push_back({ "None", { 0 } });
+        vLibrary.push_back({ "brick.png", FakeTexture(11) });
+        vLibrary.push_back({ "textures/rust.png", FakeTexture(22) });
+        return vLibrary;
+    }
+
+    int AddEntity(CScene& target, const std::string& name, int parentId = -1)
+    {
+        CEntity added(static_cast<int>(target.m_vEntities.size()));
+        added.m_Name = name;
+        added.m_ParentId = parentId;
+        target.m_vEntities.push_back(added);
+        return static_cast<int>(target.m_vEntities.size()) - 1;
+    }
+
+    CMaterialComponent* MaterialOf(CScene& scene, int index)
+    {
+        return scene.m_vEntities[index].GetMaterialComponent();
+    }
+
+    CMaterialComponent* EnsureMaterial(CScene& scene, int index)
+    {
+        if (CMaterialComponent* pExisting = MaterialOf(scene, index))
         {
+            return pExisting;
+        }
+        CComponentManager* pComponents = scene.m_vEntities[index].GetComponents();
+        if (!pComponents)
+        {
+            return nullptr;
+        }
+        auto pMaterial = std::make_shared<CMaterialComponent>();
+        pComponents->AddComponent(pMaterial);
+        return pMaterial.get();
+    }
+
+    void AssignDirectTexture(CScene& scene, int index, const std::string& textureName,
+                             unsigned int textureId = 11)
+    {
+        CMaterialComponent* pMaterial = EnsureMaterial(scene, index);
+        if (!pMaterial)
+        {
+            return;
+        }
+        pMaterial->m_AlbedoTextureName = textureName;
+        pMaterial->m_TextureName.clear();
+        pMaterial->m_Texture = FakeTexture(textureId);
+        pMaterial->m_TextureSource = TEXTURE_EXTERNAL;
+    }
+
+    class CDirectTextureHistory
+    {
+    public:
+        CDirectTextureHistory(CScene& scene, const CComponentFactoryRegistry& registry)
+            : m_Scene(scene), m_Registry(registry)
+        {
+        }
+
+        void Save()
+        {
+            m_Undo.push(quark::CSceneDocument::CaptureSnapshot(m_Scene));
+            while (!m_Redo.empty())
+            {
+                m_Redo.pop();
+            }
+        }
+
+        bool Undo()
+        {
+            if (m_Undo.empty())
+            {
+                return false;
+            }
+            const quark::SSceneSnapshot previous = m_Undo.top();
+            m_Undo.pop();
+            m_Redo.push(quark::CSceneDocument::CaptureSnapshot(m_Scene));
+            Restore(previous);
+            return true;
+        }
+
+        bool Redo()
+        {
+            if (m_Redo.empty())
+            {
+                return false;
+            }
+            const quark::SSceneSnapshot next = m_Redo.top();
             m_Redo.pop();
+            m_Undo.push(quark::CSceneDocument::CaptureSnapshot(m_Scene));
+            Restore(next);
+            return true;
         }
-    }
 
-    bool Undo()
-    {
-        if (m_Undo.empty())
+    private:
+        void Restore(const quark::SSceneSnapshot& snapshot)
         {
-            return false;
+            CHECK(quark::CSceneDocument::Deserialize(snapshot.m_Document, m_Scene, m_Registry));
+            m_Scene.m_Selected = snapshot.m_Selected;
+            m_Scene.m_vSelectedEntities = snapshot.m_vSelectedEntities;
         }
-        const quark::SSceneSnapshot previous = m_Undo.top();
-        m_Undo.pop();
-        m_Redo.push(quark::CSceneDocument::CaptureSnapshot(m_Scene));
-        Restore(previous);
-        return true;
-    }
 
-    bool Redo()
+        CScene& m_Scene;
+        const CComponentFactoryRegistry& m_Registry;
+        std::stack<quark::SSceneSnapshot> m_Undo;
+        std::stack<quark::SSceneSnapshot> m_Redo;
+    };
+
+    int CountEntities(const CScene& scene)
     {
-        if (m_Redo.empty())
-        {
-            return false;
-        }
-        const quark::SSceneSnapshot next = m_Redo.top();
-        m_Redo.pop();
-        m_Undo.push(quark::CSceneDocument::CaptureSnapshot(m_Scene));
-        Restore(next);
-        return true;
+        return static_cast<int>(scene.m_vEntities.size());
     }
-
-private:
-    void Restore(const quark::SSceneSnapshot& snapshot)
-    {
-        CHECK(quark::CSceneDocument::Deserialize(snapshot.Document, m_Scene, m_Registry));
-        m_Scene.m_Selected = snapshot.Selected;
-        m_Scene.m_vSelectedEntities = snapshot.vSelectedEntities;
-    }
-
-    CScene& m_Scene;
-    const CComponentFactoryRegistry& m_Registry;
-    std::stack<quark::SSceneSnapshot> m_Undo;
-    std::stack<quark::SSceneSnapshot> m_Redo;
-};
-
-int CountEntities(const CScene& scene)
-{
-    return static_cast<int>(scene.m_vEntities.size());
-}
 
 } // anonymous
 
@@ -172,7 +171,7 @@ TEST(DirectTexture, direct_texture_survives_undoing_two_created_objects)
 {
     CComponentFactoryRegistry registry;
     CScene scene;
-    SDirectTextureHistory history(scene, registry);
+    CDirectTextureHistory history(scene, registry);
 
     history.Save();
     AddEntity(scene, "crate");
@@ -202,7 +201,7 @@ TEST(DirectTexture, direct_texture_survives_undoing_two_created_objects)
         return;
     }
     CHECK_MSG(pMaterial->m_AlbedoTextureName == "grass.jpg",
-        "undo of an unrelated action dropped the direct texture");
+              "undo of an unrelated action dropped the direct texture");
     CHECK(pMaterial->m_TextureName.empty());
     CHECK(pMaterial->m_TextureSource == TEXTURE_EXTERNAL);
 }
@@ -211,7 +210,7 @@ TEST(DirectTexture, direct_texture_survives_repeated_undo_redo_cycles)
 {
     CComponentFactoryRegistry registry;
     CScene scene;
-    SDirectTextureHistory history(scene, registry);
+    CDirectTextureHistory history(scene, registry);
 
     history.Save();
     AddEntity(scene, "crate");
@@ -247,7 +246,7 @@ TEST(DirectTexture, undo_restores_the_name_so_the_runtime_can_rebind_the_handle)
 {
     CComponentFactoryRegistry registry;
     CScene scene;
-    SDirectTextureHistory history(scene, registry);
+    CDirectTextureHistory history(scene, registry);
 
     history.Save();
     AddEntity(scene, "crate");
@@ -268,8 +267,8 @@ TEST(DirectTexture, undo_restores_the_name_so_the_runtime_can_rebind_the_handle)
     const std::vector<STextureOption> vLibrary = MakeTextureLibrary();
     const quark::SMaterialTextureRestore restore =
         quark::PlanMaterialTextureRestore(*pMaterial, vLibrary);
-    CHECK(restore.Action == quark::EMaterialTextureRestore::DirectTexture);
-    CHECK(restore.DirectTexture.id == 11);
+    CHECK(restore.m_Action == quark::EMaterialTextureRestore::DIRECT_TEXTURE);
+    CHECK(restore.m_DirectTexture.id == 11);
 }
 
 TEST(DirectTexture, plan_rebinds_the_direct_texture_from_the_asset_library)
@@ -291,8 +290,8 @@ TEST(DirectTexture, plan_rebinds_the_direct_texture_from_the_asset_library)
     const std::vector<STextureOption> vLibrary = MakeTextureLibrary();
     const quark::SMaterialTextureRestore restore =
         quark::PlanMaterialTextureRestore(*pMaterial, vLibrary);
-    CHECK(restore.Action == quark::EMaterialTextureRestore::DirectTexture);
-    CHECK(restore.DirectTexture.id == 22);
+    CHECK(restore.m_Action == quark::EMaterialTextureRestore::DIRECT_TEXTURE);
+    CHECK(restore.m_DirectTexture.id == 22);
 }
 
 TEST(DirectTexture, plan_never_replaces_a_direct_texture_with_a_material_file)
@@ -304,9 +303,9 @@ TEST(DirectTexture, plan_never_replaces_a_direct_texture_with_a_material_file)
 
     const std::vector<STextureOption> vLibrary = MakeTextureLibrary();
     const quark::SMaterialTextureRestore restore = quark::PlanMaterialTextureRestore(material, vLibrary);
-    CHECK_MSG(restore.Action == quark::EMaterialTextureRestore::DirectTexture,
-        "the material file overrode the direct texture");
-    CHECK(restore.DirectTexture.id == 11);
+    CHECK_MSG(restore.m_Action == quark::EMaterialTextureRestore::DIRECT_TEXTURE,
+              "the material file overrode the direct texture");
+    CHECK(restore.m_DirectTexture.id == 11);
 }
 
 TEST(DirectTexture, plan_keeps_an_unresolved_direct_texture_instead_of_loading_another_source)
@@ -318,8 +317,8 @@ TEST(DirectTexture, plan_keeps_an_unresolved_direct_texture_instead_of_loading_a
 
     const std::vector<STextureOption> vLibrary = MakeTextureLibrary();
     const quark::SMaterialTextureRestore restore = quark::PlanMaterialTextureRestore(material, vLibrary);
-    CHECK_MSG(restore.Action == quark::EMaterialTextureRestore::None,
-        "an unresolved direct texture fell back to another texture source");
+    CHECK_MSG(restore.m_Action == quark::EMaterialTextureRestore::NONE,
+              "an unresolved direct texture fell back to another texture source");
     CHECK(material.m_AlbedoTextureName == "deleted.png");
 }
 
@@ -331,7 +330,7 @@ TEST(DirectTexture, plan_falls_back_to_the_material_file_without_a_direct_textur
 
     const std::vector<STextureOption> vLibrary = MakeTextureLibrary();
     const quark::SMaterialTextureRestore restore = quark::PlanMaterialTextureRestore(material, vLibrary);
-    CHECK(restore.Action == quark::EMaterialTextureRestore::MaterialFile);
+    CHECK(restore.m_Action == quark::EMaterialTextureRestore::MATERIAL_FILE);
 }
 
 TEST(DirectTexture, restores_asset_owned_texture_before_unloading_the_model)
@@ -383,7 +382,7 @@ TEST(DirectTexture, plan_restores_the_model_textures_for_a_model_sourced_materia
 
     const std::vector<STextureOption> vLibrary = MakeTextureLibrary();
     const quark::SMaterialTextureRestore restore = quark::PlanMaterialTextureRestore(material, vLibrary);
-    CHECK(restore.Action == quark::EMaterialTextureRestore::ModelTextures);
+    CHECK(restore.m_Action == quark::EMaterialTextureRestore::MODEL_TEXTURES);
 }
 
 TEST(DirectTexture, plan_clears_textures_when_the_material_has_no_source)
@@ -393,7 +392,7 @@ TEST(DirectTexture, plan_clears_textures_when_the_material_has_no_source)
 
     const std::vector<STextureOption> vLibrary = MakeTextureLibrary();
     const quark::SMaterialTextureRestore restore = quark::PlanMaterialTextureRestore(material, vLibrary);
-    CHECK(restore.Action == quark::EMaterialTextureRestore::ClearTextures);
+    CHECK(restore.m_Action == quark::EMaterialTextureRestore::CLEAR_TEXTURES);
 }
 
 TEST(DirectTexture, plan_ignores_the_none_placeholder_of_the_asset_library)
@@ -403,9 +402,9 @@ TEST(DirectTexture, plan_ignores_the_none_placeholder_of_the_asset_library)
 
     const std::vector<STextureOption> vLibrary = MakeTextureLibrary();
     const quark::SMaterialTextureRestore restore = quark::PlanMaterialTextureRestore(material, vLibrary);
-    CHECK_MSG(restore.Action == quark::EMaterialTextureRestore::DirectTexture,
-        "the placeholder entry was skipped, so the texture could not be rebound");
-    CHECK_MSG(restore.DirectTexture.id == 0, "the placeholder entry must not bind a gpu handle");
+    CHECK_MSG(restore.m_Action == quark::EMaterialTextureRestore::DIRECT_TEXTURE,
+              "the placeholder entry was skipped, so the texture could not be rebound");
+    CHECK_MSG(restore.m_DirectTexture.id == 0, "the placeholder entry must not bind a gpu handle");
 }
 
 TEST(DirectTexture, plan_leaves_other_texture_names_untouched)
@@ -419,7 +418,7 @@ TEST(DirectTexture, plan_leaves_other_texture_names_untouched)
 
     const std::vector<STextureOption> vLibrary = MakeTextureLibrary();
     const quark::SMaterialTextureRestore restore = quark::PlanMaterialTextureRestore(material, vLibrary);
-    CHECK(restore.Action == quark::EMaterialTextureRestore::DirectTexture);
+    CHECK(restore.m_Action == quark::EMaterialTextureRestore::DIRECT_TEXTURE);
     CHECK(material.m_NormalTextureName == "brick_n.png");
     CHECK(material.m_RoughnessTextureName == "brick_r.png");
     CHECK(material.m_MetallicTextureName == "brick_m.png");

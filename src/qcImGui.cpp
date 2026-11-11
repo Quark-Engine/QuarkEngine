@@ -14,340 +14,340 @@
 namespace
 {
 
-class CImGuiHost
-{
-public:
-    enum class EBackend
+    class CImGuiHost
     {
-        NONE,
-        OPENGL,
-        VULKAN,
-        D3D11
+    public:
+        enum class EBackend
+        {
+            NONE,
+            OPENGL,
+            VULKAN,
+            D3D11
+        };
+
+        bool Setup(bool darkTheme);
+
+        void Shutdown();
+
+        void Begin();
+        void End();
+        void ProcessEvent(const SDL_Event* pEvent);
+
+        bool IsUsable() const
+        {
+            return m_IsInitialized;
+        }
+
+        bool IsOpenGL() const
+        {
+            return m_IsInitialized && m_Backend == EBackend::OPENGL;
+        }
+
+        bool IsVulkan() const
+        {
+            return m_IsInitialized && m_Backend == EBackend::VULKAN;
+        }
+
+        bool IsD3D11() const
+        {
+            return m_IsInitialized && m_Backend == EBackend::D3D11;
+        }
+
+    private:
+        bool m_IsInitialized = false;
+        EBackend m_Backend = EBackend::NONE;
     };
 
-    bool Setup(bool darkTheme);
+    CImGuiHost s_Host;
 
-    void Shutdown();
-
-    void Begin();
-    void End();
-    void ProcessEvent(const SDL_Event* pEvent);
-
-    bool IsUsable() const
+    void QcImGuiEventBridge(const SDL_Event* pEvent)
     {
-        return m_IsInitialized;
+        QcImGuiProcessEvent(pEvent);
     }
 
-    bool IsOpenGL() const
+    void QcImGuiVulkanRenderCallback(VkCommandBuffer pCommandBuffer)
     {
-        return m_IsInitialized && m_Backend == EBackend::OPENGL;
+        if (!s_Host.IsVulkan())
+        {
+            return;
+        }
+
+        ImGui_ImplVulkan_RenderDrawData(ImGui::GetDrawData(), pCommandBuffer);
     }
-
-    bool IsVulkan() const
-    {
-        return m_IsInitialized && m_Backend == EBackend::VULKAN;
-    }
-
-    bool IsD3D11() const
-    {
-        return m_IsInitialized && m_Backend == EBackend::D3D11;
-    }
-
-private:
-    bool m_IsInitialized = false;
-    EBackend m_Backend = EBackend::NONE;
-};
-
-CImGuiHost s_Host;
-
-void QcImGuiEventBridge(const SDL_Event* pEvent)
-{
-    QcImGuiProcessEvent(pEvent);
-}
-
-void QcImGuiVulkanRenderCallback(VkCommandBuffer commandBuffer)
-{
-    if (!s_Host.IsVulkan())
-    {
-        return;
-    }
-
-    ImGui_ImplVulkan_RenderDrawData(ImGui::GetDrawData(), commandBuffer);
-}
 
 #if defined(_WIN32)
-void QcImGuiD3D11RenderCallback(ID3D11DeviceContext* pDeviceContext)
-{
-    if (!s_Host.IsD3D11() || pDeviceContext == nullptr)
+    void QcImGuiD3D11RenderCallback(ID3D11DeviceContext* pDeviceContext)
+    {
+        if (!s_Host.IsD3D11() || pDeviceContext == nullptr)
         {
-        return;
-    }
+            return;
+        }
 
-    ImGui_ImplDX11_RenderDrawData(ImGui::GetDrawData());
-}
+        ImGui_ImplDX11_RenderDrawData(ImGui::GetDrawData());
+    }
 #endif
 
-ImTextureID QcImGuiTextureIdFor(const Texture2D* pTexture)
-{
-    if (pTexture == nullptr || pTexture->id == 0)
+    ImTextureID QcImGuiTextureIdFor(const Texture2D* pTexture)
     {
-        return 0;
-    }
-
-    if (GetCurrentBackend() == RendererType::Vulkan)
-    {
-        const VkDescriptorSet descriptor = GetVulkanTextureDescriptorSet(pTexture->id);
-        if (descriptor == VK_NULL_HANDLE)
+        if (pTexture == nullptr || pTexture->id == 0)
         {
             return 0;
         }
-        return static_cast<ImTextureID>(reinterpret_cast<uintptr_t>(descriptor));
-    }
+
+        if (GetCurrentBackend() == RendererType::Vulkan)
+        {
+            const VkDescriptorSet pDescriptor = GetVulkanTextureDescriptorSet(pTexture->id);
+            if (pDescriptor == VK_NULL_HANDLE)
+            {
+                return 0;
+            }
+            return static_cast<ImTextureID>(reinterpret_cast<uintptr_t>(pDescriptor));
+        }
 
 #if defined(_WIN32)
-    if (GetCurrentBackend() == RendererType::D3D11)
-    {
-        ID3D11ShaderResourceView* pShaderResourceView =
-            GetD3D11TextureShaderResourceView(pTexture->id);
-        return static_cast<ImTextureID>(reinterpret_cast<uintptr_t>(pShaderResourceView));
-    }
+        if (GetCurrentBackend() == RendererType::D3D11)
+        {
+            ID3D11ShaderResourceView* pShaderResourceView =
+                GetD3D11TextureShaderResourceView(pTexture->id);
+            return static_cast<ImTextureID>(reinterpret_cast<uintptr_t>(pShaderResourceView));
+        }
 #endif
 
-    return static_cast<ImTextureID>(static_cast<uintptr_t>(pTexture->id));
-}
-
-bool CImGuiHost::Setup(bool darkTheme)
-{
-    if (m_IsInitialized)
-    {
-        return true;
+        return static_cast<ImTextureID>(static_cast<uintptr_t>(pTexture->id));
     }
 
-    IMGUI_CHECKVERSION();
-    ImGui::CreateContext();
-
-    ImGuiIO& io = ImGui::GetIO();
-    io.ConfigFlags |= ImGuiConfigFlags_NavEnableKeyboard;
-    io.ConfigFlags |= ImGuiConfigFlags_DockingEnable;
-
-    if (darkTheme)
+    bool CImGuiHost::Setup(bool darkTheme)
     {
-        ImGui::StyleColorsDark();
-    }
-    else
-    {
-        ImGui::StyleColorsClassic();
-    }
-
-    SDL_Window* pWindow = GetNativeWindow();
-    if (pWindow == nullptr)
-    {
-        ImGui::DestroyContext();
-        return false;
-    }
-
-    m_Backend = EBackend::NONE;
-
-    const RendererType backend = GetCurrentBackend();
-    bool initOk = false;
-
-    if (backend == RendererType::OpenGL)
-    {
-        SDL_GLContext context = GetNativeContext();
-        if (context == nullptr)
+        if (m_IsInitialized)
         {
-            ImGui::DestroyContext();
-            return false;
+            return true;
         }
 
-        if (!ImGui_ImplSDL3_InitForOpenGL(pWindow, context))
-        {
-            ImGui::DestroyContext();
-            return false;
-        }
-        if (!ImGui_ImplOpenGL3_Init("#version 330 core"))
-        {
-            ImGui_ImplSDL3_Shutdown();
-            ImGui::DestroyContext();
-            return false;
-        }
+        IMGUI_CHECKVERSION();
+        ImGui::CreateContext();
 
-        m_Backend = EBackend::OPENGL;
-        initOk = true;
-    }
-    else if (backend == RendererType::Vulkan)
-    {
-        const VkInstance instance = GetVulkanInstance();
-        const VkPhysicalDevice physicalDevice = GetVulkanPhysicalDevice();
-        const VkDevice device = GetVulkanDevice();
-        const VkQueue queue = GetVulkanGraphicsQueue();
-        const uint32_t queueFamily = GetVulkanGraphicsQueueFamily();
-        const VkDescriptorPool descriptorPool = GetVulkanDescriptorPool();
-        const VkRenderPass renderPass = GetVulkanMainRenderPass();
-        const uint32_t minImageCount = GetVulkanMinImageCount();
-        const uint32_t imageCount = GetVulkanImageCount();
+        ImGuiIO& io = ImGui::GetIO();
+        io.ConfigFlags |= ImGuiConfigFlags_NavEnableKeyboard;
+        io.ConfigFlags |= ImGuiConfigFlags_DockingEnable;
 
-        if (instance == VK_NULL_HANDLE || physicalDevice == VK_NULL_HANDLE || device == VK_NULL_HANDLE ||
-            queue == VK_NULL_HANDLE || queueFamily == UINT32_MAX || descriptorPool == VK_NULL_HANDLE ||
-            renderPass == VK_NULL_HANDLE || minImageCount == 0 || imageCount == 0)
+        if (darkTheme)
         {
-            ImGui::DestroyContext();
-            return false;
-        }
-
-        if (!ImGui_ImplSDL3_InitForVulkan(pWindow))
-        {
-            ImGui::DestroyContext();
-            return false;
-        }
-
-        ImGui_ImplVulkan_InitInfo initInfo{};
-        initInfo.ApiVersion = VK_API_VERSION_1_2;
-        initInfo.Instance = instance;
-        initInfo.PhysicalDevice = physicalDevice;
-        initInfo.Device = device;
-        initInfo.QueueFamily = queueFamily;
-        initInfo.Queue = queue;
-        initInfo.DescriptorPool = descriptorPool;
-        initInfo.DescriptorPoolSize = 0;
-        initInfo.MinImageCount = minImageCount;
-        initInfo.ImageCount = imageCount;
-        initInfo.PipelineInfoMain.RenderPass = renderPass;
-        initInfo.PipelineInfoMain.Subpass = 0;
-        initInfo.PipelineInfoMain.MSAASamples = GetVulkanMSAASamples();
-        initInfo.UseDynamicRendering = false;
-        initInfo.MinAllocationSize = 1024 * 1024;
-
-        initOk = ImGui_ImplVulkan_Init(&initInfo);
-        if (initOk)
-        {
-            SetVulkanRenderCallback(QcImGuiVulkanRenderCallback);
-            m_Backend = EBackend::VULKAN;
+            ImGui::StyleColorsDark();
         }
         else
         {
-            ImGui_ImplSDL3_Shutdown();
+            ImGui::StyleColorsClassic();
         }
-#if defined(_WIN32)
-    }
-    else if (backend == RendererType::D3D11)
-    {
-        ID3D11Device* pDevice = GetD3D11Device();
-        ID3D11DeviceContext* pDeviceContext = GetD3D11ImmediateContext();
-        if (!ImGui_ImplSDL3_InitForD3D(pWindow))
+
+        SDL_Window* pWindow = GetNativeWindow();
+        if (pWindow == nullptr)
         {
             ImGui::DestroyContext();
             return false;
         }
-        if (pDevice == nullptr || pDeviceContext == nullptr ||
-            !ImGui_ImplDX11_Init(pDevice, pDeviceContext))
+
+        m_Backend = EBackend::NONE;
+
+        const RendererType backend = GetCurrentBackend();
+        bool initOk = false;
+
+        if (backend == RendererType::OpenGL)
+        {
+            SDL_GLContext pContext = GetNativeContext();
+            if (pContext == nullptr)
             {
-            ImGui_ImplSDL3_Shutdown();
+                ImGui::DestroyContext();
+                return false;
+            }
+
+            if (!ImGui_ImplSDL3_InitForOpenGL(pWindow, pContext))
+            {
+                ImGui::DestroyContext();
+                return false;
+            }
+            if (!ImGui_ImplOpenGL3_Init("#version 330 core"))
+            {
+                ImGui_ImplSDL3_Shutdown();
+                ImGui::DestroyContext();
+                return false;
+            }
+
+            m_Backend = EBackend::OPENGL;
+            initOk = true;
+        }
+        else if (backend == RendererType::Vulkan)
+        {
+            const VkInstance pInstance = GetVulkanInstance();
+            const VkPhysicalDevice pPhysicalDevice = GetVulkanPhysicalDevice();
+            const VkDevice pDevice = GetVulkanDevice();
+            const VkQueue pQueue = GetVulkanGraphicsQueue();
+            const uint32_t queueFamily = GetVulkanGraphicsQueueFamily();
+            const VkDescriptorPool pDescriptorPool = GetVulkanDescriptorPool();
+            const VkRenderPass pRenderPass = GetVulkanMainRenderPass();
+            const uint32_t minImageCount = GetVulkanMinImageCount();
+            const uint32_t imageCount = GetVulkanImageCount();
+
+            if (pInstance == VK_NULL_HANDLE || pPhysicalDevice == VK_NULL_HANDLE || pDevice == VK_NULL_HANDLE ||
+                pQueue == VK_NULL_HANDLE || queueFamily == UINT32_MAX || pDescriptorPool == VK_NULL_HANDLE ||
+                pRenderPass == VK_NULL_HANDLE || minImageCount == 0 || imageCount == 0)
+            {
+                ImGui::DestroyContext();
+                return false;
+            }
+
+            if (!ImGui_ImplSDL3_InitForVulkan(pWindow))
+            {
+                ImGui::DestroyContext();
+                return false;
+            }
+
+            ImGui_ImplVulkan_InitInfo initInfo{};
+            initInfo.ApiVersion = VK_API_VERSION_1_2;
+            initInfo.Instance = pInstance;
+            initInfo.PhysicalDevice = pPhysicalDevice;
+            initInfo.Device = pDevice;
+            initInfo.QueueFamily = queueFamily;
+            initInfo.Queue = pQueue;
+            initInfo.DescriptorPool = pDescriptorPool;
+            initInfo.DescriptorPoolSize = 0;
+            initInfo.MinImageCount = minImageCount;
+            initInfo.ImageCount = imageCount;
+            initInfo.PipelineInfoMain.RenderPass = pRenderPass;
+            initInfo.PipelineInfoMain.Subpass = 0;
+            initInfo.PipelineInfoMain.MSAASamples = GetVulkanMSAASamples();
+            initInfo.UseDynamicRendering = false;
+            initInfo.MinAllocationSize = 1024 * 1024;
+
+            initOk = ImGui_ImplVulkan_Init(&initInfo);
+            if (initOk)
+            {
+                SetVulkanRenderCallback(QcImGuiVulkanRenderCallback);
+                m_Backend = EBackend::VULKAN;
+            }
+            else
+            {
+                ImGui_ImplSDL3_Shutdown();
+            }
+#if defined(_WIN32)
+        }
+        else if (backend == RendererType::D3D11)
+        {
+            ID3D11Device* pDevice = GetD3D11Device();
+            ID3D11DeviceContext* pDeviceContext = GetD3D11ImmediateContext();
+            if (!ImGui_ImplSDL3_InitForD3D(pWindow))
+            {
+                ImGui::DestroyContext();
+                return false;
+            }
+            if (pDevice == nullptr || pDeviceContext == nullptr ||
+                !ImGui_ImplDX11_Init(pDevice, pDeviceContext))
+            {
+                ImGui_ImplSDL3_Shutdown();
+                ImGui::DestroyContext();
+                return false;
+            }
+
+            SetD3D11RenderCallback(QcImGuiD3D11RenderCallback);
+            m_Backend = EBackend::D3D11;
+            initOk = true;
+#endif
+        }
+
+        if (!initOk)
+        {
             ImGui::DestroyContext();
             return false;
         }
 
-        SetD3D11RenderCallback(QcImGuiD3D11RenderCallback);
-        m_Backend = EBackend::D3D11;
-        initOk = true;
-#endif
+        SetNativeEventCallback(QcImGuiEventBridge);
+        m_IsInitialized = true;
+        return true;
     }
 
-    if (!initOk)
+    void CImGuiHost::Shutdown()
     {
+        if (!m_IsInitialized)
+        {
+            return;
+        }
+
+        SetNativeEventCallback(nullptr);
+        SetVulkanRenderCallback(nullptr);
+#if defined(_WIN32)
+        SetD3D11RenderCallback(nullptr);
+#endif
+
+        if (m_Backend == EBackend::OPENGL)
+        {
+            ImGui_ImplOpenGL3_Shutdown();
+            ImGui_ImplSDL3_Shutdown();
+        }
+        else if (m_Backend == EBackend::VULKAN)
+        {
+            ImGui_ImplVulkan_Shutdown();
+            ImGui_ImplSDL3_Shutdown();
+#if defined(_WIN32)
+        }
+        else if (m_Backend == EBackend::D3D11)
+        {
+            ImGui_ImplDX11_Shutdown();
+            ImGui_ImplSDL3_Shutdown();
+#endif
+        }
         ImGui::DestroyContext();
-        return false;
+        m_IsInitialized = false;
+        m_Backend = EBackend::NONE;
     }
 
-    SetNativeEventCallback(QcImGuiEventBridge);
-    m_IsInitialized = true;
-    return true;
-}
-
-void CImGuiHost::Shutdown()
-{
-    if (!m_IsInitialized)
+    void CImGuiHost::Begin()
     {
-        return;
-    }
+        if (!m_IsInitialized)
+        {
+            return;
+        }
 
-    SetNativeEventCallback(nullptr);
-    SetVulkanRenderCallback(nullptr);
+        CThemeManager::ProcessPendingFonts();
+        ImGui_ImplSDL3_NewFrame();
+        if (m_Backend == EBackend::OPENGL)
+        {
+            ImGui_ImplOpenGL3_NewFrame();
+        }
+        else if (m_Backend == EBackend::VULKAN)
+        {
+            ImGui_ImplVulkan_NewFrame();
 #if defined(_WIN32)
-    SetD3D11RenderCallback(nullptr);
+        }
+        else if (m_Backend == EBackend::D3D11)
+        {
+            ImGui_ImplDX11_NewFrame();
 #endif
-
-    if (m_Backend == EBackend::OPENGL)
-    {
-        ImGui_ImplOpenGL3_Shutdown();
-        ImGui_ImplSDL3_Shutdown();
-    }
-    else if (m_Backend == EBackend::VULKAN)
-    {
-        ImGui_ImplVulkan_Shutdown();
-        ImGui_ImplSDL3_Shutdown();
-#if defined(_WIN32)
-    }
-    else if (m_Backend == EBackend::D3D11)
-    {
-        ImGui_ImplDX11_Shutdown();
-        ImGui_ImplSDL3_Shutdown();
-#endif
-    }
-    ImGui::DestroyContext();
-    m_IsInitialized = false;
-    m_Backend = EBackend::NONE;
-}
-
-void CImGuiHost::Begin()
-{
-    if (!m_IsInitialized)
-    {
-        return;
+        }
+        ImGui::NewFrame();
     }
 
-    CThemeManager::ProcessPendingFonts();
-    ImGui_ImplSDL3_NewFrame();
-    if (m_Backend == EBackend::OPENGL)
+    void CImGuiHost::End()
     {
-        ImGui_ImplOpenGL3_NewFrame();
-    }
-    else if (m_Backend == EBackend::VULKAN)
-    {
-        ImGui_ImplVulkan_NewFrame();
-#if defined(_WIN32)
-    }
-    else if (m_Backend == EBackend::D3D11)
-    {
-        ImGui_ImplDX11_NewFrame();
-#endif
-    }
-    ImGui::NewFrame();
-}
+        if (!m_IsInitialized)
+        {
+            return;
+        }
 
-void CImGuiHost::End()
-{
-    if (!m_IsInitialized)
-    {
-        return;
+        ImGui::Render();
+        if (m_Backend == EBackend::OPENGL)
+        {
+            ImGui_ImplOpenGL3_RenderDrawData(ImGui::GetDrawData());
+        }
     }
 
-    ImGui::Render();
-    if (m_Backend == EBackend::OPENGL)
+    void CImGuiHost::ProcessEvent(const SDL_Event* pEvent)
     {
-        ImGui_ImplOpenGL3_RenderDrawData(ImGui::GetDrawData());
-    }
-}
+        if (!m_IsInitialized || pEvent == nullptr)
+        {
+            return;
+        }
 
-void CImGuiHost::ProcessEvent(const SDL_Event* pEvent)
-{
-    if (!m_IsInitialized || pEvent == nullptr)
-    {
-        return;
+        ImGui_ImplSDL3_ProcessEvent(pEvent);
     }
-
-    ImGui_ImplSDL3_ProcessEvent(pEvent);
-}
 
 } // anonymous
 
@@ -442,6 +442,5 @@ void QcImGuiImageRect(const Texture2D* pTexture, int width, int height, Rectangl
         textureId,
         ImVec2(static_cast<float>(width), static_cast<float>(height)),
         ImVec2(u0, v0),
-        ImVec2(u1, v1)
-    );
+        ImVec2(u1, v1));
 }

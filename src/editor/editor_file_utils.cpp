@@ -8,9 +8,15 @@ bool MoveFile(const std::string& source, const std::string& destination)
 {
     try
     {
-        if (!fs::exists(source)) return false;
-        if (fs::is_directory(source)) return false;
-        
+        if (!fs::exists(source))
+        {
+            return false;
+        }
+        if (fs::is_directory(source))
+        {
+            return false;
+        }
+
         fs::create_directories(fs::path(destination).parent_path());
         fs::rename(source, destination);
         return true;
@@ -25,9 +31,15 @@ bool MoveDirectory(const std::string& source, const std::string& destination)
 {
     try
     {
-        if (!fs::exists(source)) return false;
-        if (!fs::is_directory(source)) return false;
-        
+        if (!fs::exists(source))
+        {
+            return false;
+        }
+        if (!fs::is_directory(source))
+        {
+            return false;
+        }
+
         fs::create_directories(fs::path(destination).parent_path());
         fs::rename(source, destination);
         return true;
@@ -42,9 +54,15 @@ bool CopyFile(const std::string& source, const std::string& destination)
 {
     try
     {
-        if (!fs::exists(source)) return false;
-        if (fs::is_directory(source)) return false;
-        
+        if (!fs::exists(source))
+        {
+            return false;
+        }
+        if (fs::is_directory(source))
+        {
+            return false;
+        }
+
         fs::create_directories(fs::path(destination).parent_path());
         fs::copy_file(source, destination, fs::copy_options::overwrite_existing);
         return true;
@@ -59,9 +77,15 @@ bool CopyDirectory(const std::string& source, const std::string& destination)
 {
     try
     {
-        if (!fs::exists(source)) return false;
-        if (!fs::is_directory(source)) return false;
-        
+        if (!fs::exists(source))
+        {
+            return false;
+        }
+        if (!fs::is_directory(source))
+        {
+            return false;
+        }
+
         fs::create_directories(destination);
         fs::copy(source, destination, fs::copy_options::recursive | fs::copy_options::overwrite_existing);
         return true;
@@ -77,8 +101,11 @@ std::vector<std::string> GetDirectoryContents(const std::string& path)
     std::vector<std::string> vContents;
     try
     {
-        if (!fs::exists(path) || !fs::is_directory(path)) return vContents;
-        
+        if (!fs::exists(path) || !fs::is_directory(path))
+        {
+            return vContents;
+        }
+
         for (const auto& entry : fs::directory_iterator(path))
         {
             vContents.push_back(entry.path().string());
@@ -87,7 +114,7 @@ std::vector<std::string> GetDirectoryContents(const std::string& path)
     catch (...)
     {
     }
-    
+
     return vContents;
 }
 
@@ -119,8 +146,11 @@ bool DeleteFileOrDirectory(const std::string& path)
 {
     try
     {
-        if (!fs::exists(path)) return false;
-        
+        if (!fs::exists(path))
+        {
+            return false;
+        }
+
         if (fs::is_directory(path))
         {
             fs::remove_all(path);

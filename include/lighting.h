@@ -9,9 +9,9 @@
 enum ELightType
 {
     LIGHT_TYPE_DIRECTIONAL = 0,
-    LIGHT_TYPE_POINT       = 1,
-    LIGHT_TYPE_SPOT        = 2,
-    LIGHT_TYPE_AREA        = 3
+    LIGHT_TYPE_POINT = 1,
+    LIGHT_TYPE_SPOT = 2,
+    LIGHT_TYPE_AREA = 3
 };
 
 class CLightState

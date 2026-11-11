@@ -64,7 +64,7 @@ std::string CDesktopIntegration::OpenFileDialog(const char* pFilterLabel,
 }
 
 std::string CDesktopIntegration::SaveFileDialog(const char* pFilterLabel, const char* pFilter,
-    const char* pDefExt, const std::string& defaultName)
+                                                const char* pDefExt, const std::string& defaultName)
 {
 #ifdef _WIN32
     char aPath[MAX_PATH] = {};

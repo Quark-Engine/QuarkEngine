@@ -13,7 +13,7 @@
 #include <cmath>
 #include <cstring>
 bool CPolygonEditor::CreateVertex(const CScene& scene, CEntity& entity,
-    const Vec3& worldPosition)
+                                  const Vec3& worldPosition)
 {
     CMeshComponent* pMesh = entity.GetMeshComponent();
     if (!pMesh)
@@ -22,7 +22,7 @@ bool CPolygonEditor::CreateVertex(const CScene& scene, CEntity& entity,
     }
 
     SEditableVertex vert;
-    vert.Position = Vec3Transform(worldPosition, quark::ComposeMeshWorld(scene, entity).inverted());
+    vert.m_Position = Vec3Transform(worldPosition, quark::ComposeMeshWorld(scene, entity).inverted());
     pMesh->m_EditableMesh.m_vVertices.push_back(vert);
     return true;
 }
@@ -30,7 +30,7 @@ bool CPolygonEditor::CreateVertex(const CScene& scene, CEntity& entity,
 void CPolygonEditor::CreateTriangle(CEntity& entity, int a, int b, int c)
 {
     CMeshComponent* pMesh = entity.GetMeshComponent();
-    pMesh->m_EditableMesh.m_vTriangles.push_back({a, b, c});
+    pMesh->m_EditableMesh.m_vTriangles.push_back({ a, b, c });
 
     RebuildMeshFromEditable(pMesh->m_Model, pMesh->m_EditableMesh);
 }
@@ -55,9 +55,9 @@ void CPolygonEditor::Draw(CEditor& editor, const Camera3D& camera)
     }
 
     CEditableMesh& eMesh = pMesh->m_EditableMesh;
-    if (edit.vSelectedVertices.empty() && !eMesh.m_vVertices.empty())
+    if (edit.m_vSelectedVertices.empty() && !eMesh.m_vVertices.empty())
     {
-        edit.vSelectedVertices.push_back(0);
+        edit.m_vSelectedVertices.push_back(0);
     }
 
     ImDrawList* pDraw = ImGui::GetForegroundDrawList();
@@ -69,34 +69,34 @@ void CPolygonEditor::Draw(CEditor& editor, const Camera3D& camera)
 
     for (const auto& tri : eMesh.m_vTriangles)
     {
-        if (tri.A >= (int)eMesh.m_vVertices.size())
+        if (tri.m_A >= (int)eMesh.m_vVertices.size())
         {
             continue;
         }
-        if (tri.B >= (int)eMesh.m_vVertices.size())
+        if (tri.m_B >= (int)eMesh.m_vVertices.size())
         {
             continue;
         }
-        if (tri.C >= (int)eMesh.m_vVertices.size())
+        if (tri.m_C >= (int)eMesh.m_vVertices.size())
         {
             continue;
         }
 
-        Vec2 p1 = CScenePicker::WorldToScreen(viewport, toWorld(eMesh.m_vVertices[tri.A].Position), camera);
-        Vec2 p2 = CScenePicker::WorldToScreen(viewport, toWorld(eMesh.m_vVertices[tri.B].Position), camera);
-        Vec2 p3 = CScenePicker::WorldToScreen(viewport, toWorld(eMesh.m_vVertices[tri.C].Position), camera);
+        Vec2 p1 = CScenePicker::WorldToScreen(viewport, toWorld(eMesh.m_vVertices[tri.m_A].m_Position), camera);
+        Vec2 p2 = CScenePicker::WorldToScreen(viewport, toWorld(eMesh.m_vVertices[tri.m_B].m_Position), camera);
+        Vec2 p3 = CScenePicker::WorldToScreen(viewport, toWorld(eMesh.m_vVertices[tri.m_C].m_Position), camera);
 
-        pDraw->AddLine({p1.x,p1.y}, {p2.x,p2.y}, IM_COL32(0,255,0,255), 2.0f);
-        pDraw->AddLine({p2.x,p2.y}, {p3.x,p3.y}, IM_COL32(0,255,0,255), 2.0f);
-        pDraw->AddLine({p3.x,p3.y}, {p1.x,p1.y}, IM_COL32(0,255,0,255), 2.0f);
+        pDraw->AddLine({ p1.x, p1.y }, { p2.x, p2.y }, IM_COL32(0, 255, 0, 255), 2.0f);
+        pDraw->AddLine({ p2.x, p2.y }, { p3.x, p3.y }, IM_COL32(0, 255, 0, 255), 2.0f);
+        pDraw->AddLine({ p3.x, p3.y }, { p1.x, p1.y }, IM_COL32(0, 255, 0, 255), 2.0f);
     }
 
     for (int i = 0; i < (int)eMesh.m_vVertices.size(); i++)
     {
-        const Vec2 screen = CScenePicker::WorldToScreen(viewport, toWorld(eMesh.m_vVertices[i].Position), camera);
+        const Vec2 screen = CScenePicker::WorldToScreen(viewport, toWorld(eMesh.m_vVertices[i].m_Position), camera);
 
         bool selected = false;
-        for (int si : edit.vSelectedVertices)
+        for (int si : edit.m_vSelectedVertices)
         {
             if (si == i)
             {
@@ -105,18 +105,18 @@ void CPolygonEditor::Draw(CEditor& editor, const Camera3D& camera)
             }
         }
 
-        const ImU32 fill = selected ? IM_COL32(255,180,60,255) : IM_COL32(0,220,0,255);
+        const ImU32 fill = selected ? IM_COL32(255, 180, 60, 255) : IM_COL32(0, 220, 0, 255);
         const float radius = selected ? 9.0f : 6.0f;
-        pDraw->AddCircleFilled({screen.x,screen.y}, radius, fill);
-        pDraw->AddCircle({screen.x,screen.y}, radius, IM_COL32(20,20,20,255), 0, 2.0f);
+        pDraw->AddCircleFilled({ screen.x, screen.y }, radius, fill);
+        pDraw->AddCircle({ screen.x, screen.y }, radius, IM_COL32(20, 20, 20, 255), 0, 2.0f);
     }
 
-    if (edit.vSelectedVertices.size() == 1 && poly != POLY_CREATE)
+    if (edit.m_vSelectedVertices.size() == 1 && poly != POLY_CREATE)
     {
-        const int sel = edit.vSelectedVertices[0];
+        const int sel = edit.m_vSelectedVertices[0];
         if (sel >= 0 && sel < (int)eMesh.m_vVertices.size())
         {
-            const Vec3 worldPos = toWorld(eMesh.m_vVertices[sel].Position);
+            const Vec3 worldPos = toWorld(eMesh.m_vVertices[sel].m_Position);
 
             float aViewMat4[16] = {};
             float aProjectionMat4[16] = {};
@@ -127,15 +127,14 @@ void CPolygonEditor::Draw(CEditor& editor, const Camera3D& camera)
                 camera.fovy * DEG2RAD,
                 viewport.m_WindowSize.x / viewport.m_WindowSize.y,
                 0.1f,
-                1000.0f
-            );
+                1000.0f);
 
             memcpy(aViewMat4, &view, sizeof(aViewMat4));
             memcpy(aProjectionMat4, &projection, sizeof(aProjectionMat4));
 
-            float aT[3] = {worldPos.x, worldPos.y, worldPos.z};
-            float aR[3] = {0,0,0};
-            float aS[3] = {1,1,1};
+            float aT[3] = { worldPos.x, worldPos.y, worldPos.z };
+            float aR[3] = { 0, 0, 0 };
+            float aS[3] = { 1, 1, 1 };
 
             ImGuizmo::SetDrawlist(ImGui::GetWindowDrawList());
             ImGuizmo::SetRect(viewport.m_WindowPos.x, viewport.m_WindowPos.y, viewport.m_WindowSize.x, viewport.m_WindowSize.y);
@@ -156,27 +155,25 @@ void CPolygonEditor::Draw(CEditor& editor, const Camera3D& camera)
                 ImGuizmo::WORLD,
                 aTransformMat4,
                 nullptr,
-                gizmoSnapEnabled ? aSnap : nullptr
-            );
+                gizmoSnapEnabled ? aSnap : nullptr);
 
-            if (ImGuizmo::IsUsing() && !gizmo.WasUsingPolygon)
+            if (ImGuizmo::IsUsing() && !gizmo.m_WasUsingPolygon)
             {
                 editor.SaveState();
             }
 
             if (ImGuizmo::IsUsing())
             {
-                float aNt[3]={}, nr[3]={}, ns[3]={};
-                ImGuizmo::DecomposeMatrixToComponents(aTransformMat4, aNt, nr, ns);
-                eMesh.m_vVertices[sel].Position = Vec3Transform(
-                    Vec3{aNt[0], aNt[1], aNt[2]},
-                    Mat4Invert(meshWorldTransform)
-                );
+                float aNt[3] = {}, aNr[3] = {}, aNs[3] = {};
+                ImGuizmo::DecomposeMatrixToComponents(aTransformMat4, aNt, aNr, aNs);
+                eMesh.m_vVertices[sel].m_Position = Vec3Transform(
+                    Vec3{ aNt[0], aNt[1], aNt[2] },
+                    Mat4Invert(meshWorldTransform));
                 RebuildMeshFromEditable(pMesh->m_Model, eMesh);
                 CEntityTextureService::MarkEntityBoundsDirty(pEntity);
             }
 
-            gizmo.WasUsingPolygon = ImGuizmo::IsUsing();
+            gizmo.m_WasUsingPolygon = ImGuizmo::IsUsing();
         }
     }
 
@@ -198,9 +195,9 @@ void CPolygonEditor::Draw(CEditor& editor, const Camera3D& camera)
 
         for (int i = 0; i < (int)eMesh.m_vVertices.size(); i++)
         {
-            const Vec2 sp = CScenePicker::WorldToScreen(viewport, toWorld(eMesh.m_vVertices[i].Position), camera);
+            const Vec2 sp = CScenePicker::WorldToScreen(viewport, toWorld(eMesh.m_vVertices[i].m_Position), camera);
             const float dx = mouse.x - sp.x, dy = mouse.y - sp.y;
-            const float d = sqrtf(dx*dx + dy*dy);
+            const float d = sqrtf(dx * dx + dy * dy);
             if (d < bestDist)
             {
                 bestDist = d;
@@ -213,19 +210,19 @@ void CPolygonEditor::Draw(CEditor& editor, const Camera3D& camera)
             const bool ctrl = IsKeyDown(KEY_LEFT_CONTROL) || IsKeyDown(KEY_RIGHT_CONTROL);
             if (ctrl)
             {
-                auto it = std::find(edit.vSelectedVertices.begin(), edit.vSelectedVertices.end(), bestVert);
-                if (it != edit.vSelectedVertices.end())
+                auto it = std::find(edit.m_vSelectedVertices.begin(), edit.m_vSelectedVertices.end(), bestVert);
+                if (it != edit.m_vSelectedVertices.end())
                 {
-                    edit.vSelectedVertices.erase(it);
+                    edit.m_vSelectedVertices.erase(it);
                 }
                 else
                 {
-                    edit.vSelectedVertices.push_back(bestVert);
+                    edit.m_vSelectedVertices.push_back(bestVert);
                 }
             }
             else
             {
-                edit.vSelectedVertices = {bestVert};
+                edit.m_vSelectedVertices = { bestVert };
             }
         }
         else
@@ -238,22 +235,22 @@ void CPolygonEditor::Draw(CEditor& editor, const Camera3D& camera)
             for (int t = 0; t < (int)eMesh.m_vTriangles.size(); t++)
             {
                 const auto& tri = eMesh.m_vTriangles[t];
-                if (tri.A >= (int)eMesh.m_vVertices.size())
+                if (tri.m_A >= (int)eMesh.m_vVertices.size())
                 {
                     continue;
                 }
-                if (tri.B >= (int)eMesh.m_vVertices.size())
+                if (tri.m_B >= (int)eMesh.m_vVertices.size())
                 {
                     continue;
                 }
-                if (tri.C >= (int)eMesh.m_vVertices.size())
+                if (tri.m_C >= (int)eMesh.m_vVertices.size())
                 {
                     continue;
                 }
 
-                const Vec3 va = toWorld(eMesh.m_vVertices[tri.A].Position);
-                const Vec3 vb = toWorld(eMesh.m_vVertices[tri.B].Position);
-                const Vec3 vc = toWorld(eMesh.m_vVertices[tri.C].Position);
+                const Vec3 va = toWorld(eMesh.m_vVertices[tri.m_A].m_Position);
+                const Vec3 vb = toWorld(eMesh.m_vVertices[tri.m_B].m_Position);
+                const Vec3 vc = toWorld(eMesh.m_vVertices[tri.m_C].m_Position);
 
                 const RayCollision hit = GetRayCollisionTriangle(ray, va, vb, vc);
                 if (!hit.hit || hit.distance >= bestHitDist)
@@ -269,29 +266,28 @@ void CPolygonEditor::Draw(CEditor& editor, const Camera3D& camera)
                     Vec3Distance(hit.point, vc)
                 };
 
-                pickedCorner = (aCd[0]<aCd[1]) ? (aCd[0]<aCd[2]?0:2) : (aCd[1]<aCd[2]?1:2);
+                pickedCorner = (aCd[0] < aCd[1]) ? (aCd[0] < aCd[2] ? 0 : 2) : (aCd[1] < aCd[2] ? 1 : 2);
             }
 
             if (pickedTriangle >= 0)
             {
                 const auto& tri = eMesh.m_vTriangles[pickedTriangle];
-                const int aVerts[3] = {tri.A, tri.B, tri.C};
+                const int aVerts[3] = { tri.m_A, tri.m_B, tri.m_C };
                 const bool ctrl = IsKeyDown(KEY_LEFT_CONTROL) || IsKeyDown(KEY_RIGHT_CONTROL);
 
                 if (!ctrl)
                 {
-                    edit.vSelectedVertices.clear();
+                    edit.m_vSelectedVertices.clear();
                 }
                 const int pick = aVerts[pickedCorner];
-                if (std::find(edit.vSelectedVertices.begin(), edit.vSelectedVertices.end(), pick) == edit.vSelectedVertices.end())
+                if (std::find(edit.m_vSelectedVertices.begin(), edit.m_vSelectedVertices.end(), pick) == edit.m_vSelectedVertices.end())
                 {
-                    edit.vSelectedVertices.push_back(pick);
+                    edit.m_vSelectedVertices.push_back(pick);
                 }
-
             }
             else if (!IsKeyDown(KEY_LEFT_CONTROL) && !IsKeyDown(KEY_RIGHT_CONTROL))
             {
-                edit.vSelectedVertices.clear();
+                edit.m_vSelectedVertices.clear();
             }
         }
     }
@@ -305,23 +301,23 @@ void CPolygonEditor::Draw(CEditor& editor, const Camera3D& camera)
         for (int t = 0; t < (int)eMesh.m_vTriangles.size(); t++)
         {
             const auto& tri = eMesh.m_vTriangles[t];
-            if (tri.A >= (int)eMesh.m_vVertices.size())
+            if (tri.m_A >= (int)eMesh.m_vVertices.size())
             {
                 continue;
             }
-            if (tri.B >= (int)eMesh.m_vVertices.size())
+            if (tri.m_B >= (int)eMesh.m_vVertices.size())
             {
                 continue;
             }
-            if (tri.C >= (int)eMesh.m_vVertices.size())
+            if (tri.m_C >= (int)eMesh.m_vVertices.size())
             {
                 continue;
             }
 
             const RayCollision hit = GetRayCollisionTriangle(ray,
-                toWorld(eMesh.m_vVertices[tri.A].Position),
-                toWorld(eMesh.m_vVertices[tri.B].Position),
-                toWorld(eMesh.m_vVertices[tri.C].Position));
+                                                             toWorld(eMesh.m_vVertices[tri.m_A].m_Position),
+                                                             toWorld(eMesh.m_vVertices[tri.m_B].m_Position),
+                                                             toWorld(eMesh.m_vVertices[tri.m_C].m_Position));
 
             if (hit.hit)
             {
@@ -340,12 +336,12 @@ void CPolygonEditor::Draw(CEditor& editor, const Camera3D& camera)
         CreateVertex(editor.m_Scene, *pEntity, placePos);
 
         const int newIndex = (int)eMesh.m_vVertices.size() - 1;
-        edit.vSelectedVertices.push_back(newIndex);
+        edit.m_vSelectedVertices.push_back(newIndex);
 
-        if ((int)edit.vSelectedVertices.size() == 3)
+        if ((int)edit.m_vSelectedVertices.size() == 3)
         {
-            CreateTriangle(*pEntity, edit.vSelectedVertices[0], edit.vSelectedVertices[1], edit.vSelectedVertices[2]);
-            edit.vSelectedVertices.clear();
+            CreateTriangle(*pEntity, edit.m_vSelectedVertices[0], edit.m_vSelectedVertices[1], edit.m_vSelectedVertices[2]);
+            edit.m_vSelectedVertices.clear();
         }
     }
 }

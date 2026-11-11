@@ -5,15 +5,15 @@
 namespace
 {
 
-std::vector<int> AllocateAll(CLightRegistry& registry)
-{
-    std::vector<int> vIds;
-    for (int i = 0; i < QC_MAX_LIGHTS; i++)
+    std::vector<int> AllocateAll(CLightRegistry& registry)
     {
-        vIds.push_back(registry.Allocate());
+        std::vector<int> vIds;
+        for (int i = 0; i < QC_MAX_LIGHTS; i++)
+        {
+            vIds.push_back(registry.Allocate());
+        }
+        return vIds;
     }
-    return vIds;
-}
 
 } // anonymous
 

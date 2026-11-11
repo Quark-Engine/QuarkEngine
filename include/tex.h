@@ -9,25 +9,25 @@
 
 struct STextureOption
 {
-    std::string Name;
-    Texture2D Texture;
+    std::string m_Name;
+    Texture2D m_Texture;
 };
 
 struct STextureMeta
 {
-    std::string Guid;
-    int MipMapMode = 0;
-    bool EnableMipMap = false;
-    bool SrgbTexture = true;
-    bool IsReadable = false;
-    int FilterMode = 0;
-    int WrapU = 1;
-    int WrapV = 1;
-    int MaxTextureSize = 2048;
-    int CompressionQuality = 50;
-    int SpriteMode = 1;
-    int TextureType = 8;
-    bool AlphaIsTransparency = true;
+    std::string m_Guid;
+    int m_MipMapMode = 0;
+    bool m_EnableMipMap = false;
+    bool m_SrgbTexture = true;
+    bool m_IsReadable = false;
+    int m_FilterMode = 0;
+    int m_WrapU = 1;
+    int m_WrapV = 1;
+    int m_MaxTextureSize = 2048;
+    int m_CompressionQuality = 50;
+    int m_SpriteMode = 1;
+    int m_TextureType = 8;
+    bool m_AlphaIsTransparency = true;
 };
 
 class CTextureMetadataStore

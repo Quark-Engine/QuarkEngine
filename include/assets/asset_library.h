@@ -17,19 +17,19 @@ class CTaskPool;
 
 struct SScannedTexture
 {
-    std::string name;
-    std::string fingerprint;
-    Image imageData{};
-    STextureMeta meta;
-    bool hasImage = false;
-    std::string error;
+    std::string m_Name;
+    std::string m_Fingerprint;
+    Image m_ImageData{};
+    STextureMeta m_Meta;
+    bool m_HasImage = false;
+    std::string m_Error;
 };
 
 struct SResourceScanResult
 {
-    std::string signature;
-    std::vector<std::filesystem::path> vModelPaths;
-    std::vector<SScannedTexture> vTextures;
+    std::string m_Signature;
+    std::vector<std::filesystem::path> m_vModelPaths;
+    std::vector<SScannedTexture> m_vTextures;
 };
 
 class CAssetLibrary
@@ -114,10 +114,10 @@ private:
     void RefreshTextures(const std::string& projectPath, CScene* pScene);
     bool RefreshModels(const std::string& projectPath, CScene& scene);
     bool RefreshModels(const std::string& projectPath, CScene& scene,
-        const std::vector<std::filesystem::path>& vModelPaths);
+                       const std::vector<std::filesystem::path>& vModelPaths);
     void StartResourceScan(const std::string& projectPath);
     bool ApplyResourceScan(SResourceScanResult& scan, const std::string& projectPath,
-        CScene& scene);
+                           CScene& scene);
 
     std::vector<CModelAsset> m_vModels;
     std::vector<STextureOption> m_vTextures;

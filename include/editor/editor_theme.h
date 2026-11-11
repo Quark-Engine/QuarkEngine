@@ -6,8 +6,8 @@
 
 struct SEditorTheme
 {
-    std::string id;
-    std::string name;
+    std::string m_Id;
+    std::string m_Name;
 };
 
 struct SThemeRuntimeState;
@@ -19,7 +19,7 @@ public:
     static bool Apply(const std::string& themeId);
     static bool ReloadFonts(const std::string& themeId);
     static bool PushVariant(const std::string& component, const std::string& variant,
-        bool disabled = false);
+                            bool disabled = false);
     static void PopVariant();
     static float GetAppliedFontScale();
     static void ProcessPendingFonts();

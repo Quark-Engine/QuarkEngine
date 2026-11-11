@@ -4,9 +4,9 @@
 void UpdateLighting(Shader shader, CLightState& l)
 {
     l.m_Light.position = l.m_Position;
-    l.m_Light.target   = l.m_Target;
-    l.m_Light.color    = l.m_Color;
-    l.m_Light.enabled  = l.m_Enabled;
+    l.m_Light.target = l.m_Target;
+    l.m_Light.color = l.m_Color;
+    l.m_Light.enabled = l.m_Enabled;
 
     const bool vulkanBackend = GetCurrentBackend() == RendererType::Vulkan;
 
@@ -14,7 +14,7 @@ void UpdateLighting(Shader shader, CLightState& l)
     int type = l.m_Light.type;
     float aPosition[3] = { l.m_Position.x, l.m_Position.y, l.m_Position.z };
     float aTarget[3] = { l.m_Target.x, l.m_Target.y, l.m_Target.z };
-    float aColor[4] = {l.m_Color.r / 255.f, l.m_Color.g / 255.f, l.m_Color.b / 255.f, l.m_Color.a / 255.f};
+    float aColor[4] = { l.m_Color.r / 255.f, l.m_Color.g / 255.f, l.m_Color.b / 255.f, l.m_Color.a / 255.f };
 
     float intensity = l.m_Intensity;
     float range = l.m_Range;
@@ -108,41 +108,40 @@ int CLightRegistry::AllocatedCount() const
 
 CLightState CreateLighting(Vec3 pos, Color color)
 {
-    CLightState l  = {};
-    l.m_Position   = pos;
-    l.m_Target     = Vec3(0,0,0);
-    l.m_Color      = color;
-    l.m_Enabled    = true;
+    CLightState l = {};
+    l.m_Position = pos;
+    l.m_Target = Vec3(0, 0, 0);
+    l.m_Color = color;
+    l.m_Enabled = true;
     l.m_Light.type = LIGHT_TYPE_POINT;
-    l.m_Intensity  = 1.0f;
-    l.m_Range      = 5.0f;
-    l.m_SpotAngle  = 30.0f;
+    l.m_Intensity = 1.0f;
+    l.m_Range = 5.0f;
+    l.m_SpotAngle = 30.0f;
     return l;
 }
 
 Light CreateLightAtSlot(int slot, int type, Vec3 position, Vec3 target, Color color, Shader shader)
 {
-    Light light       = { 0 };
-    light.enabled     = true;
-    light.type        = type;
-    light.position    = position;
-    light.target      = target;
-    light.color       = color;
-    light.enabledLoc  = GetShaderLocation(shader, TextFormat("lights[%i].enabled",  slot));
-    light.typeLoc     = GetShaderLocation(shader, TextFormat("lights[%i].type",     slot));
+    Light light = { 0 };
+    light.enabled = true;
+    light.type = type;
+    light.position = position;
+    light.target = target;
+    light.color = color;
+    light.enabledLoc = GetShaderLocation(shader, TextFormat("lights[%i].enabled", slot));
+    light.typeLoc = GetShaderLocation(shader, TextFormat("lights[%i].type", slot));
     light.positionLoc = GetShaderLocation(shader, TextFormat("lights[%i].position", slot));
-    light.targetLoc   = GetShaderLocation(shader, TextFormat("lights[%i].target",   slot));
-    light.colorLoc    = GetShaderLocation(shader, TextFormat("lights[%i].color",    slot));
+    light.targetLoc = GetShaderLocation(shader, TextFormat("lights[%i].target", slot));
+    light.colorLoc = GetShaderLocation(shader, TextFormat("lights[%i].color", slot));
     light.attenuationLoc = GetShaderLocation(shader, TextFormat("lights[%i].attenuation", slot));
     return light;
 }
 
 void InitializeLightingUniformCache(CLightState& lighting, Shader shader, int slot)
 {
-    lighting.m_IntensityLoc  = GetShaderLocation(shader, TextFormat("lights[%i].intensity", slot));
-    lighting.m_RangeLoc      = GetShaderLocation(shader, TextFormat("lights[%i].range", slot));
+    lighting.m_IntensityLoc = GetShaderLocation(shader, TextFormat("lights[%i].intensity", slot));
+    lighting.m_RangeLoc = GetShaderLocation(shader, TextFormat("lights[%i].range", slot));
     lighting.m_SpotAngleLoc = GetShaderLocation(shader, TextFormat("lights[%i].spotAngle", slot));
     lighting.m_Light.attenuationLoc = GetShaderLocation(shader,
-        TextFormat("lights[%i].attenuation", slot));
+                                                        TextFormat("lights[%i].attenuation", slot));
 }
-

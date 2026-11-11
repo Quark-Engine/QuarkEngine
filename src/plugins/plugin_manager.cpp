@@ -7,10 +7,10 @@ namespace fs = std::filesystem;
 
 namespace
 {
-std::string NormalizePluginPath(const std::string& path)
-{
-    return fs::path(path).lexically_normal().string();
-}
+    std::string NormalizePluginPath(const std::string& path)
+    {
+        return fs::path(path).lexically_normal().string();
+    }
 } // anonymous
 
 void CPluginManager::LoadOne(const std::string& filepath, SPluginContext* pCtx)
@@ -22,8 +22,8 @@ void CPluginManager::LoadOne(const std::string& filepath, SPluginContext* pCtx)
         return;
     }
 
-    using GetPluginFunc = SPlugin*(*)();
-    GetPluginFunc pfnGetPlugin = reinterpret_cast<GetPluginFunc>(library.GetSymbol("GetPlugin"));
+    using FGetPluginFunc = SPlugin* (*)();
+    FGetPluginFunc pfnGetPlugin = reinterpret_cast<FGetPluginFunc>(library.GetSymbol("GetPlugin"));
 
     if (!pfnGetPlugin)
     {
@@ -38,14 +38,14 @@ void CPluginManager::LoadOne(const std::string& filepath, SPluginContext* pCtx)
     }
 
     m_vPlugins.push_back({ std::move(library), pPlugin, filepath });
-    TraceLog(LogLevel::Info, "PLUGIN", TextFormat("Loaded '%s' v%s", pPlugin->pName, pPlugin->pVersion));
+    TraceLog(LogLevel::Info, "PLUGIN", TextFormat("Loaded '%s' v%s", pPlugin->m_pName, pPlugin->m_pVersion));
 
     if (pCtx != nullptr && pPlugin->pfnOnLoad)
     {
         m_pRegisteringPlugin = pPlugin;
-        pCtx->deltaTime = 0.0f;
-        pCtx->entityCount = 0;
-        pCtx->pSelected = nullptr;
+        pCtx->m_DeltaTime = 0.0f;
+        pCtx->m_EntityCount = 0;
+        pCtx->m_pSelected = nullptr;
         pPlugin->pfnOnLoad(pCtx);
         m_pRegisteringPlugin = nullptr;
     }
@@ -102,22 +102,33 @@ void CPluginManager::LoadAll(const std::string& pluginDir, SPluginContext* pCtx)
         {
             const std::string ext = entry.path().extension().string();
 #ifdef _WIN32
-            if (ext == ".dll") bin = entry.path();
+            if (ext == ".dll")
+            {
+                bin = entry.path();
+            }
 #elif __APPLE__
-            if (ext == ".dylib") bin = entry.path();
+            if (ext == ".dylib")
+            {
+                bin = entry.path();
+            }
 #else
-            if (ext == ".so") bin = entry.path();
+            if (ext == ".so")
+            {
+                bin = entry.path();
+            }
 #endif
         }
 
-        if (bin.empty()) continue;
+        if (bin.empty())
+        {
+            continue;
+        }
 
         const std::string normalizedPath = NormalizePluginPath(bin.string());
         if (std::find(m_vDisabledPlugins.begin(), m_vDisabledPlugins.end(), normalizedPath) !=
             m_vDisabledPlugins.end())
         {
-            TraceLog(LogLevel::Info, "PLUGIN", TextFormat("Skipping disabled plugin '%s'",
-                bin.filename().string().c_str()));
+            TraceLog(LogLevel::Info, "PLUGIN", TextFormat("Skipping disabled plugin '%s'", bin.filename().string().c_str()));
             continue;
         }
 
@@ -136,7 +147,10 @@ void CPluginManager::UnloadAll()
 {
     for (auto& lp : m_vPlugins)
     {
-        if (lp.pPlugin->pfnOnUnload) lp.pPlugin->pfnOnUnload();
+        if (lp.m_pPlugin->pfnOnUnload)
+        {
+            lp.m_pPlugin->pfnOnUnload();
+        }
     }
     m_vEventCallbacks.clear();
     m_vUiCallbacks.clear();
@@ -147,17 +161,17 @@ void CPluginManager::RemoveCallbacksForPlugin(SPlugin* pPlugin)
 {
     m_vUiCallbacks.erase(
         std::remove_if(m_vUiCallbacks.begin(), m_vUiCallbacks.end(),
-            [pPlugin](const SRegisteredUICallback& callback)
-            {
-                return callback.pPlugin == pPlugin;
-            }),
+                       [pPlugin](const SRegisteredUICallback& callback)
+                       {
+                           return callback.m_pPlugin == pPlugin;
+                       }),
         m_vUiCallbacks.end());
     m_vEventCallbacks.erase(
         std::remove_if(m_vEventCallbacks.begin(), m_vEventCallbacks.end(),
-            [pPlugin](const SRegisteredEventCallback& callback)
-            {
-                return callback.pPlugin == pPlugin;
-            }),
+                       [pPlugin](const SRegisteredEventCallback& callback)
+                       {
+                           return callback.m_pPlugin == pPlugin;
+                       }),
         m_vEventCallbacks.end());
 }
 
@@ -169,7 +183,7 @@ void CPluginManager::UnloadPlugin(int index)
     }
 
     SLoadedPlugin& plugin = m_vPlugins[index];
-    SPlugin* pPlugin = plugin.pPlugin;
+    SPlugin* pPlugin = plugin.m_pPlugin;
     if (pPlugin->pfnOnUnload)
     {
         pPlugin->pfnOnUnload();
@@ -182,7 +196,10 @@ void CPluginManager::UpdateAll(SPluginContext& ctx)
 {
     for (auto& lp : m_vPlugins)
     {
-        if (lp.pPlugin->pfnOnUpdate) lp.pPlugin->pfnOnUpdate(&ctx);
+        if (lp.m_pPlugin->pfnOnUpdate)
+        {
+            lp.m_pPlugin->pfnOnUpdate(&ctx);
+        }
     }
 }
 
@@ -190,13 +207,16 @@ void CPluginManager::DrawUiAll(SPluginContext& ctx)
 {
     for (auto& lp : m_vPlugins)
     {
-        if (lp.pPlugin->pfnOnDrawUI) lp.pPlugin->pfnOnDrawUI(&ctx);
+        if (lp.m_pPlugin->pfnOnDrawUI)
+        {
+            lp.m_pPlugin->pfnOnDrawUI(&ctx);
+        }
     }
 }
 
 void CPluginManager::RegisterUiCallback(EUIRegion region, FPluginUICallback callback)
 {
-    m_vUiCallbacks.push_back({m_pRegisteringPlugin, region, callback});
+    m_vUiCallbacks.push_back({ m_pRegisteringPlugin, region, callback });
 }
 
 void CPluginManager::DrawUiRegion(EUIRegion region, SPluginContext& ctx)
@@ -204,9 +224,9 @@ void CPluginManager::DrawUiRegion(EUIRegion region, SPluginContext& ctx)
     for (size_t callbackIndex = 0; callbackIndex < m_vUiCallbacks.size(); ++callbackIndex)
     {
         const SRegisteredUICallback cb = m_vUiCallbacks[callbackIndex];
-        if (cb.region == region)
+        if (cb.m_Region == region)
         {
-            cb.callback(&ctx);
+            cb.pfnCallback(&ctx);
         }
     }
 }
@@ -215,7 +235,7 @@ void CPluginManager::RegisterEventCallback(EPluginEvent event, FPluginEventCallb
 {
     if (callback)
     {
-        m_vEventCallbacks.push_back({m_pRegisteringPlugin, event, callback});
+        m_vEventCallbacks.push_back({ m_pRegisteringPlugin, event, callback });
     }
 }
 
@@ -223,10 +243,10 @@ void CPluginManager::UnregisterEventCallback(EPluginEvent event, FPluginEventCal
 {
     m_vEventCallbacks.erase(
         std::remove_if(m_vEventCallbacks.begin(), m_vEventCallbacks.end(),
-            [event, callback](const SRegisteredEventCallback& registered)
-            {
-                return registered.event == event && registered.callback == callback;
-            }),
+                       [event, callback](const SRegisteredEventCallback& registered)
+                       {
+                           return registered.m_Event == event && registered.pfnCallback == callback;
+                       }),
         m_vEventCallbacks.end());
 }
 
@@ -235,9 +255,9 @@ void CPluginManager::DispatchEvent(EPluginEvent event, SPluginContext& ctx, int 
     const std::vector<SRegisteredEventCallback> vCallbacks = m_vEventCallbacks;
     for (const SRegisteredEventCallback& registered : vCallbacks)
     {
-        if (registered.event == event && registered.callback)
+        if (registered.m_Event == event && registered.pfnCallback)
         {
-            registered.callback(&ctx, event, entityIndex);
+            registered.pfnCallback(&ctx, event, entityIndex);
         }
     }
 }

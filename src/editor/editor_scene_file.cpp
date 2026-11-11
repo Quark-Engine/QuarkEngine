@@ -10,14 +10,14 @@
 namespace
 {
 
-constexpr const char* SCENE_EXTENSION = ".json";
+    constexpr const char* SCENE_EXTENSION = ".json";
 
 } // anonymous
 
 std::string CSceneFileService::BrowseSceneSavePath(const std::string& defaultName)
 {
     return CDesktopIntegration::SaveFileDialog("Scene JSON",
-        "Scene JSON (*.json)\0*.json\0All Files (*.*)\0*.*\0", "json", defaultName);
+                                               "Scene JSON (*.json)\0*.json\0All Files (*.*)\0*.*\0", "json", defaultName);
 }
 
 void CSceneFileService::SaveAs(CEditor& editor)

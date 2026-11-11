@@ -3,12 +3,12 @@
 #include <string>
 
 #ifdef _WIN32
-    struct HINSTANCE__;
-    typedef struct HINSTANCE__* LibHandle;
+struct HINSTANCE__;
+typedef struct HINSTANCE__* LibHandle;
 #else
-    #include <dlfcn.h>
+#include <dlfcn.h>
 
-    typedef void* LibHandle;
+typedef void* LibHandle;
 #endif
 
 class CDynamicLibrary
@@ -32,7 +32,7 @@ public:
     const std::string& GetError() const;
 
 private:
-    LibHandle m_Handle = nullptr;
+    LibHandle m_pHandle = nullptr;
     std::string m_Error;
 };
 
