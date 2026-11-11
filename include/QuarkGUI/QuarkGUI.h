@@ -189,4 +189,4 @@ private:
 } // gui
 } // quark
 
-#define // QUARK_GUI_H__
+#endif // QUARK_GUI_H__
