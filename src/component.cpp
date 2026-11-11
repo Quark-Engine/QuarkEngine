@@ -259,6 +259,7 @@ void CUiComponent::Serialize(nlohmann::json& json) const
     json["color_multiplier"] = m_ColorMultiplier;
     json["fade_duration"] = m_FadeDuration;
     json["navigation"] = static_cast<int>(m_Navigation);
+    json["show_navigation_visualization"] = m_ShowNavigationVisualization;
 }
 
 void CUiComponent::Deserialize(const nlohmann::json& json)
@@ -324,6 +325,10 @@ void CUiComponent::Deserialize(const nlohmann::json& json)
         {
             m_Navigation = static_cast<EGuiButtonNavigation>(navigation);
         }
+    }
+    if (json.contains("show_navigation_visualization") && json["show_navigation_visualization"].is_boolean())
+    {
+        m_ShowNavigationVisualization = json["show_navigation_visualization"].get<bool>();
     }
     m_Name = GetTypeName();
 }
@@ -485,7 +490,7 @@ void CComponentManager::Deserialize(const nlohmann::json& json, const CComponent
                     legacyUiData["size"][1].get<float>()
                 };
             }
-            m_vComponents.push_back(pRectTransform);
+            m_vComponents.insert(m_vComponents.begin(), pRectTransform);
         }
 
         auto pText = GetComponentOfType<CTextComponent>();

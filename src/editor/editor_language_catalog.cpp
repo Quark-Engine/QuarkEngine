@@ -97,7 +97,7 @@ namespace
                       sizeof(gs_aLanguageCodes) / sizeof(gs_aLanguageCodes[0]),
                   "language labels and codes must stay index-aligned");
 
-    constexpr int s_LanguageCount = static_cast<int>(sizeof(gs_aLanguageCodes) / sizeof(gs_aLanguageCodes[0]));
+    static constexpr int s_LanguageCount = static_cast<int>(sizeof(gs_aLanguageCodes) / sizeof(gs_aLanguageCodes[0]));
 
 } // anonymous
 

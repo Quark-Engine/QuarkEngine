@@ -239,8 +239,8 @@ CEntity CEntityFactory::UiWidget(CScene& scene, EGuiWidgetType widgetType, int p
             break;
     }
 
-    pCm->AddComponent(pUi);
     pCm->AddComponent(pRectTransform);
+    pCm->AddComponent(pUi);
     pCm->AddComponent(pText);
     pUi->SyncToRuntimeDesc(pRectTransform.get(), pText.get());
     return entity;

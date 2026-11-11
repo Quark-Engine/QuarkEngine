@@ -859,7 +859,7 @@ bool ImGui::ButtonEx(const char* label, const ImVec2& size_arg, ImGuiButtonFlags
             bb.Min.x + (size.x - label_size.x) * style.ButtonTextAlign.x,
             bb.Min.y + (size.y - label_size.y) * style.ButtonTextAlign.y
         );
-        draw->AddText(text_pos, text_col, label);
+        draw->AddText(NULL, 0.0f, text_pos, text_col, label, FindRenderedTextEnd(label));
     }
     else
     {
@@ -890,7 +890,7 @@ bool ImGui::ButtonEx(const char* label, const ImVec2& size_arg, ImGuiButtonFlags
             bb.Min.x + (size.x - label_size.x) * style.ButtonTextAlign.x,
             bb.Min.y + (size.y - label_size.y) * style.ButtonTextAlign.y
         );
-        draw->AddText(text_pos, GetColorU32(ImGuiCol_Text), label);
+        draw->AddText(NULL, 0.0f, text_pos, GetColorU32(ImGuiCol_Text), label, FindRenderedTextEnd(label));
     }
     
     // Automatically close popups
@@ -2339,11 +2339,13 @@ bool ImGui::Combo(const char* label, int* current_item,
     const float height = GetFrameHeight();
     const ImVec2 pos = window->DC.CursorPos;
     const ImVec2 size = ImVec2(200, height);
+    const ImVec2 label_size = CalcTextSize(label, NULL, true);
 
     const ImRect bb(pos, pos + size);
-    ItemSize(bb, style.FramePadding.y);
+    const ImRect total_bb(bb.Min, bb.Max + ImVec2(label_size.x > 0.0f ? style.ItemInnerSpacing.x + label_size.x : 0.0f, 0.0f));
+    ItemSize(total_bb, style.FramePadding.y);
 
-    if (!ItemAdd(bb, id))
+    if (!ItemAdd(total_bb, id, &bb))
         return false;
 
     bool hovered, held;
@@ -2454,6 +2456,9 @@ bool ImGui::Combo(const char* label, int* current_item,
                 preview);
         }
     }
+
+    if (label_size.x > 0.0f)
+        RenderText(ImVec2(bb.Max.x + style.ItemInnerSpacing.x, bb.Min.y + style.FramePadding.y), label);
 
     if (pressed)
         OpenPopupEx(id);

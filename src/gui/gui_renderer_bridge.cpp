@@ -4,23 +4,70 @@
 #include "entity.h"
 #include "scene.h"
 
+#include <algorithm>
+#include <cctype>
 #include <cmath>
 #include <filesystem>
+#include <fstream>
+#include <sstream>
+#include <unordered_map>
 #include <vector>
 
 namespace quark
 {
     namespace gui
     {
-
         namespace
         {
+            struct SCachedFontEntry
+            {
+                Font m_Font = {};
+                bool m_Valid = false;
+            };
 
-            Font s_GuiFont = {};
-            bool s_GuiFontLoaded = false;
-            bool s_GuiFontAttempted = false;
-            bool s_BackendInstalled = false;
-            const Camera2D* s_pGuiScissorCamera2D = nullptr;
+            static Font s_GuiFont = {};
+            static bool s_GuiFontLoaded = false;
+            static bool s_GuiFontAttempted = false;
+            static std::string s_DefaultFontPath;
+            static std::unordered_map<std::string, SCachedFontEntry> s_FontCache;
+            static std::unordered_map<std::string, Color> s_MaterialTintCache;
+            static const Font* s_pActiveFont = nullptr;
+            static bool s_ActiveSyntheticBold = false;
+            static Color s_ActiveMaterialTint = { 255, 255, 255, 255 };
+            static bool s_BackendInstalled = false;
+            static const Camera2D* s_pGuiScissorCamera2D = nullptr;
+
+            const std::vector<int>& GetGuiCodepoints()
+            {
+                static std::vector<int> s_vCodepoints;
+                if (s_vCodepoints.empty())
+                {
+                    s_vCodepoints.reserve(450);
+                    for (int cp = 32; cp <= 126; ++cp)
+                    {
+                        s_vCodepoints.push_back(cp);
+                    }
+                    for (int cp = 160; cp <= 255; ++cp)
+                    {
+                        s_vCodepoints.push_back(cp);
+                    }
+                    for (int cp = 0x0400; cp <= 0x04FF; ++cp)
+                    {
+                        s_vCodepoints.push_back(cp);
+                    }
+                }
+                return s_vCodepoints;
+            }
+
+            std::string ToLowerCopy(const std::string& input)
+            {
+                std::string out = input;
+                for (char& ch : out)
+                {
+                    ch = static_cast<char>(std::tolower(static_cast<unsigned char>(ch)));
+                }
+                return out;
+            }
 
             void EnsureGuiFontLoaded()
             {
@@ -55,21 +102,8 @@ namespace quark
                     return;
                 }
 
-                std::vector<int> vCodepoints;
-                vCodepoints.reserve(450);
-                for (int cp = 32; cp <= 126; ++cp)
-                {
-                    vCodepoints.push_back(cp);
-                }
-                for (int cp = 160; cp <= 255; ++cp)
-                {
-                    vCodepoints.push_back(cp);
-                }
-                for (int cp = 0x0400; cp <= 0x04FF; ++cp)
-                {
-                    vCodepoints.push_back(cp);
-                }
-
+                s_DefaultFontPath = foundPath;
+                const std::vector<int>& vCodepoints = GetGuiCodepoints();
                 s_GuiFont = LoadFontEx(foundPath.c_str(), 32, vCodepoints.data(), static_cast<int>(vCodepoints.size()));
                 if (s_GuiFont.texture.id != 0 && s_GuiFont.glyphCount > 0)
                 {
@@ -78,20 +112,273 @@ namespace quark
                 }
             }
 
+            std::string ResolveBaseFontPath(const std::string& requestedFont)
+            {
+                EnsureGuiFontLoaded();
+                const std::string lowerReq = ToLowerCopy(requestedFont);
+                if (requestedFont.empty() || lowerReq == "default (rubik)" || lowerReq == "rubik-regular" || lowerReq == "arial")
+                {
+                    return s_DefaultFontPath;
+                }
+
+                std::error_code ec;
+                if (std::filesystem::exists(requestedFont, ec) && !ec)
+                {
+                    return requestedFont;
+                }
+
+                const char* aSearchPrefixes[] = {
+                    "assets/font/",
+                    "assets/fonts/",
+                    "resources/",
+                    "font/",
+                    "../assets/font/",
+                    "../../assets/font/"
+                };
+                for (const char* pPrefix : aSearchPrefixes)
+                {
+                    const std::string candidate = std::string(pPrefix) + requestedFont;
+                    if (std::filesystem::exists(candidate, ec) && !ec)
+                    {
+                        return candidate;
+                    }
+                    const std::string ttfCandidate = candidate + ".ttf";
+                    if (std::filesystem::exists(ttfCandidate, ec) && !ec)
+                    {
+                        return ttfCandidate;
+                    }
+                    const std::string otfCandidate = candidate + ".otf";
+                    if (std::filesystem::exists(otfCandidate, ec) && !ec)
+                    {
+                        return otfCandidate;
+                    }
+                }
+
+                return s_DefaultFontPath;
+            }
+
+            std::string FindStyledSiblingFontPath(const std::string& basePath, int fontStyle, bool& outFoundBold, bool& outFoundItalic)
+            {
+                outFoundBold = false;
+                outFoundItalic = false;
+                if (basePath.empty() || fontStyle <= 0)
+                {
+                    return basePath;
+                }
+
+                const std::filesystem::path fsBase(basePath);
+                const std::filesystem::path parentDir = fsBase.parent_path();
+                const std::string ext = fsBase.extension().string();
+                std::string stem = fsBase.stem().string();
+                const std::string lowerStem = ToLowerCopy(stem);
+                if (lowerStem.size() > 8 && lowerStem.substr(lowerStem.size() - 8) == "-regular")
+                {
+                    stem = stem.substr(0, stem.size() - 8);
+                }
+
+                auto tryCandidates = [&](const std::vector<std::string>& vSuffixes) -> std::string
+                {
+                    std::error_code ec;
+                    for (const std::string& suffix : vSuffixes)
+                    {
+                        const std::filesystem::path candidate = parentDir / (stem + suffix + ext);
+                        if (std::filesystem::exists(candidate, ec) && !ec)
+                        {
+                            return candidate.string();
+                        }
+                    }
+                    return {};
+                };
+
+                if (fontStyle == 3)
+                {
+                    const std::string bi = tryCandidates({ "-BoldItalic", "bi", "z", "_bi" });
+                    if (!bi.empty())
+                    {
+                        outFoundBold = true;
+                        outFoundItalic = true;
+                        return bi;
+                    }
+                    const std::string italicOnly = tryCandidates({ "-Italic", "-Oblique", "i", "_i" });
+                    if (!italicOnly.empty())
+                    {
+                        outFoundItalic = true;
+                        return italicOnly;
+                    }
+                    const std::string boldOnly = tryCandidates({ "-Bold", "bd", "b", "_b" });
+                    if (!boldOnly.empty())
+                    {
+                        outFoundBold = true;
+                        return boldOnly;
+                    }
+                }
+                else if (fontStyle == 1)
+                {
+                    const std::string boldOnly = tryCandidates({ "-Bold", "bd", "b", "_b" });
+                    if (!boldOnly.empty())
+                    {
+                        outFoundBold = true;
+                        return boldOnly;
+                    }
+                }
+                else if (fontStyle == 2)
+                {
+                    const std::string italicOnly = tryCandidates({ "-Italic", "-Oblique", "i", "_i" });
+                    if (!italicOnly.empty())
+                    {
+                        outFoundItalic = true;
+                        return italicOnly;
+                    }
+                }
+                return basePath;
+            }
+
+            const Font* GetOrLoadCachedFont(const std::string& cacheKey)
+            {
+                if (cacheKey.empty() || !IsWindowReady())
+                {
+                    return s_GuiFontLoaded ? &s_GuiFont : nullptr;
+                }
+                if (cacheKey == s_DefaultFontPath && s_GuiFontLoaded)
+                {
+                    return &s_GuiFont;
+                }
+
+                auto it = s_FontCache.find(cacheKey);
+                if (it != s_FontCache.end())
+                {
+                    return it->second.m_Valid ? &it->second.m_Font : (s_GuiFontLoaded ? &s_GuiFont : nullptr);
+                }
+
+                const std::vector<int>& vCodepoints = GetGuiCodepoints();
+                SCachedFontEntry entry;
+                entry.m_Font = LoadFontEx(cacheKey.c_str(), 32, vCodepoints.data(), static_cast<int>(vCodepoints.size()));
+                if (entry.m_Font.texture.id != 0 && entry.m_Font.glyphCount > 0)
+                {
+                    SetTextureFilter(entry.m_Font.texture, TEXTURE_FILTER_BILINEAR);
+                    entry.m_Valid = true;
+                }
+                auto inserted = s_FontCache.emplace(cacheKey, entry);
+                return inserted.first->second.m_Valid ? &inserted.first->second.m_Font : (s_GuiFontLoaded ? &s_GuiFont : nullptr);
+            }
+
+            Color ResolveMaterialTint(const std::string& materialPath)
+            {
+                if (materialPath.empty() || materialPath == "None" || materialPath == "None (Material)")
+                {
+                    return { 255, 255, 255, 255 };
+                }
+
+                auto it = s_MaterialTintCache.find(materialPath);
+                if (it != s_MaterialTintCache.end())
+                {
+                    return it->second;
+                }
+
+                Color tint = { 255, 255, 255, 255 };
+                std::error_code ec;
+                if (std::filesystem::exists(materialPath, ec) && !ec)
+                {
+                    std::ifstream file(materialPath);
+                    std::string line;
+                    float kdR = 1.0f;
+                    float kdG = 1.0f;
+                    float kdB = 1.0f;
+                    float alpha = 1.0f;
+                    while (std::getline(file, line))
+                    {
+                        std::istringstream iss(line);
+                        std::string token;
+                        if (!(iss >> token))
+                        {
+                            continue;
+                        }
+                        if (token == "Kd")
+                        {
+                            iss >> kdR >> kdG >> kdB;
+                        }
+                        else if (token == "d")
+                        {
+                            iss >> alpha;
+                        }
+                    }
+                    tint.r = static_cast<unsigned char>(std::clamp(static_cast<int>(std::lround(kdR * 255.0f)), 0, 255));
+                    tint.g = static_cast<unsigned char>(std::clamp(static_cast<int>(std::lround(kdG * 255.0f)), 0, 255));
+                    tint.b = static_cast<unsigned char>(std::clamp(static_cast<int>(std::lround(kdB * 255.0f)), 0, 255));
+                    tint.a = static_cast<unsigned char>(std::clamp(static_cast<int>(std::lround(alpha * 255.0f)), 0, 255));
+                }
+
+                s_MaterialTintCache.emplace(materialPath, tint);
+                return tint;
+            }
+
+            void BridgeSetTextContext(const char* pFontPath, int fontStyle, const char* pMaterialPath)
+            {
+                EnsureGuiFontLoaded();
+                const std::string basePath = ResolveBaseFontPath(pFontPath ? pFontPath : "");
+                bool foundBold = false;
+                bool foundItalic = false;
+                std::string styledPath = FindStyledSiblingFontPath(basePath, fontStyle, foundBold, foundItalic);
+
+                const bool wantsBold = (fontStyle == 1 || fontStyle == 3);
+                const bool wantsItalic = (fontStyle == 2 || fontStyle == 3);
+                s_ActiveSyntheticBold = wantsBold && !foundBold;
+
+                if (wantsItalic && !foundItalic && !styledPath.empty())
+                {
+                    const Font* pItalicFont = GetOrLoadCachedFont(styledPath + "|italic");
+                    if (pItalicFont != nullptr && pItalicFont != &s_GuiFont)
+                    {
+                        s_pActiveFont = pItalicFont;
+                    }
+                    else
+                    {
+                        s_pActiveFont = GetOrLoadCachedFont(styledPath);
+                    }
+                }
+                else
+                {
+                    s_pActiveFont = GetOrLoadCachedFont(styledPath);
+                }
+
+                s_ActiveMaterialTint = ResolveMaterialTint(pMaterialPath ? pMaterialPath : "");
+            }
+
             void BridgeDrawText(const char* text, float x, float y, float fontSize, float lineSpacing, Color color)
             {
+                (void)lineSpacing;
                 if (!text || !text[0])
                 {
                     return;
                 }
                 EnsureGuiFontLoaded();
-                if (s_GuiFontLoaded && s_GuiFont.texture.id != 0)
+                const Color finalColor = {
+                    static_cast<unsigned char>((static_cast<int>(color.r) * static_cast<int>(s_ActiveMaterialTint.r)) / 255),
+                    static_cast<unsigned char>((static_cast<int>(color.g) * static_cast<int>(s_ActiveMaterialTint.g)) / 255),
+                    static_cast<unsigned char>((static_cast<int>(color.b) * static_cast<int>(s_ActiveMaterialTint.b)) / 255),
+                    static_cast<unsigned char>((static_cast<int>(color.a) * static_cast<int>(s_ActiveMaterialTint.a)) / 255)
+                };
+
+                const Font* pFontToUse = (s_pActiveFont && s_pActiveFont->texture.id != 0)
+                    ? s_pActiveFont
+                    : ((s_GuiFontLoaded && s_GuiFont.texture.id != 0) ? &s_GuiFont : nullptr);
+
+                if (pFontToUse != nullptr)
                 {
-                    DrawTextEx(s_GuiFont, text, { x, y }, fontSize, lineSpacing, color);
+                    DrawTextEx(*pFontToUse, text, { x, y }, fontSize, 1.0f, finalColor);
+                    if (s_ActiveSyntheticBold)
+                    {
+                        const float boldOffset = std::max(1.0f, std::round(fontSize * 0.045f));
+                        DrawTextEx(*pFontToUse, text, { x + boldOffset, y }, fontSize, 1.0f, finalColor);
+                    }
                 }
                 else
                 {
-                    DrawText(text, static_cast<int>(std::round(x)), static_cast<int>(std::round(y)), static_cast<int>(std::round(fontSize)), color);
+                    DrawText(text, static_cast<int>(std::round(x)), static_cast<int>(std::round(y)), static_cast<int>(std::round(fontSize)), finalColor);
+                    if (s_ActiveSyntheticBold)
+                    {
+                        DrawText(text, static_cast<int>(std::round(x)) + 1, static_cast<int>(std::round(y)), static_cast<int>(std::round(fontSize)), finalColor);
+                    }
                 }
             }
 
@@ -102,9 +389,18 @@ namespace quark
                     return { 0.0f, fontSize };
                 }
                 EnsureGuiFontLoaded();
-                if (s_GuiFontLoaded && s_GuiFont.texture.id != 0)
+                const Font* pFontToUse = (s_pActiveFont && s_pActiveFont->texture.id != 0)
+                    ? s_pActiveFont
+                    : ((s_GuiFontLoaded && s_GuiFont.texture.id != 0) ? &s_GuiFont : nullptr);
+
+                if (pFontToUse != nullptr)
                 {
-                    return MeasureTextEx(s_GuiFont, text, fontSize, 1.0f);
+                    Vec2 measured = MeasureTextEx(*pFontToUse, text, fontSize, 1.0f);
+                    if (s_ActiveSyntheticBold)
+                    {
+                        measured.x += std::max(1.0f, std::round(fontSize * 0.045f));
+                    }
+                    return measured;
                 }
                 const int width = MeasureText(text, static_cast<int>(std::round(fontSize)));
                 return { static_cast<float>(width), fontSize };
@@ -175,6 +471,7 @@ namespace quark
             backend.pfnEndScissorMode = &BridgeEndScissorMode;
             backend.pfnDrawText = &BridgeDrawText;
             backend.pfnMeasureText = &BridgeMeasureText;
+            backend.pfnSetTextContext = &BridgeSetTextContext;
             backend.pfnGetTime = &BridgeGetTime;
 
             CGuiSystem::Get().SetBackend(backend);
@@ -183,10 +480,25 @@ namespace quark
 
         void ShutdownGuiBackend()
         {
-            if (s_GuiFontLoaded && IsWindowReady())
+            if (IsWindowReady())
             {
-                UnloadFont(s_GuiFont);
+                for (auto& pair : s_FontCache)
+                {
+                    if (pair.second.m_Valid && pair.second.m_Font.texture.id != 0)
+                    {
+                        UnloadFont(pair.second.m_Font);
+                    }
+                }
+                if (s_GuiFontLoaded)
+                {
+                    UnloadFont(s_GuiFont);
+                }
             }
+            s_FontCache.clear();
+            s_MaterialTintCache.clear();
+            s_pActiveFont = nullptr;
+            s_ActiveSyntheticBold = false;
+            s_ActiveMaterialTint = { 255, 255, 255, 255 };
             s_GuiFont = {};
             s_GuiFontLoaded = false;
             s_GuiFontAttempted = false;
@@ -328,6 +640,5 @@ namespace quark
             }
             return CGuiSystem::Get().IsPointOverAnyWidget(vWidgetDescs, mousePosInViewport);
         }
-
     } // gui
 } // quark

@@ -960,7 +960,7 @@ namespace IMGUIZMO_NAMESPACE
       gContext.mWidth = width;
       gContext.mHeight = height;
       gContext.mXMax = gContext.mX + gContext.mWidth;
-      gContext.mYMax = gContext.mY + gContext.mXMax;
+      gContext.mYMax = gContext.mY + gContext.mHeight;
       gContext.mDisplayRatio = width / height;
    }
 
@@ -2254,7 +2254,9 @@ namespace IMGUIZMO_NAMESPACE
                gContext.mModel.v.right, gContext.mModel.v.up, gContext.mModel.v.dir,
                -gContext.mCameraDir };
 
-            vec_t cameraToModelNormalized = Normalized(gContext.mModel.v.position - gContext.mCameraEye);
+            vec_t cameraToModelNormalized = gContext.mIsOrthographic
+               ? -gContext.mCameraDir
+               : Normalized(gContext.mModel.v.position - gContext.mCameraEye);
             for (unsigned int i = 0; i < 3; i++)
             {
                vec_t orthoVector = Cross(movePlanNormal[i], cameraToModelNormalized);
@@ -2301,7 +2303,16 @@ namespace IMGUIZMO_NAMESPACE
             gContext.mbUsing = true;
             gContext.mEditingID = gContext.GetCurrentID();
             gContext.mCurrentOperation = type;
-            const vec_t movePlanNormal[] = { gContext.mModelLocal.v.up, gContext.mModelLocal.v.dir, gContext.mModelLocal.v.right, gContext.mModelLocal.v.dir, gContext.mModelLocal.v.up, gContext.mModelLocal.v.right, -gContext.mCameraDir };
+            vec_t movePlanNormal[] = { gContext.mModelLocal.v.right, gContext.mModelLocal.v.up, gContext.mModelLocal.v.dir, gContext.mModelLocal.v.dir, gContext.mModelLocal.v.up, gContext.mModelLocal.v.right, -gContext.mCameraDir };
+            vec_t cameraToModelNormalized = gContext.mIsOrthographic
+               ? -gContext.mCameraDir
+               : Normalized(gContext.mModelLocal.v.position - gContext.mCameraEye);
+            for (unsigned int i = 0; i < 3; i++)
+            {
+               vec_t orthoVector = Cross(movePlanNormal[i], cameraToModelNormalized);
+               movePlanNormal[i].Cross(orthoVector);
+               movePlanNormal[i].Normalize();
+            }
             // pickup plan
 
             gContext.mTranslationPlan = BuildPlan(gContext.mModelLocal.v.position, movePlanNormal[type - MT_SCALE_X]);

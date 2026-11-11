@@ -517,6 +517,11 @@ bool CProjectService::Load(const std::string& folderPath, CScene& scene, CAssetL
 
     for (auto& e : scene.m_vEntities)
     {
+        if (e.GetUiComponent())
+        {
+            e.GetComponents()->RemoveMeshAndMaterialForUi();
+            continue;
+        }
         if (!e.GetTransformComponent())
         {
             e.GetComponents()->AddComponent(std::make_shared<CTransformComponent>());

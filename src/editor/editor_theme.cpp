@@ -72,10 +72,10 @@ namespace
     using TBoolStyleNames = std::unordered_map<std::string, bool ImGuiStyle::*>;
     using TStyleColorNames = std::unordered_map<std::string, ImVec4 ImGuiStyle::*>;
 
-    float s_AppliedFontScale = 1.0f;
-    SThemeOverrides s_PendingFontOverrides;
-    std::string s_PendingFontThemeId;
-    bool s_HasPendingFonts = false;
+    static float s_AppliedFontScale = 1.0f;
+    static SThemeOverrides s_PendingFontOverrides;
+    static std::string s_PendingFontThemeId;
+    static bool s_HasPendingFonts = false;
 
     const TColorNames& GetColorNames()
     {

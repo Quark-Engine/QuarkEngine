@@ -87,11 +87,11 @@ std::vector<std::pair<std::string, std::string>> CFreetypeTextMesh::GetSystemFon
 
     auto scanDir = [&](const fs::path& dir)
     {
-        if (!fs::exists(dir))
+        std::error_code ec;
+        if (!fs::exists(dir, ec) || ec)
         {
             return;
         }
-        std::error_code ec;
 
         for (auto& entry : fs::recursive_directory_iterator(dir, fs::directory_options::skip_permission_denied, ec))
         {
@@ -107,51 +107,32 @@ std::vector<std::pair<std::string, std::string>> CFreetypeTextMesh::GetSystemFon
             }
 
             std::string name = entry.path().stem().string();
-            vResult.push_back({ name, entry.path().string() });
+            std::string fullPath = entry.path().string();
+            bool alreadyAdded = false;
+            for (const auto& existing : vResult)
+            {
+                if (existing.second == fullPath)
+                {
+                    alreadyAdded = true;
+                    break;
+                }
+            }
+            if (!alreadyAdded)
+            {
+                vResult.push_back({ name, fullPath });
+            }
         }
     };
 
-#if _WIN32
-    char aWindir[512] = {};
-    size_t windirLength = 0;
-    char* pWin = nullptr;
-    if (_dupenv_s(&pWin, &windirLength, "WINDIR") == 0 && pWin)
+    std::error_code cwdEc;
+    const fs::path currentDir = fs::current_path(cwdEc);
+    if (!cwdEc)
     {
-        snprintf(aWindir, sizeof(aWindir), "%s", pWin);
-        free(pWin);
-        pWin = aWindir;
+        scanDir(currentDir);
     }
-
-    if (pWin)
-    {
-        scanDir(std::string(pWin) + "\\Fonts");
-    }
-
-#elif __APPLE__
-    scanDir("/System/Library/Fonts");
-    scanDir("/Library/Fonts");
-
-    const char* pHome = getenv("HOME");
-    if (pHome)
-    {
-        scanDir(std::string(pHome) + "/Library/Fonts");
-    }
-
-#else
-    scanDir("/usr/share/fonts");
-    scanDir("/usr/local/share/fonts");
-
-    const char* pHome = getenv("HOME");
-    if (pHome)
-    {
-        scanDir(std::string(pHome) + "/.fonts");
-    }
-    if (pHome)
-    {
-        scanDir(std::string(pHome) + "/.local/share/fonts");
-    }
-
-#endif
+    scanDir("assets/font");
+    scanDir("../assets/font");
+    scanDir("../../assets/font");
 
     std::sort(vResult.begin(), vResult.end(), [](auto& a, auto& b)
               {

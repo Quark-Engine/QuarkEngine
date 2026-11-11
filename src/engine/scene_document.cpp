@@ -509,19 +509,26 @@ namespace quark
                 entity.m_pComponents->Deserialize(ej, factories);
             }
 
-            if (!entity.GetTransformComponent())
+            if (entity.GetUiComponent())
             {
-                entity.GetComponents()->AddComponent(std::make_shared<CTransformComponent>());
+                entity.GetComponents()->RemoveMeshAndMaterialForUi();
             }
-            if (!entity.m_IsGroup && !entity.GetLightComponent() && !entity.GetCameraComponent())
+            else
             {
-                if (!entity.GetMeshComponent())
+                if (!entity.GetTransformComponent())
                 {
-                    entity.GetComponents()->AddComponent(std::make_shared<CMeshComponent>());
+                    entity.GetComponents()->AddComponent(std::make_shared<CTransformComponent>());
                 }
-                if (!entity.GetMaterialComponent())
+                if (!entity.m_IsGroup && !entity.GetLightComponent() && !entity.GetCameraComponent())
                 {
-                    entity.GetComponents()->AddComponent(std::make_shared<CMaterialComponent>());
+                    if (!entity.GetMeshComponent())
+                    {
+                        entity.GetComponents()->AddComponent(std::make_shared<CMeshComponent>());
+                    }
+                    if (!entity.GetMaterialComponent())
+                    {
+                        entity.GetComponents()->AddComponent(std::make_shared<CMaterialComponent>());
+                    }
                 }
             }
 

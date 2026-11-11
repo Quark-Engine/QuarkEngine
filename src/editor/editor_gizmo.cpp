@@ -25,14 +25,61 @@ void CGizmoController::Draw(CEditor& editor, CFlyCamera& camera)
         return;
     }
 
+    if (viewport.m_WindowSize.x <= 0 || viewport.m_WindowSize.y <= 0)
+    {
+        return;
+    }
+
+    if (editor.m_Scene2DMode && !editor.m_IsPlaying && viewport.m_Hovered &&
+        !ImGuizmo::IsOver() && !ImGuizmo::IsUsing() &&
+        IsMouseButtonPressed(MOUSE_BUTTON_LEFT))
+    {
+        const float zoom2D = std::max(0.01f, editor.m_Scene2DZoom);
+        const float targetX = viewport.m_WindowSize.x * 0.5f + editor.m_Scene2DPan.x;
+        const float targetY = viewport.m_WindowSize.y * 0.5f + editor.m_Scene2DPan.y;
+        const ImVec2 mousePos = ImGui::GetIO().MousePos;
+        const float localMouseX = mousePos.x - viewport.m_WindowPos.x;
+        const float localMouseY = mousePos.y - viewport.m_WindowPos.y;
+        const float worldMouseX = (localMouseX - viewport.m_WindowSize.x * 0.5f) / zoom2D + targetX;
+        const float worldMouseY = (localMouseY - viewport.m_WindowSize.y * 0.5f) / zoom2D + targetY;
+
+        for (int entityIndex = static_cast<int>(editor.m_Scene.m_vEntities.size()) - 1;
+             entityIndex >= 0;
+             --entityIndex)
+        {
+            CEntity& candidate = editor.m_Scene.m_vEntities[entityIndex];
+            CComponentManager* pCandidateComponents = candidate.GetComponents();
+            auto pCandidateRect = pCandidateComponents
+                ? pCandidateComponents->GetComponentOfType<CUiRectTransformComponent>()
+                : nullptr;
+            if (!pCandidateRect || !pCandidateRect->m_Enabled)
+            {
+                continue;
+            }
+            const float minX = pCandidateRect->m_Position.x;
+            const float minY = pCandidateRect->m_Position.y;
+            const float maxX = minX + std::max(1.0f, pCandidateRect->m_Size.x);
+            const float maxY = minY + std::max(1.0f, pCandidateRect->m_Size.y);
+            if (worldMouseX >= minX && worldMouseX <= maxX &&
+                worldMouseY >= minY && worldMouseY <= maxY)
+            {
+                const bool additive = IsKeyDown(KEY_LEFT_CONTROL) || IsKeyDown(KEY_RIGHT_CONTROL);
+                editor.m_Scene.SelectEntity(entityIndex, additive);
+                break;
+            }
+        }
+    }
+
     CEntity* pEntity = editor.m_Scene.GetSelected();
     if (!pEntity)
     {
         return;
     }
+    CComponentManager* pComponents = pEntity->GetComponents();
+    auto pRectTransform = pComponents ? pComponents->GetComponentOfType<CUiRectTransformComponent>() : nullptr;
     CTransformComponent* pTransform = pEntity->GetTransformComponent();
     CMeshComponent* pMesh = pEntity->GetMeshComponent();
-    if (!pTransform)
+    if (!pTransform && !pRectTransform)
     {
         return;
     }
@@ -40,13 +87,10 @@ void CGizmoController::Draw(CEditor& editor, CFlyCamera& camera)
     {
         return;
     }
-    if (viewport.m_WindowSize.x <= 0 || viewport.m_WindowSize.y <= 0)
-    {
-        return;
-    }
 
     ImGuizmo::SetDrawlist(ImGui::GetWindowDrawList());
     ImGuizmo::SetRect(viewport.m_WindowPos.x, viewport.m_WindowPos.y, viewport.m_WindowSize.x, viewport.m_WindowSize.y);
+    ImGuizmo::SetOrthographic(editor.m_Scene2DMode || (pRectTransform != nullptr && pTransform == nullptr));
     ImGuizmo::AllowAxisFlip(false);
     ImGuizmo::Enable(viewport.m_Hovered || ImGuizmo::IsUsing());
 
@@ -67,6 +111,173 @@ void CGizmoController::Draw(CEditor& editor, CFlyCamera& camera)
     };
     const bool gizmoSnapEnabled = editor.m_Preferences.m_GizmoSnapEnabled ||
         IsKeyDown(KEY_LEFT_CONTROL) || IsKeyDown(KEY_RIGHT_CONTROL);
+
+    if (pRectTransform && (editor.m_Scene2DMode || !pTransform))
+    {
+        const float zoom2D = editor.m_Scene2DMode ? std::max(0.01f, editor.m_Scene2DZoom) : 1.0f;
+        const Vec2 pan2D = editor.m_Scene2DMode ? editor.m_Scene2DPan : Vec2{ 0.0f, 0.0f };
+        const float targetX = viewport.m_WindowSize.x * 0.5f + pan2D.x;
+        const float targetY = viewport.m_WindowSize.y * 0.5f + pan2D.y;
+        const float halfWidth = (viewport.m_WindowSize.x / zoom2D) * 0.5f;
+        const float halfHeight = (viewport.m_WindowSize.y / zoom2D) * 0.5f;
+
+        const Mat4 uiView = Mat4::lookAt(
+            { targetX, -targetY, 100.0f },
+            { targetX, -targetY, 0.0f },
+            { 0.0f, 1.0f, 0.0f });
+        const Mat4 uiProjection = Mat4::ortho(
+            -halfWidth,
+            halfWidth,
+            -halfHeight,
+            halfHeight,
+            0.1f,
+            1000.0f);
+
+        const Vec2 oldSize = {
+            std::max(1.0f, pRectTransform->m_Size.x),
+            std::max(1.0f, pRectTransform->m_Size.y)
+        };
+        const Vec2 oldCenter = {
+            pRectTransform->m_Position.x + oldSize.x * 0.5f,
+            pRectTransform->m_Position.y + oldSize.y * 0.5f
+        };
+
+        if (editor.m_Preferences.m_ShowSelectionVisualization)
+        {
+            const ImVec2 rectMin(
+                viewport.m_WindowPos.x + viewport.m_WindowSize.x * 0.5f + (pRectTransform->m_Position.x - targetX) * zoom2D,
+                viewport.m_WindowPos.y + viewport.m_WindowSize.y * 0.5f + (pRectTransform->m_Position.y - targetY) * zoom2D);
+            const ImVec2 rectMax(
+                rectMin.x + oldSize.x * zoom2D,
+                rectMin.y + oldSize.y * zoom2D);
+            ImGui::GetWindowDrawList()->AddRect(
+                rectMin,
+                rectMax,
+                IM_COL32(
+                    editor.m_Preferences.m_SelectionRed,
+                    editor.m_Preferences.m_SelectionGreen,
+                    editor.m_Preferences.m_SelectionBlue,
+                    255),
+                0.0f,
+                0,
+                1.5f);
+        }
+
+        float aUiViewMat4[16] = {};
+        float aUiProjectionMat4[16] = {};
+        float aUiTransformMat4[16] = {};
+        memcpy(aUiViewMat4, &uiView, sizeof(aUiViewMat4));
+        memcpy(aUiProjectionMat4, &uiProjection, sizeof(aUiProjectionMat4));
+
+        float aUiTranslation[3] = { oldCenter.x, -oldCenter.y, 0.0f };
+        float aUiRotation[3] = { 0.0f, 0.0f, 0.0f };
+        float aUiScale[3] = { oldSize.x, oldSize.y, 1.0f };
+        ImGuizmo::RecomposeMatrixFromComponents(
+            aUiTranslation,
+            aUiRotation,
+            aUiScale,
+            aUiTransformMat4);
+
+        const ImGuizmo::OPERATION uiOperation =
+            (editor.m_Ui.m_MeshEdit.m_GizmoMode == ImGuizmo::SCALE)
+                ? ImGuizmo::SCALE
+                : ImGuizmo::TRANSLATE;
+
+        ImGuizmo::Manipulate(
+            aUiViewMat4,
+            aUiProjectionMat4,
+            uiOperation,
+            ImGuizmo::LOCAL,
+            aUiTransformMat4,
+            nullptr,
+            gizmoSnapEnabled
+                ? (uiOperation == ImGuizmo::SCALE ? aScaleSnap : aTranslationSnap)
+                : nullptr);
+
+        if (ImGuizmo::IsUsing() && !gizmo.m_WasUsingTransform)
+        {
+            editor.SaveState();
+        }
+
+        if (ImGuizmo::IsUsing())
+        {
+            float aNextTranslation[3] = {};
+            float aNextRotation[3] = {};
+            float aNextScale[3] = {};
+            ImGuizmo::DecomposeMatrixToComponents(
+                aUiTransformMat4,
+                aNextTranslation,
+                aNextRotation,
+                aNextScale);
+
+            const Vec2 newSize = {
+                std::max(1.0f, std::fabs(aNextScale[0])),
+                std::max(1.0f, std::fabs(aNextScale[1]))
+            };
+            const Vec2 newCenter = {
+                aNextTranslation[0],
+                -aNextTranslation[1]
+            };
+            const Vec2 newPos = {
+                newCenter.x - newSize.x * 0.5f,
+                newCenter.y - newSize.y * 0.5f
+            };
+            const Vec2 posDelta = {
+                newPos.x - pRectTransform->m_Position.x,
+                newPos.y - pRectTransform->m_Position.y
+            };
+
+            pRectTransform->m_Position = newPos;
+            pRectTransform->m_Size = newSize;
+
+            if (CUiComponent* pUi = pEntity->GetUiComponent())
+            {
+                auto pText = pComponents->GetComponentOfType<CTextComponent>();
+                pUi->SyncToRuntimeDesc(pRectTransform.get(), pText.get());
+            }
+
+            if (editor.m_Scene.m_vSelectedEntities.size() > 1)
+            {
+                for (int selectedIndex : editor.m_Scene.m_vSelectedEntities)
+                {
+                    if (selectedIndex == editor.m_Scene.m_Selected ||
+                        selectedIndex < 0 || selectedIndex >= static_cast<int>(editor.m_Scene.m_vEntities.size()))
+                    {
+                        continue;
+                    }
+                    CEntity& selectedEntity = editor.m_Scene.m_vEntities[selectedIndex];
+                    CComponentManager* pSelectedComponents = selectedEntity.GetComponents();
+                    auto pSelectedRect = pSelectedComponents
+                        ? pSelectedComponents->GetComponentOfType<CUiRectTransformComponent>()
+                        : nullptr;
+                    if (!pSelectedRect)
+                    {
+                        continue;
+                    }
+                    pSelectedRect->m_Position.x += posDelta.x;
+                    pSelectedRect->m_Position.y += posDelta.y;
+                    if (CUiComponent* pSelectedUi = selectedEntity.GetUiComponent())
+                    {
+                        auto pSelectedText = pSelectedComponents->GetComponentOfType<CTextComponent>();
+                        pSelectedUi->SyncToRuntimeDesc(pSelectedRect.get(), pSelectedText.get());
+                    }
+                }
+            }
+
+            editor.m_SceneDirty = true;
+            DispatchPluginEvent(PLUGIN_EVENT_TRANSFORM_CHANGED,
+                                static_cast<int>(pEntity - editor.m_Scene.m_vEntities.data()));
+        }
+
+        gizmo.m_WasUsingTransform = ImGuizmo::IsUsing();
+        gizmo.m_WasUsingMeshEdit = false;
+        return;
+    }
+
+    if (!pTransform)
+    {
+        return;
+    }
 
     const Mat4 view = Mat4::lookAt(
         camera.GetCamera().position,

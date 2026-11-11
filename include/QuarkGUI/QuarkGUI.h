@@ -82,6 +82,7 @@ struct SGuiBackend
     void (*pfnEndScissorMode)() = nullptr;
     void (*pfnDrawText)(const char* pText, float x, float y, float fontSize, float lineSpacing, Color color) = nullptr;
     Vec2 (*pfnMeasureText)(const char* pText, float fontSize) = nullptr;
+    void (*pfnSetTextContext)(const char* pFontPath, int fontStyle, const char* pMaterialPath) = nullptr;
     double (*pfnGetTime)() = nullptr;
 };
 
@@ -112,14 +113,22 @@ struct SGuiWidgetDesc
     Vec2 m_Position = { 40.0f, 40.0f };
     Vec2 m_Size = { 160.0f, 30.0f };
     std::string m_Text;
+    bool m_TextEnabled = true;
     std::string m_Placeholder;
     std::vector<std::string> m_vItems;
     int m_SelectedIndex = 0;
+    std::string m_TextFont;
+    int m_TextFontStyle = 0;
     float m_TextFontSize = 16.0f;
     float m_TextLineSpacing = 1.0f;
+    bool m_TextRichText = false;
     Color m_TextColor = { 235, 235, 235, 255 };
     int m_TextHorizontalAlignment = 1;
     int m_TextVerticalAlignment = 1;
+    int m_TextHorizontalOverflow = 0;
+    int m_TextVerticalOverflow = 1;
+    bool m_TextBestFit = false;
+    std::string m_TextMaterial;
     bool m_ButtonInteractable = true;
     EGuiButtonTransition m_ButtonTransition = EGuiButtonTransition::COLOR_TINT;
     Color m_ButtonNormalColor = { 72, 72, 72, 255 };

@@ -28,8 +28,8 @@ namespace fs = std::filesystem;
 
 namespace
 {
-    std::ofstream s_EngineLogFile;
-    std::mutex s_EngineLogMutex;
+    static std::ofstream s_EngineLogFile;
+    static std::mutex s_EngineLogMutex;
 
     void WriteEngineLog(LogLevel, const char* pMessage)
     {

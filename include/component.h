@@ -703,23 +703,39 @@ public:
             m_RuntimeDesc.m_Position = { 40.0f, 40.0f };
             m_RuntimeDesc.m_Size = { 160.0f, 30.0f };
         }
-        if (pTextComponent)
+        const bool textEnabled = (pTextComponent != nullptr && pTextComponent->m_Enabled);
+        m_RuntimeDesc.m_TextEnabled = textEnabled;
+        if (textEnabled)
         {
             m_RuntimeDesc.m_Text = pTextComponent->m_Text;
+            m_RuntimeDesc.m_TextFont = pTextComponent->m_Font;
+            m_RuntimeDesc.m_TextFontStyle = static_cast<int>(pTextComponent->m_FontStyle);
             m_RuntimeDesc.m_TextFontSize = pTextComponent->m_FontSize;
             m_RuntimeDesc.m_TextLineSpacing = pTextComponent->m_LineSpacing;
+            m_RuntimeDesc.m_TextRichText = pTextComponent->m_RichText;
             m_RuntimeDesc.m_TextColor = pTextComponent->m_Color;
             m_RuntimeDesc.m_TextHorizontalAlignment = static_cast<int>(pTextComponent->m_HorizontalAlignment);
             m_RuntimeDesc.m_TextVerticalAlignment = static_cast<int>(pTextComponent->m_VerticalAlignment);
+            m_RuntimeDesc.m_TextHorizontalOverflow = static_cast<int>(pTextComponent->m_HorizontalOverflow);
+            m_RuntimeDesc.m_TextVerticalOverflow = static_cast<int>(pTextComponent->m_VerticalOverflow);
+            m_RuntimeDesc.m_TextBestFit = pTextComponent->m_BestFit;
+            m_RuntimeDesc.m_TextMaterial = pTextComponent->m_Material;
         }
         else
         {
             m_RuntimeDesc.m_Text.clear();
+            m_RuntimeDesc.m_TextFont.clear();
+            m_RuntimeDesc.m_TextFontStyle = 0;
             m_RuntimeDesc.m_TextFontSize = 16.0f;
             m_RuntimeDesc.m_TextLineSpacing = 1.0f;
+            m_RuntimeDesc.m_TextRichText = false;
             m_RuntimeDesc.m_TextColor = { 235, 235, 235, 255 };
             m_RuntimeDesc.m_TextHorizontalAlignment = 1;
             m_RuntimeDesc.m_TextVerticalAlignment = 1;
+            m_RuntimeDesc.m_TextHorizontalOverflow = 0;
+            m_RuntimeDesc.m_TextVerticalOverflow = 1;
+            m_RuntimeDesc.m_TextBestFit = false;
+            m_RuntimeDesc.m_TextMaterial.clear();
         }
         m_RuntimeDesc.m_Placeholder = m_Placeholder;
         m_RuntimeDesc.m_vItems = m_vItems;
@@ -739,7 +755,7 @@ public:
 
     void SyncFromRuntimeDesc(CTextComponent* pTextComponent)
     {
-        if (pTextComponent)
+        if (pTextComponent && pTextComponent->m_Enabled)
         {
             pTextComponent->m_Text = m_RuntimeDesc.m_Text;
         }
@@ -775,7 +791,8 @@ public:
         {
             const auto& pComponent = m_vComponents[i - 1];
             if (pComponent &&
-                (pComponent->GetType() == COMPONENT_MESH ||
+                (pComponent->GetType() == COMPONENT_TRANSFORM ||
+                 pComponent->GetType() == COMPONENT_MESH ||
                  pComponent->GetType() == COMPONENT_MATERIAL))
             {
                 if (auto pMesh = std::dynamic_pointer_cast<CMeshComponent>(pComponent))
@@ -783,6 +800,19 @@ public:
                     pMesh->ReleaseOwnedResources();
                 }
                 RemoveComponent(i - 1);
+            }
+        }
+        for (size_t i = 0; i < m_vComponents.size(); ++i)
+        {
+            if (m_vComponents[i] && m_vComponents[i]->GetType() == COMPONENT_UI_RECT_TRANSFORM)
+            {
+                if (i > 0)
+                {
+                    auto pRectTransform = m_vComponents[i];
+                    m_vComponents.erase(m_vComponents.begin() + static_cast<std::ptrdiff_t>(i));
+                    m_vComponents.insert(m_vComponents.begin(), pRectTransform);
+                }
+                break;
             }
         }
     }

@@ -792,6 +792,12 @@ TEST(ComponentFactory, legacy_ui_fields_migrate_to_text_and_rect_transform)
     CHECK(pUi != nullptr);
     CHECK(pRectTransform != nullptr);
     CHECK(pText != nullptr);
+    CHECK(components.GetTransform() == nullptr);
+    CHECK(components.GetComponentCount() >= 1);
+    if (components.GetComponentCount() >= 1 && components.GetComponent(0))
+    {
+        CHECK(components.GetComponent(0)->GetType() == COMPONENT_UI_RECT_TRANSFORM);
+    }
     if (!pUi || !pRectTransform || !pText)
     {
         return;
@@ -800,6 +806,17 @@ TEST(ComponentFactory, legacy_ui_fields_migrate_to_text_and_rect_transform)
     CHECK(pRectTransform->m_Position.y == 34.0f);
     CHECK(pRectTransform->m_Size.x == 210.0f);
     CHECK(pRectTransform->m_Size.y == 44.0f);
+    CHECK(pText->m_Text == "Legacy button");
+
+    pUi->SyncToRuntimeDesc(pRectTransform.get(), pText.get());
+    CHECK(pUi->m_RuntimeDesc.m_TextEnabled);
+    CHECK(pUi->m_RuntimeDesc.m_Text == "Legacy button");
+
+    pText->m_Enabled = false;
+    pUi->SyncToRuntimeDesc(pRectTransform.get(), pText.get());
+    CHECK(!pUi->m_RuntimeDesc.m_TextEnabled);
+    CHECK(pUi->m_RuntimeDesc.m_Text.empty());
+    pUi->SyncFromRuntimeDesc(pText.get());
     CHECK(pText->m_Text == "Legacy button");
 
     nlohmann::json serialized;
