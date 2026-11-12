@@ -509,9 +509,10 @@ namespace quark
                 entity.m_pComponents->Deserialize(ej, factories);
             }
 
-            if (entity.GetUiComponent())
+            if (entity.HasUiComponent())
             {
-                entity.GetComponents()->RemoveMeshAndMaterialForUi();
+                const bool isCanvas = entity.GetCanvasComponent() != nullptr;
+                entity.GetComponents()->RemoveMeshAndMaterialForUi(isCanvas);
             }
             else
             {

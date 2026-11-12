@@ -19,6 +19,10 @@ public:
     static void DrawCollisionComponent(CEditor& editor, CEntity& entity, CCollisionComponent* pCollision);
     static void Draw3dTextComponent(CEditor& editor, CEntity& entity, CText3DComponent* pText);
     static void DrawUiRectTransformComponent(CEditor& editor, CUiRectTransformComponent* pRectTransform);
+    static void DrawCanvasComponent(CEditor& editor, CEntity& entity, CCanvasComponent* pCanvas);
+    static void DrawImageComponent(CEditor& editor, CEntity& entity, CImageComponent* pImage);
+    static void DrawPanelComponent(CEditor& editor, CEntity& entity, CPanelComponent* pPanel);
+    static void DrawButtonComponent(CEditor& editor, CEntity& entity, CButtonComponent* pButton);
     static void DrawUiTextComponent(CEditor& editor, CTextComponent* pText);
     static void DrawScriptComponent(CEditor& editor, CEntity& entity, CScriptComponent* pScript);
     static void DrawUiComponent(CEditor& editor, CEntity& entity, CUiComponent* pUi);

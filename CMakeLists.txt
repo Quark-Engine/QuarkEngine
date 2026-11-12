@@ -136,6 +136,7 @@ add_library(QuarkEngineRuntime SHARED
     src/engine/scene_package.cpp
     src/engine/scene_runtime.cpp
     src/engine/transform.cpp
+    src/engine/canvas_system.cpp
     src/entity.cpp
     src/lighting.cpp
     src/models.cpp
@@ -370,6 +371,7 @@ if(BUILD_ENGINE)
         src/assets/preview_cache.cpp
         src/assets/texture_cache.cpp
         src/engine/transform.cpp
+    src/engine/canvas_system.cpp
         src/engine/cpu_task_pool.cpp
         src/engine/component_factory_registry.cpp
         src/engine/scene_document.cpp
@@ -616,6 +618,8 @@ if(QUARK_BUILD_TESTS)
         tests/test_scene_document.cpp
         tests/test_direct_texture.cpp
         tests/test_cpu_task_pool.cpp
+        tests/test_canvas_system.cpp
+        src/gui/gui_renderer_bridge.cpp
         src/dynamic_library.cpp
         src/component.cpp
         src/editable_mesh.cpp
@@ -623,6 +627,7 @@ if(QUARK_BUILD_TESTS)
         src/engine/scene_document.cpp
         src/engine/material_texture_restore.cpp
         src/engine/transform.cpp
+    src/engine/canvas_system.cpp
         src/engine/component_factory_registry.cpp
         src/entity.cpp
         src/editor/editor_hierarchy_utils.cpp

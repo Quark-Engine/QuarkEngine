@@ -21,6 +21,11 @@ namespace quark
         bool SceneHasActiveUiWidgets(const CScene& scene);
         bool IsPointOverSceneGui(CScene& scene, Vec2 mousePosInViewport);
 
+        void DrawUiText(const char* text, float x, float y, float fontSize,
+                        const char* pFontPath, int fontStyle, Color color);
+        Vec2 MeasureUiText(const char* text, float fontSize,
+                           const char* pFontPath, int fontStyle);
+
     } // gui
 } // quark
 

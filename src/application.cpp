@@ -16,6 +16,7 @@
 #include "tex.h"
 #include "engine/transform.h"
 #include "engine/scene_runtime.h"
+#include "engine/canvas_system.h"
 #include <algorithm>
 #include <cfloat>
 #include <chrono>
@@ -89,6 +90,7 @@ namespace
             camera.target = position + forward;
             camera.up = up;
             camera.fovy = pCamera->m_FieldOfView;
+            camera.projection = CAMERA_PERSPECTIVE;
             return true;
         }
         return false;
@@ -379,6 +381,26 @@ void CApplication::UpdateFrame()
     {
         const float viewportWidth = std::max(1.0f, m_Editor.m_Ui.m_Viewport.m_WindowSize.x);
         const float viewportHeight = std::max(1.0f, m_Editor.m_Ui.m_Viewport.m_WindowSize.y);
+
+        static bool s_Initial2DZoomApplied = false;
+        if (!s_Initial2DZoomApplied && m_Editor.m_Scene2DZoom == 1.0f &&
+            m_Editor.m_Scene2DPan.x == 0.0f && m_Editor.m_Scene2DPan.y == 0.0f)
+        {
+            for (const CEntity& entity : m_Editor.m_Scene.m_vEntities)
+            {
+                if (const CCanvasComponent* pCanvas = entity.GetCanvasComponent())
+                {
+                    if (pCanvas->m_Enabled && pCanvas->m_Height > 0.0f && viewportHeight > 10.0f)
+                    {
+                        const float ratioY = (viewportHeight * 0.72f) / pCanvas->m_Height;
+                        const float ratioX = (viewportWidth * 0.72f) / pCanvas->m_Width;
+                        m_Editor.m_Scene2DZoom = std::clamp(std::min(ratioX, ratioY), 0.1f, 2.0f);
+                        s_Initial2DZoomApplied = true;
+                        break;
+                    }
+                }
+            }
+        }
         if (m_Editor.m_Ui.m_Viewport.m_Hovered)
         {
             const float wheel = GetMouseWheelMove();
@@ -455,6 +477,7 @@ void CApplication::RenderFrame()
     m_SceneRenderer.Update(m_Editor.m_Scene, m_Editor.m_Lights, renderCameraPosition, m_Editor.m_Preferences.m_ShadowsEnabled,
                            m_Editor.m_Preferences.m_ShadowBias, m_Editor.m_Preferences.m_ShadowFilterQuality);
     ClearBackground(DARKGRAY);
+    quark::ui::CCanvasSystem::Get().UpdateCanvasTextures(m_Editor.m_Scene);
 
     if (m_Editor.m_Ui.m_Viewport.m_RenderTexture.id > 0 && IsRenderTextureValid(m_Editor.m_Ui.m_Viewport.m_RenderTexture))
     {
@@ -564,6 +587,8 @@ void CApplication::RenderFrame()
                     DrawLine3D(aCorners[i], aCorners[(i + 1) % 4], YELLOW);
                 }
             }
+            quark::ui::CCanvasSystem::Get().RenderWorldSpaceCanvases(m_Editor.m_Scene, renderCamera);
+            quark::ui::CCanvasSystem::Get().DrawCanvasGizmos(m_Editor.m_Scene, m_Editor.m_Scene.m_Selected, renderCamera);
             EndMode3D();
             m_FrameTimings.m_Main3dPassMs = ElapsedMilliseconds(main3dStart);
 
@@ -649,6 +674,12 @@ void CApplication::RenderFrame()
             quark::gui::RenderSceneGui(m_Editor.m_Scene, localMouse, sceneGuiInteractive);
             if (sceneGui2D)
             {
+                quark::ui::CCanvasSystem::Get().Render2DCanvases(m_Editor.m_Scene, m_Editor.m_Ui.m_Viewport, m_Editor.m_Scene.m_Selected);
+            }
+            quark::ui::CCanvasSystem::Get().RenderScreenSpaceCanvases(m_Editor.m_Scene, m_Editor.m_Ui.m_Viewport, localMouse, sceneGuiInteractive);
+            quark::ui::CCanvasSystem::Get().UpdateInteraction(m_Editor.m_Scene, m_Editor.m_Ui.m_Viewport, renderCamera, sceneGuiInteractive);
+            if (sceneGui2D)
+            {
                 quark::gui::SetGuiScissorCamera2D(nullptr);
                 EndMode2D();
             }
@@ -710,6 +741,7 @@ void CApplication::RenderFrame()
                     entity, worldTransform, m_Editor.m_Preferences);
                 m_SceneRenderer.EndLightingPass();
             }
+            quark::ui::CCanvasSystem::Get().RenderWorldSpaceCanvases(m_Editor.m_Scene, gameCamera);
             EndMode3D();
         }
         {
@@ -731,9 +763,11 @@ void CApplication::RenderFrame()
                 (rawMouse.y - gameViewport.m_WindowPos.y) * scaleY
             };
             const bool gameGuiInteractive =
-                m_Editor.m_IsPlaying && m_Editor.m_GameViewActive;
+                m_Editor.m_IsPlaying || m_Editor.m_GameViewActive || m_Editor.m_Ui.m_GameViewport.m_Hovered;
             quark::gui::RenderSceneGui(m_Editor.m_Scene, localMouse,
                                        gameGuiInteractive);
+            quark::ui::CCanvasSystem::Get().RenderScreenSpaceCanvases(m_Editor.m_Scene, gameViewport, localMouse, gameGuiInteractive);
+            quark::ui::CCanvasSystem::Get().UpdateInteraction(m_Editor.m_Scene, gameViewport, gameCamera, gameGuiInteractive);
         }
         EndTextureMode();
         m_FrameTimings.m_Main3dPassMs += ElapsedMilliseconds(game3dStart);

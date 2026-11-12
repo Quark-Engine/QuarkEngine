@@ -6,6 +6,7 @@
 #include "engine/scene_package.h"
 #include "engine/cpu_task_pool.h"
 #include "engine/transform.h"
+#include "engine/canvas_system.h"
 #include "project.h"
 #include "scene.h"
 #include "text_mesh.h"
@@ -75,6 +76,7 @@ namespace
             camera.target = position + forward;
             camera.up = up;
             camera.fovy = pCamera->m_FieldOfView;
+            camera.projection = CAMERA_PERSPECTIVE;
             return true;
         }
         return false;
@@ -399,6 +401,7 @@ extern "C"
             ClearBackground({ static_cast<unsigned char>(preferences.m_BackgroundRed),
                               static_cast<unsigned char>(preferences.m_BackgroundGreen),
                               static_cast<unsigned char>(preferences.m_BackgroundBlue), 255 });
+            quark::ui::CCanvasSystem::Get().UpdateCanvasTextures(scene);
             BeginMode3D(camera);
             for (int entityIndex = 0; entityIndex < static_cast<int>(scene.m_vEntities.size()); ++entityIndex)
             {
@@ -416,8 +419,15 @@ extern "C"
                     entity, renderer.GetCachedWorldTransform(entityIndex), preferences);
                 renderer.EndLightingPass();
             }
+            quark::ui::CCanvasSystem::Get().RenderWorldSpaceCanvases(scene, camera);
             EndMode3D();
             quark::gui::RenderSceneGui(scene, GetMousePosition(), true);
+            {
+                quark::ui::SUiViewport runtimeViewport({ 0.0f, 0.0f },
+                    { static_cast<float>(GetScreenWidth()), static_cast<float>(GetScreenHeight()) });
+                quark::ui::CCanvasSystem::Get().RenderScreenSpaceCanvases(scene, runtimeViewport, GetMousePosition(), true);
+                quark::ui::CCanvasSystem::Get().UpdateInteraction(scene, runtimeViewport, camera, true);
+            }
             EndDrawing();
         }
 

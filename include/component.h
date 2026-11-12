@@ -51,7 +51,43 @@ enum EComponentType
     COMPONENT_SCRIPT,
     COMPONENT_UI,
     COMPONENT_TEXT,
-    COMPONENT_UI_RECT_TRANSFORM
+    COMPONENT_UI_RECT_TRANSFORM,
+    COMPONENT_CANVAS,
+    COMPONENT_IMAGE,
+    COMPONENT_PANEL,
+    COMPONENT_BUTTON
+};
+
+enum class ECanvasRenderMode
+{
+    SCREEN_SPACE_OVERLAY = 0,
+    SCREEN_SPACE_CAMERA = 1,
+    WORLD_SPACE = 2
+};
+
+enum class EUiImageType
+{
+    SIMPLE = 0,
+    SLICED = 1,
+    TILED = 2,
+    FILLED = 3
+};
+
+enum class EUiTransition
+{
+    NONE = 0,
+    COLOR_TINT = 1,
+    SPRITE_SWAP = 2,
+    ANIMATION = 3
+};
+
+enum class EUiNavigation
+{
+    NONE = 0,
+    HORIZONTAL = 1,
+    VERTICAL = 2,
+    AUTOMATIC = 3,
+    EXPLICIT = 4
 };
 
 enum EColliderType
@@ -566,11 +602,62 @@ enum class EUiTextOverflow : int
     TRUNCATE = 1
 };
 
+class CCanvasComponent : public IComponent
+{
+public:
+    ECanvasRenderMode m_RenderMode = ECanvasRenderMode::WORLD_SPACE;
+    int m_RenderCameraEntityId = -1;
+    bool m_PixelPerfect = false;
+    int m_SortingOrder = 0;
+    int m_TargetDisplay = 0;
+    Vec2 m_ReferenceResolution = { 1920.0f, 1080.0f };
+    float m_Width = 800.0f;
+    float m_Height = 600.0f;
+    float m_ScaleFactor = 1.0f;
+    float m_PlaneDistance = 100.0f;
+    int m_EventCameraEntityId = -1;
+    bool m_OverrideSorting = false;
+
+    RenderTexture2D m_RuntimeTexture = {};
+    Model m_RuntimeQuadModel = {};
+    bool m_QuadModelInitialized = false;
+    RendererType m_QuadBackend = RendererType::Auto;
+
+    CCanvasComponent()
+        : IComponent(COMPONENT_CANVAS, "Canvas")
+    {
+    }
+
+    ~CCanvasComponent() override;
+
+    EComponentType GetType() const override
+    {
+        return COMPONENT_CANVAS;
+    }
+
+    std::string GetTypeName() const override
+    {
+        return "Canvas";
+    }
+
+    void ReleaseOwnedResources();
+    void Serialize(nlohmann::json& json) const override;
+    void Deserialize(const nlohmann::json& json) override;
+};
+
 class CUiRectTransformComponent : public IComponent
 {
 public:
     Vec2 m_Position = { 32.0f, 32.0f };
+    Vec2 m_AnchoredPosition = { 32.0f, 32.0f };
     Vec2 m_Size = { 150.0f, 30.0f };
+    Vec2 m_AnchorMin = { 0.5f, 0.5f };
+    Vec2 m_AnchorMax = { 0.5f, 0.5f };
+    Vec2 m_Pivot = { 0.5f, 0.5f };
+    float m_Rotation2D = 0.0f;
+    Vec2 m_Scale2D = { 1.0f, 1.0f };
+    Vec2 m_OffsetMin = { 0.0f, 0.0f };
+    Vec2 m_OffsetMax = { 0.0f, 0.0f };
 
     CUiRectTransformComponent()
         : IComponent(COMPONENT_UI_RECT_TRANSFORM, "Rect Transform")
@@ -587,23 +674,124 @@ public:
         return "Rect Transform";
     }
 
-    void Serialize(nlohmann::json& json) const override
+    Rectangle CalculateLocalRect(const Vec2& parentSize) const;
+
+    void Serialize(nlohmann::json& json) const override;
+    void Deserialize(const nlohmann::json& json) override;
+};
+
+class CImageComponent : public IComponent
+{
+public:
+    std::string m_SourceTexture;
+    Color m_Color = { 255, 255, 255, 255 };
+    std::string m_Material;
+    bool m_RaycastTarget = true;
+    EUiImageType m_ImageType = EUiImageType::SIMPLE;
+    bool m_PreserveAspect = false;
+    bool m_FillCenter = true;
+    float m_FillAmount = 1.0f;
+
+    Texture2D m_RuntimeTexture = {};
+    bool m_TextureLoaded = false;
+
+    CImageComponent()
+        : IComponent(COMPONENT_IMAGE, "Image")
     {
-        json["position"] = { m_Position.x, m_Position.y };
-        json["size"] = { m_Size.x, m_Size.y };
     }
 
-    void Deserialize(const nlohmann::json& json) override
+    ~CImageComponent() override;
+
+    EComponentType GetType() const override
     {
-        if (json.contains("position") && json["position"].is_array() && json["position"].size() >= 2)
-        {
-            m_Position = { json["position"][0].get<float>(), json["position"][1].get<float>() };
-        }
-        if (json.contains("size") && json["size"].is_array() && json["size"].size() >= 2)
-        {
-            m_Size = { json["size"][0].get<float>(), json["size"][1].get<float>() };
-        }
+        return COMPONENT_IMAGE;
     }
+
+    std::string GetTypeName() const override
+    {
+        return "Image";
+    }
+
+    void ReleaseOwnedResources();
+    void Serialize(nlohmann::json& json) const override;
+    void Deserialize(const nlohmann::json& json) override;
+};
+
+class CPanelComponent : public IComponent
+{
+public:
+    std::string m_BackgroundImage;
+    Color m_BackgroundColor = { 255, 255, 255, 100 };
+    bool m_RaycastTarget = true;
+
+    Texture2D m_RuntimeTexture = {};
+    bool m_TextureLoaded = false;
+
+    CPanelComponent()
+        : IComponent(COMPONENT_PANEL, "Panel")
+    {
+    }
+
+    ~CPanelComponent() override;
+
+    EComponentType GetType() const override
+    {
+        return COMPONENT_PANEL;
+    }
+
+    std::string GetTypeName() const override
+    {
+        return "Panel";
+    }
+
+    void ReleaseOwnedResources();
+    void Serialize(nlohmann::json& json) const override;
+    void Deserialize(const nlohmann::json& json) override;
+};
+
+class CButtonComponent : public IComponent
+{
+public:
+    bool m_Interactable = true;
+    EUiTransition m_Transition = EUiTransition::COLOR_TINT;
+    EUiNavigation m_Navigation = EUiNavigation::AUTOMATIC;
+    Color m_NormalColor = { 255, 255, 255, 255 };
+    Color m_HighlightedColor = { 220, 220, 220, 255 };
+    Color m_PressedColor = { 180, 180, 180, 255 };
+    Color m_SelectedColor = { 220, 220, 220, 255 };
+    Color m_DisabledColor = { 150, 150, 150, 128 };
+    float m_ColorMultiplier = 1.0f;
+    float m_FadeDuration = 0.1f;
+    std::string m_SpriteSwapHighlighted;
+    std::string m_SpriteSwapPressed;
+    std::string m_SpriteSwapSelected;
+    std::string m_SpriteSwapDisabled;
+    std::string m_OnClickAction;
+    std::function<void()> m_fnOnClick;
+    bool m_RaycastTarget = true;
+
+    bool m_IsHovered = false;
+    bool m_IsPressed = false;
+    bool m_IsSelected = false;
+
+    CButtonComponent()
+        : IComponent(COMPONENT_BUTTON, "Button")
+    {
+    }
+
+    EComponentType GetType() const override
+    {
+        return COMPONENT_BUTTON;
+    }
+
+    std::string GetTypeName() const override
+    {
+        return "Button";
+    }
+
+    Color GetCurrentColor() const;
+    void Serialize(nlohmann::json& json) const override;
+    void Deserialize(const nlohmann::json& json) override;
 };
 
 class CTextComponent : public IComponent
@@ -614,6 +802,7 @@ public:
     EUiTextFontStyle m_FontStyle = EUiTextFontStyle::NORMAL;
     float m_FontSize = 16.0f;
     float m_LineSpacing = 1.0f;
+    float m_CharacterSpacing = 0.0f;
     bool m_RichText = false;
     EUiTextAlignment m_HorizontalAlignment = EUiTextAlignment::CENTER;
     EUiTextVerticalAlignment m_VerticalAlignment = EUiTextVerticalAlignment::MIDDLE;
@@ -622,6 +811,7 @@ public:
     bool m_BestFit = false;
     Color m_Color = { 235, 235, 235, 255 };
     std::string m_Material = "None (Material)";
+    bool m_RaycastTarget = true;
 
     CTextComponent()
         : IComponent(COMPONENT_TEXT, "Text")
@@ -785,21 +975,26 @@ public:
         }
     }
 
-    void RemoveMeshAndMaterialForUi()
+    void RemoveMeshAndMaterialForUi(bool keepTransform = false)
     {
         for (size_t i = m_vComponents.size(); i > 0; --i)
         {
             const auto& pComponent = m_vComponents[i - 1];
-            if (pComponent &&
-                (pComponent->GetType() == COMPONENT_TRANSFORM ||
-                 pComponent->GetType() == COMPONENT_MESH ||
-                 pComponent->GetType() == COMPONENT_MATERIAL))
+            if (pComponent)
             {
-                if (auto pMesh = std::dynamic_pointer_cast<CMeshComponent>(pComponent))
+                if (pComponent->GetType() == COMPONENT_MESH ||
+                    pComponent->GetType() == COMPONENT_MATERIAL)
                 {
-                    pMesh->ReleaseOwnedResources();
+                    if (auto pMesh = std::dynamic_pointer_cast<CMeshComponent>(pComponent))
+                    {
+                        pMesh->ReleaseOwnedResources();
+                    }
+                    RemoveComponent(i - 1);
                 }
-                RemoveComponent(i - 1);
+                else if (!keepTransform && pComponent->GetType() == COMPONENT_TRANSFORM)
+                {
+                    RemoveComponent(i - 1);
+                }
             }
         }
         for (size_t i = 0; i < m_vComponents.size(); ++i)
@@ -884,6 +1079,42 @@ public:
     CUiComponent* GetUiComponent()
     {
         auto pComp = GetComponentOfType<CUiComponent>();
+        return pComp ? pComp.get() : nullptr;
+    }
+
+    CCanvasComponent* GetCanvas()
+    {
+        auto pComp = GetComponentOfType<CCanvasComponent>();
+        return pComp ? pComp.get() : nullptr;
+    }
+
+    CUiRectTransformComponent* GetRectTransform()
+    {
+        auto pComp = GetComponentOfType<CUiRectTransformComponent>();
+        return pComp ? pComp.get() : nullptr;
+    }
+
+    CImageComponent* GetImage()
+    {
+        auto pComp = GetComponentOfType<CImageComponent>();
+        return pComp ? pComp.get() : nullptr;
+    }
+
+    CPanelComponent* GetPanel()
+    {
+        auto pComp = GetComponentOfType<CPanelComponent>();
+        return pComp ? pComp.get() : nullptr;
+    }
+
+    CButtonComponent* GetButton()
+    {
+        auto pComp = GetComponentOfType<CButtonComponent>();
+        return pComp ? pComp.get() : nullptr;
+    }
+
+    CTextComponent* GetText()
+    {
+        auto pComp = GetComponentOfType<CTextComponent>();
         return pComp ? pComp.get() : nullptr;
     }
 

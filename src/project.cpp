@@ -517,9 +517,10 @@ bool CProjectService::Load(const std::string& folderPath, CScene& scene, CAssetL
 
     for (auto& e : scene.m_vEntities)
     {
-        if (e.GetUiComponent())
+        if (e.HasUiComponent())
         {
-            e.GetComponents()->RemoveMeshAndMaterialForUi();
+            const bool isCanvas = e.GetCanvasComponent() != nullptr;
+            e.GetComponents()->RemoveMeshAndMaterialForUi(isCanvas);
             continue;
         }
         if (!e.GetTransformComponent())

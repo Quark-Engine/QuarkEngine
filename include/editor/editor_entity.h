@@ -19,6 +19,11 @@ public:
     static CEntity Light(CScene& scene, int parentIndex);
     static CEntity Camera(CScene& scene, int parentIndex);
     static CEntity UiWidget(CScene& scene, EGuiWidgetType widgetType, int parentIndex = -1);
+    static CEntity Canvas(CScene& scene, ECanvasRenderMode mode = ECanvasRenderMode::WORLD_SPACE, int parentIndex = -1);
+    static CEntity UiPanel(CScene& scene, int parentIndex = -1);
+    static CEntity UiButton(CScene& scene, int parentIndex = -1);
+    static CEntity UiText(CScene& scene, int parentIndex = -1);
+    static CEntity UiImage(CScene& scene, int parentIndex = -1);
 
     static void AssignName(CEntity& entity, const char* pNewName);
 

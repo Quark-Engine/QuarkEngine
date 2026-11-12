@@ -7,11 +7,46 @@
 #include "editor/editor_utils.h"
 #include "camera.h"
 #include "engine/transform.h"
+#include "engine/canvas_system.h"
 #include "tex.h"
 #include "ImGuizmo.h"
 #include "imgui.h"
 
 #include <cstring>
+
+namespace
+{
+    Vec3 WorldToCanvasLocal(const Mat4& canvasWorld, const Vec3& worldPos)
+    {
+        const Vec3 canvasPos = { canvasWorld.m[12], canvasWorld.m[13], canvasWorld.m[14] };
+        const Vec3 diff = worldPos - canvasPos;
+
+        const Vec3 col0 = { canvasWorld.m[0], canvasWorld.m[1], canvasWorld.m[2] };
+        const Vec3 col1 = { canvasWorld.m[4], canvasWorld.m[5], canvasWorld.m[6] };
+        const Vec3 col2 = { canvasWorld.m[8], canvasWorld.m[9], canvasWorld.m[10] };
+
+        const float scaleX2 = col0.dot(col0);
+        const float scaleY2 = col1.dot(col1);
+        const float scaleZ2 = col2.dot(col2);
+
+        if (scaleX2 < 1e-12f || scaleY2 < 1e-12f || scaleZ2 < 1e-12f)
+        {
+            return { 0.0f, 0.0f, 0.0f };
+        }
+
+        return Vec3{
+            diff.dot(col0) / scaleX2,
+            diff.dot(col1) / scaleY2,
+            diff.dot(col2) / scaleZ2
+        };
+    }
+
+    Vec2 s_UiDragStartAnchoredPos = { 0.0f, 0.0f };
+    Vec2 s_UiDragStartCenter = { 0.0f, 0.0f };
+    int s_UiDragEntityIndex = -1;
+    bool s_UiDragging = false;
+}
+
 void CGizmoController::Draw(CEditor& editor, CFlyCamera& camera)
 {
     SGizmoState& gizmo = editor.m_Ui.m_Gizmo;
@@ -56,10 +91,36 @@ void CGizmoController::Draw(CEditor& editor, CFlyCamera& camera)
             {
                 continue;
             }
-            const float minX = pCandidateRect->m_Position.x;
-            const float minY = pCandidateRect->m_Position.y;
-            const float maxX = minX + std::max(1.0f, pCandidateRect->m_Size.x);
-            const float maxY = minY + std::max(1.0f, pCandidateRect->m_Size.y);
+
+            float minX = 0.0f;
+            float minY = 0.0f;
+            float maxX = 0.0f;
+            float maxY = 0.0f;
+
+            const int candCanvasIdx = quark::ui::CCanvasSystem::Get().FindCanvasForEntity(editor.m_Scene, entityIndex);
+            if (candCanvasIdx >= 0 && candCanvasIdx < static_cast<int>(editor.m_Scene.m_vEntities.size()))
+            {
+                const CCanvasComponent* pCandCanvas = editor.m_Scene.m_vEntities[candCanvasIdx].GetCanvasComponent();
+                const float cW = pCandCanvas ? pCandCanvas->m_Width : 800.0f;
+                const float cH = pCandCanvas ? pCandCanvas->m_Height : 600.0f;
+                const float canvasX = (viewport.m_WindowSize.x - cW) * 0.5f;
+                const float canvasY = (viewport.m_WindowSize.y - cH) * 0.5f;
+                const Rectangle elemRect = quark::ui::CCanvasSystem::Get().ComputeElementCanvasRect(
+                    editor.m_Scene, entityIndex, { cW, cH });
+                const float screenY = canvasY + (cH - (elemRect.y + elemRect.height));
+                minX = canvasX + elemRect.x;
+                minY = screenY;
+                maxX = minX + elemRect.width;
+                maxY = minY + elemRect.height;
+            }
+            else
+            {
+                minX = pCandidateRect->m_Position.x;
+                minY = pCandidateRect->m_Position.y;
+                maxX = minX + std::max(1.0f, pCandidateRect->m_Size.x);
+                maxY = minY + std::max(1.0f, pCandidateRect->m_Size.y);
+            }
+
             if (worldMouseX >= minX && worldMouseX <= maxX &&
                 worldMouseY >= minY && worldMouseY <= maxY)
             {
@@ -88,9 +149,20 @@ void CGizmoController::Draw(CEditor& editor, CFlyCamera& camera)
         return;
     }
 
+    const int selectedEntityIndex = editor.m_Scene.m_Selected;
+    const int canvasIndex = pRectTransform
+        ? quark::ui::CCanvasSystem::Get().FindCanvasForEntity(editor.m_Scene, selectedEntityIndex)
+        : -1;
+    const CCanvasComponent* pCanvas = (canvasIndex >= 0 && canvasIndex < static_cast<int>(editor.m_Scene.m_vEntities.size()))
+        ? editor.m_Scene.m_vEntities[canvasIndex].GetCanvasComponent()
+        : nullptr;
+    const bool isWorldSpaceCanvasElement = (!editor.m_Scene2DMode && pRectTransform != nullptr &&
+                                            pCanvas != nullptr && pCanvas->m_RenderMode == ECanvasRenderMode::WORLD_SPACE &&
+                                            selectedEntityIndex != canvasIndex);
+
     ImGuizmo::SetDrawlist(ImGui::GetWindowDrawList());
     ImGuizmo::SetRect(viewport.m_WindowPos.x, viewport.m_WindowPos.y, viewport.m_WindowSize.x, viewport.m_WindowSize.y);
-    ImGuizmo::SetOrthographic(editor.m_Scene2DMode || (pRectTransform != nullptr && pTransform == nullptr));
+    ImGuizmo::SetOrthographic(editor.m_Scene2DMode || (pRectTransform != nullptr && !isWorldSpaceCanvasElement && (selectedEntityIndex != canvasIndex || !pTransform)));
     ImGuizmo::AllowAxisFlip(false);
     ImGuizmo::Enable(viewport.m_Hovered || ImGuizmo::IsUsing());
 
@@ -112,7 +184,119 @@ void CGizmoController::Draw(CEditor& editor, CFlyCamera& camera)
     const bool gizmoSnapEnabled = editor.m_Preferences.m_GizmoSnapEnabled ||
         IsKeyDown(KEY_LEFT_CONTROL) || IsKeyDown(KEY_RIGHT_CONTROL);
 
-    if (pRectTransform && (editor.m_Scene2DMode || !pTransform))
+    if (isWorldSpaceCanvasElement)
+    {
+        ImGuizmo::SetOrthographic(false);
+        const Mat4 view = Mat4::lookAt(
+            camera.GetCamera().position,
+            camera.GetCamera().target,
+            camera.GetCamera().up);
+        const Mat4 projection = Mat4::perspective(
+            camera.GetCamera().fovy * DEG2RAD,
+            viewport.m_WindowSize.x / viewport.m_WindowSize.y,
+            0.1f,
+            1000.0f);
+
+        float aViewMat4[16] = {};
+        float aProjectionMat4[16] = {};
+        memcpy(aViewMat4, &view, sizeof(aViewMat4));
+        memcpy(aProjectionMat4, &projection, sizeof(aProjectionMat4));
+
+        const Mat4 canvasWorld = quark::ui::CCanvasSystem::Get().GetCanvasWorldMatrix(editor.m_Scene, canvasIndex);
+        const float canvasW = pCanvas->m_Width;
+        const float canvasH = pCanvas->m_Height;
+        const Rectangle elemRect = quark::ui::CCanvasSystem::Get().ComputeElementCanvasRect(
+            editor.m_Scene, selectedEntityIndex, { canvasW, canvasH });
+
+        const float localCenterX = elemRect.x + elemRect.width * 0.5f - canvasW * 0.5f;
+        const float localCenterY = elemRect.y + elemRect.height * 0.5f - canvasH * 0.5f;
+        const float localCenterZ = 0.002f;
+
+        const Mat4 elemWorld = canvasWorld *
+            Mat4::translation(localCenterX, localCenterY, localCenterZ) *
+            Mat4::rotationZ(pRectTransform->m_Rotation2D * DEG2RAD) *
+            Mat4::scale(pRectTransform->m_Scale2D.x, pRectTransform->m_Scale2D.y, 1.0f);
+
+        float aElemTransformMat4[16] = {};
+        memcpy(aElemTransformMat4, &elemWorld, sizeof(aElemTransformMat4));
+
+        const ImGuizmo::OPERATION op = (editor.m_Ui.m_MeshEdit.m_GizmoMode == ImGuizmo::SCALE)
+            ? ImGuizmo::SCALE
+            : ((editor.m_Ui.m_MeshEdit.m_GizmoMode == ImGuizmo::ROTATE) ? ImGuizmo::ROTATE : ImGuizmo::TRANSLATE);
+
+        ImGuizmo::Manipulate(
+            aViewMat4,
+            aProjectionMat4,
+            op,
+            ImGuizmo::LOCAL,
+            aElemTransformMat4,
+            nullptr,
+            gizmoSnapEnabled
+                ? (op == ImGuizmo::SCALE ? aScaleSnap : (op == ImGuizmo::ROTATE ? aRotationSnap : aTranslationSnap))
+                : nullptr);
+
+        if (ImGuizmo::IsUsing() && (!s_UiDragging || s_UiDragEntityIndex != selectedEntityIndex))
+        {
+            editor.SaveState();
+            s_UiDragStartAnchoredPos = pRectTransform->m_AnchoredPosition;
+            s_UiDragStartCenter = { localCenterX, localCenterY };
+            s_UiDragEntityIndex = selectedEntityIndex;
+            s_UiDragging = true;
+        }
+
+        if (ImGuizmo::IsUsing() && s_UiDragging && s_UiDragEntityIndex == selectedEntityIndex)
+        {
+            float aNextTranslation[3] = {};
+            float aNextRotation[3] = {};
+            float aNextScale[3] = {};
+            ImGuizmo::DecomposeMatrixToComponents(
+                aElemTransformMat4,
+                aNextTranslation,
+                aNextRotation,
+                aNextScale);
+
+            const Vec3 newWorldPos = { aNextTranslation[0], aNextTranslation[1], aNextTranslation[2] };
+            const Vec3 newLocalPos = WorldToCanvasLocal(canvasWorld, newWorldPos);
+
+            const float deltaLocalX = newLocalPos.x - s_UiDragStartCenter.x;
+            const float deltaLocalY = newLocalPos.y - s_UiDragStartCenter.y;
+
+            pRectTransform->m_AnchoredPosition.x = s_UiDragStartAnchoredPos.x + deltaLocalX;
+            pRectTransform->m_AnchoredPosition.y = s_UiDragStartAnchoredPos.y + deltaLocalY;
+            pRectTransform->m_Position = pRectTransform->m_AnchoredPosition;
+            if (op == ImGuizmo::ROTATE)
+            {
+                pRectTransform->m_Rotation2D = aNextRotation[2];
+            }
+            if (op == ImGuizmo::SCALE)
+            {
+                pRectTransform->m_Scale2D = {
+                    std::max(0.01f, std::fabs(aNextScale[0])),
+                    std::max(0.01f, std::fabs(aNextScale[1]))
+                };
+            }
+
+            if (CUiComponent* pUi = pEntity->GetUiComponent())
+            {
+                auto pText = pComponents->GetComponentOfType<CTextComponent>();
+                pUi->SyncToRuntimeDesc(pRectTransform.get(), pText.get());
+            }
+
+            editor.m_SceneDirty = true;
+            DispatchPluginEvent(PLUGIN_EVENT_TRANSFORM_CHANGED, selectedEntityIndex);
+        }
+        else if (!ImGuizmo::IsUsing())
+        {
+            s_UiDragging = false;
+            s_UiDragEntityIndex = -1;
+        }
+
+        gizmo.m_WasUsingTransform = ImGuizmo::IsUsing();
+        gizmo.m_WasUsingMeshEdit = false;
+        return;
+    }
+
+    if (pRectTransform && (editor.m_Scene2DMode || (pCanvas != nullptr && selectedEntityIndex != canvasIndex)))
     {
         const float zoom2D = editor.m_Scene2DMode ? std::max(0.01f, editor.m_Scene2DZoom) : 1.0f;
         const Vec2 pan2D = editor.m_Scene2DMode ? editor.m_Scene2DPan : Vec2{ 0.0f, 0.0f };
@@ -133,23 +317,41 @@ void CGizmoController::Draw(CEditor& editor, CFlyCamera& camera)
             0.1f,
             1000.0f);
 
-        const Vec2 oldSize = {
-            std::max(1.0f, pRectTransform->m_Size.x),
-            std::max(1.0f, pRectTransform->m_Size.y)
-        };
-        const Vec2 oldCenter = {
-            pRectTransform->m_Position.x + oldSize.x * 0.5f,
-            pRectTransform->m_Position.y + oldSize.y * 0.5f
-        };
+        Vec2 realCenter = { 0.0f, 0.0f };
+        Vec2 realSize = { 100.0f, 100.0f };
+
+        if (pCanvas != nullptr)
+        {
+            const float canvasW = pCanvas->m_Width;
+            const float canvasH = pCanvas->m_Height;
+            const float canvasX = (viewport.m_WindowSize.x - canvasW) * 0.5f;
+            const float canvasY = (viewport.m_WindowSize.y - canvasH) * 0.5f;
+            const Rectangle elemRect = quark::ui::CCanvasSystem::Get().ComputeElementCanvasRect(
+                editor.m_Scene, selectedEntityIndex, { canvasW, canvasH });
+            const float screenY = canvasY + (canvasH - (elemRect.y + elemRect.height));
+            realCenter = { canvasX + elemRect.x + elemRect.width * 0.5f, screenY + elemRect.height * 0.5f };
+            realSize = { elemRect.width, elemRect.height };
+        }
+        else
+        {
+            realSize = {
+                std::max(1.0f, pRectTransform->m_Size.x),
+                std::max(1.0f, pRectTransform->m_Size.y)
+            };
+            realCenter = {
+                pRectTransform->m_Position.x + realSize.x * 0.5f,
+                pRectTransform->m_Position.y + realSize.y * 0.5f
+            };
+        }
 
         if (editor.m_Preferences.m_ShowSelectionVisualization)
         {
             const ImVec2 rectMin(
-                viewport.m_WindowPos.x + viewport.m_WindowSize.x * 0.5f + (pRectTransform->m_Position.x - targetX) * zoom2D,
-                viewport.m_WindowPos.y + viewport.m_WindowSize.y * 0.5f + (pRectTransform->m_Position.y - targetY) * zoom2D);
+                viewport.m_WindowPos.x + viewport.m_WindowSize.x * 0.5f + (realCenter.x - realSize.x * 0.5f - targetX) * zoom2D,
+                viewport.m_WindowPos.y + viewport.m_WindowSize.y * 0.5f + (realCenter.y - realSize.y * 0.5f - targetY) * zoom2D);
             const ImVec2 rectMax(
-                rectMin.x + oldSize.x * zoom2D,
-                rectMin.y + oldSize.y * zoom2D);
+                rectMin.x + realSize.x * zoom2D,
+                rectMin.y + realSize.y * zoom2D);
             ImGui::GetWindowDrawList()->AddRect(
                 rectMin,
                 rectMax,
@@ -169,9 +371,9 @@ void CGizmoController::Draw(CEditor& editor, CFlyCamera& camera)
         memcpy(aUiViewMat4, &uiView, sizeof(aUiViewMat4));
         memcpy(aUiProjectionMat4, &uiProjection, sizeof(aUiProjectionMat4));
 
-        float aUiTranslation[3] = { oldCenter.x, -oldCenter.y, 0.0f };
-        float aUiRotation[3] = { 0.0f, 0.0f, 0.0f };
-        float aUiScale[3] = { oldSize.x, oldSize.y, 1.0f };
+        float aUiTranslation[3] = { realCenter.x, -realCenter.y, 0.0f };
+        float aUiRotation[3] = { 0.0f, 0.0f, pRectTransform->m_Rotation2D };
+        float aUiScale[3] = { realSize.x, realSize.y, 1.0f };
         ImGuizmo::RecomposeMatrixFromComponents(
             aUiTranslation,
             aUiRotation,
@@ -181,7 +383,7 @@ void CGizmoController::Draw(CEditor& editor, CFlyCamera& camera)
         const ImGuizmo::OPERATION uiOperation =
             (editor.m_Ui.m_MeshEdit.m_GizmoMode == ImGuizmo::SCALE)
                 ? ImGuizmo::SCALE
-                : ImGuizmo::TRANSLATE;
+                : ((editor.m_Ui.m_MeshEdit.m_GizmoMode == ImGuizmo::ROTATE) ? ImGuizmo::ROTATE : ImGuizmo::TRANSLATE);
 
         ImGuizmo::Manipulate(
             aUiViewMat4,
@@ -191,15 +393,19 @@ void CGizmoController::Draw(CEditor& editor, CFlyCamera& camera)
             aUiTransformMat4,
             nullptr,
             gizmoSnapEnabled
-                ? (uiOperation == ImGuizmo::SCALE ? aScaleSnap : aTranslationSnap)
+                ? (uiOperation == ImGuizmo::SCALE ? aScaleSnap : (uiOperation == ImGuizmo::ROTATE ? aRotationSnap : aTranslationSnap))
                 : nullptr);
 
-        if (ImGuizmo::IsUsing() && !gizmo.m_WasUsingTransform)
+        if (ImGuizmo::IsUsing() && (!s_UiDragging || s_UiDragEntityIndex != selectedEntityIndex))
         {
             editor.SaveState();
+            s_UiDragStartAnchoredPos = pRectTransform->m_AnchoredPosition;
+            s_UiDragStartCenter = realCenter;
+            s_UiDragEntityIndex = selectedEntityIndex;
+            s_UiDragging = true;
         }
 
-        if (ImGuizmo::IsUsing())
+        if (ImGuizmo::IsUsing() && s_UiDragging && s_UiDragEntityIndex == selectedEntityIndex)
         {
             float aNextTranslation[3] = {};
             float aNextRotation[3] = {};
@@ -210,25 +416,32 @@ void CGizmoController::Draw(CEditor& editor, CFlyCamera& camera)
                 aNextRotation,
                 aNextScale);
 
-            const Vec2 newSize = {
-                std::max(1.0f, std::fabs(aNextScale[0])),
-                std::max(1.0f, std::fabs(aNextScale[1]))
-            };
             const Vec2 newCenter = {
                 aNextTranslation[0],
                 -aNextTranslation[1]
             };
-            const Vec2 newPos = {
-                newCenter.x - newSize.x * 0.5f,
-                newCenter.y - newSize.y * 0.5f
-            };
-            const Vec2 posDelta = {
-                newPos.x - pRectTransform->m_Position.x,
-                newPos.y - pRectTransform->m_Position.y
-            };
+            const float deltaX = newCenter.x - s_UiDragStartCenter.x;
+            const float deltaY = -(newCenter.y - s_UiDragStartCenter.y);
 
-            pRectTransform->m_Position = newPos;
-            pRectTransform->m_Size = newSize;
+            pRectTransform->m_AnchoredPosition.x = s_UiDragStartAnchoredPos.x + deltaX;
+            pRectTransform->m_AnchoredPosition.y = s_UiDragStartAnchoredPos.y + deltaY;
+            pRectTransform->m_Position = pRectTransform->m_AnchoredPosition;
+            if (uiOperation == ImGuizmo::ROTATE)
+            {
+                pRectTransform->m_Rotation2D = aNextRotation[2];
+            }
+            if (uiOperation == ImGuizmo::SCALE)
+            {
+                pRectTransform->m_Size = {
+                    std::max(1.0f, std::fabs(aNextScale[0])),
+                    std::max(1.0f, std::fabs(aNextScale[1]))
+                };
+                if (selectedEntityIndex == canvasIndex && pCanvas)
+                {
+                    const_cast<CCanvasComponent*>(pCanvas)->m_Width = pRectTransform->m_Size.x;
+                    const_cast<CCanvasComponent*>(pCanvas)->m_Height = pRectTransform->m_Size.y;
+                }
+            }
 
             if (CUiComponent* pUi = pEntity->GetUiComponent())
             {
@@ -236,37 +449,13 @@ void CGizmoController::Draw(CEditor& editor, CFlyCamera& camera)
                 pUi->SyncToRuntimeDesc(pRectTransform.get(), pText.get());
             }
 
-            if (editor.m_Scene.m_vSelectedEntities.size() > 1)
-            {
-                for (int selectedIndex : editor.m_Scene.m_vSelectedEntities)
-                {
-                    if (selectedIndex == editor.m_Scene.m_Selected ||
-                        selectedIndex < 0 || selectedIndex >= static_cast<int>(editor.m_Scene.m_vEntities.size()))
-                    {
-                        continue;
-                    }
-                    CEntity& selectedEntity = editor.m_Scene.m_vEntities[selectedIndex];
-                    CComponentManager* pSelectedComponents = selectedEntity.GetComponents();
-                    auto pSelectedRect = pSelectedComponents
-                        ? pSelectedComponents->GetComponentOfType<CUiRectTransformComponent>()
-                        : nullptr;
-                    if (!pSelectedRect)
-                    {
-                        continue;
-                    }
-                    pSelectedRect->m_Position.x += posDelta.x;
-                    pSelectedRect->m_Position.y += posDelta.y;
-                    if (CUiComponent* pSelectedUi = selectedEntity.GetUiComponent())
-                    {
-                        auto pSelectedText = pSelectedComponents->GetComponentOfType<CTextComponent>();
-                        pSelectedUi->SyncToRuntimeDesc(pSelectedRect.get(), pSelectedText.get());
-                    }
-                }
-            }
-
             editor.m_SceneDirty = true;
-            DispatchPluginEvent(PLUGIN_EVENT_TRANSFORM_CHANGED,
-                                static_cast<int>(pEntity - editor.m_Scene.m_vEntities.data()));
+            DispatchPluginEvent(PLUGIN_EVENT_TRANSFORM_CHANGED, selectedEntityIndex);
+        }
+        else if (!ImGuizmo::IsUsing())
+        {
+            s_UiDragging = false;
+            s_UiDragEntityIndex = -1;
         }
 
         gizmo.m_WasUsingTransform = ImGuizmo::IsUsing();

@@ -67,6 +67,19 @@ public:
     const CCameraComponent* GetCameraComponent() const;
     CUiComponent* GetUiComponent();
     const CUiComponent* GetUiComponent() const;
+    CCanvasComponent* GetCanvasComponent();
+    const CCanvasComponent* GetCanvasComponent() const;
+    CUiRectTransformComponent* GetRectTransformComponent();
+    const CUiRectTransformComponent* GetRectTransformComponent() const;
+    CImageComponent* GetImageComponent();
+    const CImageComponent* GetImageComponent() const;
+    CPanelComponent* GetPanelComponent();
+    const CPanelComponent* GetPanelComponent() const;
+    CButtonComponent* GetButtonComponent();
+    const CButtonComponent* GetButtonComponent() const;
+    CTextComponent* GetTextComponent();
+    const CTextComponent* GetTextComponent() const;
+    bool HasUiComponent() const;
 
     int m_Id = 0;
     std::string m_Name;

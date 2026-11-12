@@ -55,6 +55,26 @@ void CComponentFactoryRegistry::SeedBuiltIns()
          {
              return std::make_shared<CUiRectTransformComponent>();
          });
+    seed("Canvas", []()
+         {
+             return std::make_shared<CCanvasComponent>();
+         });
+    seed("Image", []()
+         {
+             return std::make_shared<CImageComponent>();
+         });
+    seed("Panel", []()
+         {
+             return std::make_shared<CPanelComponent>();
+         });
+    seed("Button", []()
+         {
+             return std::make_shared<CButtonComponent>();
+         });
+    seed("Selectable", []()
+         {
+             return std::make_shared<CButtonComponent>();
+         });
     seed("Script", []()
          {
              return std::make_shared<CScriptComponent>();

@@ -208,7 +208,7 @@ CEntity CEntityFactory::UiWidget(CScene& scene, EGuiWidgetType widgetType, int p
     entity.m_ParentId = parentIndex;
 
     CComponentManager* pCm = entity.GetComponents();
-    pCm->RemoveMeshAndMaterialForUi();
+    pCm->RemoveMeshAndMaterialForUi(false);
 
     auto pUi = std::make_shared<CUiComponent>();
     pUi->m_WidgetType = widgetType;
@@ -243,6 +243,151 @@ CEntity CEntityFactory::UiWidget(CScene& scene, EGuiWidgetType widgetType, int p
     pCm->AddComponent(pUi);
     pCm->AddComponent(pText);
     pUi->SyncToRuntimeDesc(pRectTransform.get(), pText.get());
+    return entity;
+}
+
+CEntity CEntityFactory::Canvas(CScene& scene, ECanvasRenderMode mode, int parentIndex)
+{
+    CEntity entity;
+    entity.m_Name = scene.MakeUniqueName("Canvas");
+    entity.m_Id = static_cast<int>(scene.m_vEntities.size());
+    entity.m_ParentId = parentIndex;
+
+    CComponentManager* pCm = entity.GetComponents();
+    pCm->RemoveMeshAndMaterialForUi(false);
+
+    auto pTransform = std::make_shared<CTransformComponent>();
+    pTransform->m_Position = { 0.0f, 1.5f, 0.0f };
+    pTransform->m_Rotation = { 0.0f, 0.0f, 0.0f };
+    pTransform->m_Scale = { 0.005f, 0.005f, 0.005f };
+
+    auto pCanvas = std::make_shared<CCanvasComponent>();
+    pCanvas->m_RenderMode = mode;
+    pCanvas->m_Width = 800.0f;
+    pCanvas->m_Height = 600.0f;
+
+    auto pRectTransform = std::make_shared<CUiRectTransformComponent>();
+    pRectTransform->m_AnchoredPosition = { 0.0f, 0.0f };
+    pRectTransform->m_Position = { 0.0f, 0.0f };
+    pRectTransform->m_Size = { 800.0f, 600.0f };
+    pRectTransform->m_AnchorMin = { 0.5f, 0.5f };
+    pRectTransform->m_AnchorMax = { 0.5f, 0.5f };
+    pRectTransform->m_Pivot = { 0.5f, 0.5f };
+
+    pCm->AddComponent(pTransform);
+    pCm->AddComponent(pRectTransform);
+    pCm->AddComponent(pCanvas);
+    return entity;
+}
+
+CEntity CEntityFactory::UiPanel(CScene& scene, int parentIndex)
+{
+    CEntity entity;
+    entity.m_Name = scene.MakeUniqueName("Panel");
+    entity.m_Id = static_cast<int>(scene.m_vEntities.size());
+    entity.m_ParentId = parentIndex;
+
+    CComponentManager* pCm = entity.GetComponents();
+    pCm->RemoveMeshAndMaterialForUi(false);
+
+    auto pRectTransform = std::make_shared<CUiRectTransformComponent>();
+    pRectTransform->m_AnchorMin = { 0.0f, 0.0f };
+    pRectTransform->m_AnchorMax = { 1.0f, 1.0f };
+    pRectTransform->m_Pivot = { 0.5f, 0.5f };
+    pRectTransform->m_OffsetMin = { 0.0f, 0.0f };
+    pRectTransform->m_OffsetMax = { 0.0f, 0.0f };
+    pRectTransform->m_Size = { 800.0f, 600.0f };
+
+    auto pPanel = std::make_shared<CPanelComponent>();
+    pPanel->m_BackgroundColor = { 35, 35, 45, 200 };
+
+    pCm->AddComponent(pRectTransform);
+    pCm->AddComponent(pPanel);
+    return entity;
+}
+
+CEntity CEntityFactory::UiButton(CScene& scene, int parentIndex)
+{
+    CEntity entity;
+    entity.m_Name = scene.MakeUniqueName("Button");
+    entity.m_Id = static_cast<int>(scene.m_vEntities.size());
+    entity.m_ParentId = parentIndex;
+
+    CComponentManager* pCm = entity.GetComponents();
+    pCm->RemoveMeshAndMaterialForUi(false);
+
+    auto pRectTransform = std::make_shared<CUiRectTransformComponent>();
+    pRectTransform->m_Size = { 160.0f, 40.0f };
+    pRectTransform->m_AnchorMin = { 0.5f, 0.5f };
+    pRectTransform->m_AnchorMax = { 0.5f, 0.5f };
+    pRectTransform->m_Pivot = { 0.5f, 0.5f };
+
+    auto pButton = std::make_shared<CButtonComponent>();
+    pButton->m_NormalColor = { 70, 70, 80, 255 };
+    pButton->m_HighlightedColor = { 90, 90, 105, 255 };
+    pButton->m_PressedColor = { 50, 50, 60, 255 };
+    pButton->m_SelectedColor = { 90, 90, 105, 255 };
+
+    auto pText = std::make_shared<CTextComponent>();
+    pText->m_Text = "Button";
+    pText->m_FontSize = 18.0f;
+    pText->m_HorizontalAlignment = EUiTextAlignment::CENTER;
+    pText->m_VerticalAlignment = EUiTextVerticalAlignment::MIDDLE;
+
+    pCm->AddComponent(pRectTransform);
+    pCm->AddComponent(pButton);
+    pCm->AddComponent(pText);
+    return entity;
+}
+
+CEntity CEntityFactory::UiText(CScene& scene, int parentIndex)
+{
+    CEntity entity;
+    entity.m_Name = scene.MakeUniqueName("Text");
+    entity.m_Id = static_cast<int>(scene.m_vEntities.size());
+    entity.m_ParentId = parentIndex;
+
+    CComponentManager* pCm = entity.GetComponents();
+    pCm->RemoveMeshAndMaterialForUi(false);
+
+    auto pRectTransform = std::make_shared<CUiRectTransformComponent>();
+    pRectTransform->m_Size = { 200.0f, 40.0f };
+    pRectTransform->m_AnchorMin = { 0.5f, 0.5f };
+    pRectTransform->m_AnchorMax = { 0.5f, 0.5f };
+    pRectTransform->m_Pivot = { 0.5f, 0.5f };
+
+    auto pText = std::make_shared<CTextComponent>();
+    pText->m_Text = "New Text";
+    pText->m_FontSize = 20.0f;
+    pText->m_HorizontalAlignment = EUiTextAlignment::CENTER;
+    pText->m_VerticalAlignment = EUiTextVerticalAlignment::MIDDLE;
+
+    pCm->AddComponent(pRectTransform);
+    pCm->AddComponent(pText);
+    return entity;
+}
+
+CEntity CEntityFactory::UiImage(CScene& scene, int parentIndex)
+{
+    CEntity entity;
+    entity.m_Name = scene.MakeUniqueName("Image");
+    entity.m_Id = static_cast<int>(scene.m_vEntities.size());
+    entity.m_ParentId = parentIndex;
+
+    CComponentManager* pCm = entity.GetComponents();
+    pCm->RemoveMeshAndMaterialForUi(false);
+
+    auto pRectTransform = std::make_shared<CUiRectTransformComponent>();
+    pRectTransform->m_Size = { 100.0f, 100.0f };
+    pRectTransform->m_AnchorMin = { 0.5f, 0.5f };
+    pRectTransform->m_AnchorMax = { 0.5f, 0.5f };
+    pRectTransform->m_Pivot = { 0.5f, 0.5f };
+
+    auto pImage = std::make_shared<CImageComponent>();
+    pImage->m_Color = WHITE;
+
+    pCm->AddComponent(pRectTransform);
+    pCm->AddComponent(pImage);
     return entity;
 }
 

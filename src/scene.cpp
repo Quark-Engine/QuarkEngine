@@ -91,16 +91,27 @@ void CScene::ReleaseResources()
     {
         CMeshComponent* pMesh = entity.GetMeshComponent();
         CMaterialComponent* pMaterial = entity.GetMaterialComponent();
-        if (!pMesh)
+        if (pMesh)
         {
-            continue;
+            CEntityTextureService::RestoreModelTextures(&entity);
+            pMesh->ReleaseOwnedResources();
+            if (pMaterial)
+            {
+                pMaterial->m_Texture = { 0 };
+            }
         }
 
-        CEntityTextureService::RestoreModelTextures(&entity);
-        pMesh->ReleaseOwnedResources();
-        if (pMaterial)
+        if (auto pCanvas = entity.GetCanvasComponent())
         {
-            pMaterial->m_Texture = { 0 };
+            pCanvas->ReleaseOwnedResources();
+        }
+        if (auto pImage = entity.GetImageComponent())
+        {
+            pImage->ReleaseOwnedResources();
+        }
+        if (auto pPanel = entity.GetPanelComponent())
+        {
+            pPanel->ReleaseOwnedResources();
         }
     }
 

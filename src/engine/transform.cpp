@@ -126,7 +126,7 @@ namespace quark
             a00 * (a11 * a22 - a12 * a21) -
             a01 * (a10 * a22 - a12 * a20) +
             a02 * (a10 * a21 - a11 * a20);
-        if (!std::isfinite(determinant) || std::fabs(determinant) <= 1e-8f)
+        if (!std::isfinite(determinant) || std::fabs(determinant) <= 1e-15f)
         {
             return false;
         }

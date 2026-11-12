@@ -340,6 +340,7 @@ void CTextComponent::Serialize(nlohmann::json& json) const
     json["font_style"] = static_cast<int>(m_FontStyle);
     json["font_size"] = m_FontSize;
     json["line_spacing"] = m_LineSpacing;
+    json["character_spacing"] = m_CharacterSpacing;
     json["rich_text"] = m_RichText;
     json["horizontal_alignment"] = static_cast<int>(m_HorizontalAlignment);
     json["vertical_alignment"] = static_cast<int>(m_VerticalAlignment);
@@ -348,6 +349,7 @@ void CTextComponent::Serialize(nlohmann::json& json) const
     json["best_fit"] = m_BestFit;
     json["color"] = SerializeGuiColor(m_Color);
     json["material"] = m_Material;
+    json["raycast_target"] = m_RaycastTarget;
 }
 
 void CTextComponent::Deserialize(const nlohmann::json& json)
@@ -376,6 +378,10 @@ void CTextComponent::Deserialize(const nlohmann::json& json)
     if (json.contains("line_spacing") && json["line_spacing"].is_number())
     {
         m_LineSpacing = std::clamp(json["line_spacing"].get<float>(), 0.1f, 10.0f);
+    }
+    if (json.contains("character_spacing") && json["character_spacing"].is_number())
+    {
+        m_CharacterSpacing = json["character_spacing"].get<float>();
     }
     if (json.contains("rich_text") && json["rich_text"].is_boolean())
     {
@@ -425,6 +431,412 @@ void CTextComponent::Deserialize(const nlohmann::json& json)
     if (json.contains("material") && json["material"].is_string())
     {
         m_Material = json["material"].get<std::string>();
+    }
+    if (json.contains("raycast_target") && json["raycast_target"].is_boolean())
+    {
+        m_RaycastTarget = json["raycast_target"].get<bool>();
+    }
+}
+
+CCanvasComponent::~CCanvasComponent()
+{
+    ReleaseOwnedResources();
+}
+
+void CCanvasComponent::ReleaseOwnedResources()
+{
+    if (m_RuntimeTexture.id != 0)
+    {
+        UnloadRenderTexture(m_RuntimeTexture);
+        m_RuntimeTexture = {};
+    }
+    if (m_QuadModelInitialized)
+    {
+        UnloadModel(m_RuntimeQuadModel);
+        m_RuntimeQuadModel = {};
+        m_QuadModelInitialized = false;
+    }
+}
+
+void CCanvasComponent::Serialize(nlohmann::json& json) const
+{
+    json["render_mode"] = static_cast<int>(m_RenderMode);
+    json["render_camera_id"] = m_RenderCameraEntityId;
+    json["pixel_perfect"] = m_PixelPerfect;
+    json["sorting_order"] = m_SortingOrder;
+    json["target_display"] = m_TargetDisplay;
+    json["reference_resolution"] = { m_ReferenceResolution.x, m_ReferenceResolution.y };
+    json["width"] = m_Width;
+    json["height"] = m_Height;
+    json["scale_factor"] = m_ScaleFactor;
+    json["plane_distance"] = m_PlaneDistance;
+    json["event_camera_id"] = m_EventCameraEntityId;
+    json["override_sorting"] = m_OverrideSorting;
+}
+
+void CCanvasComponent::Deserialize(const nlohmann::json& json)
+{
+    if (json.contains("render_mode") && json["render_mode"].is_number_integer())
+    {
+        const int mode = json["render_mode"].get<int>();
+        if (mode >= static_cast<int>(ECanvasRenderMode::SCREEN_SPACE_OVERLAY) &&
+            mode <= static_cast<int>(ECanvasRenderMode::WORLD_SPACE))
+        {
+            m_RenderMode = static_cast<ECanvasRenderMode>(mode);
+        }
+    }
+    if (json.contains("render_camera_id") && json["render_camera_id"].is_number_integer())
+    {
+        m_RenderCameraEntityId = json["render_camera_id"].get<int>();
+    }
+    if (json.contains("pixel_perfect") && json["pixel_perfect"].is_boolean())
+    {
+        m_PixelPerfect = json["pixel_perfect"].get<bool>();
+    }
+    if (json.contains("sorting_order") && json["sorting_order"].is_number_integer())
+    {
+        m_SortingOrder = json["sorting_order"].get<int>();
+    }
+    if (json.contains("target_display") && json["target_display"].is_number_integer())
+    {
+        m_TargetDisplay = json["target_display"].get<int>();
+    }
+    if (json.contains("reference_resolution") && json["reference_resolution"].is_array() &&
+        json["reference_resolution"].size() >= 2)
+    {
+        m_ReferenceResolution = {
+            json["reference_resolution"][0].get<float>(),
+            json["reference_resolution"][1].get<float>()
+        };
+    }
+    if (json.contains("width") && json["width"].is_number())
+    {
+        m_Width = json["width"].get<float>();
+    }
+    if (json.contains("height") && json["height"].is_number())
+    {
+        m_Height = json["height"].get<float>();
+    }
+    if (json.contains("scale_factor") && json["scale_factor"].is_number())
+    {
+        m_ScaleFactor = json["scale_factor"].get<float>();
+    }
+    if (json.contains("plane_distance") && json["plane_distance"].is_number())
+    {
+        m_PlaneDistance = json["plane_distance"].get<float>();
+    }
+    if (json.contains("event_camera_id") && json["event_camera_id"].is_number_integer())
+    {
+        m_EventCameraEntityId = json["event_camera_id"].get<int>();
+    }
+    if (json.contains("override_sorting") && json["override_sorting"].is_boolean())
+    {
+        m_OverrideSorting = json["override_sorting"].get<bool>();
+    }
+}
+
+Rectangle CUiRectTransformComponent::CalculateLocalRect(const Vec2& parentSize) const
+{
+    Rectangle rect = { 0.0f, 0.0f, m_Size.x, m_Size.y };
+    if (m_AnchorMin.x == m_AnchorMax.x && m_AnchorMin.y == m_AnchorMax.y)
+    {
+        const float anchorX = parentSize.x * m_AnchorMin.x;
+        const float anchorY = parentSize.y * m_AnchorMin.y;
+        const float pivotPointX = anchorX + m_AnchoredPosition.x;
+        const float pivotPointY = anchorY + m_AnchoredPosition.y;
+        rect.x = pivotPointX - m_Size.x * m_Pivot.x;
+        rect.y = pivotPointY - m_Size.y * m_Pivot.y;
+        rect.width = m_Size.x;
+        rect.height = m_Size.y;
+    }
+    else
+    {
+        const float anchorMinX = parentSize.x * m_AnchorMin.x;
+        const float anchorMinY = parentSize.y * m_AnchorMin.y;
+        const float anchorMaxX = parentSize.x * m_AnchorMax.x;
+        const float anchorMaxY = parentSize.y * m_AnchorMax.y;
+        rect.x = anchorMinX + m_OffsetMin.x;
+        rect.y = anchorMinY + m_OffsetMin.y;
+        rect.width = std::max(1.0f, (anchorMaxX + m_OffsetMax.x) - rect.x);
+        rect.height = std::max(1.0f, (anchorMaxY + m_OffsetMax.y) - rect.y);
+    }
+    return rect;
+}
+
+void CUiRectTransformComponent::Serialize(nlohmann::json& json) const
+{
+    json["position"] = { m_AnchoredPosition.x, m_AnchoredPosition.y };
+    json["anchored_position"] = { m_AnchoredPosition.x, m_AnchoredPosition.y };
+    json["size"] = { m_Size.x, m_Size.y };
+    json["anchor_min"] = { m_AnchorMin.x, m_AnchorMin.y };
+    json["anchor_max"] = { m_AnchorMax.x, m_AnchorMax.y };
+    json["pivot"] = { m_Pivot.x, m_Pivot.y };
+    json["rotation_2d"] = m_Rotation2D;
+    json["scale_2d"] = { m_Scale2D.x, m_Scale2D.y };
+    json["offset_min"] = { m_OffsetMin.x, m_OffsetMin.y };
+    json["offset_max"] = { m_OffsetMax.x, m_OffsetMax.y };
+}
+
+void CUiRectTransformComponent::Deserialize(const nlohmann::json& json)
+{
+    if (json.contains("anchored_position") && json["anchored_position"].is_array() &&
+        json["anchored_position"].size() >= 2)
+    {
+        m_AnchoredPosition = {
+            json["anchored_position"][0].get<float>(),
+            json["anchored_position"][1].get<float>()
+        };
+        m_Position = m_AnchoredPosition;
+    }
+    else if (json.contains("position") && json["position"].is_array() && json["position"].size() >= 2)
+    {
+        m_Position = { json["position"][0].get<float>(), json["position"][1].get<float>() };
+        m_AnchoredPosition = m_Position;
+    }
+
+    if (json.contains("size") && json["size"].is_array() && json["size"].size() >= 2)
+    {
+        m_Size = { json["size"][0].get<float>(), json["size"][1].get<float>() };
+    }
+    if (json.contains("anchor_min") && json["anchor_min"].is_array() && json["anchor_min"].size() >= 2)
+    {
+        m_AnchorMin = { json["anchor_min"][0].get<float>(), json["anchor_min"][1].get<float>() };
+    }
+    if (json.contains("anchor_max") && json["anchor_max"].is_array() && json["anchor_max"].size() >= 2)
+    {
+        m_AnchorMax = { json["anchor_max"][0].get<float>(), json["anchor_max"][1].get<float>() };
+    }
+    if (json.contains("pivot") && json["pivot"].is_array() && json["pivot"].size() >= 2)
+    {
+        m_Pivot = { json["pivot"][0].get<float>(), json["pivot"][1].get<float>() };
+    }
+    if (json.contains("rotation_2d") && json["rotation_2d"].is_number())
+    {
+        m_Rotation2D = json["rotation_2d"].get<float>();
+    }
+    if (json.contains("scale_2d") && json["scale_2d"].is_array() && json["scale_2d"].size() >= 2)
+    {
+        m_Scale2D = { json["scale_2d"][0].get<float>(), json["scale_2d"][1].get<float>() };
+    }
+    if (json.contains("offset_min") && json["offset_min"].is_array() && json["offset_min"].size() >= 2)
+    {
+        m_OffsetMin = { json["offset_min"][0].get<float>(), json["offset_min"][1].get<float>() };
+    }
+    if (json.contains("offset_max") && json["offset_max"].is_array() && json["offset_max"].size() >= 2)
+    {
+        m_OffsetMax = { json["offset_max"][0].get<float>(), json["offset_max"][1].get<float>() };
+    }
+}
+
+CImageComponent::~CImageComponent()
+{
+    ReleaseOwnedResources();
+}
+
+void CImageComponent::ReleaseOwnedResources()
+{
+    if (m_TextureLoaded && m_RuntimeTexture.id != 0)
+    {
+        UnloadTexture(m_RuntimeTexture);
+        m_RuntimeTexture = {};
+        m_TextureLoaded = false;
+    }
+}
+
+void CImageComponent::Serialize(nlohmann::json& json) const
+{
+    json["source_texture"] = m_SourceTexture;
+    json["color"] = SerializeGuiColor(m_Color);
+    json["material"] = m_Material;
+    json["raycast_target"] = m_RaycastTarget;
+    json["image_type"] = static_cast<int>(m_ImageType);
+    json["preserve_aspect"] = m_PreserveAspect;
+    json["fill_center"] = m_FillCenter;
+    json["fill_amount"] = m_FillAmount;
+}
+
+void CImageComponent::Deserialize(const nlohmann::json& json)
+{
+    if (json.contains("source_texture") && json["source_texture"].is_string())
+    {
+        m_SourceTexture = json["source_texture"].get<std::string>();
+    }
+    DeserializeGuiColor(json, "color", m_Color);
+    if (json.contains("material") && json["material"].is_string())
+    {
+        m_Material = json["material"].get<std::string>();
+    }
+    if (json.contains("raycast_target") && json["raycast_target"].is_boolean())
+    {
+        m_RaycastTarget = json["raycast_target"].get<bool>();
+    }
+    if (json.contains("image_type") && json["image_type"].is_number_integer())
+    {
+        const int type = json["image_type"].get<int>();
+        if (type >= static_cast<int>(EUiImageType::SIMPLE) &&
+            type <= static_cast<int>(EUiImageType::FILLED))
+        {
+            m_ImageType = static_cast<EUiImageType>(type);
+        }
+    }
+    if (json.contains("preserve_aspect") && json["preserve_aspect"].is_boolean())
+    {
+        m_PreserveAspect = json["preserve_aspect"].get<bool>();
+    }
+    if (json.contains("fill_center") && json["fill_center"].is_boolean())
+    {
+        m_FillCenter = json["fill_center"].get<bool>();
+    }
+    if (json.contains("fill_amount") && json["fill_amount"].is_number())
+    {
+        m_FillAmount = json["fill_amount"].get<float>();
+    }
+}
+
+CPanelComponent::~CPanelComponent()
+{
+    ReleaseOwnedResources();
+}
+
+void CPanelComponent::ReleaseOwnedResources()
+{
+    if (m_TextureLoaded && m_RuntimeTexture.id != 0)
+    {
+        UnloadTexture(m_RuntimeTexture);
+        m_RuntimeTexture = {};
+        m_TextureLoaded = false;
+    }
+}
+
+void CPanelComponent::Serialize(nlohmann::json& json) const
+{
+    json["background_image"] = m_BackgroundImage;
+    json["background_color"] = SerializeGuiColor(m_BackgroundColor);
+    json["raycast_target"] = m_RaycastTarget;
+}
+
+void CPanelComponent::Deserialize(const nlohmann::json& json)
+{
+    if (json.contains("background_image") && json["background_image"].is_string())
+    {
+        m_BackgroundImage = json["background_image"].get<std::string>();
+    }
+    DeserializeGuiColor(json, "background_color", m_BackgroundColor);
+    if (json.contains("raycast_target") && json["raycast_target"].is_boolean())
+    {
+        m_RaycastTarget = json["raycast_target"].get<bool>();
+    }
+}
+
+Color CButtonComponent::GetCurrentColor() const
+{
+    Color baseColor = m_NormalColor;
+    if (!m_Interactable)
+    {
+        baseColor = m_DisabledColor;
+    }
+    else if (m_IsPressed)
+    {
+        baseColor = m_PressedColor;
+    }
+    else if (m_IsHovered)
+    {
+        baseColor = m_HighlightedColor;
+    }
+    else if (m_IsSelected)
+    {
+        baseColor = m_SelectedColor;
+    }
+
+    const float mult = std::clamp(m_ColorMultiplier, 0.0f, 5.0f);
+    return {
+        static_cast<unsigned char>(std::clamp(static_cast<int>(baseColor.r * mult), 0, 255)),
+        static_cast<unsigned char>(std::clamp(static_cast<int>(baseColor.g * mult), 0, 255)),
+        static_cast<unsigned char>(std::clamp(static_cast<int>(baseColor.b * mult), 0, 255)),
+        baseColor.a
+    };
+}
+
+void CButtonComponent::Serialize(nlohmann::json& json) const
+{
+    json["interactable"] = m_Interactable;
+    json["transition"] = static_cast<int>(m_Transition);
+    json["navigation"] = static_cast<int>(m_Navigation);
+    json["normal_color"] = SerializeGuiColor(m_NormalColor);
+    json["highlighted_color"] = SerializeGuiColor(m_HighlightedColor);
+    json["pressed_color"] = SerializeGuiColor(m_PressedColor);
+    json["selected_color"] = SerializeGuiColor(m_SelectedColor);
+    json["disabled_color"] = SerializeGuiColor(m_DisabledColor);
+    json["color_multiplier"] = m_ColorMultiplier;
+    json["fade_duration"] = m_FadeDuration;
+    json["sprite_swap_highlighted"] = m_SpriteSwapHighlighted;
+    json["sprite_swap_pressed"] = m_SpriteSwapPressed;
+    json["sprite_swap_selected"] = m_SpriteSwapSelected;
+    json["sprite_swap_disabled"] = m_SpriteSwapDisabled;
+    json["on_click_action"] = m_OnClickAction;
+    json["raycast_target"] = m_RaycastTarget;
+}
+
+void CButtonComponent::Deserialize(const nlohmann::json& json)
+{
+    if (json.contains("interactable") && json["interactable"].is_boolean())
+    {
+        m_Interactable = json["interactable"].get<bool>();
+    }
+    if (json.contains("transition") && json["transition"].is_number_integer())
+    {
+        const int trans = json["transition"].get<int>();
+        if (trans >= static_cast<int>(EUiTransition::NONE) &&
+            trans <= static_cast<int>(EUiTransition::ANIMATION))
+        {
+            m_Transition = static_cast<EUiTransition>(trans);
+        }
+    }
+    if (json.contains("navigation") && json["navigation"].is_number_integer())
+    {
+        const int nav = json["navigation"].get<int>();
+        if (nav >= static_cast<int>(EUiNavigation::NONE) &&
+            nav <= static_cast<int>(EUiNavigation::EXPLICIT))
+        {
+            m_Navigation = static_cast<EUiNavigation>(nav);
+        }
+    }
+    DeserializeGuiColor(json, "normal_color", m_NormalColor);
+    DeserializeGuiColor(json, "highlighted_color", m_HighlightedColor);
+    DeserializeGuiColor(json, "pressed_color", m_PressedColor);
+    DeserializeGuiColor(json, "selected_color", m_SelectedColor);
+    DeserializeGuiColor(json, "disabled_color", m_DisabledColor);
+    if (json.contains("color_multiplier") && json["color_multiplier"].is_number())
+    {
+        m_ColorMultiplier = json["color_multiplier"].get<float>();
+    }
+    if (json.contains("fade_duration") && json["fade_duration"].is_number())
+    {
+        m_FadeDuration = json["fade_duration"].get<float>();
+    }
+    if (json.contains("sprite_swap_highlighted") && json["sprite_swap_highlighted"].is_string())
+    {
+        m_SpriteSwapHighlighted = json["sprite_swap_highlighted"].get<std::string>();
+    }
+    if (json.contains("sprite_swap_pressed") && json["sprite_swap_pressed"].is_string())
+    {
+        m_SpriteSwapPressed = json["sprite_swap_pressed"].get<std::string>();
+    }
+    if (json.contains("sprite_swap_selected") && json["sprite_swap_selected"].is_string())
+    {
+        m_SpriteSwapSelected = json["sprite_swap_selected"].get<std::string>();
+    }
+    if (json.contains("sprite_swap_disabled") && json["sprite_swap_disabled"].is_string())
+    {
+        m_SpriteSwapDisabled = json["sprite_swap_disabled"].get<std::string>();
+    }
+    if (json.contains("on_click_action") && json["on_click_action"].is_string())
+    {
+        m_OnClickAction = json["on_click_action"].get<std::string>();
+    }
+    if (json.contains("raycast_target") && json["raycast_target"].is_boolean())
+    {
+        m_RaycastTarget = json["raycast_target"].get<bool>();
     }
 }
 
@@ -592,6 +1004,26 @@ void CComponentManager::CloneInto(const CComponentManager& source)
             case COMPONENT_UI_RECT_TRANSFORM:
                 pCloned = std::make_shared<CUiRectTransformComponent>(
                     *std::dynamic_pointer_cast<CUiRectTransformComponent>(pComponent));
+                break;
+
+            case COMPONENT_CANVAS:
+                pCloned = std::make_shared<CCanvasComponent>(
+                    *std::dynamic_pointer_cast<CCanvasComponent>(pComponent));
+                break;
+
+            case COMPONENT_IMAGE:
+                pCloned = std::make_shared<CImageComponent>(
+                    *std::dynamic_pointer_cast<CImageComponent>(pComponent));
+                break;
+
+            case COMPONENT_PANEL:
+                pCloned = std::make_shared<CPanelComponent>(
+                    *std::dynamic_pointer_cast<CPanelComponent>(pComponent));
+                break;
+
+            case COMPONENT_BUTTON:
+                pCloned = std::make_shared<CButtonComponent>(
+                    *std::dynamic_pointer_cast<CButtonComponent>(pComponent));
                 break;
 
             default:

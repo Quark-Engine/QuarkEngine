@@ -4,6 +4,7 @@
 #include "scripting/script_engine.h"
 #include "editor/editor_utils.h"
 #include "editor/editor_viewers.h"
+#include "editor/editor_desktop.h"
 #include "imgui.h"
 #include "text_mesh.h"
 #include "models.h"
@@ -33,72 +34,9 @@
 namespace
 {
 
-    std::string BrowseForFileDialog(const char* pFilter, const char* pTitle)
+    std::string BrowseForFileDialog(const char* pFilterLabel, const char* pFilter)
     {
-#ifdef _WIN32
-        struct SOpenFileNameA
-        {
-            DWORD m_StructSize;
-            HWND m_HwndOwner;
-            HINSTANCE m_Instance;
-            LPCSTR m_pstrFilter;
-            LPSTR m_pstrCustomFilter;
-            DWORD m_MaxCustFilter;
-            DWORD m_FilterIndex;
-            LPSTR m_pstrFile;
-            DWORD m_MaxFile;
-            LPSTR m_pstrFileTitle;
-            DWORD m_MaxFileTitle;
-            LPCSTR m_pstrInitialDir;
-            LPCSTR m_pstrTitle;
-            DWORD m_Flags;
-            WORD m_FileOffset;
-            WORD m_FileExtension;
-            LPCSTR m_pstrDefExt;
-            LPARAM m_CustData;
-            void* m_pfnHook;
-            LPCSTR m_pTemplateName;
-            void* m_pvReserved;
-            DWORD m_Reserved;
-            DWORD m_FlagsEx;
-        };
-
-        using PfnGetOpenFileNameA = BOOL(WINAPI*)(SOpenFileNameA*);
-        HMODULE hComdlg = LoadLibraryA("comdlg32.dll");
-        if (!hComdlg)
-        {
-            return {};
-        }
-        auto pfnGetOpen = reinterpret_cast<PfnGetOpenFileNameA>(
-            GetProcAddress(hComdlg, "GetOpenFileNameA"));
-        if (!pfnGetOpen)
-        {
-            FreeLibrary(hComdlg);
-            return {};
-        }
-
-        char aFileBuffer[1024] = {};
-        SOpenFileNameA ofn = {};
-        ofn.m_StructSize = sizeof(SOpenFileNameA);
-        ofn.m_pstrFilter = pFilter;
-        ofn.m_FilterIndex = 1;
-        ofn.m_pstrFile = aFileBuffer;
-        ofn.m_MaxFile = sizeof(aFileBuffer);
-        ofn.m_pstrTitle = pTitle;
-        ofn.m_Flags = 0x00000800 | 0x00001000 | 0x00000008;
-
-        std::string result;
-        if (pfnGetOpen(&ofn) && aFileBuffer[0] != '\0')
-        {
-            result = aFileBuffer;
-        }
-        FreeLibrary(hComdlg);
-        return result;
-#else
-        (void)pFilter;
-        (void)pTitle;
-        return {};
-#endif
+        return CDesktopIntegration::OpenFileDialog(pFilterLabel, pFilter);
     }
 
 } // anonymous
@@ -185,6 +123,22 @@ void CComponentUIHelper::DrawEntityInspector(CEditor& editor, CEntity& entity, S
                 else if (auto pRectTransform = std::dynamic_pointer_cast<CUiRectTransformComponent>(pComp))
                 {
                     DrawUiRectTransformComponent(editor, pRectTransform.get());
+                }
+                else if (auto pCanvas = std::dynamic_pointer_cast<CCanvasComponent>(pComp))
+                {
+                    DrawCanvasComponent(editor, entity, pCanvas.get());
+                }
+                else if (auto pImage = std::dynamic_pointer_cast<CImageComponent>(pComp))
+                {
+                    DrawImageComponent(editor, entity, pImage.get());
+                }
+                else if (auto pPanel = std::dynamic_pointer_cast<CPanelComponent>(pComp))
+                {
+                    DrawPanelComponent(editor, entity, pPanel.get());
+                }
+                else if (auto pButton = std::dynamic_pointer_cast<CButtonComponent>(pComp))
+                {
+                    DrawButtonComponent(editor, entity, pButton.get());
                 }
                 else if (auto pScript = std::dynamic_pointer_cast<CScriptComponent>(pComp))
                 {
@@ -380,6 +334,76 @@ void CComponentUIHelper::DrawEntityInspector(CEditor& editor, CEntity& entity, S
                 }
                 return false;
             }();
+            if (ImGui::MenuItem("Canvas"))
+            {
+                if (!pComponentsManager->GetComponentOfType<CCanvasComponent>())
+                {
+                    editor.SaveState();
+                    pComponentsManager->RemoveMeshAndMaterialForUi(true);
+                    pComponentsManager->AddComponent(std::make_shared<CCanvasComponent>());
+                }
+            }
+            if (ImGui::MenuItem("Rect Transform"))
+            {
+                if (!pComponentsManager->GetComponentOfType<CUiRectTransformComponent>())
+                {
+                    editor.SaveState();
+                    pComponentsManager->RemoveMeshAndMaterialForUi(false);
+                    pComponentsManager->AddComponent(std::make_shared<CUiRectTransformComponent>());
+                }
+            }
+            if (ImGui::MenuItem("Image"))
+            {
+                if (!pComponentsManager->GetComponentOfType<CImageComponent>())
+                {
+                    editor.SaveState();
+                    pComponentsManager->RemoveMeshAndMaterialForUi(false);
+                    if (!pComponentsManager->GetComponentOfType<CUiRectTransformComponent>())
+                    {
+                        pComponentsManager->AddComponent(std::make_shared<CUiRectTransformComponent>());
+                    }
+                    pComponentsManager->AddComponent(std::make_shared<CImageComponent>());
+                }
+            }
+            if (ImGui::MenuItem("Panel"))
+            {
+                if (!pComponentsManager->GetComponentOfType<CPanelComponent>())
+                {
+                    editor.SaveState();
+                    pComponentsManager->RemoveMeshAndMaterialForUi(false);
+                    if (!pComponentsManager->GetComponentOfType<CUiRectTransformComponent>())
+                    {
+                        pComponentsManager->AddComponent(std::make_shared<CUiRectTransformComponent>());
+                    }
+                    pComponentsManager->AddComponent(std::make_shared<CPanelComponent>());
+                }
+            }
+            if (ImGui::MenuItem("Button"))
+            {
+                if (!pComponentsManager->GetComponentOfType<CButtonComponent>())
+                {
+                    editor.SaveState();
+                    pComponentsManager->RemoveMeshAndMaterialForUi(false);
+                    if (!pComponentsManager->GetComponentOfType<CUiRectTransformComponent>())
+                    {
+                        pComponentsManager->AddComponent(std::make_shared<CUiRectTransformComponent>());
+                    }
+                    pComponentsManager->AddComponent(std::make_shared<CButtonComponent>());
+                }
+            }
+            if (ImGui::MenuItem("Text"))
+            {
+                if (!pComponentsManager->GetComponentOfType<CTextComponent>())
+                {
+                    editor.SaveState();
+                    pComponentsManager->RemoveMeshAndMaterialForUi(false);
+                    if (!pComponentsManager->GetComponentOfType<CUiRectTransformComponent>())
+                    {
+                        pComponentsManager->AddComponent(std::make_shared<CUiRectTransformComponent>());
+                    }
+                    pComponentsManager->AddComponent(std::make_shared<CTextComponent>());
+                }
+            }
             if (ImGui::MenuItem("UI"))
             {
                 if (!hasUi)
@@ -1300,7 +1324,7 @@ void CComponentUIHelper::Draw3dTextComponent(CEditor& editor, CEntity& entity, C
     ImGui::SameLine();
     if (ImGui::Button("...##Browse3dFont"))
     {
-        const std::string browsedFont = BrowseForFileDialog("Font Files (*.ttf;*.otf)\0*.ttf;*.otf\0All Files (*.*)\0*.*\0", "Select Font");
+        const std::string browsedFont = BrowseForFileDialog("Font Files (*.ttf;*.otf)", "Font Files (*.ttf;*.otf)\0*.ttf;*.otf\0All Files (*.*)\0*.*\0");
         if (!browsedFont.empty())
         {
             editor.SaveState();
@@ -1576,27 +1600,609 @@ void CComponentUIHelper::DrawUiRectTransformComponent(
     }
 
     bool changed = false;
-    float aPosition[2] = { pRectTransform->m_Position.x, pRectTransform->m_Position.y };
-    const bool positionChanged = ImGui::DragFloat2("Position", aPosition, 1.0f, -4096.0f, 4096.0f, "%.0f px");
+
+    float aPos[2] = { pRectTransform->m_AnchoredPosition.x, pRectTransform->m_AnchoredPosition.y };
+    if (ImGui::DragFloat2("Pos (X, Y)", aPos, 1.0f, -8192.0f, 8192.0f, "%.1f"))
+    {
+        pRectTransform->m_AnchoredPosition = { aPos[0], aPos[1] };
+        pRectTransform->m_Position = pRectTransform->m_AnchoredPosition;
+        changed = true;
+    }
     if (ImGui::IsItemActivated())
     {
         editor.SaveState();
-    }
-    if (positionChanged)
-    {
-        pRectTransform->m_Position = { aPosition[0], aPosition[1] };
-        changed = true;
     }
 
     float aSize[2] = { pRectTransform->m_Size.x, pRectTransform->m_Size.y };
-    const bool sizeChanged = ImGui::DragFloat2("Size", aSize, 1.0f, 16.0f, 2048.0f, "%.0f px");
+    if (ImGui::DragFloat2("Width / Height", aSize, 1.0f, 1.0f, 8192.0f, "%.1f"))
+    {
+        pRectTransform->m_Size = { std::max(1.0f, aSize[0]), std::max(1.0f, aSize[1]) };
+        changed = true;
+    }
     if (ImGui::IsItemActivated())
     {
         editor.SaveState();
     }
-    if (sizeChanged)
+
+    float aAnchorMin[2] = { pRectTransform->m_AnchorMin.x, pRectTransform->m_AnchorMin.y };
+    if (ImGui::DragFloat2("Anchor Min", aAnchorMin, 0.01f, 0.0f, 1.0f, "%.2f"))
     {
-        pRectTransform->m_Size = { std::max(16.0f, aSize[0]), std::max(16.0f, aSize[1]) };
+        pRectTransform->m_AnchorMin = { std::clamp(aAnchorMin[0], 0.0f, 1.0f), std::clamp(aAnchorMin[1], 0.0f, 1.0f) };
+        changed = true;
+    }
+    if (ImGui::IsItemActivated())
+    {
+        editor.SaveState();
+    }
+
+    float aAnchorMax[2] = { pRectTransform->m_AnchorMax.x, pRectTransform->m_AnchorMax.y };
+    if (ImGui::DragFloat2("Anchor Max", aAnchorMax, 0.01f, 0.0f, 1.0f, "%.2f"))
+    {
+        pRectTransform->m_AnchorMax = { std::clamp(aAnchorMax[0], 0.0f, 1.0f), std::clamp(aAnchorMax[1], 0.0f, 1.0f) };
+        changed = true;
+    }
+    if (ImGui::IsItemActivated())
+    {
+        editor.SaveState();
+    }
+
+    float aPivot[2] = { pRectTransform->m_Pivot.x, pRectTransform->m_Pivot.y };
+    if (ImGui::DragFloat2("Pivot", aPivot, 0.01f, 0.0f, 1.0f, "%.2f"))
+    {
+        pRectTransform->m_Pivot = { std::clamp(aPivot[0], 0.0f, 1.0f), std::clamp(aPivot[1], 0.0f, 1.0f) };
+        changed = true;
+    }
+    if (ImGui::IsItemActivated())
+    {
+        editor.SaveState();
+    }
+
+    float rotation = pRectTransform->m_Rotation2D;
+    if (ImGui::DragFloat("Rotation", &rotation, 0.5f, -360.0f, 360.0f, "%.1f deg"))
+    {
+        pRectTransform->m_Rotation2D = rotation;
+        changed = true;
+    }
+    if (ImGui::IsItemActivated())
+    {
+        editor.SaveState();
+    }
+
+    float aScale[2] = { pRectTransform->m_Scale2D.x, pRectTransform->m_Scale2D.y };
+    if (ImGui::DragFloat2("Scale", aScale, 0.01f, -100.0f, 100.0f, "%.2f"))
+    {
+        pRectTransform->m_Scale2D = { aScale[0], aScale[1] };
+        changed = true;
+    }
+    if (ImGui::IsItemActivated())
+    {
+        editor.SaveState();
+    }
+
+    if (changed)
+    {
+        editor.m_SceneDirty = true;
+    }
+}
+
+void CComponentUIHelper::DrawCanvasComponent(
+    CEditor& editor,
+    CEntity& entity,
+    CCanvasComponent* pCanvas)
+{
+    if (!pCanvas)
+    {
+        return;
+    }
+
+    bool changed = false;
+
+    const char* apRenderModes[] = {
+        "Screen Space - Overlay",
+        "Screen Space - Camera",
+        "World Space"
+    };
+    int currentMode = static_cast<int>(pCanvas->m_RenderMode);
+    if (ImGui::Combo("Render Mode", &currentMode, apRenderModes, IM_ARRAYSIZE(apRenderModes)))
+    {
+        editor.SaveState();
+        pCanvas->m_RenderMode = static_cast<ECanvasRenderMode>(currentMode);
+        changed = true;
+    }
+
+    auto drawCameraCombo = [&](const char* label, int& cameraId)
+    {
+        std::string preview = "None (-1)";
+        if (cameraId >= 0)
+        {
+            for (int eIdx = 0; eIdx < static_cast<int>(editor.m_Scene.m_vEntities.size()); ++eIdx)
+            {
+                const auto& ent = editor.m_Scene.m_vEntities[eIdx];
+                if (ent.m_Id == cameraId || eIdx == cameraId)
+                {
+                    preview = ent.m_Name + " (" + std::to_string(ent.m_Id) + ")";
+                    break;
+                }
+            }
+        }
+
+        if (ImGui::BeginCombo(label, preview.c_str()))
+        {
+            const bool selectedNone = (cameraId == -1);
+            if (ImGui::Selectable("None (-1)", selectedNone))
+            {
+                editor.SaveState();
+                cameraId = -1;
+                changed = true;
+            }
+            for (int eIdx = 0; eIdx < static_cast<int>(editor.m_Scene.m_vEntities.size()); ++eIdx)
+            {
+                const auto& ent = editor.m_Scene.m_vEntities[eIdx];
+                if (ent.GetCameraComponent())
+                {
+                    const bool isSelected = (cameraId == ent.m_Id || cameraId == eIdx);
+                    const std::string name = ent.m_Name + " (" + std::to_string(ent.m_Id) + ")";
+                    if (ImGui::Selectable(name.c_str(), isSelected))
+                    {
+                        editor.SaveState();
+                        cameraId = ent.m_Id;
+                        changed = true;
+                    }
+                }
+            }
+            ImGui::EndCombo();
+        }
+    };
+
+    if (pCanvas->m_RenderMode == ECanvasRenderMode::WORLD_SPACE)
+    {
+        float aSize[2] = { pCanvas->m_Width, pCanvas->m_Height };
+        if (ImGui::DragFloat2("Canvas Size", aSize, 1.0f, 10.0f, 8192.0f, "%.0f"))
+        {
+            pCanvas->m_Width = std::max(10.0f, aSize[0]);
+            pCanvas->m_Height = std::max(10.0f, aSize[1]);
+            changed = true;
+        }
+        if (ImGui::IsItemActivated())
+        {
+            editor.SaveState();
+        }
+
+        int eventCam = pCanvas->m_EventCameraEntityId;
+        drawCameraCombo("Event Camera", eventCam);
+        if (eventCam != pCanvas->m_EventCameraEntityId)
+        {
+            pCanvas->m_EventCameraEntityId = eventCam;
+            changed = true;
+        }
+
+        bool overrideSorting = pCanvas->m_OverrideSorting;
+        if (ImGui::Checkbox("Override Sorting", &overrideSorting))
+        {
+            editor.SaveState();
+            pCanvas->m_OverrideSorting = overrideSorting;
+            changed = true;
+        }
+
+        int sortOrder = pCanvas->m_SortingOrder;
+        if (ImGui::InputInt("Sort Order", &sortOrder))
+        {
+            pCanvas->m_SortingOrder = sortOrder;
+            changed = true;
+        }
+        if (ImGui::IsItemActivated())
+        {
+            editor.SaveState();
+        }
+
+        bool pixelPerfect = pCanvas->m_PixelPerfect;
+        if (ImGui::Checkbox("Pixel Perfect", &pixelPerfect))
+        {
+            editor.SaveState();
+            pCanvas->m_PixelPerfect = pixelPerfect;
+            changed = true;
+        }
+    }
+    else if (pCanvas->m_RenderMode == ECanvasRenderMode::SCREEN_SPACE_CAMERA)
+    {
+        bool pixelPerfect = pCanvas->m_PixelPerfect;
+        if (ImGui::Checkbox("Pixel Perfect", &pixelPerfect))
+        {
+            editor.SaveState();
+            pCanvas->m_PixelPerfect = pixelPerfect;
+            changed = true;
+        }
+
+        int renderCam = pCanvas->m_RenderCameraEntityId;
+        drawCameraCombo("Render Camera", renderCam);
+        if (renderCam != pCanvas->m_RenderCameraEntityId)
+        {
+            pCanvas->m_RenderCameraEntityId = renderCam;
+            changed = true;
+        }
+
+        float planeDist = pCanvas->m_PlaneDistance;
+        if (ImGui::DragFloat("Plane Distance", &planeDist, 1.0f, 0.1f, 10000.0f, "%.1f"))
+        {
+            pCanvas->m_PlaneDistance = planeDist;
+            changed = true;
+        }
+        if (ImGui::IsItemActivated())
+        {
+            editor.SaveState();
+        }
+
+        int sortOrder = pCanvas->m_SortingOrder;
+        if (ImGui::InputInt("Sort Order", &sortOrder))
+        {
+            pCanvas->m_SortingOrder = sortOrder;
+            changed = true;
+        }
+        if (ImGui::IsItemActivated())
+        {
+            editor.SaveState();
+        }
+    }
+    else
+    {
+        bool pixelPerfect = pCanvas->m_PixelPerfect;
+        if (ImGui::Checkbox("Pixel Perfect", &pixelPerfect))
+        {
+            editor.SaveState();
+            pCanvas->m_PixelPerfect = pixelPerfect;
+            changed = true;
+        }
+
+        int sortOrder = pCanvas->m_SortingOrder;
+        if (ImGui::InputInt("Sort Order", &sortOrder))
+        {
+            pCanvas->m_SortingOrder = sortOrder;
+            changed = true;
+        }
+        if (ImGui::IsItemActivated())
+        {
+            editor.SaveState();
+        }
+
+        int targetDisplay = pCanvas->m_TargetDisplay;
+        if (ImGui::InputInt("Target Display", &targetDisplay))
+        {
+            pCanvas->m_TargetDisplay = targetDisplay;
+            changed = true;
+        }
+        if (ImGui::IsItemActivated())
+        {
+            editor.SaveState();
+        }
+
+        float scaleFactor = pCanvas->m_ScaleFactor;
+        if (ImGui::DragFloat("Scale Factor", &scaleFactor, 0.05f, 0.1f, 10.0f, "%.2f"))
+        {
+            pCanvas->m_ScaleFactor = scaleFactor;
+            changed = true;
+        }
+        if (ImGui::IsItemActivated())
+        {
+            editor.SaveState();
+        }
+
+        float aRefRes[2] = { pCanvas->m_ReferenceResolution.x, pCanvas->m_ReferenceResolution.y };
+        if (ImGui::DragFloat2("Reference Resolution", aRefRes, 1.0f, 100.0f, 8192.0f, "%.0f"))
+        {
+            pCanvas->m_ReferenceResolution = { aRefRes[0], aRefRes[1] };
+            changed = true;
+        }
+        if (ImGui::IsItemActivated())
+        {
+            editor.SaveState();
+        }
+    }
+
+    if (changed)
+    {
+        editor.m_SceneDirty = true;
+    }
+}
+
+void CComponentUIHelper::DrawImageComponent(
+    CEditor& editor,
+    CEntity& entity,
+    CImageComponent* pImage)
+{
+    if (!pImage)
+    {
+        return;
+    }
+
+    bool changed = false;
+
+    char aTexturePath[512] = {};
+    std::snprintf(aTexturePath, sizeof(aTexturePath), "%s", pImage->m_SourceTexture.c_str());
+    if (ImGui::InputText("Source Image", aTexturePath, sizeof(aTexturePath)))
+    {
+        pImage->m_SourceTexture = aTexturePath;
+        changed = true;
+    }
+    if (ImGui::IsItemActivated())
+    {
+        editor.SaveState();
+    }
+    ImGui::SameLine();
+    if (ImGui::Button("...##BrowseImageTexture"))
+    {
+        const std::string browsed = BrowseForFileDialog("Image Files (*.png;*.jpg;*.jpeg;*.bmp)", "Image Files (*.png;*.jpg;*.jpeg;*.bmp)\0*.png;*.jpg;*.jpeg;*.bmp\0All Files (*.*)\0*.*\0");
+        if (!browsed.empty())
+        {
+            editor.SaveState();
+            pImage->m_SourceTexture = browsed;
+            changed = true;
+        }
+    }
+
+    if (EditGuiColor4(editor, "Color##Img", pImage->m_Color))
+    {
+        changed = true;
+    }
+
+    char aMaterialPath[512] = {};
+    std::snprintf(aMaterialPath, sizeof(aMaterialPath), "%s", pImage->m_Material.c_str());
+    if (ImGui::InputText("Material", aMaterialPath, sizeof(aMaterialPath)))
+    {
+        pImage->m_Material = aMaterialPath;
+        changed = true;
+    }
+    if (ImGui::IsItemActivated())
+    {
+        editor.SaveState();
+    }
+    ImGui::SameLine();
+    if (ImGui::Button("...##BrowseImageMaterial"))
+    {
+        const std::string browsed = BrowseForFileDialog("Material Files (*.mtl)", "Material Files (*.mtl)\0*.mtl\0All Files (*.*)\0*.*\0");
+        if (!browsed.empty())
+        {
+            editor.SaveState();
+            pImage->m_Material = browsed;
+            changed = true;
+        }
+    }
+
+    bool raycastTarget = pImage->m_RaycastTarget;
+    if (ImGui::Checkbox("Raycast Target##Img", &raycastTarget))
+    {
+        editor.SaveState();
+        pImage->m_RaycastTarget = raycastTarget;
+        changed = true;
+    }
+
+    const char* apImageTypes[] = { "Simple", "Sliced", "Tiled", "Filled" };
+    int currentType = static_cast<int>(pImage->m_ImageType);
+    if (ImGui::Combo("Image Type", &currentType, apImageTypes, IM_ARRAYSIZE(apImageTypes)))
+    {
+        editor.SaveState();
+        pImage->m_ImageType = static_cast<EUiImageType>(currentType);
+        changed = true;
+    }
+
+    bool preserveAspect = pImage->m_PreserveAspect;
+    if (ImGui::Checkbox("Preserve Aspect", &preserveAspect))
+    {
+        editor.SaveState();
+        pImage->m_PreserveAspect = preserveAspect;
+        changed = true;
+    }
+
+    if (pImage->m_ImageType == EUiImageType::SLICED || pImage->m_ImageType == EUiImageType::TILED)
+    {
+        bool fillCenter = pImage->m_FillCenter;
+        if (ImGui::Checkbox("Fill Center", &fillCenter))
+        {
+            editor.SaveState();
+            pImage->m_FillCenter = fillCenter;
+            changed = true;
+        }
+    }
+    else if (pImage->m_ImageType == EUiImageType::FILLED)
+    {
+        float fillAmount = pImage->m_FillAmount;
+        if (ImGui::SliderFloat("Fill Amount", &fillAmount, 0.0f, 1.0f, "%.2f"))
+        {
+            pImage->m_FillAmount = fillAmount;
+            changed = true;
+        }
+        if (ImGui::IsItemActivated())
+        {
+            editor.SaveState();
+        }
+    }
+
+    if (changed)
+    {
+        editor.m_SceneDirty = true;
+    }
+}
+
+void CComponentUIHelper::DrawPanelComponent(
+    CEditor& editor,
+    CEntity& entity,
+    CPanelComponent* pPanel)
+{
+    if (!pPanel)
+    {
+        return;
+    }
+
+    bool changed = false;
+
+    char aImagePath[512] = {};
+    std::snprintf(aImagePath, sizeof(aImagePath), "%s", pPanel->m_BackgroundImage.c_str());
+    if (ImGui::InputText("Background Image", aImagePath, sizeof(aImagePath)))
+    {
+        pPanel->m_BackgroundImage = aImagePath;
+        changed = true;
+    }
+    if (ImGui::IsItemActivated())
+    {
+        editor.SaveState();
+    }
+    ImGui::SameLine();
+    if (ImGui::Button("...##BrowsePanelImage"))
+    {
+        const std::string browsed = BrowseForFileDialog("Image Files (*.png;*.jpg;*.jpeg;*.bmp)", "Image Files (*.png;*.jpg;*.jpeg;*.bmp)\0*.png;*.jpg;*.jpeg;*.bmp\0All Files (*.*)\0*.*\0");
+        if (!browsed.empty())
+        {
+            editor.SaveState();
+            pPanel->m_BackgroundImage = browsed;
+            changed = true;
+        }
+    }
+
+    if (EditGuiColor4(editor, "Background Color##Pnl", pPanel->m_BackgroundColor))
+    {
+        changed = true;
+    }
+
+    bool raycastTarget = pPanel->m_RaycastTarget;
+    if (ImGui::Checkbox("Raycast Target##Pnl", &raycastTarget))
+    {
+        editor.SaveState();
+        pPanel->m_RaycastTarget = raycastTarget;
+        changed = true;
+    }
+
+    if (changed)
+    {
+        editor.m_SceneDirty = true;
+    }
+}
+
+void CComponentUIHelper::DrawButtonComponent(
+    CEditor& editor,
+    CEntity& entity,
+    CButtonComponent* pButton)
+{
+    if (!pButton)
+    {
+        return;
+    }
+
+    bool changed = false;
+
+    bool interactable = pButton->m_Interactable;
+    if (ImGui::Checkbox("Interactable", &interactable))
+    {
+        editor.SaveState();
+        pButton->m_Interactable = interactable;
+        changed = true;
+    }
+
+    const char* apTransitions[] = { "None", "Color Tint", "Sprite Swap", "Animation" };
+    int currentTransition = static_cast<int>(pButton->m_Transition);
+    if (ImGui::Combo("Transition", &currentTransition, apTransitions, IM_ARRAYSIZE(apTransitions)))
+    {
+        editor.SaveState();
+        pButton->m_Transition = static_cast<EUiTransition>(currentTransition);
+        changed = true;
+    }
+
+    if (pButton->m_Transition == EUiTransition::COLOR_TINT)
+    {
+        if (EditGuiColor4(editor, "Normal Color##Btn", pButton->m_NormalColor))
+        {
+            changed = true;
+        }
+        if (EditGuiColor4(editor, "Highlighted Color##Btn", pButton->m_HighlightedColor))
+        {
+            changed = true;
+        }
+        if (EditGuiColor4(editor, "Pressed Color##Btn", pButton->m_PressedColor))
+        {
+            changed = true;
+        }
+        if (EditGuiColor4(editor, "Selected Color##Btn", pButton->m_SelectedColor))
+        {
+            changed = true;
+        }
+        if (EditGuiColor4(editor, "Disabled Color##Btn", pButton->m_DisabledColor))
+        {
+            changed = true;
+        }
+
+        float colorMultiplier = pButton->m_ColorMultiplier;
+        if (ImGui::SliderFloat("Color Multiplier", &colorMultiplier, 1.0f, 5.0f, "%.1f"))
+        {
+            pButton->m_ColorMultiplier = colorMultiplier;
+            changed = true;
+        }
+        if (ImGui::IsItemActivated())
+        {
+            editor.SaveState();
+        }
+
+        float fadeDuration = pButton->m_FadeDuration;
+        if (ImGui::DragFloat("Fade Duration", &fadeDuration, 0.01f, 0.0f, 5.0f, "%.2f s"))
+        {
+            pButton->m_FadeDuration = fadeDuration;
+            changed = true;
+        }
+        if (ImGui::IsItemActivated())
+        {
+            editor.SaveState();
+        }
+    }
+    else if (pButton->m_Transition == EUiTransition::SPRITE_SWAP)
+    {
+        char aHighlighted[512] = {};
+        std::snprintf(aHighlighted, sizeof(aHighlighted), "%s", pButton->m_SpriteSwapHighlighted.c_str());
+        if (ImGui::InputText("Highlighted Sprite", aHighlighted, sizeof(aHighlighted)))
+        {
+            pButton->m_SpriteSwapHighlighted = aHighlighted;
+            changed = true;
+        }
+        if (ImGui::IsItemActivated())
+        {
+            editor.SaveState();
+        }
+
+        char aPressed[512] = {};
+        std::snprintf(aPressed, sizeof(aPressed), "%s", pButton->m_SpriteSwapPressed.c_str());
+        if (ImGui::InputText("Pressed Sprite", aPressed, sizeof(aPressed)))
+        {
+            pButton->m_SpriteSwapPressed = aPressed;
+            changed = true;
+        }
+        if (ImGui::IsItemActivated())
+        {
+            editor.SaveState();
+        }
+    }
+
+    const char* apNavigations[] = { "None", "Horizontal", "Vertical", "Automatic", "Explicit" };
+    int currentNav = static_cast<int>(pButton->m_Navigation);
+    if (ImGui::Combo("Navigation", &currentNav, apNavigations, IM_ARRAYSIZE(apNavigations)))
+    {
+        editor.SaveState();
+        pButton->m_Navigation = static_cast<EUiNavigation>(currentNav);
+        changed = true;
+    }
+
+    char aAction[512] = {};
+    std::snprintf(aAction, sizeof(aAction), "%s", pButton->m_OnClickAction.c_str());
+    if (ImGui::InputText("On Click Action", aAction, sizeof(aAction)))
+    {
+        pButton->m_OnClickAction = aAction;
+        changed = true;
+    }
+    if (ImGui::IsItemActivated())
+    {
+        editor.SaveState();
+    }
+
+    bool raycastTarget = pButton->m_RaycastTarget;
+    if (ImGui::Checkbox("Raycast Target##Btn", &raycastTarget))
+    {
+        editor.SaveState();
+        pButton->m_RaycastTarget = raycastTarget;
         changed = true;
     }
 
@@ -1728,7 +2334,7 @@ void CComponentUIHelper::DrawUiTextComponent(CEditor& editor, CTextComponent* pT
     ImGui::SameLine();
     if (ImGui::Button("...##BrowseUiFont"))
     {
-        const std::string browsedFont = BrowseForFileDialog("Font Files (*.ttf;*.otf)\0*.ttf;*.otf\0All Files (*.*)\0*.*\0", "Select Font");
+        const std::string browsedFont = BrowseForFileDialog("Font Files (*.ttf;*.otf)", "Font Files (*.ttf;*.otf)\0*.ttf;*.otf\0All Files (*.*)\0*.*\0");
         if (!browsedFont.empty())
         {
             editor.SaveState();
@@ -1916,7 +2522,7 @@ void CComponentUIHelper::DrawUiTextComponent(CEditor& editor, CTextComponent* pT
         ImGui::SameLine();
         if (ImGui::Button("...##BrowseUiMaterial"))
         {
-            const std::string browsedMaterial = BrowseForFileDialog("Material Files (*.mtl)\0*.mtl\0All Files (*.*)\0*.*\0", "Select Material");
+            const std::string browsedMaterial = BrowseForFileDialog("Material Files (*.mtl)", "Material Files (*.mtl)\0*.mtl\0All Files (*.*)\0*.*\0");
             if (!browsedMaterial.empty())
             {
                 editor.SaveState();

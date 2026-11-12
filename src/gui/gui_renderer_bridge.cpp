@@ -25,9 +25,17 @@ namespace quark
                 bool m_Valid = false;
             };
 
+            struct SResolvedFontInfo
+            {
+                std::string m_StyledPath;
+                bool m_FoundBold = false;
+                bool m_FoundItalic = false;
+            };
+
             static Font s_GuiFont = {};
             static bool s_GuiFontLoaded = false;
             static bool s_GuiFontAttempted = false;
+            static std::unordered_map<std::string, SResolvedFontInfo> s_FontResolutionCache;
             static std::string s_DefaultFontPath;
             static std::unordered_map<std::string, SCachedFontEntry> s_FontCache;
             static std::unordered_map<std::string, Color> s_MaterialTintCache;
@@ -104,7 +112,7 @@ namespace quark
 
                 s_DefaultFontPath = foundPath;
                 const std::vector<int>& vCodepoints = GetGuiCodepoints();
-                s_GuiFont = LoadFontEx(foundPath.c_str(), 32, vCodepoints.data(), static_cast<int>(vCodepoints.size()));
+                s_GuiFont = LoadFontEx(foundPath.c_str(), 48, vCodepoints.data(), static_cast<int>(vCodepoints.size()));
                 if (s_GuiFont.texture.id != 0 && s_GuiFont.glyphCount > 0)
                 {
                     SetTextureFilter(s_GuiFont.texture, TEXTURE_FILTER_BILINEAR);
@@ -116,7 +124,7 @@ namespace quark
             {
                 EnsureGuiFontLoaded();
                 const std::string lowerReq = ToLowerCopy(requestedFont);
-                if (requestedFont.empty() || lowerReq == "default (rubik)" || lowerReq == "rubik-regular" || lowerReq == "arial")
+                if (requestedFont.empty() || lowerReq == "default" || lowerReq == "default (rubik)" || lowerReq == "rubik-regular")
                 {
                     return s_DefaultFontPath;
                 }
@@ -153,6 +161,30 @@ namespace quark
                         return otfCandidate;
                     }
                 }
+
+#ifdef _WIN32
+                char* pWinDir = nullptr;
+                size_t winDirLen = 0;
+                _dupenv_s(&pWinDir, &winDirLen, "WINDIR");
+                const std::string winFontsDir = (pWinDir && winDirLen > 0) ? (std::string(pWinDir) + "\\Fonts\\") : "C:\\Windows\\Fonts\\";
+                if (pWinDir)
+                {
+                    free(pWinDir);
+                }
+                const std::string winCandidate = winFontsDir + requestedFont;
+                if (std::filesystem::exists(winCandidate, ec) && !ec)
+                {
+                    return winCandidate;
+                }
+                if (std::filesystem::exists(winCandidate + ".ttf", ec) && !ec)
+                {
+                    return winCandidate + ".ttf";
+                }
+                if (std::filesystem::exists(winCandidate + ".otf", ec) && !ec)
+                {
+                    return winCandidate + ".otf";
+                }
+#endif
 
                 return s_DefaultFontPath;
             }
@@ -252,7 +284,7 @@ namespace quark
 
                 const std::vector<int>& vCodepoints = GetGuiCodepoints();
                 SCachedFontEntry entry;
-                entry.m_Font = LoadFontEx(cacheKey.c_str(), 32, vCodepoints.data(), static_cast<int>(vCodepoints.size()));
+                entry.m_Font = LoadFontEx(cacheKey.c_str(), 48, vCodepoints.data(), static_cast<int>(vCodepoints.size()));
                 if (entry.m_Font.texture.id != 0 && entry.m_Font.glyphCount > 0)
                 {
                     SetTextureFilter(entry.m_Font.texture, TEXTURE_FILTER_BILINEAR);
@@ -315,10 +347,20 @@ namespace quark
             void BridgeSetTextContext(const char* pFontPath, int fontStyle, const char* pMaterialPath)
             {
                 EnsureGuiFontLoaded();
-                const std::string basePath = ResolveBaseFontPath(pFontPath ? pFontPath : "");
-                bool foundBold = false;
-                bool foundItalic = false;
-                std::string styledPath = FindStyledSiblingFontPath(basePath, fontStyle, foundBold, foundItalic);
+                const std::string fontKey = (pFontPath ? pFontPath : "") + std::string("#") + std::to_string(fontStyle);
+                auto resIt = s_FontResolutionCache.find(fontKey);
+                if (resIt == s_FontResolutionCache.end())
+                {
+                    const std::string basePath = ResolveBaseFontPath(pFontPath ? pFontPath : "");
+                    bool foundBold = false;
+                    bool foundItalic = false;
+                    std::string styledPath = FindStyledSiblingFontPath(basePath, fontStyle, foundBold, foundItalic);
+                    resIt = s_FontResolutionCache.emplace(fontKey, SResolvedFontInfo{ std::move(styledPath), foundBold, foundItalic }).first;
+                }
+
+                const std::string& styledPath = resIt->second.m_StyledPath;
+                const bool foundBold = resIt->second.m_FoundBold;
+                const bool foundItalic = resIt->second.m_FoundItalic;
 
                 const bool wantsBold = (fontStyle == 1 || fontStyle == 3);
                 const bool wantsItalic = (fontStyle == 2 || fontStyle == 3);
@@ -495,6 +537,7 @@ namespace quark
                 }
             }
             s_FontCache.clear();
+            s_FontResolutionCache.clear();
             s_MaterialTintCache.clear();
             s_pActiveFont = nullptr;
             s_ActiveSyntheticBold = false;
@@ -614,6 +657,16 @@ namespace quark
                 {
                     return true;
                 }
+                const CCanvasComponent* pCanvas = entity.GetCanvasComponent();
+                if (pCanvas && pCanvas->m_Enabled)
+                {
+                    return true;
+                }
+                const CButtonComponent* pBtn = entity.GetButtonComponent();
+                if (pBtn && pBtn->m_Enabled)
+                {
+                    return true;
+                }
             }
             return false;
         }
@@ -639,6 +692,20 @@ namespace quark
                 return false;
             }
             return CGuiSystem::Get().IsPointOverAnyWidget(vWidgetDescs, mousePosInViewport);
+        }
+
+        void DrawUiText(const char* text, float x, float y, float fontSize,
+                        const char* pFontPath, int fontStyle, Color color)
+        {
+            BridgeSetTextContext(pFontPath, fontStyle, nullptr);
+            BridgeDrawText(text, x, y, fontSize, 1.0f, color);
+        }
+
+        Vec2 MeasureUiText(const char* text, float fontSize,
+                           const char* pFontPath, int fontStyle)
+        {
+            BridgeSetTextContext(pFontPath, fontStyle, nullptr);
+            return BridgeMeasureText(text, fontSize);
         }
     } // gui
 } // quark

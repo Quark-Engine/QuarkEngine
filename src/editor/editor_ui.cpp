@@ -87,6 +87,51 @@ void CViewportState::Unload()
     Release();
 }
 
+int CEditor::GetOrCreateCanvasForUi(int contextParentIndex)
+{
+    int candidateIndex = contextParentIndex;
+    if (candidateIndex < 0 && m_Scene.m_Selected >= 0 && m_Scene.m_Selected < static_cast<int>(m_Scene.m_vEntities.size()))
+    {
+        candidateIndex = m_Scene.m_Selected;
+    }
+
+    if (candidateIndex >= 0 && candidateIndex < static_cast<int>(m_Scene.m_vEntities.size()))
+    {
+        int p = candidateIndex;
+        while (p >= 0)
+        {
+            if (m_Scene.m_vEntities[p].GetCanvasComponent())
+            {
+                return m_Scene.m_vEntities[candidateIndex].m_Id;
+            }
+            int parentId = m_Scene.m_vEntities[p].m_ParentId;
+            p = -1;
+            for (size_t i = 0; i < m_Scene.m_vEntities.size(); ++i)
+            {
+                if (m_Scene.m_vEntities[i].m_Id == parentId)
+                {
+                    p = static_cast<int>(i);
+                    break;
+                }
+            }
+        }
+    }
+
+    for (size_t i = 0; i < m_Scene.m_vEntities.size(); ++i)
+    {
+        if (m_Scene.m_vEntities[i].GetCanvasComponent())
+        {
+            return m_Scene.m_vEntities[i].m_Id;
+        }
+    }
+
+    CEntity canvasEntity = CEntityFactory::Canvas(m_Scene, ECanvasRenderMode::WORLD_SPACE, -1);
+    m_Scene.m_vEntities.push_back(std::move(canvasEntity));
+    const int canvasIndex = static_cast<int>(m_Scene.m_vEntities.size()) - 1;
+    DispatchPluginEvent(PLUGIN_EVENT_ENTITY_CREATED, canvasIndex);
+    return m_Scene.m_vEntities[canvasIndex].m_Id;
+}
+
 void CEditor::DrawUi(Shader shader, CFlyCamera& camera, SPluginContext* pPluginCtx)
 {
     PollBuild();
@@ -375,6 +420,57 @@ void CEditor::DrawMainMenuBar(SPluginContext* pPluginCtx, ImGuiID dockspaceId,
             ImGui::Separator();
             if (ImGui::BeginMenu("UI"))
             {
+                if (ImGui::MenuItem("Canvas"))
+                {
+                    SaveState();
+                    CEntity entity = CEntityFactory::Canvas(m_Scene, ECanvasRenderMode::WORLD_SPACE, -1);
+                    m_Scene.m_vEntities.push_back(std::move(entity));
+                    const int entityIndex = static_cast<int>(m_Scene.m_vEntities.size()) - 1;
+                    DispatchPluginEvent(PLUGIN_EVENT_ENTITY_CREATED, entityIndex);
+                    m_Scene.SelectEntity(entityIndex, false);
+                }
+                if (ImGui::MenuItem("Panel"))
+                {
+                    SaveState();
+                    const int parentId = GetOrCreateCanvasForUi(m_Scene.m_Selected);
+                    CEntity entity = CEntityFactory::UiPanel(m_Scene, parentId);
+                    m_Scene.m_vEntities.push_back(std::move(entity));
+                    const int entityIndex = static_cast<int>(m_Scene.m_vEntities.size()) - 1;
+                    DispatchPluginEvent(PLUGIN_EVENT_ENTITY_CREATED, entityIndex);
+                    m_Scene.SelectEntity(entityIndex, false);
+                }
+                if (ImGui::MenuItem("Button"))
+                {
+                    SaveState();
+                    const int parentId = GetOrCreateCanvasForUi(m_Scene.m_Selected);
+                    CEntity entity = CEntityFactory::UiButton(m_Scene, parentId);
+                    m_Scene.m_vEntities.push_back(std::move(entity));
+                    const int entityIndex = static_cast<int>(m_Scene.m_vEntities.size()) - 1;
+                    DispatchPluginEvent(PLUGIN_EVENT_ENTITY_CREATED, entityIndex);
+                    m_Scene.SelectEntity(entityIndex, false);
+                }
+                if (ImGui::MenuItem("Text"))
+                {
+                    SaveState();
+                    const int parentId = GetOrCreateCanvasForUi(m_Scene.m_Selected);
+                    CEntity entity = CEntityFactory::UiText(m_Scene, parentId);
+                    m_Scene.m_vEntities.push_back(std::move(entity));
+                    const int entityIndex = static_cast<int>(m_Scene.m_vEntities.size()) - 1;
+                    DispatchPluginEvent(PLUGIN_EVENT_ENTITY_CREATED, entityIndex);
+                    m_Scene.SelectEntity(entityIndex, false);
+                }
+                if (ImGui::MenuItem("Image"))
+                {
+                    SaveState();
+                    const int parentId = GetOrCreateCanvasForUi(m_Scene.m_Selected);
+                    CEntity entity = CEntityFactory::UiImage(m_Scene, parentId);
+                    m_Scene.m_vEntities.push_back(std::move(entity));
+                    const int entityIndex = static_cast<int>(m_Scene.m_vEntities.size()) - 1;
+                    DispatchPluginEvent(PLUGIN_EVENT_ENTITY_CREATED, entityIndex);
+                    m_Scene.SelectEntity(entityIndex, false);
+                }
+
+                ImGui::Separator();
                 auto createUiEntity = [this](EGuiWidgetType type)
                 {
                     SaveState();
@@ -384,10 +480,6 @@ void CEditor::DrawMainMenuBar(SPluginContext* pPluginCtx, ImGuiID dockspaceId,
                     DispatchPluginEvent(PLUGIN_EVENT_ENTITY_CREATED, entityIndex);
                     m_Scene.SelectEntity(entityIndex, false);
                 };
-                if (ImGui::MenuItem("Button"))
-                {
-                    createUiEntity(EGuiWidgetType::BUTTON);
-                }
                 if (ImGui::MenuItem("Inputfield"))
                 {
                     createUiEntity(EGuiWidgetType::INPUT_FIELD);
@@ -639,6 +731,57 @@ void CEditor::HierarchyDrawCreateMenu(int parentIndex)
         ImGui::Separator();
         if (ImGui::BeginMenu("UI"))
         {
+            if (ImGui::MenuItem("Canvas"))
+            {
+                SaveState();
+                CEntity entity = CEntityFactory::Canvas(m_Scene, ECanvasRenderMode::WORLD_SPACE, parentIndex);
+                m_Scene.m_vEntities.push_back(std::move(entity));
+                const int entityIndex = static_cast<int>(m_Scene.m_vEntities.size()) - 1;
+                DispatchPluginEvent(PLUGIN_EVENT_ENTITY_CREATED, entityIndex);
+                m_Scene.SelectEntity(entityIndex, false);
+            }
+            if (ImGui::MenuItem("Panel"))
+            {
+                SaveState();
+                const int parentId = GetOrCreateCanvasForUi(parentIndex);
+                CEntity entity = CEntityFactory::UiPanel(m_Scene, parentId);
+                m_Scene.m_vEntities.push_back(std::move(entity));
+                const int entityIndex = static_cast<int>(m_Scene.m_vEntities.size()) - 1;
+                DispatchPluginEvent(PLUGIN_EVENT_ENTITY_CREATED, entityIndex);
+                m_Scene.SelectEntity(entityIndex, false);
+            }
+            if (ImGui::MenuItem("Button"))
+            {
+                SaveState();
+                const int parentId = GetOrCreateCanvasForUi(parentIndex);
+                CEntity entity = CEntityFactory::UiButton(m_Scene, parentId);
+                m_Scene.m_vEntities.push_back(std::move(entity));
+                const int entityIndex = static_cast<int>(m_Scene.m_vEntities.size()) - 1;
+                DispatchPluginEvent(PLUGIN_EVENT_ENTITY_CREATED, entityIndex);
+                m_Scene.SelectEntity(entityIndex, false);
+            }
+            if (ImGui::MenuItem("Text"))
+            {
+                SaveState();
+                const int parentId = GetOrCreateCanvasForUi(parentIndex);
+                CEntity entity = CEntityFactory::UiText(m_Scene, parentId);
+                m_Scene.m_vEntities.push_back(std::move(entity));
+                const int entityIndex = static_cast<int>(m_Scene.m_vEntities.size()) - 1;
+                DispatchPluginEvent(PLUGIN_EVENT_ENTITY_CREATED, entityIndex);
+                m_Scene.SelectEntity(entityIndex, false);
+            }
+            if (ImGui::MenuItem("Image"))
+            {
+                SaveState();
+                const int parentId = GetOrCreateCanvasForUi(parentIndex);
+                CEntity entity = CEntityFactory::UiImage(m_Scene, parentId);
+                m_Scene.m_vEntities.push_back(std::move(entity));
+                const int entityIndex = static_cast<int>(m_Scene.m_vEntities.size()) - 1;
+                DispatchPluginEvent(PLUGIN_EVENT_ENTITY_CREATED, entityIndex);
+                m_Scene.SelectEntity(entityIndex, false);
+            }
+
+            ImGui::Separator();
             auto createUiEntity = [this, parentIndex](EGuiWidgetType type)
             {
                 SaveState();
@@ -648,10 +791,6 @@ void CEditor::HierarchyDrawCreateMenu(int parentIndex)
                 DispatchPluginEvent(PLUGIN_EVENT_ENTITY_CREATED, entityIndex);
                 m_Scene.SelectEntity(entityIndex, false);
             };
-            if (ImGui::MenuItem("Button"))
-            {
-                createUiEntity(EGuiWidgetType::BUTTON);
-            }
             if (ImGui::MenuItem("Inputfield"))
             {
                 createUiEntity(EGuiWidgetType::INPUT_FIELD);
@@ -1065,7 +1204,22 @@ void CEditor::SetScene2DMode(CFlyCamera& camera, bool enabled)
         m_CameraBefore2D = camera.m_Cam;
         m_CameraPitchBefore2D = camera.m_Pitch;
         m_CameraYawBefore2D = camera.m_Yaw;
-        m_Scene2DZoom = 1.0f;
+
+        float initialZoom = 1.0f;
+        for (const CEntity& entity : m_Scene.m_vEntities)
+        {
+            if (const CCanvasComponent* pCanvas = entity.GetCanvasComponent())
+            {
+                if (pCanvas->m_Enabled && pCanvas->m_Height > 0.0f && m_Ui.m_Viewport.m_WindowSize.y > 0.0f)
+                {
+                    const float ratioY = (m_Ui.m_Viewport.m_WindowSize.y * 0.72f) / pCanvas->m_Height;
+                    const float ratioX = (m_Ui.m_Viewport.m_WindowSize.x * 0.72f) / pCanvas->m_Width;
+                    initialZoom = std::clamp(std::min(ratioX, ratioY), 0.1f, 2.0f);
+                    break;
+                }
+            }
+        }
+        m_Scene2DZoom = initialZoom;
         m_Scene2DPan = { 0.0f, 0.0f };
     }
     else

@@ -56,11 +56,62 @@ std::string CDesktopIntegration::OpenFileDialog(const char* pFilterLabel,
     {
         return aPath;
     }
+    return {};
+
+#elif defined(__linux__)
+    std::string cmd = "zenity --file-selection ";
+    if (pFilterLabel && pFilterLabel[0] != '\0')
+    {
+        cmd += "--file-filter='";
+        cmd += pFilterLabel;
+        cmd += "'";
+    }
+    cmd += " 2>/dev/null";
+
+    FILE* pPipe = popen(cmd.c_str(), "r");
+    if (!pPipe)
+    {
+        return {};
+    }
+    char aResult[1024] = {};
+    if (fgets(aResult, sizeof(aResult), pPipe))
+    {
+        const size_t len = strlen(aResult);
+        if (len > 0 && aResult[len - 1] == '\n')
+        {
+            aResult[len - 1] = '\0';
+        }
+    }
+    pclose(pPipe);
+    return aResult;
+
+#elif defined(__APPLE__)
+    static_cast<void>(pFilterLabel);
+    static_cast<void>(pFilter);
+    std::string script = "POSIX path of (choose file with prompt \"Select File\")";
+    std::string cmd = "osascript -e \"" + script + "\" 2>/dev/null";
+    FILE* pPipe = popen(cmd.c_str(), "r");
+    if (!pPipe)
+    {
+        return {};
+    }
+    char aResult[1024] = {};
+    if (fgets(aResult, sizeof(aResult), pPipe))
+    {
+        const size_t len = strlen(aResult);
+        if (len > 0 && aResult[len - 1] == '\n')
+        {
+            aResult[len - 1] = '\0';
+        }
+    }
+    pclose(pPipe);
+    return aResult;
+
 #else
     static_cast<void>(pFilterLabel);
     static_cast<void>(pFilter);
-#endif
     return {};
+#endif
 }
 
 std::string CDesktopIntegration::SaveFileDialog(const char* pFilterLabel, const char* pFilter,

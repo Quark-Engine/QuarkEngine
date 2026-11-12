@@ -743,10 +743,15 @@ TEST(ComponentFactory, TypeNames_lists_built_ins_and_registrations_in_a_stable_o
 {
     CComponentFactoryRegistry registry;
     const std::vector<std::string> vBuiltIns = registry.TypeNames();
-    CHECK(vBuiltIns.size() == 14);
+    CHECK(vBuiltIns.size() == 19);
     CHECK(std::find(vBuiltIns.begin(), vBuiltIns.end(), "Script") != vBuiltIns.end());
     CHECK(std::find(vBuiltIns.begin(), vBuiltIns.end(), "Transform") != vBuiltIns.end());
     CHECK(vBuiltIns.front() == "3D Text");
+    CHECK(std::find(vBuiltIns.begin(), vBuiltIns.end(), "Canvas") != vBuiltIns.end());
+    CHECK(std::find(vBuiltIns.begin(), vBuiltIns.end(), "Image") != vBuiltIns.end());
+    CHECK(std::find(vBuiltIns.begin(), vBuiltIns.end(), "Panel") != vBuiltIns.end());
+    CHECK(std::find(vBuiltIns.begin(), vBuiltIns.end(), "Button") != vBuiltIns.end());
+    CHECK(std::find(vBuiltIns.begin(), vBuiltIns.end(), "Selectable") != vBuiltIns.end());
     CHECK(std::find(vBuiltIns.begin(), vBuiltIns.end(), "UI") != vBuiltIns.end());
     CHECK(std::find(vBuiltIns.begin(), vBuiltIns.end(), "Ui Button") != vBuiltIns.end());
     CHECK(std::find(vBuiltIns.begin(), vBuiltIns.end(), "Ui Inputfield") != vBuiltIns.end());

@@ -73,6 +73,7 @@ public:
     bool StopPlayMode();
     void Undo();
     void Redo();
+    int GetOrCreateCanvasForUi(int contextParentIndex = -1);
 
     void Unload();
 

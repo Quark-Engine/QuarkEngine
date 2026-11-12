@@ -243,3 +243,74 @@ const CUiComponent* CEntity::GetUiComponent() const
 {
     return m_pComponents ? m_pComponents->GetUiComponent() : nullptr;
 }
+
+CCanvasComponent* CEntity::GetCanvasComponent()
+{
+    return m_pComponents ? m_pComponents->GetCanvas() : nullptr;
+}
+
+const CCanvasComponent* CEntity::GetCanvasComponent() const
+{
+    return m_pComponents ? m_pComponents->GetCanvas() : nullptr;
+}
+
+CUiRectTransformComponent* CEntity::GetRectTransformComponent()
+{
+    return m_pComponents ? m_pComponents->GetRectTransform() : nullptr;
+}
+
+const CUiRectTransformComponent* CEntity::GetRectTransformComponent() const
+{
+    return m_pComponents ? m_pComponents->GetRectTransform() : nullptr;
+}
+
+CImageComponent* CEntity::GetImageComponent()
+{
+    return m_pComponents ? m_pComponents->GetImage() : nullptr;
+}
+
+const CImageComponent* CEntity::GetImageComponent() const
+{
+    return m_pComponents ? m_pComponents->GetImage() : nullptr;
+}
+
+CPanelComponent* CEntity::GetPanelComponent()
+{
+    return m_pComponents ? m_pComponents->GetPanel() : nullptr;
+}
+
+const CPanelComponent* CEntity::GetPanelComponent() const
+{
+    return m_pComponents ? m_pComponents->GetPanel() : nullptr;
+}
+
+CButtonComponent* CEntity::GetButtonComponent()
+{
+    return m_pComponents ? m_pComponents->GetButton() : nullptr;
+}
+
+const CButtonComponent* CEntity::GetButtonComponent() const
+{
+    return m_pComponents ? m_pComponents->GetButton() : nullptr;
+}
+
+CTextComponent* CEntity::GetTextComponent()
+{
+    return m_pComponents ? m_pComponents->GetText() : nullptr;
+}
+
+const CTextComponent* CEntity::GetTextComponent() const
+{
+    return m_pComponents ? m_pComponents->GetText() : nullptr;
+}
+
+bool CEntity::HasUiComponent() const
+{
+    return GetUiComponent() != nullptr ||
+           GetCanvasComponent() != nullptr ||
+           GetRectTransformComponent() != nullptr ||
+           GetImageComponent() != nullptr ||
+           GetPanelComponent() != nullptr ||
+           GetButtonComponent() != nullptr ||
+           GetTextComponent() != nullptr;
+}
