@@ -261,9 +261,10 @@ void CGizmoController::Draw(CEditor& editor, CFlyCamera& camera)
             const float deltaLocalX = newLocalPos.x - s_UiDragStartCenter.x;
             const float deltaLocalY = newLocalPos.y - s_UiDragStartCenter.y;
 
-            pRectTransform->m_AnchoredPosition.x = s_UiDragStartAnchoredPos.x + deltaLocalX;
-            pRectTransform->m_AnchoredPosition.y = s_UiDragStartAnchoredPos.y + deltaLocalY;
-            pRectTransform->m_Position = pRectTransform->m_AnchoredPosition;
+            pRectTransform->SetAnchoredPosition({
+                s_UiDragStartAnchoredPos.x + deltaLocalX,
+                s_UiDragStartAnchoredPos.y + deltaLocalY
+            });
             if (op == ImGuizmo::ROTATE)
             {
                 pRectTransform->m_Rotation2D = aNextRotation[2];
@@ -423,9 +424,10 @@ void CGizmoController::Draw(CEditor& editor, CFlyCamera& camera)
             const float deltaX = newCenter.x - s_UiDragStartCenter.x;
             const float deltaY = -(newCenter.y - s_UiDragStartCenter.y);
 
-            pRectTransform->m_AnchoredPosition.x = s_UiDragStartAnchoredPos.x + deltaX;
-            pRectTransform->m_AnchoredPosition.y = s_UiDragStartAnchoredPos.y + deltaY;
-            pRectTransform->m_Position = pRectTransform->m_AnchoredPosition;
+            pRectTransform->SetAnchoredPosition({
+                s_UiDragStartAnchoredPos.x + deltaX,
+                s_UiDragStartAnchoredPos.y + deltaY
+            });
             if (uiOperation == ImGuizmo::ROTATE)
             {
                 pRectTransform->m_Rotation2D = aNextRotation[2];

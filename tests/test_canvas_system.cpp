@@ -3,6 +3,7 @@
 #include "engine/canvas_system.h"
 #include "engine/component_factory_registry.h"
 #include "engine/scene_document.h"
+#include "engine/transform.h"
 
 #include "QuarkCore/QuarkCore.hpp"
 
@@ -89,6 +90,41 @@ TEST(RectTransform, stretch_and_center_calculations)
     CHECK_NEAR(rect.y, 20.0f, 0.001);
     CHECK_NEAR(rect.width, 780.0f, 0.001);
     CHECK_NEAR(rect.height, 560.0f, 0.001);
+}
+
+TEST(CanvasSystem, moving_stretched_text_under_button)
+{
+    CScene scene;
+
+    int canvasIdx = AddEntity(scene, "Canvas");
+    auto pCanvas = std::make_shared<CCanvasComponent>();
+    scene.m_vEntities[canvasIdx].GetComponents()->AddComponent(pCanvas);
+
+    int buttonIdx = AddEntity(scene, "Button", scene.m_vEntities[canvasIdx].m_Id);
+    auto pButton = std::make_shared<CButtonComponent>();
+    scene.m_vEntities[buttonIdx].GetComponents()->AddComponent(pButton);
+    auto pButtonRect = std::make_shared<CUiRectTransformComponent>();
+    pButtonRect->m_AnchoredPosition = { 15.0f, -20.0f };
+    pButtonRect->m_Size = { 200.0f, 50.0f };
+    scene.m_vEntities[buttonIdx].GetComponents()->AddComponent(pButtonRect);
+
+    int textIdx = AddEntity(scene, "Text", scene.m_vEntities[buttonIdx].m_Id);
+    auto pTextRect = std::make_shared<CUiRectTransformComponent>();
+    pTextRect->m_AnchorMin = { 0.0f, 0.0f };
+    pTextRect->m_AnchorMax = { 1.0f, 1.0f };
+    scene.m_vEntities[textIdx].GetComponents()->AddComponent(pTextRect);
+
+    quark::ui::CCanvasSystem& system = quark::ui::CCanvasSystem::Get();
+    const Vec2 canvasSize = { pCanvas->m_Width, pCanvas->m_Height };
+    const Rectangle initialRect = system.ComputeElementCanvasRect(scene, textIdx, canvasSize);
+
+    pTextRect->SetAnchoredPosition({ 44.0f, 25.0f });
+    const Rectangle movedRect = system.ComputeElementCanvasRect(scene, textIdx, canvasSize);
+
+    CHECK_NEAR(movedRect.x, initialRect.x + 12.0f, 0.001);
+    CHECK_NEAR(movedRect.y, initialRect.y - 7.0f, 0.001);
+    CHECK_NEAR(movedRect.width, initialRect.width, 0.001);
+    CHECK_NEAR(movedRect.height, initialRect.height, 0.001);
 }
 
 TEST(ButtonComponent, state_transitions_and_color_multiplier)
@@ -280,7 +316,7 @@ TEST(CanvasSystem, example_scene_creation)
 
     int camIdx = AddEntity(scene, "Main Camera", -1);
     auto* pCamTrans = scene.m_vEntities[camIdx].GetTransformComponent();
-    pCamTrans->m_Position = { 0.0f, 1.5f, -5.0f };
+    pCamTrans->m_Position = { 0.0f, 1.5f, 5.0f };
     pCamTrans->m_Rotation = { 0.0f, 0.0f, 0.0f };
     auto pCamera = std::make_shared<CCameraComponent>();
     pCamera->m_FieldOfView = 60.0f;
@@ -302,6 +338,11 @@ TEST(CanvasSystem, example_scene_creation)
     pCanvasTrans->m_Position = { 0.0f, 1.5f, 0.0f };
     pCanvasTrans->m_Rotation = { 0.0f, 0.0f, 0.0f };
     pCanvasTrans->m_Scale = { 0.005f, 0.005f, 0.005f };
+    const Mat4 cameraWorld = quark::ComposeWorld(scene, camIdx);
+    const Vec3 cameraPosition = cameraWorld * Vec3{ 0.0f, 0.0f, 0.0f };
+    const Vec3 cameraForward = cameraWorld * Vec3{ 0.0f, 0.0f, -1.0f } - cameraPosition;
+    const Vec3 canvasPosition = quark::ComposeWorld(scene, canvasIdx) * Vec3{ 0.0f, 0.0f, 0.0f };
+    CHECK(cameraForward.dot(canvasPosition - cameraPosition) > 0.0f);
     auto pCanvas = std::make_shared<CCanvasComponent>();
     pCanvas->m_RenderMode = ECanvasRenderMode::WORLD_SPACE;
     pCanvas->m_Width = 800.0f;

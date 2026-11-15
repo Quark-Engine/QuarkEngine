@@ -1604,8 +1604,7 @@ void CComponentUIHelper::DrawUiRectTransformComponent(
     float aPos[2] = { pRectTransform->m_AnchoredPosition.x, pRectTransform->m_AnchoredPosition.y };
     if (ImGui::DragFloat2("Pos (X, Y)", aPos, 1.0f, -8192.0f, 8192.0f, "%.1f"))
     {
-        pRectTransform->m_AnchoredPosition = { aPos[0], aPos[1] };
-        pRectTransform->m_Position = pRectTransform->m_AnchoredPosition;
+        pRectTransform->SetAnchoredPosition({ aPos[0], aPos[1] });
         changed = true;
     }
     if (ImGui::IsItemActivated())

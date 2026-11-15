@@ -675,6 +675,7 @@ public:
     }
 
     Rectangle CalculateLocalRect(const Vec2& parentSize) const;
+    void SetAnchoredPosition(const Vec2& anchoredPosition);
 
     void Serialize(nlohmann::json& json) const override;
     void Deserialize(const nlohmann::json& json) override;

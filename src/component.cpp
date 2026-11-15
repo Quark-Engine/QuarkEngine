@@ -563,6 +563,23 @@ Rectangle CUiRectTransformComponent::CalculateLocalRect(const Vec2& parentSize) 
     return rect;
 }
 
+void CUiRectTransformComponent::SetAnchoredPosition(const Vec2& anchoredPosition)
+{
+    const Vec2 delta = anchoredPosition - m_AnchoredPosition;
+    if (m_AnchorMin.x != m_AnchorMax.x)
+    {
+        m_OffsetMin.x += delta.x;
+        m_OffsetMax.x += delta.x;
+    }
+    if (m_AnchorMin.y != m_AnchorMax.y)
+    {
+        m_OffsetMin.y += delta.y;
+        m_OffsetMax.y += delta.y;
+    }
+    m_AnchoredPosition = anchoredPosition;
+    m_Position = anchoredPosition;
+}
+
 void CUiRectTransformComponent::Serialize(nlohmann::json& json) const
 {
     json["position"] = { m_AnchoredPosition.x, m_AnchoredPosition.y };
