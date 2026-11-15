@@ -75,6 +75,24 @@ TEST(GetEntityDescendants, leaf_has_none)
     CHECK(GetEntityDescendants(sceneUnderTest, 1).empty());
 }
 
+TEST(EraseEntityAndDescendants, removes_the_subtree_and_preserves_unrelated_entities)
+{
+    CScene sceneUnderTest;
+    Add(sceneUnderTest, "canvas", -1);
+    Add(sceneUnderTest, "child", 0);
+    Add(sceneUnderTest, "nested-child", 1);
+    Add(sceneUnderTest, "unrelated", -1);
+
+    EraseEntityAndDescendants(sceneUnderTest, 0);
+
+    CHECK(sceneUnderTest.m_vEntities.size() == 1);
+    CHECK(sceneUnderTest.m_vEntities[0].m_Name == "unrelated");
+    CHECK(sceneUnderTest.m_vEntities[0].m_Id == 0);
+    CHECK(sceneUnderTest.m_vEntities[0].m_ParentId == -1);
+    CHECK(sceneUnderTest.m_Selected == -1);
+    CHECK(sceneUnderTest.m_vSelectedEntities.empty());
+}
+
 TEST(IsEntityGroup, reflects_the_flag)
 {
     CScene sceneUnderTest;

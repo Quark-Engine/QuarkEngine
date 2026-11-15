@@ -3,6 +3,7 @@
 #include "engine/transform.h"
 #include "imgui.h"
 #include <algorithm>
+#include <functional>
 
 std::vector<int> GetEntityChildren(const CScene& scene, int parentId)
 {
@@ -21,11 +22,21 @@ std::vector<int> GetEntityDescendants(const CScene& scene, int entityId)
 {
     std::vector<int> vDescendants;
     std::vector<int> vToProcess = GetEntityChildren(scene, entityId);
+    std::vector<bool> vVisited(scene.m_vEntities.size(), false);
+    if (entityId >= 0 && entityId < static_cast<int>(vVisited.size()))
+    {
+        vVisited[entityId] = true;
+    }
 
     while (!vToProcess.empty())
     {
         int current = vToProcess.back();
         vToProcess.pop_back();
+        if (current < 0 || current >= static_cast<int>(vVisited.size()) || vVisited[current])
+        {
+            continue;
+        }
+        vVisited[current] = true;
 
         vDescendants.push_back(current);
 
@@ -37,6 +48,51 @@ std::vector<int> GetEntityDescendants(const CScene& scene, int entityId)
     }
 
     return vDescendants;
+}
+
+void EraseEntityAndDescendants(
+    CScene& scene, int entityIndex,
+    const std::function<void(CEntity&, int)>& beforeErase)
+{
+    if (entityIndex < 0 || entityIndex >= static_cast<int>(scene.m_vEntities.size()))
+    {
+        return;
+    }
+
+    std::vector<int> vIndices = GetEntityDescendants(scene, entityIndex);
+    vIndices.push_back(entityIndex);
+    std::sort(vIndices.begin(), vIndices.end(), std::greater<int>());
+
+    for (int index : vIndices)
+    {
+        if (index < 0 || index >= static_cast<int>(scene.m_vEntities.size()))
+        {
+            continue;
+        }
+        CEntity& entity = scene.m_vEntities[index];
+        if (beforeErase)
+        {
+            beforeErase(entity, index);
+        }
+        DispatchPluginEvent(PLUGIN_EVENT_ENTITY_DELETED, index);
+        scene.m_vEntities.erase(scene.m_vEntities.begin() + index);
+        for (int current = 0; current < static_cast<int>(scene.m_vEntities.size()); ++current)
+        {
+            CEntity& remaining = scene.m_vEntities[current];
+            remaining.m_Id = current;
+            if (remaining.m_ParentId == index)
+            {
+                remaining.m_ParentId = -1;
+            }
+            else if (remaining.m_ParentId > index)
+            {
+                --remaining.m_ParentId;
+            }
+        }
+    }
+
+    scene.m_Selected = -1;
+    scene.m_vSelectedEntities.clear();
 }
 
 void MoveEntityToParent(CScene& scene, int entityId, int newParentId)

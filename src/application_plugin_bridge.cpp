@@ -2861,16 +2861,11 @@ namespace
 
     void SceneDelete(CScene* pScene, int index)
     {
-        if (index < 0 || index >= (int)pScene->m_vEntities.size())
+        if (!pScene || index < 0 || index >= static_cast<int>(pScene->m_vEntities.size()))
         {
             return;
         }
-        DispatchPluginEvent(PLUGIN_EVENT_ENTITY_DELETED, index);
-        pScene->m_vEntities.erase(pScene->m_vEntities.begin() + index);
-        if (pScene->m_Selected >= (int)pScene->m_vEntities.size())
-        {
-            pScene->m_Selected = -1;
-        }
+        EraseEntityAndDescendants(*pScene, index);
     }
 
     int SceneGetSelected(CScene* pScene)

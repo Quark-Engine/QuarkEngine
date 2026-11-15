@@ -3,12 +3,16 @@
 
 #include "../entity.h"
 #include "../scene.h"
-#include <vector>
+#include <functional>
 #include <string>
+#include <vector>
 
 std::vector<int> GetEntityChildren(const CScene& scene, int parentId);
 std::vector<int> GetEntityDescendants(const CScene& scene, int entityId);
 std::vector<int> GetRootEntities(const CScene& scene);
+void EraseEntityAndDescendants(
+    CScene& scene, int entityIndex,
+    const std::function<void(CEntity&, int)>& beforeErase = {});
 
 void MoveEntityToParent(CScene& scene, int entityId, int newParentId);
 int CreateGroup(CScene& scene, const std::string& name, int parentId = -1);

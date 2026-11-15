@@ -784,6 +784,10 @@ namespace quark::ui
             {
                 continue;
             }
+            if (!HasCanvasChildren(scene, entityIndex))
+            {
+                continue;
+            }
 
             const Mat4 canvasTransform = GetCanvasWorldMatrix(scene, entityIndex);
             Vec2 hitCanvasPoint = { 0.0f, 0.0f };
@@ -923,6 +927,10 @@ namespace quark::ui
             CCanvasComponent* pCanvas = canvasEntity.GetCanvasComponent();
             if (!pCanvas || !pCanvas->m_Enabled ||
                 pCanvas->m_RenderMode == ECanvasRenderMode::WORLD_SPACE)
+            {
+                continue;
+            }
+            if (!HasCanvasChildren(scene, canvasIndex))
             {
                 continue;
             }
@@ -1751,6 +1759,27 @@ namespace quark::ui
         }
     }
 
+    bool CCanvasSystem::HasCanvasChildren(const CScene& scene, int canvasEntityIndex) const
+    {
+        if (canvasEntityIndex < 0 ||
+            canvasEntityIndex >= static_cast<int>(scene.m_vEntities.size()))
+        {
+            return false;
+        }
+
+        const int canvasId = scene.m_vEntities[canvasEntityIndex].m_Id;
+        for (const CEntity& entity : scene.m_vEntities)
+        {
+            if (entity.m_ParentId == canvasEntityIndex ||
+                (canvasId != canvasEntityIndex && entity.m_ParentId == canvasId))
+            {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
     void CCanvasSystem::UpdateCanvasTextures(CScene& scene)
     {
         for (int entityIndex = 0; entityIndex < static_cast<int>(scene.m_vEntities.size()); ++entityIndex)
@@ -1763,6 +1792,12 @@ namespace quark::ui
             }
             if (pCanvas->m_RenderMode == ECanvasRenderMode::SCREEN_SPACE_CAMERA)
             {
+                continue;
+            }
+
+            if (!HasCanvasChildren(scene, entityIndex))
+            {
+                pCanvas->ReleaseOwnedResources();
                 continue;
             }
 
@@ -1874,9 +1909,14 @@ namespace quark::ui
         std::vector<int> vCanvasIndices;
         for (int entityIndex = 0; entityIndex < static_cast<int>(scene.m_vEntities.size()); ++entityIndex)
         {
-            const CCanvasComponent* pCanvas = scene.m_vEntities[entityIndex].GetCanvasComponent();
+            CCanvasComponent* pCanvas = scene.m_vEntities[entityIndex].GetCanvasComponent();
             if (!pCanvas || !pCanvas->m_Enabled || pCanvas->m_RenderMode == ECanvasRenderMode::WORLD_SPACE)
             {
+                continue;
+            }
+            if (!HasCanvasChildren(scene, entityIndex))
+            {
+                pCanvas->ReleaseOwnedResources();
                 continue;
             }
 

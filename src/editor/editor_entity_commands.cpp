@@ -2,6 +2,7 @@
 
 #include "editor/editor.h"
 #include "editor/editor_state.h"
+#include "editor/editor_hierarchy_utils.h"
 #include "application_plugin_bridge.h"
 #include "models.h"
 #include "tex.h"
@@ -120,44 +121,24 @@ void CSceneEntityCommands::Duplicate(CEditor& editor, CEntity* pEntity)
 
 void CSceneEntityCommands::Erase(CEditor& editor, int index)
 {
-    if (index < 0 || index >= static_cast<int>(editor.m_Scene.m_vEntities.size()))
-    {
-        return;
-    }
-
-    CEntity& entity = editor.m_Scene.m_vEntities[index];
-    if (auto pLight = entity.GetLightComponent(); pLight && pLight->m_Created)
-    {
-        pLight->m_Light.m_Enabled = false;
-        editor.m_Lights.Free(pLight->m_Light.m_Id);
-        pLight->m_Created = false;
-        pLight->m_Light.m_Id = -1;
-    }
-
-    if (auto pMesh = entity.GetMeshComponent())
-    {
-        CEntityTextureService::RestoreModelTextures(&entity);
-        pMesh->ReleaseOwnedResources();
-    }
-
-    DispatchPluginEvent(PLUGIN_EVENT_ENTITY_DELETED, index);
-    editor.m_Scene.m_vEntities.erase(editor.m_Scene.m_vEntities.begin() + index);
-    for (int current = 0; current < static_cast<int>(editor.m_Scene.m_vEntities.size()); ++current)
-    {
-        CEntity& remaining = editor.m_Scene.m_vEntities[current];
-        remaining.m_Id = current;
-        if (remaining.m_ParentId == index)
+    EraseEntityAndDescendants(
+        editor.m_Scene, index,
+        [&editor](CEntity& entity, int)
         {
-            remaining.m_ParentId = -1;
-        }
-        else if (remaining.m_ParentId > index)
-        {
-            remaining.m_ParentId--;
-        }
-    }
+            if (auto pLight = entity.GetLightComponent(); pLight && pLight->m_Created)
+            {
+                pLight->m_Light.m_Enabled = false;
+                editor.m_Lights.Free(pLight->m_Light.m_Id);
+                pLight->m_Created = false;
+                pLight->m_Light.m_Id = -1;
+            }
 
-    editor.m_Scene.m_Selected = -1;
-    editor.m_Scene.m_vSelectedEntities.clear();
+            if (auto pMesh = entity.GetMeshComponent())
+            {
+                CEntityTextureService::RestoreModelTextures(&entity);
+                pMesh->ReleaseOwnedResources();
+            }
+        });
 }
 
 void CSceneEntityCommands::Delete(CEditor& editor, CEntity* pEntity)

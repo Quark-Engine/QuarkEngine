@@ -89,6 +89,7 @@ namespace quark::ui
                                   CCanvasComponent& canvas, float canvasWidth, float canvasHeight,
                                   float originX = 0.0f, float originY = 0.0f,
                                   float scaleX = 1.0f, float scaleY = 1.0f);
+        bool HasCanvasChildren(const CScene& scene, int canvasEntityIndex) const;
         void DispatchButtonEvent(CScene& scene, int entityIndex, EUiEventType event);
         void SetSelectedButton(CScene& scene, int entityIndex);
         int FindNavigableButton(const CScene& scene, int entityIndex, int direction,

@@ -2031,7 +2031,7 @@ void CComponentUIHelper::DrawImageComponent(
     }
 
     bool raycastTarget = pImage->m_RaycastTarget;
-    if (ImGui::Checkbox("Raycast Target##Img", &raycastTarget))
+    if (ImGui::Checkbox("Raycast Target", &raycastTarget))
     {
         editor.SaveState();
         pImage->m_RaycastTarget = raycastTarget;
@@ -2139,7 +2139,7 @@ void CComponentUIHelper::DrawPanelComponent(
     }
 
     bool raycastTarget = pPanel->m_RaycastTarget;
-    if (ImGui::Checkbox("Raycast Target##Pnl", &raycastTarget))
+    if (ImGui::Checkbox("Raycast Target", &raycastTarget))
     {
         editor.SaveState();
         pPanel->m_RaycastTarget = raycastTarget;
@@ -2344,7 +2344,7 @@ void CComponentUIHelper::DrawButtonComponent(
     }
 
     bool raycastTarget = pButton->m_RaycastTarget;
-    if (ImGui::Checkbox("Raycast Target##Btn", &raycastTarget))
+    if (ImGui::Checkbox("Raycast Target", &raycastTarget))
     {
         editor.SaveState();
         pButton->m_RaycastTarget = raycastTarget;
