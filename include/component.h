@@ -5,6 +5,7 @@
 #include "lighting.h"
 #include "nlohmann/json.hpp"
 #include "editable_mesh.h"
+#include <array>
 #include <string>
 #include <vector>
 #include <memory>
@@ -65,6 +66,13 @@ enum class ECanvasRenderMode
     WORLD_SPACE = 2
 };
 
+enum class EUiCanvasViewport
+{
+    EDITOR_SCENE = 0,
+    EDITOR_GAME = 1,
+    RUNTIME = 2
+};
+
 enum class EUiImageType
 {
     SIMPLE = 0,
@@ -88,6 +96,28 @@ enum class EUiNavigation
     VERTICAL = 2,
     AUTOMATIC = 3,
     EXPLICIT = 4
+};
+
+enum class EUiEventType
+{
+    POINTER_ENTER = 0,
+    POINTER_EXIT = 1,
+    POINTER_DOWN = 2,
+    POINTER_UP = 3,
+    CLICK = 4,
+    BEGIN_DRAG = 5,
+    DRAG = 6,
+    END_DRAG = 7,
+    DROP = 8,
+    SELECT = 9,
+    DESELECT = 10,
+    SUBMIT = 11
+};
+
+struct SUiEventCallback
+{
+    EUiEventType m_Event = EUiEventType::CLICK;
+    std::string m_Action;
 };
 
 enum EColliderType
@@ -611,6 +641,7 @@ public:
     int m_SortingOrder = 0;
     int m_TargetDisplay = 0;
     Vec2 m_ReferenceResolution = { 1920.0f, 1080.0f };
+    float m_MatchWidthOrHeight = 0.5f;
     float m_Width = 800.0f;
     float m_Height = 600.0f;
     float m_ScaleFactor = 1.0f;
@@ -619,6 +650,7 @@ public:
     bool m_OverrideSorting = false;
 
     RenderTexture2D m_RuntimeTexture = {};
+    std::array<RenderTexture2D, 3> m_aScreenSpaceTextures = {};
     Model m_RuntimeQuadModel = {};
     bool m_QuadModelInitialized = false;
     RendererType m_QuadBackend = RendererType::Auto;
@@ -658,6 +690,7 @@ public:
     Vec2 m_Scale2D = { 1.0f, 1.0f };
     Vec2 m_OffsetMin = { 0.0f, 0.0f };
     Vec2 m_OffsetMax = { 0.0f, 0.0f };
+    bool m_ClipChildren = false;
 
     CUiRectTransformComponent()
         : IComponent(COMPONENT_UI_RECT_TRANSFORM, "Rect Transform")
@@ -692,9 +725,11 @@ public:
     bool m_PreserveAspect = false;
     bool m_FillCenter = true;
     float m_FillAmount = 1.0f;
+    std::array<float, 4> m_aBorder = {};
 
     Texture2D m_RuntimeTexture = {};
     bool m_TextureLoaded = false;
+    std::string m_LoadedTexturePath;
 
     CImageComponent()
         : IComponent(COMPONENT_IMAGE, "Image")
@@ -727,6 +762,7 @@ public:
 
     Texture2D m_RuntimeTexture = {};
     bool m_TextureLoaded = false;
+    std::string m_LoadedTexturePath;
 
     CPanelComponent()
         : IComponent(COMPONENT_PANEL, "Panel")
@@ -761,6 +797,7 @@ public:
     Color m_PressedColor = { 180, 180, 180, 255 };
     Color m_SelectedColor = { 220, 220, 220, 255 };
     Color m_DisabledColor = { 150, 150, 150, 128 };
+    std::array<int, 4> m_aNavigationTargetIds = { -1, -1, -1, -1 };
     float m_ColorMultiplier = 1.0f;
     float m_FadeDuration = 0.1f;
     std::string m_SpriteSwapHighlighted;
@@ -768,6 +805,7 @@ public:
     std::string m_SpriteSwapSelected;
     std::string m_SpriteSwapDisabled;
     std::string m_OnClickAction;
+    std::vector<SUiEventCallback> m_vEventCallbacks;
     std::function<void()> m_fnOnClick;
     bool m_RaycastTarget = true;
 

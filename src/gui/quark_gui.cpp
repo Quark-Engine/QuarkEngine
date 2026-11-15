@@ -364,6 +364,19 @@ namespace quark
                 return (c & 0xC0) == 0x80;
             }
 
+            int CountUtf8Codepoints(const std::string& text)
+            {
+                int count = 0;
+                for (unsigned char character : text)
+                {
+                    if (!IsUtf8ContinuationByte(character))
+                    {
+                        ++count;
+                    }
+                }
+                return count;
+            }
+
             int PrevUtf8CharPos(const std::string& str, int pos)
             {
                 int i = std::clamp(pos, 0, static_cast<int>(str.size()));
@@ -679,9 +692,23 @@ namespace quark
                 setTextContext(styleOverride);
                 if (m_Backend.pfnMeasureText && !s.empty())
                 {
-                    return m_Backend.pfnMeasureText(s.c_str(), sizePx);
+                    Vec2 measured = m_Backend.pfnMeasureText(s.c_str(), sizePx);
+                    const int codepointCount = CountUtf8Codepoints(s);
+                    if (codepointCount > 1)
+                    {
+                        measured.x +=
+                            static_cast<float>(codepointCount - 1) * widget.m_TextCharacterSpacing;
+                    }
+                    return measured;
                 }
-                return { static_cast<float>(s.size()) * (sizePx * 0.52f), sizePx };
+                const int codepointCount = CountUtf8Codepoints(s);
+                const float characterSpacing = codepointCount > 1
+                    ? static_cast<float>(codepointCount - 1) * widget.m_TextCharacterSpacing
+                    : 0.0f;
+                return {
+                    static_cast<float>(codepointCount) * (sizePx * 0.52f) + characterSpacing,
+                    sizePx
+                };
             };
 
             auto measureText = [&](const std::string& s) -> Vec2
@@ -900,6 +927,23 @@ namespace quark
                     effectiveClip.y = std::min(effectiveClip.y, boxRect.y - 1000.0f);
                     effectiveClip.height = std::max(effectiveClip.height, boxRect.height + 2000.0f);
                 }
+                if (widget.m_WidgetType == EGuiWidgetType::TEXT && widget.m_UseTextClip)
+                {
+                    const float minX = std::max(
+                        effectiveClip.x, widget.m_TextClipRect.x);
+                    const float minY = std::max(
+                        effectiveClip.y, widget.m_TextClipRect.y);
+                    const float maxX = std::min(
+                        effectiveClip.x + effectiveClip.width,
+                        widget.m_TextClipRect.x + widget.m_TextClipRect.width);
+                    const float maxY = std::min(
+                        effectiveClip.y + effectiveClip.height,
+                        widget.m_TextClipRect.y + widget.m_TextClipRect.height);
+                    effectiveClip = {
+                        minX, minY, std::max(0.0f, maxX - minX),
+                        std::max(0.0f, maxY - minY)
+                    };
+                }
 
                 const bool useScissor = m_Backend.pfnBeginScissorMode &&
                     m_Backend.pfnEndScissorMode &&
@@ -933,13 +977,29 @@ namespace quark
                         const Vec2 spanSize = measureSpanAtSize(span.m_Text, spanFontSize, span.m_FontStyle);
                         const float spanY = curY + (line.m_Height - spanSize.y) * 0.5f;
                         setTextContext(span.m_FontStyle);
-                        m_Backend.pfnDrawText(
-                            span.m_Text.c_str(),
-                            std::round(curX),
-                            std::round(spanY),
-                            spanFontSize,
-                            lineSpacing,
-                            span.m_Color);
+                        if (m_Backend.pfnDrawTextTransformed &&
+                            (std::fabs(widget.m_TextRotation) > 0.001f ||
+                             std::fabs(widget.m_TextCharacterSpacing) > 0.001f))
+                        {
+                            m_Backend.pfnDrawTextTransformed(
+                                span.m_Text.c_str(),
+                                std::round(curX),
+                                std::round(spanY),
+                                spanFontSize,
+                                widget.m_TextRotation,
+                                widget.m_TextCharacterSpacing,
+                                span.m_Color);
+                        }
+                        else
+                        {
+                            m_Backend.pfnDrawText(
+                                span.m_Text.c_str(),
+                                std::round(curX),
+                                std::round(spanY),
+                                spanFontSize,
+                                lineSpacing,
+                                span.m_Color);
+                        }
                         curX += spanSize.x;
                     }
                     curY += line.m_Height * lineSpacing;
@@ -977,6 +1037,24 @@ namespace quark
 
             switch (widget.m_WidgetType)
             {
+                case EGuiWidgetType::TEXT:
+                {
+                    if (widget.m_TextEnabled)
+                    {
+                        if (widget.m_UseTextClip &&
+                            (widget.m_TextClipRect.x >= rect.x + rect.width ||
+                             widget.m_TextClipRect.y >= rect.y + rect.height ||
+                             widget.m_TextClipRect.x + widget.m_TextClipRect.width <= rect.x ||
+                             widget.m_TextClipRect.y + widget.m_TextClipRect.height <= rect.y))
+                        {
+                            break;
+                        }
+                        drawFormattedWidgetText(
+                            widget.m_Text, widget.m_TextColor, rect, 0.0f, rect);
+                    }
+                    break;
+                }
+
                 case EGuiWidgetType::BUTTON:
                 {
                     if (m_Interactive && widget.m_ButtonInteractable)

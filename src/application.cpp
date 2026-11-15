@@ -676,13 +676,17 @@ void CApplication::RenderFrame()
             {
                 quark::ui::CCanvasSystem::Get().Render2DCanvases(m_Editor.m_Scene, m_Editor.m_Ui.m_Viewport, m_Editor.m_Scene.m_Selected);
             }
-            quark::ui::CCanvasSystem::Get().RenderScreenSpaceCanvases(m_Editor.m_Scene, m_Editor.m_Ui.m_Viewport, localMouse, sceneGuiInteractive);
-            quark::ui::CCanvasSystem::Get().UpdateInteraction(m_Editor.m_Scene, m_Editor.m_Ui.m_Viewport, renderCamera, sceneGuiInteractive);
             if (sceneGui2D)
             {
                 quark::gui::SetGuiScissorCamera2D(nullptr);
                 EndMode2D();
             }
+            quark::ui::CCanvasSystem::Get().RenderScreenSpaceCanvases(
+                m_Editor.m_Scene, m_Editor.m_Ui.m_Viewport, localMouse,
+                sceneGuiInteractive, renderCamera, EUiCanvasViewport::EDITOR_SCENE);
+            quark::ui::CCanvasSystem::Get().UpdateInteraction(
+                m_Editor.m_Scene, m_Editor.m_Ui.m_Viewport, renderCamera,
+                sceneGuiInteractive);
         }
         EndTextureMode();
     }
@@ -766,7 +770,9 @@ void CApplication::RenderFrame()
                 m_Editor.m_IsPlaying || m_Editor.m_GameViewActive || m_Editor.m_Ui.m_GameViewport.m_Hovered;
             quark::gui::RenderSceneGui(m_Editor.m_Scene, localMouse,
                                        gameGuiInteractive);
-            quark::ui::CCanvasSystem::Get().RenderScreenSpaceCanvases(m_Editor.m_Scene, gameViewport, localMouse, gameGuiInteractive);
+            quark::ui::CCanvasSystem::Get().RenderScreenSpaceCanvases(
+                m_Editor.m_Scene, gameViewport, localMouse,
+                gameGuiInteractive, gameCamera, EUiCanvasViewport::EDITOR_GAME);
             quark::ui::CCanvasSystem::Get().UpdateInteraction(m_Editor.m_Scene, gameViewport, gameCamera, gameGuiInteractive);
         }
         EndTextureMode();

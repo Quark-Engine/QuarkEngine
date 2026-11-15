@@ -425,7 +425,9 @@ extern "C"
             {
                 quark::ui::SUiViewport runtimeViewport({ 0.0f, 0.0f },
                     { static_cast<float>(GetScreenWidth()), static_cast<float>(GetScreenHeight()) });
-                quark::ui::CCanvasSystem::Get().RenderScreenSpaceCanvases(scene, runtimeViewport, GetMousePosition(), true);
+                quark::ui::CCanvasSystem::Get().RenderScreenSpaceCanvases(
+                    scene, runtimeViewport, GetMousePosition(), true, camera,
+                    EUiCanvasViewport::RUNTIME);
                 quark::ui::CCanvasSystem::Get().UpdateInteraction(scene, runtimeViewport, camera, true);
             }
             EndDrawing();

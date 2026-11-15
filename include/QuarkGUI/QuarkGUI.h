@@ -22,7 +22,8 @@ enum class EGuiWidgetType : int
 {
     BUTTON = 0,
     INPUT_FIELD = 1,
-    COMBO = 2
+    COMBO = 2,
+    TEXT = 3
 };
 
 enum class EGuiButtonTransition : int
@@ -84,6 +85,9 @@ struct SGuiBackend
     Vec2 (*pfnMeasureText)(const char* pText, float fontSize) = nullptr;
     void (*pfnSetTextContext)(const char* pFontPath, int fontStyle, const char* pMaterialPath) = nullptr;
     double (*pfnGetTime)() = nullptr;
+    void (*pfnDrawTextTransformed)(
+        const char* pText, float x, float y, float fontSize, float rotation, float spacing,
+        Color color) = nullptr;
 };
 
 struct SGuiInputState
@@ -150,6 +154,10 @@ struct SGuiWidgetDesc
     int m_HoveredItemIndex = -1;
     int m_CaretPos = 0;
     int m_ClickCount = 0;
+    float m_TextCharacterSpacing = 0.0f;
+    float m_TextRotation = 0.0f;
+    Rectangle m_TextClipRect = {};
+    bool m_UseTextClip = false;
 };
 
 namespace quark

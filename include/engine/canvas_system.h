@@ -42,7 +42,11 @@ namespace quark::ui
         void Initialize();
         void Shutdown();
 
-        Rectangle ComputeElementCanvasRect(const CScene& scene, int entityIndex, const Vec2& canvasSize);
+        Rectangle ComputeElementCanvasRect(const CScene& scene, int entityIndex,
+                                           const Vec2& canvasSize) const;
+        Mat4 ComputeElementCanvasTransform(const CScene& scene, int entityIndex, const Vec2& canvasSize) const;
+        float ComputeScreenSpaceCanvasScale(const CCanvasComponent& canvas,
+                                            const Vec2& viewportSize) const;
         Mat4 GetCanvasWorldMatrix(const CScene& scene, int canvasEntityIndex);
 
         bool RaycastWorldCanvas(const CScene& scene, const CCanvasComponent& canvas,
@@ -51,6 +55,8 @@ namespace quark::ui
 
         SCanvasHitResult PickUiElement(CScene& scene, const Ray& ray,
                                        const Camera3D& camera, float maxDistance = 1000.0f);
+        SCanvasHitResult PickScreenSpaceUiElement(CScene& scene, const SUiViewport& viewport,
+                                                  const Vec2& screenPoint);
 
         void UpdateInteraction(CScene& scene, const SUiViewport& viewport,
                                const Camera3D& camera, bool interactive);
@@ -60,7 +66,9 @@ namespace quark::ui
         void RenderWorldSpaceCanvases(CScene& scene, const Camera3D& camera);
         void Render2DCanvases(CScene& scene, const SUiViewport& viewport, int selectedEntityIndex);
         void RenderScreenSpaceCanvases(CScene& scene, const SUiViewport& viewport,
-                                      Vec2 mousePosInViewport, bool interactive);
+                                      Vec2 mousePosInViewport, bool interactive,
+                                      const Camera3D& activeCamera,
+                                      EUiCanvasViewport viewportKind);
 
         void DrawCanvasGizmos(CScene& scene, int selectedEntityIndex, const Camera3D& camera);
         int FindCanvasForEntity(const CScene& scene, int entityIndex) const;
@@ -79,14 +87,27 @@ namespace quark::ui
 
         void RenderCanvasElements(CScene& scene, int canvasEntityIndex,
                                   CCanvasComponent& canvas, float canvasWidth, float canvasHeight,
-                                  float originX = 0.0f, float originY = 0.0f);
+                                  float originX = 0.0f, float originY = 0.0f,
+                                  float scaleX = 1.0f, float scaleY = 1.0f);
+        void DispatchButtonEvent(CScene& scene, int entityIndex, EUiEventType event);
+        void SetSelectedButton(CScene& scene, int entityIndex);
+        int FindNavigableButton(const CScene& scene, int entityIndex, int direction,
+                                const Vec2& canvasSize) const;
+        bool IsPointInsideClipHierarchy(const CScene& scene, int entityIndex,
+                                        int canvasEntityIndex, const Vec2& canvasSize,
+                                        const Vec2& canvasPoint) const;
         void EnsureQuadModel(CCanvasComponent& canvas);
         void CollectCanvasElementsRecursive(const CScene& scene, int parentIndex,
                                             std::vector<int>& vOutIndices);
+        Mat4 ComputeElementCanvasTransformRecursive(const CScene& scene, int entityIndex,
+                                                    const Vec2& canvasSize, int depth) const;
 
         int m_HoveredEntityIndex = -1;
         int m_PressedEntityIndex = -1;
+        int m_SelectedEntityIndex = -1;
         int m_ActiveCanvasIndex = -1;
+        Vec2 m_PointerDownPosition = { 0.0f, 0.0f };
+        bool m_DragStarted = false;
         bool m_Initialized = false;
     };
 

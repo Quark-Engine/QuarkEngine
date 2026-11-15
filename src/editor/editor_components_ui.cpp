@@ -12,6 +12,7 @@
 #include "editor/editor.h"
 #include "application_plugin_bridge.h"
 #include "language_manager.h"
+#include <algorithm>
 #include <filesystem>
 #include <cstdio>
 #include <cstring>
@@ -1678,6 +1679,14 @@ void CComponentUIHelper::DrawUiRectTransformComponent(
         editor.SaveState();
     }
 
+    bool clipChildren = pRectTransform->m_ClipChildren;
+    if (ImGui::Checkbox("Clip Children", &clipChildren))
+    {
+        editor.SaveState();
+        pRectTransform->m_ClipChildren = clipChildren;
+        changed = true;
+    }
+
     if (changed)
     {
         editor.m_SceneDirty = true;
@@ -1794,6 +1803,17 @@ void CComponentUIHelper::DrawCanvasComponent(
             editor.SaveState();
         }
 
+        float matchWidthOrHeight = pCanvas->m_MatchWidthOrHeight;
+        if (ImGui::SliderFloat("Match Width Or Height", &matchWidthOrHeight, 0.0f, 1.0f, "%.2f"))
+        {
+            pCanvas->m_MatchWidthOrHeight = matchWidthOrHeight;
+            changed = true;
+        }
+        if (ImGui::IsItemActivated())
+        {
+            editor.SaveState();
+        }
+
         bool pixelPerfect = pCanvas->m_PixelPerfect;
         if (ImGui::Checkbox("Pixel Perfect", &pixelPerfect))
         {
@@ -1824,6 +1844,39 @@ void CComponentUIHelper::DrawCanvasComponent(
         if (ImGui::DragFloat("Plane Distance", &planeDist, 1.0f, 0.1f, 10000.0f, "%.1f"))
         {
             pCanvas->m_PlaneDistance = planeDist;
+            changed = true;
+        }
+        if (ImGui::IsItemActivated())
+        {
+            editor.SaveState();
+        }
+
+        float scaleFactor = pCanvas->m_ScaleFactor;
+        if (ImGui::DragFloat("Scale Factor", &scaleFactor, 0.05f, 0.1f, 10.0f, "%.2f"))
+        {
+            pCanvas->m_ScaleFactor = scaleFactor;
+            changed = true;
+        }
+        if (ImGui::IsItemActivated())
+        {
+            editor.SaveState();
+        }
+
+        float aRefRes[2] = { pCanvas->m_ReferenceResolution.x, pCanvas->m_ReferenceResolution.y };
+        if (ImGui::DragFloat2("Reference Resolution", aRefRes, 1.0f, 100.0f, 8192.0f, "%.0f"))
+        {
+            pCanvas->m_ReferenceResolution = { aRefRes[0], aRefRes[1] };
+            changed = true;
+        }
+        if (ImGui::IsItemActivated())
+        {
+            editor.SaveState();
+        }
+
+        float matchWidthOrHeight = pCanvas->m_MatchWidthOrHeight;
+        if (ImGui::SliderFloat("Match Width Or Height", &matchWidthOrHeight, 0.0f, 1.0f, "%.2f"))
+        {
+            pCanvas->m_MatchWidthOrHeight = matchWidthOrHeight;
             changed = true;
         }
         if (ImGui::IsItemActivated())
@@ -1878,6 +1931,17 @@ void CComponentUIHelper::DrawCanvasComponent(
         if (ImGui::DragFloat("Scale Factor", &scaleFactor, 0.05f, 0.1f, 10.0f, "%.2f"))
         {
             pCanvas->m_ScaleFactor = scaleFactor;
+            changed = true;
+        }
+        if (ImGui::IsItemActivated())
+        {
+            editor.SaveState();
+        }
+
+        float matchWidthOrHeight = pCanvas->m_MatchWidthOrHeight;
+        if (ImGui::SliderFloat("Match Width Or Height", &matchWidthOrHeight, 0.0f, 1.0f, "%.2f"))
+        {
+            pCanvas->m_MatchWidthOrHeight = matchWidthOrHeight;
             changed = true;
         }
         if (ImGui::IsItemActivated())
@@ -1991,7 +2055,7 @@ void CComponentUIHelper::DrawImageComponent(
         changed = true;
     }
 
-    if (pImage->m_ImageType == EUiImageType::SLICED || pImage->m_ImageType == EUiImageType::TILED)
+    if (pImage->m_ImageType == EUiImageType::SLICED)
     {
         bool fillCenter = pImage->m_FillCenter;
         if (ImGui::Checkbox("Fill Center", &fillCenter))
@@ -1999,6 +2063,19 @@ void CComponentUIHelper::DrawImageComponent(
             editor.SaveState();
             pImage->m_FillCenter = fillCenter;
             changed = true;
+        }
+        if (ImGui::DragFloat4(
+                "Slice Border", pImage->m_aBorder.data(), 1.0f, 0.0f, 4096.0f, "%.0f"))
+        {
+            for (float& border : pImage->m_aBorder)
+            {
+                border = std::max(0.0f, border);
+            }
+            changed = true;
+        }
+        if (ImGui::IsItemActivated())
+        {
+            editor.SaveState();
         }
     }
     else if (pImage->m_ImageType == EUiImageType::FILLED)
@@ -2184,6 +2261,20 @@ void CComponentUIHelper::DrawButtonComponent(
         pButton->m_Navigation = static_cast<EUiNavigation>(currentNav);
         changed = true;
     }
+    if (pButton->m_Navigation == EUiNavigation::EXPLICIT)
+    {
+        static const char* apDirections[] = { "Up", "Right", "Down", "Left" };
+        for (size_t direction = 0; direction < pButton->m_aNavigationTargetIds.size(); ++direction)
+        {
+            int targetId = pButton->m_aNavigationTargetIds[direction];
+            if (ImGui::InputInt(apDirections[direction], &targetId))
+            {
+                editor.SaveState();
+                pButton->m_aNavigationTargetIds[direction] = targetId;
+                changed = true;
+            }
+        }
+    }
 
     char aAction[512] = {};
     std::snprintf(aAction, sizeof(aAction), "%s", pButton->m_OnClickAction.c_str());
@@ -2195,6 +2286,61 @@ void CComponentUIHelper::DrawButtonComponent(
     if (ImGui::IsItemActivated())
     {
         editor.SaveState();
+    }
+
+    static const char* apEventNames[] = {
+        "Pointer Enter", "Pointer Exit", "Pointer Down", "Pointer Up",
+        "Click", "Begin Drag", "Drag", "End Drag", "Drop",
+        "Select", "Deselect", "Submit"
+    };
+    ImGui::TextUnformatted("Event Callbacks");
+    ImGui::Separator();
+    if (ImGui::Button("Add Event Callback"))
+    {
+        editor.SaveState();
+        pButton->m_vEventCallbacks.push_back({});
+        changed = true;
+    }
+
+    for (size_t callbackIndex = 0;
+         callbackIndex < pButton->m_vEventCallbacks.size(); ++callbackIndex)
+    {
+        ImGui::PushID(static_cast<int>(callbackIndex));
+        SUiEventCallback& callback = pButton->m_vEventCallbacks[callbackIndex];
+        int event = static_cast<int>(callback.m_Event);
+        if (ImGui::Combo("Event", &event, apEventNames, IM_ARRAYSIZE(apEventNames)))
+        {
+            editor.SaveState();
+            callback.m_Event = static_cast<EUiEventType>(event);
+            changed = true;
+        }
+
+        char aCallbackAction[512] = {};
+        std::snprintf(
+            aCallbackAction, sizeof(aCallbackAction), "%s", callback.m_Action.c_str());
+        const bool actionChanged =
+            ImGui::InputText("Action", aCallbackAction, sizeof(aCallbackAction));
+        if (ImGui::IsItemActivated())
+        {
+            editor.SaveState();
+        }
+        if (actionChanged)
+        {
+            callback.m_Action = aCallbackAction;
+            changed = true;
+        }
+
+        if (ImGui::Button("Remove Callback"))
+        {
+            editor.SaveState();
+            pButton->m_vEventCallbacks.erase(
+                pButton->m_vEventCallbacks.begin() + callbackIndex);
+            changed = true;
+            ImGui::PopID();
+            break;
+        }
+        ImGui::Separator();
+        ImGui::PopID();
     }
 
     bool raycastTarget = pButton->m_RaycastTarget;

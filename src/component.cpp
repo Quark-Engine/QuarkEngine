@@ -6,6 +6,8 @@
 #include "entity.h"
 #include "nlohmann/json.hpp"
 
+#include <algorithm>
+
 void CMeshComponent::Serialize(nlohmann::json& json) const
 {
     json["segments"] = m_Segments;
@@ -450,6 +452,14 @@ void CCanvasComponent::ReleaseOwnedResources()
         UnloadRenderTexture(m_RuntimeTexture);
         m_RuntimeTexture = {};
     }
+    for (RenderTexture2D& screenSpaceTexture : m_aScreenSpaceTextures)
+    {
+        if (screenSpaceTexture.id != 0)
+        {
+            UnloadRenderTexture(screenSpaceTexture);
+            screenSpaceTexture = {};
+        }
+    }
     if (m_QuadModelInitialized)
     {
         UnloadModel(m_RuntimeQuadModel);
@@ -466,6 +476,7 @@ void CCanvasComponent::Serialize(nlohmann::json& json) const
     json["sorting_order"] = m_SortingOrder;
     json["target_display"] = m_TargetDisplay;
     json["reference_resolution"] = { m_ReferenceResolution.x, m_ReferenceResolution.y };
+    json["match_width_or_height"] = m_MatchWidthOrHeight;
     json["width"] = m_Width;
     json["height"] = m_Height;
     json["scale_factor"] = m_ScaleFactor;
@@ -508,6 +519,11 @@ void CCanvasComponent::Deserialize(const nlohmann::json& json)
             json["reference_resolution"][0].get<float>(),
             json["reference_resolution"][1].get<float>()
         };
+    }
+    if (json.contains("match_width_or_height") && json["match_width_or_height"].is_number())
+    {
+        m_MatchWidthOrHeight = std::clamp(
+            json["match_width_or_height"].get<float>(), 0.0f, 1.0f);
     }
     if (json.contains("width") && json["width"].is_number())
     {
@@ -592,6 +608,7 @@ void CUiRectTransformComponent::Serialize(nlohmann::json& json) const
     json["scale_2d"] = { m_Scale2D.x, m_Scale2D.y };
     json["offset_min"] = { m_OffsetMin.x, m_OffsetMin.y };
     json["offset_max"] = { m_OffsetMax.x, m_OffsetMax.y };
+    json["clip_children"] = m_ClipChildren;
 }
 
 void CUiRectTransformComponent::Deserialize(const nlohmann::json& json)
@@ -643,6 +660,10 @@ void CUiRectTransformComponent::Deserialize(const nlohmann::json& json)
     {
         m_OffsetMax = { json["offset_max"][0].get<float>(), json["offset_max"][1].get<float>() };
     }
+    if (json.contains("clip_children") && json["clip_children"].is_boolean())
+    {
+        m_ClipChildren = json["clip_children"].get<bool>();
+    }
 }
 
 CImageComponent::~CImageComponent()
@@ -658,6 +679,7 @@ void CImageComponent::ReleaseOwnedResources()
         m_RuntimeTexture = {};
         m_TextureLoaded = false;
     }
+    m_LoadedTexturePath.clear();
 }
 
 void CImageComponent::Serialize(nlohmann::json& json) const
@@ -670,6 +692,7 @@ void CImageComponent::Serialize(nlohmann::json& json) const
     json["preserve_aspect"] = m_PreserveAspect;
     json["fill_center"] = m_FillCenter;
     json["fill_amount"] = m_FillAmount;
+    json["border"] = m_aBorder;
 }
 
 void CImageComponent::Deserialize(const nlohmann::json& json)
@@ -708,6 +731,17 @@ void CImageComponent::Deserialize(const nlohmann::json& json)
     {
         m_FillAmount = json["fill_amount"].get<float>();
     }
+    if (json.contains("border") && json["border"].is_array() && json["border"].size() >= 4)
+    {
+        for (std::size_t borderIndex = 0; borderIndex < m_aBorder.size(); ++borderIndex)
+        {
+            if (json["border"][borderIndex].is_number())
+            {
+                m_aBorder[borderIndex] =
+                    std::max(0.0f, json["border"][borderIndex].get<float>());
+            }
+        }
+    }
 }
 
 CPanelComponent::~CPanelComponent()
@@ -723,6 +757,7 @@ void CPanelComponent::ReleaseOwnedResources()
         m_RuntimeTexture = {};
         m_TextureLoaded = false;
     }
+    m_LoadedTexturePath.clear();
 }
 
 void CPanelComponent::Serialize(nlohmann::json& json) const
@@ -784,6 +819,7 @@ void CButtonComponent::Serialize(nlohmann::json& json) const
     json["pressed_color"] = SerializeGuiColor(m_PressedColor);
     json["selected_color"] = SerializeGuiColor(m_SelectedColor);
     json["disabled_color"] = SerializeGuiColor(m_DisabledColor);
+    json["navigation_target_ids"] = m_aNavigationTargetIds;
     json["color_multiplier"] = m_ColorMultiplier;
     json["fade_duration"] = m_FadeDuration;
     json["sprite_swap_highlighted"] = m_SpriteSwapHighlighted;
@@ -791,6 +827,14 @@ void CButtonComponent::Serialize(nlohmann::json& json) const
     json["sprite_swap_selected"] = m_SpriteSwapSelected;
     json["sprite_swap_disabled"] = m_SpriteSwapDisabled;
     json["on_click_action"] = m_OnClickAction;
+    json["event_callbacks"] = nlohmann::json::array();
+    for (const SUiEventCallback& callback : m_vEventCallbacks)
+    {
+        json["event_callbacks"].push_back({
+            { "event", static_cast<int>(callback.m_Event) },
+            { "action", callback.m_Action }
+        });
+    }
     json["raycast_target"] = m_RaycastTarget;
 }
 
@@ -823,6 +867,19 @@ void CButtonComponent::Deserialize(const nlohmann::json& json)
     DeserializeGuiColor(json, "pressed_color", m_PressedColor);
     DeserializeGuiColor(json, "selected_color", m_SelectedColor);
     DeserializeGuiColor(json, "disabled_color", m_DisabledColor);
+    if (json.contains("navigation_target_ids") &&
+        json["navigation_target_ids"].is_array() &&
+        json["navigation_target_ids"].size() == m_aNavigationTargetIds.size())
+    {
+        for (size_t targetIndex = 0; targetIndex < m_aNavigationTargetIds.size(); ++targetIndex)
+        {
+            if (json["navigation_target_ids"][targetIndex].is_number_integer())
+            {
+                m_aNavigationTargetIds[targetIndex] =
+                    json["navigation_target_ids"][targetIndex].get<int>();
+            }
+        }
+    }
     if (json.contains("color_multiplier") && json["color_multiplier"].is_number())
     {
         m_ColorMultiplier = json["color_multiplier"].get<float>();
@@ -850,6 +907,31 @@ void CButtonComponent::Deserialize(const nlohmann::json& json)
     if (json.contains("on_click_action") && json["on_click_action"].is_string())
     {
         m_OnClickAction = json["on_click_action"].get<std::string>();
+    }
+    if (json.contains("event_callbacks") && json["event_callbacks"].is_array())
+    {
+        m_vEventCallbacks.clear();
+        for (const nlohmann::json& callbackJson : json["event_callbacks"])
+        {
+            if (!callbackJson.is_object() ||
+                !callbackJson.contains("event") || !callbackJson["event"].is_number_integer() ||
+                !callbackJson.contains("action") || !callbackJson["action"].is_string())
+            {
+                continue;
+            }
+
+            const int event = callbackJson["event"].get<int>();
+            if (event < static_cast<int>(EUiEventType::POINTER_ENTER) ||
+                event > static_cast<int>(EUiEventType::SUBMIT))
+            {
+                continue;
+            }
+
+            m_vEventCallbacks.push_back({
+                static_cast<EUiEventType>(event),
+                callbackJson["action"].get<std::string>()
+            });
+        }
     }
     if (json.contains("raycast_target") && json["raycast_target"].is_boolean())
     {

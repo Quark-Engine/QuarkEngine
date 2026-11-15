@@ -23,6 +23,9 @@ namespace quark
 
         void DrawUiText(const char* text, float x, float y, float fontSize,
                         const char* pFontPath, int fontStyle, Color color);
+        void DrawUiTextTransformed(const char* text, float x, float y, float fontSize,
+                                   const char* pFontPath, int fontStyle, Color color,
+                                   float rotation, float spacing);
         Vec2 MeasureUiText(const char* text, float fontSize,
                            const char* pFontPath, int fontStyle);
 

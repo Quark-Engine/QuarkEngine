@@ -229,6 +229,10 @@ namespace quark::script
         {
             return false;
         }
+
+        virtual void OnUIEvent(const std::string& eventName, const std::string& actionName)
+        {
+        }
     };
 
     enum class Key

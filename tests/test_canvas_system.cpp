@@ -17,6 +17,49 @@
 namespace
 {
 
+    std::vector<std::string> s_vDrawnUiText;
+    std::vector<float> s_vDrawnUiFontSizes;
+    float s_UiTextRotation = 0.0f;
+    float s_UiTextCharacterSpacing = 0.0f;
+
+    void CaptureUiText(const char* pText, float x, float y, float fontSize,
+                       float lineSpacing, Color color)
+    {
+        (void)x;
+        (void)y;
+        (void)lineSpacing;
+        (void)color;
+        s_vDrawnUiText.emplace_back(pText);
+        s_vDrawnUiFontSizes.push_back(fontSize);
+    }
+
+    void CaptureTransformedUiText(const char* pText, float x, float y, float fontSize,
+                                  float rotation, float spacing, Color color)
+    {
+        (void)x;
+        (void)y;
+        (void)color;
+        s_vDrawnUiText.emplace_back(pText);
+        s_vDrawnUiFontSizes.push_back(fontSize);
+        s_UiTextRotation = rotation;
+        s_UiTextCharacterSpacing = spacing;
+    }
+
+    Vec2 MeasureUiTestText(const char* pText, float fontSize)
+    {
+        return {
+            static_cast<float>(std::char_traits<char>::length(pText)) * fontSize * 0.5f,
+            fontSize
+        };
+    }
+
+    void SetUiTestTextContext(const char* pFontPath, int fontStyle, const char* pMaterialPath)
+    {
+        (void)pFontPath;
+        (void)fontStyle;
+        (void)pMaterialPath;
+    }
+
     int AddEntity(CScene& target, const std::string& name, int parentId = -1)
     {
         CEntity added(static_cast<int>(target.m_vEntities.size()));
@@ -36,6 +79,7 @@ TEST(CanvasComponent, default_properties_and_serialization)
     CHECK_NEAR(canvas.m_Height, 600.0f, 0.001);
     CHECK(canvas.m_SortingOrder == 0);
     CHECK(canvas.m_PixelPerfect == false);
+    CHECK_NEAR(canvas.m_MatchWidthOrHeight, 0.5f, 0.001);
 
     canvas.m_RenderMode = ECanvasRenderMode::SCREEN_SPACE_CAMERA;
     canvas.m_Width = 1920.0f;
@@ -43,6 +87,7 @@ TEST(CanvasComponent, default_properties_and_serialization)
     canvas.m_SortingOrder = 5;
     canvas.m_PixelPerfect = true;
     canvas.m_ScaleFactor = 2.0f;
+    canvas.m_MatchWidthOrHeight = 0.25f;
     canvas.m_PlaneDistance = 100.0f;
     canvas.m_EventCameraEntityId = 2;
     canvas.m_OverrideSorting = true;
@@ -59,6 +104,7 @@ TEST(CanvasComponent, default_properties_and_serialization)
     CHECK(deserialized.m_SortingOrder == 5);
     CHECK(deserialized.m_PixelPerfect == true);
     CHECK_NEAR(deserialized.m_ScaleFactor, 2.0f, 0.001);
+    CHECK_NEAR(deserialized.m_MatchWidthOrHeight, 0.25f, 0.001);
     CHECK_NEAR(deserialized.m_PlaneDistance, 100.0f, 0.001);
     CHECK(deserialized.m_EventCameraEntityId == 2);
     CHECK(deserialized.m_OverrideSorting == true);
@@ -90,6 +136,19 @@ TEST(RectTransform, stretch_and_center_calculations)
     CHECK_NEAR(rect.y, 20.0f, 0.001);
     CHECK_NEAR(rect.width, 780.0f, 0.001);
     CHECK_NEAR(rect.height, 560.0f, 0.001);
+}
+
+TEST(RectTransform, child_clipping_serialization)
+{
+    CUiRectTransformComponent rectTransform;
+    rectTransform.m_ClipChildren = true;
+
+    nlohmann::json json;
+    rectTransform.Serialize(json);
+
+    CUiRectTransformComponent deserialized;
+    deserialized.Deserialize(json);
+    CHECK(deserialized.m_ClipChildren == true);
 }
 
 TEST(CanvasSystem, moving_stretched_text_under_button)
@@ -125,6 +184,107 @@ TEST(CanvasSystem, moving_stretched_text_under_button)
     CHECK_NEAR(movedRect.y, initialRect.y - 7.0f, 0.001);
     CHECK_NEAR(movedRect.width, initialRect.width, 0.001);
     CHECK_NEAR(movedRect.height, initialRect.height, 0.001);
+
+    pTextRect->m_Rotation2D = 90.0f;
+    pTextRect->m_Scale2D = { 2.0f, 1.0f };
+    const Mat4 textTransform = system.ComputeElementCanvasTransform(scene, textIdx, canvasSize);
+    const Vec3 textCenter = textTransform * Vec3{ movedRect.width * 0.5f, movedRect.height * 0.5f, 0.0f };
+    const Vec3 textRight = textTransform * Vec3{ movedRect.width, movedRect.height * 0.5f, 0.0f };
+
+    CHECK_NEAR(textCenter.x, movedRect.x + movedRect.width * 0.5f, 0.001);
+    CHECK_NEAR(textCenter.y, movedRect.y + movedRect.height * 0.5f, 0.001);
+    CHECK_NEAR(textRight.x, textCenter.x, 0.001);
+    CHECK_NEAR(textRight.y, textCenter.y + movedRect.width, 0.001);
+}
+
+TEST(CanvasSystem, screen_space_scaler_and_raycast)
+{
+    CScene scene;
+    const int canvasIndex = AddEntity(scene, "Canvas");
+    auto pCanvas = std::make_shared<CCanvasComponent>();
+    pCanvas->m_RenderMode = ECanvasRenderMode::SCREEN_SPACE_OVERLAY;
+    pCanvas->m_ReferenceResolution = { 400.0f, 300.0f };
+    scene.m_vEntities[canvasIndex].GetComponents()->AddComponent(pCanvas);
+
+    const int buttonIndex = AddEntity(scene, "Button", scene.m_vEntities[canvasIndex].m_Id);
+    auto pButton = std::make_shared<CButtonComponent>();
+    pButton->m_RaycastTarget = true;
+    scene.m_vEntities[buttonIndex].GetComponents()->AddComponent(pButton);
+    auto pRectTransform = std::make_shared<CUiRectTransformComponent>();
+    pRectTransform->m_AnchorMin = { 0.5f, 0.5f };
+    pRectTransform->m_AnchorMax = { 0.5f, 0.5f };
+    pRectTransform->m_Pivot = { 0.5f, 0.5f };
+    pRectTransform->m_AnchoredPosition = { 0.0f, 0.0f };
+    pRectTransform->m_Size = { 100.0f, 40.0f };
+    scene.m_vEntities[buttonIndex].GetComponents()->AddComponent(pRectTransform);
+
+    const int maskIndex = AddEntity(scene, "Mask", scene.m_vEntities[canvasIndex].m_Id);
+    auto pMaskRect = std::make_shared<CUiRectTransformComponent>();
+    pMaskRect->m_AnchorMin = { 0.5f, 0.5f };
+    pMaskRect->m_AnchorMax = { 0.5f, 0.5f };
+    pMaskRect->m_Pivot = { 0.5f, 0.5f };
+    pMaskRect->m_AnchoredPosition = { 0.0f, 0.0f };
+    pMaskRect->m_Size = { 100.0f, 100.0f };
+    pMaskRect->m_ClipChildren = true;
+    scene.m_vEntities[maskIndex].GetComponents()->AddComponent(pMaskRect);
+
+    const int clippedButtonIndex =
+        AddEntity(scene, "Clipped Button", scene.m_vEntities[maskIndex].m_Id);
+    scene.m_vEntities[clippedButtonIndex].GetComponents()->AddComponent(
+        std::make_shared<CButtonComponent>());
+    auto pClippedRect = std::make_shared<CUiRectTransformComponent>();
+    pClippedRect->m_AnchorMin = { 0.5f, 0.5f };
+    pClippedRect->m_AnchorMax = { 0.5f, 0.5f };
+    pClippedRect->m_Pivot = { 0.5f, 0.5f };
+    pClippedRect->m_AnchoredPosition = { 60.0f, 0.0f };
+    pClippedRect->m_Size = { 60.0f, 40.0f };
+    scene.m_vEntities[clippedButtonIndex].GetComponents()->AddComponent(pClippedRect);
+
+    quark::ui::CCanvasSystem& system = quark::ui::CCanvasSystem::Get();
+    pCanvas->m_MatchWidthOrHeight = 0.0f;
+    CHECK_NEAR(system.ComputeScreenSpaceCanvasScale(*pCanvas, { 800.0f, 300.0f }), 2.0f, 0.001);
+    pCanvas->m_MatchWidthOrHeight = 1.0f;
+    CHECK_NEAR(system.ComputeScreenSpaceCanvasScale(*pCanvas, { 800.0f, 300.0f }), 1.0f, 0.001);
+    pCanvas->m_MatchWidthOrHeight = 0.5f;
+    CHECK_NEAR(
+        system.ComputeScreenSpaceCanvasScale(*pCanvas, { 800.0f, 300.0f }),
+        std::sqrt(2.0f), 0.001);
+
+    const quark::ui::SUiViewport viewport({ 20.0f, 30.0f }, { 800.0f, 600.0f });
+    const Rectangle buttonRect = system.ComputeElementCanvasRect(
+        scene, buttonIndex, { 400.0f, 300.0f });
+    const Mat4 buttonTransform = system.ComputeElementCanvasTransform(
+        scene, buttonIndex, { 400.0f, 300.0f });
+    const Vec3 buttonCenter = buttonTransform * Vec3{ 50.0f, 20.0f, 0.0f };
+    CHECK_NEAR(buttonRect.x, 150.0f, 0.001);
+    CHECK_NEAR(buttonRect.y, 130.0f, 0.001);
+    CHECK_NEAR(buttonCenter.x, 200.0f, 0.001);
+    CHECK_NEAR(buttonCenter.y, 150.0f, 0.001);
+
+    const quark::ui::SCanvasHitResult hit = system.PickScreenSpaceUiElement(
+        scene, viewport, { 420.0f, 330.0f });
+    CHECK(hit.m_Hit == true);
+    CHECK(hit.m_CanvasEntityIndex == canvasIndex);
+    CHECK(hit.m_HitEntityIndex == buttonIndex);
+
+    const quark::ui::SCanvasHitResult clippedHit = system.PickScreenSpaceUiElement(
+        scene, viewport, { 500.0f, 330.0f });
+    CHECK(clippedHit.m_Hit == true);
+    CHECK(clippedHit.m_HitEntityIndex == clippedButtonIndex);
+
+    const quark::ui::SCanvasHitResult clippedMiss = system.PickScreenSpaceUiElement(
+        scene, viewport, { 524.0f, 330.0f });
+    CHECK(clippedMiss.m_Hit == false);
+
+    const quark::ui::SCanvasHitResult miss = system.PickScreenSpaceUiElement(
+        scene, viewport, { 120.0f, 130.0f });
+    CHECK(miss.m_Hit == false);
+
+    pCanvas->m_RenderMode = ECanvasRenderMode::SCREEN_SPACE_CAMERA;
+    const quark::ui::SCanvasHitResult cameraCanvasHit = system.PickScreenSpaceUiElement(
+        scene, viewport, { 420.0f, 330.0f });
+    CHECK(cameraCanvasHit.m_Hit == true);
+    CHECK(cameraCanvasHit.m_HitEntityIndex == buttonIndex);
 }
 
 TEST(ButtonComponent, state_transitions_and_color_multiplier)
@@ -164,6 +324,68 @@ TEST(ButtonComponent, state_transitions_and_color_multiplier)
     CHECK(clicked == true);
 }
 
+TEST(ButtonComponent, event_callbacks_serialize)
+{
+    CButtonComponent button;
+    button.m_vEventCallbacks = {
+        { EUiEventType::POINTER_ENTER, "OnHover" },
+        { EUiEventType::DROP, "OnDrop" }
+    };
+    button.m_aNavigationTargetIds = { 10, 11, 12, 13 };
+
+    nlohmann::json json;
+    button.Serialize(json);
+
+    CButtonComponent deserialized;
+    deserialized.Deserialize(json);
+    CHECK(deserialized.m_vEventCallbacks.size() == 2);
+    CHECK(deserialized.m_vEventCallbacks[0].m_Event == EUiEventType::POINTER_ENTER);
+    CHECK(deserialized.m_vEventCallbacks[0].m_Action == "OnHover");
+    CHECK(deserialized.m_vEventCallbacks[1].m_Event == EUiEventType::DROP);
+    CHECK(deserialized.m_vEventCallbacks[1].m_Action == "OnDrop");
+    CHECK(deserialized.m_aNavigationTargetIds == button.m_aNavigationTargetIds);
+}
+
+TEST(CanvasText, layout_wrapping_and_transformed_spacing)
+{
+    quark::gui::CGuiSystem& gui = quark::gui::CGuiSystem::Get();
+    const SGuiBackend previousBackend = gui.GetBackend();
+    SGuiBackend backend;
+    backend.pfnDrawText = &CaptureUiText;
+    backend.pfnDrawTextTransformed = &CaptureTransformedUiText;
+    backend.pfnMeasureText = &MeasureUiTestText;
+    backend.pfnSetTextContext = &SetUiTestTextContext;
+    gui.SetBackend(backend);
+
+    SGuiWidgetDesc widget;
+    widget.m_WidgetId = 1;
+    widget.m_WidgetType = EGuiWidgetType::TEXT;
+    widget.m_Position = { 10.0f, 20.0f };
+    widget.m_Size = { 50.0f, 60.0f };
+    widget.m_Text = "alpha beta gamma";
+    widget.m_TextFontSize = 10.0f;
+    widget.m_TextRotation = 30.0f;
+    widget.m_TextCharacterSpacing = 1.0f;
+    std::vector<SGuiWidgetDesc*> vWidgets = { &widget };
+    s_vDrawnUiText.clear();
+    s_vDrawnUiFontSizes.clear();
+
+    gui.RenderOnly(vWidgets);
+    CHECK(s_vDrawnUiText.size() > 1);
+    CHECK_NEAR(s_UiTextRotation, 30.0f, 0.001);
+    CHECK_NEAR(s_UiTextCharacterSpacing, 1.0f, 0.001);
+
+    widget.m_TextHorizontalOverflow = 1;
+    widget.m_TextRotation = 0.0f;
+    widget.m_TextCharacterSpacing = 0.0f;
+    s_vDrawnUiText.clear();
+    gui.RenderOnly(vWidgets);
+    gui.SetBackend(previousBackend);
+
+    CHECK(s_vDrawnUiText.size() == 1);
+    CHECK(s_vDrawnUiText[0] == "alpha beta gamma");
+}
+
 TEST(ImageAndPanel, serialization_round_trip)
 {
     CImageComponent image;
@@ -174,6 +396,7 @@ TEST(ImageAndPanel, serialization_round_trip)
     image.m_ImageType = EUiImageType::SLICED;
     image.m_PreserveAspect = true;
     image.m_FillCenter = false;
+    image.m_aBorder = { 12.0f, 8.0f, 14.0f, 10.0f };
 
     nlohmann::json jImg;
     image.Serialize(jImg);
@@ -186,6 +409,8 @@ TEST(ImageAndPanel, serialization_round_trip)
     CHECK(dImg.m_ImageType == EUiImageType::SLICED);
     CHECK(dImg.m_PreserveAspect == true);
     CHECK(dImg.m_FillCenter == false);
+    CHECK_NEAR(dImg.m_aBorder[0], 12.0f, 0.001);
+    CHECK_NEAR(dImg.m_aBorder[3], 10.0f, 0.001);
 
     CPanelComponent panel;
     panel.m_BackgroundImage = "assets/textures/panel_bg.png";

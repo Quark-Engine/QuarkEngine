@@ -424,6 +424,37 @@ namespace quark
                 }
             }
 
+            void BridgeDrawTextTransformed(const char* text, float x, float y, float fontSize,
+                                           float rotation, float spacing, Color color)
+            {
+                if (!text || !text[0])
+                {
+                    return;
+                }
+                EnsureGuiFontLoaded();
+                const Color finalColor = {
+                    static_cast<unsigned char>((static_cast<int>(color.r) * static_cast<int>(s_ActiveMaterialTint.r)) / 255),
+                    static_cast<unsigned char>((static_cast<int>(color.g) * static_cast<int>(s_ActiveMaterialTint.g)) / 255),
+                    static_cast<unsigned char>((static_cast<int>(color.b) * static_cast<int>(s_ActiveMaterialTint.b)) / 255),
+                    static_cast<unsigned char>((static_cast<int>(color.a) * static_cast<int>(s_ActiveMaterialTint.a)) / 255)
+                };
+                const Font* pFontToUse = (s_pActiveFont && s_pActiveFont->texture.id != 0)
+                    ? s_pActiveFont
+                    : ((s_GuiFontLoaded && s_GuiFont.texture.id != 0) ? &s_GuiFont : nullptr);
+                const Font defaultFont = pFontToUse ? *pFontToUse : GetFontDefault();
+
+                DrawTextPro(
+                    defaultFont, text, { x, y }, { 0.0f, 0.0f },
+                    rotation, fontSize, spacing, finalColor);
+                if (s_ActiveSyntheticBold)
+                {
+                    const float boldOffset = std::max(1.0f, std::round(fontSize * 0.045f));
+                    DrawTextPro(
+                        defaultFont, text, { x + boldOffset, y }, { 0.0f, 0.0f },
+                        rotation, fontSize, spacing, finalColor);
+                }
+            }
+
             Vec2 BridgeMeasureText(const char* text, float fontSize)
             {
                 if (!text || !text[0])
@@ -515,6 +546,7 @@ namespace quark
             backend.pfnMeasureText = &BridgeMeasureText;
             backend.pfnSetTextContext = &BridgeSetTextContext;
             backend.pfnGetTime = &BridgeGetTime;
+            backend.pfnDrawTextTransformed = &BridgeDrawTextTransformed;
 
             CGuiSystem::Get().SetBackend(backend);
             s_BackendInstalled = true;
@@ -699,6 +731,43 @@ namespace quark
         {
             BridgeSetTextContext(pFontPath, fontStyle, nullptr);
             BridgeDrawText(text, x, y, fontSize, 1.0f, color);
+        }
+
+        void DrawUiTextTransformed(const char* text, float x, float y, float fontSize,
+                                   const char* pFontPath, int fontStyle, Color color,
+                                   float rotation, float spacing)
+        {
+            BridgeSetTextContext(pFontPath, fontStyle, nullptr);
+            if (!text || !text[0])
+            {
+                return;
+            }
+
+            const Font* pFontToUse = (s_pActiveFont && s_pActiveFont->texture.id != 0)
+                ? s_pActiveFont
+                : ((s_GuiFontLoaded && s_GuiFont.texture.id != 0) ? &s_GuiFont : nullptr);
+            const Color finalColor = {
+                static_cast<unsigned char>((static_cast<int>(color.r) * static_cast<int>(s_ActiveMaterialTint.r)) / 255),
+                static_cast<unsigned char>((static_cast<int>(color.g) * static_cast<int>(s_ActiveMaterialTint.g)) / 255),
+                static_cast<unsigned char>((static_cast<int>(color.b) * static_cast<int>(s_ActiveMaterialTint.b)) / 255),
+                static_cast<unsigned char>((static_cast<int>(color.a) * static_cast<int>(s_ActiveMaterialTint.a)) / 255)
+            };
+
+            if (pFontToUse)
+            {
+                DrawTextPro(*pFontToUse, text, { x, y }, { 0.0f, 0.0f },
+                            rotation, fontSize, spacing, finalColor);
+                if (s_ActiveSyntheticBold)
+                {
+                    const float boldOffset = std::max(1.0f, std::round(fontSize * 0.045f));
+                    const Vec2 offset = Vec2{ boldOffset, 0.0f }.rotate(rotation * DEG2RAD);
+                    DrawTextPro(*pFontToUse, text, { x + offset.x, y + offset.y },
+                                { 0.0f, 0.0f }, rotation, fontSize, spacing, finalColor);
+                }
+                return;
+            }
+
+            BridgeDrawText(text, x, y, fontSize, 1.0f, finalColor);
         }
 
         Vec2 MeasureUiText(const char* text, float fontSize,
