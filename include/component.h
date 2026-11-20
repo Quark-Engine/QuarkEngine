@@ -63,7 +63,8 @@ enum EComponentType
     COMPONENT_SCROLL_VIEW,
     COMPONENT_HORIZONTAL_LAYOUT,
     COMPONENT_VERTICAL_LAYOUT,
-    COMPONENT_GRID_LAYOUT
+    COMPONENT_GRID_LAYOUT,
+    COMPONENT_COUNT
 };
 
 enum class ECanvasRenderMode
@@ -1309,11 +1310,143 @@ class CComponentManager
 {
 private:
     std::vector<std::shared_ptr<IComponent>> m_vComponents;
+    std::array<IComponent*, COMPONENT_COUNT> m_apFastLookup = {};
+
+    template <typename T>
+    static constexpr EComponentType StaticComponentType()
+    {
+        if constexpr (std::is_same_v<T, CTransformComponent>)
+        {
+            return COMPONENT_TRANSFORM;
+        }
+        else if constexpr (std::is_same_v<T, CMeshComponent>)
+        {
+            return COMPONENT_MESH;
+        }
+        else if constexpr (std::is_same_v<T, CMaterialComponent>)
+        {
+            return COMPONENT_MATERIAL;
+        }
+        else if constexpr (std::is_same_v<T, CLightComponent>)
+        {
+            return COMPONENT_LIGHT;
+        }
+        else if constexpr (std::is_same_v<T, CCollisionComponent>)
+        {
+            return COMPONENT_COLLISION;
+        }
+        else if constexpr (std::is_same_v<T, CCameraComponent>)
+        {
+            return COMPONENT_CAMERA;
+        }
+        else if constexpr (std::is_same_v<T, CScriptComponent>)
+        {
+            return COMPONENT_SCRIPT;
+        }
+        else if constexpr (std::is_same_v<T, CUiComponent>)
+        {
+            return COMPONENT_UI;
+        }
+        else if constexpr (std::is_same_v<T, CTextComponent>)
+        {
+            return COMPONENT_TEXT;
+        }
+        else if constexpr (std::is_same_v<T, CUiRectTransformComponent>)
+        {
+            return COMPONENT_UI_RECT_TRANSFORM;
+        }
+        else if constexpr (std::is_same_v<T, CCanvasComponent>)
+        {
+            return COMPONENT_CANVAS;
+        }
+        else if constexpr (std::is_same_v<T, CImageComponent>)
+        {
+            return COMPONENT_IMAGE;
+        }
+        else if constexpr (std::is_same_v<T, CPanelComponent>)
+        {
+            return COMPONENT_PANEL;
+        }
+        else if constexpr (std::is_same_v<T, CButtonComponent>)
+        {
+            return COMPONENT_BUTTON;
+        }
+        else if constexpr (std::is_same_v<T, CSliderComponent>)
+        {
+            return COMPONENT_SLIDER;
+        }
+        else if constexpr (std::is_same_v<T, CToggleComponent>)
+        {
+            return COMPONENT_TOGGLE;
+        }
+        else if constexpr (std::is_same_v<T, CProgressBarComponent>)
+        {
+            return COMPONENT_PROGRESS_BAR;
+        }
+        else if constexpr (std::is_same_v<T, CScrollViewComponent>)
+        {
+            return COMPONENT_SCROLL_VIEW;
+        }
+        else if constexpr (std::is_same_v<T, CHorizontalLayoutComponent>)
+        {
+            return COMPONENT_HORIZONTAL_LAYOUT;
+        }
+        else if constexpr (std::is_same_v<T, CVerticalLayoutComponent>)
+        {
+            return COMPONENT_VERTICAL_LAYOUT;
+        }
+        else if constexpr (std::is_same_v<T, CGridLayoutComponent>)
+        {
+            return COMPONENT_GRID_LAYOUT;
+        }
+        else
+        {
+            return COMPONENT_CUSTOM;
+        }
+    }
 
 public:
+    void RebuildFastLookup()
+    {
+        m_apFastLookup.fill(nullptr);
+        for (const auto& pComp : m_vComponents)
+        {
+            if (!pComp)
+            {
+                continue;
+            }
+            const int typeIdx = static_cast<int>(pComp->GetType());
+            if (typeIdx >= 0 && typeIdx < static_cast<int>(COMPONENT_COUNT) &&
+                m_apFastLookup[static_cast<size_t>(typeIdx)] == nullptr)
+            {
+                m_apFastLookup[static_cast<size_t>(typeIdx)] = pComp.get();
+            }
+        }
+    }
+
+    template <typename T>
+    T* GetFastComponent(EComponentType type) const
+    {
+        const int typeIdx = static_cast<int>(type);
+        if (typeIdx >= 0 && typeIdx < static_cast<int>(COMPONENT_COUNT))
+        {
+            return static_cast<T*>(m_apFastLookup[static_cast<size_t>(typeIdx)]);
+        }
+        return nullptr;
+    }
+
     void AddComponent(std::shared_ptr<IComponent> pComponent)
     {
-        m_vComponents.push_back(pComponent);
+        if (pComponent)
+        {
+            const int typeIdx = static_cast<int>(pComponent->GetType());
+            if (typeIdx >= 0 && typeIdx < static_cast<int>(COMPONENT_COUNT) &&
+                m_apFastLookup[static_cast<size_t>(typeIdx)] == nullptr)
+            {
+                m_apFastLookup[static_cast<size_t>(typeIdx)] = pComponent.get();
+            }
+        }
+        m_vComponents.push_back(std::move(pComponent));
     }
 
     void RemoveComponent(size_t index)
@@ -1321,6 +1454,7 @@ public:
         if (index < m_vComponents.size())
         {
             m_vComponents.erase(m_vComponents.begin() + index);
+            RebuildFastLookup();
         }
     }
 
@@ -1331,18 +1465,18 @@ public:
             const auto& pComponent = m_vComponents[i - 1];
             if (pComponent)
             {
-                if (pComponent->GetType() == COMPONENT_MESH ||
-                    pComponent->GetType() == COMPONENT_MATERIAL)
+                const EComponentType compType = pComponent->GetType();
+                if (compType == COMPONENT_MESH || compType == COMPONENT_MATERIAL)
                 {
-                    if (auto pMesh = std::dynamic_pointer_cast<CMeshComponent>(pComponent))
+                    if (compType == COMPONENT_MESH)
                     {
-                        pMesh->ReleaseOwnedResources();
+                        static_cast<CMeshComponent*>(pComponent.get())->ReleaseOwnedResources();
                     }
-                    RemoveComponent(i - 1);
+                    m_vComponents.erase(m_vComponents.begin() + static_cast<std::ptrdiff_t>(i - 1));
                 }
-                else if (!keepTransform && pComponent->GetType() == COMPONENT_TRANSFORM)
+                else if (!keepTransform && compType == COMPONENT_TRANSFORM)
                 {
-                    RemoveComponent(i - 1);
+                    m_vComponents.erase(m_vComponents.begin() + static_cast<std::ptrdiff_t>(i - 1));
                 }
             }
         }
@@ -1359,6 +1493,7 @@ public:
                 break;
             }
         }
+        RebuildFastLookup();
     }
 
     std::shared_ptr<IComponent> GetComponent(size_t index)
@@ -1378,135 +1513,130 @@ public:
     template <typename T>
     std::shared_ptr<T> GetComponentOfType()
     {
-        for (auto& pComp : m_vComponents)
+        constexpr EComponentType targetType = StaticComponentType<T>();
+        if constexpr (targetType != COMPONENT_CUSTOM)
         {
-            auto casted = std::dynamic_pointer_cast<T>(pComp);
-            if (casted)
+            for (auto& pComp : m_vComponents)
             {
-                return casted;
+                if (pComp && pComp->GetType() == targetType)
+                {
+                    return std::static_pointer_cast<T>(pComp);
+                }
             }
+            return nullptr;
         }
-        return nullptr;
+        else
+        {
+            for (auto& pComp : m_vComponents)
+            {
+                auto casted = std::dynamic_pointer_cast<T>(pComp);
+                if (casted)
+                {
+                    return casted;
+                }
+            }
+            return nullptr;
+        }
     }
 
-    CTransformComponent* GetTransform()
+    CTransformComponent* GetTransform() const
     {
-        auto pComp = GetComponentOfType<CTransformComponent>();
-        return pComp ? pComp.get() : nullptr;
+        return GetFastComponent<CTransformComponent>(COMPONENT_TRANSFORM);
     }
 
-    CMeshComponent* GetMesh()
+    CMeshComponent* GetMesh() const
     {
-        auto pComp = GetComponentOfType<CMeshComponent>();
-        return pComp ? pComp.get() : nullptr;
+        return GetFastComponent<CMeshComponent>(COMPONENT_MESH);
     }
 
-    CLightComponent* GetLight()
+    CLightComponent* GetLight() const
     {
-        auto pComp = GetComponentOfType<CLightComponent>();
-        return pComp ? pComp.get() : nullptr;
+        return GetFastComponent<CLightComponent>(COMPONENT_LIGHT);
     }
 
-    CMaterialComponent* GetMaterial()
+    CMaterialComponent* GetMaterial() const
     {
-        auto pComp = GetComponentOfType<CMaterialComponent>();
-        return pComp ? pComp.get() : nullptr;
+        return GetFastComponent<CMaterialComponent>(COMPONENT_MATERIAL);
     }
 
-    CCollisionComponent* GetCollision()
+    CCollisionComponent* GetCollision() const
     {
-        auto pComp = GetComponentOfType<CCollisionComponent>();
-        return pComp ? pComp.get() : nullptr;
+        return GetFastComponent<CCollisionComponent>(COMPONENT_COLLISION);
     }
 
-    CCameraComponent* GetCamera()
+    CCameraComponent* GetCamera() const
     {
-        auto pComp = GetComponentOfType<CCameraComponent>();
-        return pComp ? pComp.get() : nullptr;
+        return GetFastComponent<CCameraComponent>(COMPONENT_CAMERA);
     }
 
-    CUiComponent* GetUiComponent()
+    CUiComponent* GetUiComponent() const
     {
-        auto pComp = GetComponentOfType<CUiComponent>();
-        return pComp ? pComp.get() : nullptr;
+        return GetFastComponent<CUiComponent>(COMPONENT_UI);
     }
 
-    CCanvasComponent* GetCanvas()
+    CCanvasComponent* GetCanvas() const
     {
-        auto pComp = GetComponentOfType<CCanvasComponent>();
-        return pComp ? pComp.get() : nullptr;
+        return GetFastComponent<CCanvasComponent>(COMPONENT_CANVAS);
     }
 
-    CUiRectTransformComponent* GetRectTransform()
+    CUiRectTransformComponent* GetRectTransform() const
     {
-        auto pComp = GetComponentOfType<CUiRectTransformComponent>();
-        return pComp ? pComp.get() : nullptr;
+        return GetFastComponent<CUiRectTransformComponent>(COMPONENT_UI_RECT_TRANSFORM);
     }
 
-    CImageComponent* GetImage()
+    CImageComponent* GetImage() const
     {
-        auto pComp = GetComponentOfType<CImageComponent>();
-        return pComp ? pComp.get() : nullptr;
+        return GetFastComponent<CImageComponent>(COMPONENT_IMAGE);
     }
 
-    CPanelComponent* GetPanel()
+    CPanelComponent* GetPanel() const
     {
-        auto pComp = GetComponentOfType<CPanelComponent>();
-        return pComp ? pComp.get() : nullptr;
+        return GetFastComponent<CPanelComponent>(COMPONENT_PANEL);
     }
 
-    CButtonComponent* GetButton()
+    CButtonComponent* GetButton() const
     {
-        auto pComp = GetComponentOfType<CButtonComponent>();
-        return pComp ? pComp.get() : nullptr;
+        return GetFastComponent<CButtonComponent>(COMPONENT_BUTTON);
     }
 
-    CTextComponent* GetText()
+    CTextComponent* GetText() const
     {
-        auto pComp = GetComponentOfType<CTextComponent>();
-        return pComp ? pComp.get() : nullptr;
+        return GetFastComponent<CTextComponent>(COMPONENT_TEXT);
     }
 
-    CSliderComponent* GetSlider()
+    CSliderComponent* GetSlider() const
     {
-        auto pComp = GetComponentOfType<CSliderComponent>();
-        return pComp ? pComp.get() : nullptr;
+        return GetFastComponent<CSliderComponent>(COMPONENT_SLIDER);
     }
 
-    CToggleComponent* GetToggle()
+    CToggleComponent* GetToggle() const
     {
-        auto pComp = GetComponentOfType<CToggleComponent>();
-        return pComp ? pComp.get() : nullptr;
+        return GetFastComponent<CToggleComponent>(COMPONENT_TOGGLE);
     }
 
-    CProgressBarComponent* GetProgressBar()
+    CProgressBarComponent* GetProgressBar() const
     {
-        auto pComp = GetComponentOfType<CProgressBarComponent>();
-        return pComp ? pComp.get() : nullptr;
+        return GetFastComponent<CProgressBarComponent>(COMPONENT_PROGRESS_BAR);
     }
 
-    CScrollViewComponent* GetScrollView()
+    CScrollViewComponent* GetScrollView() const
     {
-        auto pComp = GetComponentOfType<CScrollViewComponent>();
-        return pComp ? pComp.get() : nullptr;
+        return GetFastComponent<CScrollViewComponent>(COMPONENT_SCROLL_VIEW);
     }
 
-    CHorizontalLayoutComponent* GetHorizontalLayout()
+    CHorizontalLayoutComponent* GetHorizontalLayout() const
     {
-        auto pComp = GetComponentOfType<CHorizontalLayoutComponent>();
-        return pComp ? pComp.get() : nullptr;
+        return GetFastComponent<CHorizontalLayoutComponent>(COMPONENT_HORIZONTAL_LAYOUT);
     }
 
-    CVerticalLayoutComponent* GetVerticalLayout()
+    CVerticalLayoutComponent* GetVerticalLayout() const
     {
-        auto pComp = GetComponentOfType<CVerticalLayoutComponent>();
-        return pComp ? pComp.get() : nullptr;
+        return GetFastComponent<CVerticalLayoutComponent>(COMPONENT_VERTICAL_LAYOUT);
     }
 
-    CGridLayoutComponent* GetGridLayout()
+    CGridLayoutComponent* GetGridLayout() const
     {
-        auto pComp = GetComponentOfType<CGridLayoutComponent>();
-        return pComp ? pComp.get() : nullptr;
+        return GetFastComponent<CGridLayoutComponent>(COMPONENT_GRID_LAYOUT);
     }
 
     CScriptComponent* GetScript();

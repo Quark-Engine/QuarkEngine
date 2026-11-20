@@ -79,103 +79,92 @@ void CComponentUIHelper::DrawEntityInspector(CEditor& editor, CEntity& entity, S
 
                 ImGui::Spacing();
 
-                if (auto pTransform = std::dynamic_pointer_cast<CTransformComponent>(pComp))
+                switch (pComp->GetType())
                 {
-                    DrawTransformComponent(editor, entity, pTransform.get());
-                }
-                else if (auto pMesh = std::dynamic_pointer_cast<CMeshComponent>(pComp))
-                {
-                    DrawMeshComponent(editor, entity, pMesh.get());
-                }
-                else if (auto pLight = std::dynamic_pointer_cast<CLightComponent>(pComp))
-                {
-                    DrawLightComponent(editor, entity, pLight.get(), shader);
-                }
-                else if (auto pMaterial = std::dynamic_pointer_cast<CMaterialComponent>(pComp))
-                {
-                    DrawMaterialComponent(editor, entity, pMaterial.get());
-                }
-                else if (auto pCollision = std::dynamic_pointer_cast<CCollisionComponent>(pComp))
-                {
-                    DrawCollisionComponent(editor, entity, pCollision.get());
-                }
-                else if (auto pCamera = std::dynamic_pointer_cast<CCameraComponent>(pComp))
-                {
-                    float fieldOfView = pCamera->m_FieldOfView;
-                    const bool fieldOfViewChanged =
-                        ImGui::SliderFloat("Field of View", &fieldOfView, 20.0f, 120.0f, "%.0f deg");
-                    if (ImGui::IsItemActivated())
+                    case COMPONENT_TRANSFORM:
+                        DrawTransformComponent(editor, entity, static_cast<CTransformComponent*>(pComp.get()));
+                        break;
+                    case COMPONENT_MESH:
+                        DrawMeshComponent(editor, entity, static_cast<CMeshComponent*>(pComp.get()));
+                        break;
+                    case COMPONENT_LIGHT:
+                        DrawLightComponent(editor, entity, static_cast<CLightComponent*>(pComp.get()), shader);
+                        break;
+                    case COMPONENT_MATERIAL:
+                        DrawMaterialComponent(editor, entity, static_cast<CMaterialComponent*>(pComp.get()));
+                        break;
+                    case COMPONENT_COLLISION:
+                        DrawCollisionComponent(editor, entity, static_cast<CCollisionComponent*>(pComp.get()));
+                        break;
+                    case COMPONENT_CAMERA:
                     {
-                        editor.SaveState();
+                        auto* pCamera = static_cast<CCameraComponent*>(pComp.get());
+                        float fieldOfView = pCamera->m_FieldOfView;
+                        const bool fieldOfViewChanged =
+                            ImGui::SliderFloat("Field of View", &fieldOfView, 20.0f, 120.0f, "%.0f deg");
+                        if (ImGui::IsItemActivated())
+                        {
+                            editor.SaveState();
+                        }
+                        if (fieldOfViewChanged)
+                        {
+                            pCamera->m_FieldOfView = fieldOfView;
+                        }
+                        break;
                     }
-                    if (fieldOfViewChanged)
-                    {
-                        pCamera->m_FieldOfView = fieldOfView;
-                    }
-                }
-                else if (auto pText = std::dynamic_pointer_cast<CText3DComponent>(pComp))
-                {
-                    Draw3dTextComponent(editor, entity, pText.get());
-                }
-                else if (auto pText = std::dynamic_pointer_cast<CTextComponent>(pComp))
-                {
-                    DrawUiTextComponent(editor, pText.get());
-                }
-                else if (auto pRectTransform = std::dynamic_pointer_cast<CUiRectTransformComponent>(pComp))
-                {
-                    DrawUiRectTransformComponent(editor, pRectTransform.get());
-                }
-                else if (auto pCanvas = std::dynamic_pointer_cast<CCanvasComponent>(pComp))
-                {
-                    DrawCanvasComponent(editor, entity, pCanvas.get());
-                }
-                else if (auto pImage = std::dynamic_pointer_cast<CImageComponent>(pComp))
-                {
-                    DrawImageComponent(editor, entity, pImage.get());
-                }
-                else if (auto pPanel = std::dynamic_pointer_cast<CPanelComponent>(pComp))
-                {
-                    DrawPanelComponent(editor, entity, pPanel.get());
-                }
-                else if (auto pButton = std::dynamic_pointer_cast<CButtonComponent>(pComp))
-                {
-                    DrawButtonComponent(editor, entity, pButton.get());
-                }
-                else if (auto pSlider = std::dynamic_pointer_cast<CSliderComponent>(pComp))
-                {
-                    DrawSliderComponent(editor, pSlider.get());
-                }
-                else if (auto pToggle = std::dynamic_pointer_cast<CToggleComponent>(pComp))
-                {
-                    DrawToggleComponent(editor, pToggle.get());
-                }
-                else if (auto pProgressBar = std::dynamic_pointer_cast<CProgressBarComponent>(pComp))
-                {
-                    DrawProgressBarComponent(editor, pProgressBar.get());
-                }
-                else if (auto pScrollView = std::dynamic_pointer_cast<CScrollViewComponent>(pComp))
-                {
-                    DrawScrollViewComponent(editor, pScrollView.get());
-                }
-                else if (auto pHLayout = std::dynamic_pointer_cast<CHorizontalLayoutComponent>(pComp))
-                {
-                    DrawHorizontalLayoutComponent(editor, pHLayout.get());
-                }
-                else if (auto pVLayout = std::dynamic_pointer_cast<CVerticalLayoutComponent>(pComp))
-                {
-                    DrawVerticalLayoutComponent(editor, pVLayout.get());
-                }
-                else if (auto pGLayout = std::dynamic_pointer_cast<CGridLayoutComponent>(pComp))
-                {
-                    DrawGridLayoutComponent(editor, pGLayout.get());
-                }
-                else if (auto pScript = std::dynamic_pointer_cast<CScriptComponent>(pComp))
-                {
-                    DrawScriptComponent(editor, entity, pScript.get());
-                }
-                else if (auto pUi = std::dynamic_pointer_cast<CUiComponent>(pComp))
-                {
-                    DrawUiComponent(editor, entity, pUi.get());
+                    case COMPONENT_CUSTOM:
+                        if (auto pText = std::dynamic_pointer_cast<CText3DComponent>(pComp))
+                        {
+                            Draw3dTextComponent(editor, entity, pText.get());
+                        }
+                        break;
+                    case COMPONENT_TEXT:
+                        DrawUiTextComponent(editor, static_cast<CTextComponent*>(pComp.get()));
+                        break;
+                    case COMPONENT_UI_RECT_TRANSFORM:
+                        DrawUiRectTransformComponent(editor, static_cast<CUiRectTransformComponent*>(pComp.get()));
+                        break;
+                    case COMPONENT_CANVAS:
+                        DrawCanvasComponent(editor, entity, static_cast<CCanvasComponent*>(pComp.get()));
+                        break;
+                    case COMPONENT_IMAGE:
+                        DrawImageComponent(editor, entity, static_cast<CImageComponent*>(pComp.get()));
+                        break;
+                    case COMPONENT_PANEL:
+                        DrawPanelComponent(editor, entity, static_cast<CPanelComponent*>(pComp.get()));
+                        break;
+                    case COMPONENT_BUTTON:
+                        DrawButtonComponent(editor, entity, static_cast<CButtonComponent*>(pComp.get()));
+                        break;
+                    case COMPONENT_SLIDER:
+                        DrawSliderComponent(editor, static_cast<CSliderComponent*>(pComp.get()));
+                        break;
+                    case COMPONENT_TOGGLE:
+                        DrawToggleComponent(editor, static_cast<CToggleComponent*>(pComp.get()));
+                        break;
+                    case COMPONENT_PROGRESS_BAR:
+                        DrawProgressBarComponent(editor, static_cast<CProgressBarComponent*>(pComp.get()));
+                        break;
+                    case COMPONENT_SCROLL_VIEW:
+                        DrawScrollViewComponent(editor, static_cast<CScrollViewComponent*>(pComp.get()));
+                        break;
+                    case COMPONENT_HORIZONTAL_LAYOUT:
+                        DrawHorizontalLayoutComponent(editor, static_cast<CHorizontalLayoutComponent*>(pComp.get()));
+                        break;
+                    case COMPONENT_VERTICAL_LAYOUT:
+                        DrawVerticalLayoutComponent(editor, static_cast<CVerticalLayoutComponent*>(pComp.get()));
+                        break;
+                    case COMPONENT_GRID_LAYOUT:
+                        DrawGridLayoutComponent(editor, static_cast<CGridLayoutComponent*>(pComp.get()));
+                        break;
+                    case COMPONENT_SCRIPT:
+                        DrawScriptComponent(editor, entity, static_cast<CScriptComponent*>(pComp.get()));
+                        break;
+                    case COMPONENT_UI:
+                        DrawUiComponent(editor, entity, static_cast<CUiComponent*>(pComp.get()));
+                        break;
+                    default:
+                        break;
                 }
 
                 ImGui::Spacing();
@@ -553,8 +542,9 @@ void CComponentUIHelper::DrawEntityInspector(CEditor& editor, CEntity& entity, S
             editor.SaveState();
             std::shared_ptr<IComponent> pComp = pComponentsManager->GetComponent(componentToRemove);
 
-            if (std::shared_ptr<CLightComponent> pLight = std::dynamic_pointer_cast<CLightComponent>(pComp))
+            if (pComp && pComp->GetType() == COMPONENT_LIGHT)
             {
+                auto* pLight = static_cast<CLightComponent*>(pComp.get());
                 if (pLight->m_Created)
                 {
                     pLight->m_Light.m_Enabled = false;

@@ -1293,6 +1293,7 @@ void CComponentManager::Deserialize(const nlohmann::json& json, const CComponent
     }
 
     m_vComponents.clear();
+    m_apFastLookup.fill(nullptr);
     nlohmann::json legacyUiData;
     for (const auto& compJson : json["components"])
     {
@@ -1315,7 +1316,7 @@ void CComponentManager::Deserialize(const nlohmann::json& json, const CComponent
 
         if (compJson.contains("data"))
         {
-            if (std::dynamic_pointer_cast<CUiComponent>(pComp))
+            if (pComp->GetType() == COMPONENT_UI)
             {
                 legacyUiData = compJson["data"];
             }
@@ -1325,16 +1326,18 @@ void CComponentManager::Deserialize(const nlohmann::json& json, const CComponent
         m_vComponents.push_back(pComp);
     }
 
-    if (auto pUi = GetComponentOfType<CUiComponent>())
+    RebuildFastLookup();
+
+    if (CUiComponent* pUi = GetUiComponent())
     {
-        auto pRectTransform = GetComponentOfType<CUiRectTransformComponent>();
+        CUiRectTransformComponent* pRectTransform = GetRectTransform();
         if (!pRectTransform)
         {
-            pRectTransform = std::make_shared<CUiRectTransformComponent>();
+            auto pNewRectTransform = std::make_shared<CUiRectTransformComponent>();
             if (legacyUiData.contains("position") && legacyUiData["position"].is_array() &&
                 legacyUiData["position"].size() >= 2)
             {
-                pRectTransform->m_Position = {
+                pNewRectTransform->m_Position = {
                     legacyUiData["position"][0].get<float>(),
                     legacyUiData["position"][1].get<float>()
                 };
@@ -1342,38 +1345,38 @@ void CComponentManager::Deserialize(const nlohmann::json& json, const CComponent
             if (legacyUiData.contains("size") && legacyUiData["size"].is_array() &&
                 legacyUiData["size"].size() >= 2)
             {
-                pRectTransform->m_Size = {
+                pNewRectTransform->m_Size = {
                     legacyUiData["size"][0].get<float>(),
                     legacyUiData["size"][1].get<float>()
                 };
             }
-            m_vComponents.insert(m_vComponents.begin(), pRectTransform);
+            m_vComponents.insert(m_vComponents.begin(), pNewRectTransform);
         }
 
-        auto pText = GetComponentOfType<CTextComponent>();
+        CTextComponent* pText = GetText();
         if (!pText)
         {
-            pText = std::make_shared<CTextComponent>();
+            auto pNewText = std::make_shared<CTextComponent>();
             if (legacyUiData.contains("text") && legacyUiData["text"].is_string())
             {
-                pText->m_Text = legacyUiData["text"].get<std::string>();
+                pNewText->m_Text = legacyUiData["text"].get<std::string>();
             }
             else if (pUi->m_WidgetType == EGuiWidgetType::BUTTON)
             {
-                pText->m_Text = "Button";
+                pNewText->m_Text = "Button";
             }
             else if (pUi->m_WidgetType == EGuiWidgetType::INPUT_FIELD)
             {
-                pText->m_Text.clear();
+                pNewText->m_Text.clear();
             }
             else
             {
-                pText->m_Text = "Combo";
+                pNewText->m_Text = "Combo";
             }
-            pText->m_HorizontalAlignment = pUi->m_WidgetType == EGuiWidgetType::BUTTON
+            pNewText->m_HorizontalAlignment = pUi->m_WidgetType == EGuiWidgetType::BUTTON
                 ? EUiTextAlignment::CENTER
                 : EUiTextAlignment::LEFT;
-            m_vComponents.push_back(pText);
+            m_vComponents.push_back(pNewText);
         }
 
         RemoveMeshAndMaterialForUi();
@@ -1382,13 +1385,13 @@ void CComponentManager::Deserialize(const nlohmann::json& json, const CComponent
 
 CScriptComponent* CComponentManager::GetScript()
 {
-    auto pComp = GetComponentOfType<CScriptComponent>();
-    return pComp ? pComp.get() : nullptr;
+    return GetFastComponent<CScriptComponent>(COMPONENT_SCRIPT);
 }
 
 void CComponentManager::CloneInto(const CComponentManager& source)
 {
     m_vComponents.clear();
+    m_apFastLookup.fill(nullptr);
     m_vComponents.reserve(source.m_vComponents.size());
 
     for (const auto& pComponent : source.m_vComponents)
@@ -1403,107 +1406,107 @@ void CComponentManager::CloneInto(const CComponentManager& source)
         {
             case COMPONENT_TRANSFORM:
                 pCloned = std::make_shared<CTransformComponent>(
-                    *std::dynamic_pointer_cast<CTransformComponent>(pComponent));
+                    *static_cast<const CTransformComponent*>(pComponent.get()));
                 break;
 
             case COMPONENT_MESH:
                 pCloned = std::make_shared<CMeshComponent>(
-                    *std::dynamic_pointer_cast<CMeshComponent>(pComponent));
+                    *static_cast<const CMeshComponent*>(pComponent.get()));
                 break;
 
             case COMPONENT_LIGHT:
                 pCloned = std::make_shared<CLightComponent>(
-                    *std::dynamic_pointer_cast<CLightComponent>(pComponent));
+                    *static_cast<const CLightComponent*>(pComponent.get()));
                 break;
 
             case COMPONENT_MATERIAL:
                 pCloned = std::make_shared<CMaterialComponent>(
-                    *std::dynamic_pointer_cast<CMaterialComponent>(pComponent));
+                    *static_cast<const CMaterialComponent*>(pComponent.get()));
                 break;
 
             case COMPONENT_COLLISION:
                 pCloned = std::make_shared<CCollisionComponent>(
-                    *std::dynamic_pointer_cast<CCollisionComponent>(pComponent));
+                    *static_cast<const CCollisionComponent*>(pComponent.get()));
                 break;
 
             case COMPONENT_CAMERA:
                 pCloned = std::make_shared<CCameraComponent>(
-                    *std::dynamic_pointer_cast<CCameraComponent>(pComponent));
+                    *static_cast<const CCameraComponent*>(pComponent.get()));
                 break;
 
             case COMPONENT_SCRIPT:
                 pCloned = std::make_shared<CScriptComponent>(
-                    *std::dynamic_pointer_cast<CScriptComponent>(pComponent));
+                    *static_cast<const CScriptComponent*>(pComponent.get()));
                 break;
 
             case COMPONENT_UI:
                 pCloned = std::make_shared<CUiComponent>(
-                    *std::dynamic_pointer_cast<CUiComponent>(pComponent));
+                    *static_cast<const CUiComponent*>(pComponent.get()));
                 break;
 
             case COMPONENT_TEXT:
                 pCloned = std::make_shared<CTextComponent>(
-                    *std::dynamic_pointer_cast<CTextComponent>(pComponent));
+                    *static_cast<const CTextComponent*>(pComponent.get()));
                 break;
 
             case COMPONENT_UI_RECT_TRANSFORM:
                 pCloned = std::make_shared<CUiRectTransformComponent>(
-                    *std::dynamic_pointer_cast<CUiRectTransformComponent>(pComponent));
+                    *static_cast<const CUiRectTransformComponent*>(pComponent.get()));
                 break;
 
             case COMPONENT_CANVAS:
                 pCloned = std::make_shared<CCanvasComponent>(
-                    *std::dynamic_pointer_cast<CCanvasComponent>(pComponent));
+                    *static_cast<const CCanvasComponent*>(pComponent.get()));
                 break;
 
             case COMPONENT_IMAGE:
                 pCloned = std::make_shared<CImageComponent>(
-                    *std::dynamic_pointer_cast<CImageComponent>(pComponent));
+                    *static_cast<const CImageComponent*>(pComponent.get()));
                 break;
 
             case COMPONENT_PANEL:
                 pCloned = std::make_shared<CPanelComponent>(
-                    *std::dynamic_pointer_cast<CPanelComponent>(pComponent));
+                    *static_cast<const CPanelComponent*>(pComponent.get()));
                 break;
 
             case COMPONENT_BUTTON:
                 pCloned = std::make_shared<CButtonComponent>(
-                    *std::dynamic_pointer_cast<CButtonComponent>(pComponent));
+                    *static_cast<const CButtonComponent*>(pComponent.get()));
                 break;
 
             case COMPONENT_SLIDER:
                 pCloned = std::make_shared<CSliderComponent>(
-                    *std::dynamic_pointer_cast<CSliderComponent>(pComponent));
+                    *static_cast<const CSliderComponent*>(pComponent.get()));
                 break;
 
             case COMPONENT_TOGGLE:
                 pCloned = std::make_shared<CToggleComponent>(
-                    *std::dynamic_pointer_cast<CToggleComponent>(pComponent));
+                    *static_cast<const CToggleComponent*>(pComponent.get()));
                 break;
 
             case COMPONENT_PROGRESS_BAR:
                 pCloned = std::make_shared<CProgressBarComponent>(
-                    *std::dynamic_pointer_cast<CProgressBarComponent>(pComponent));
+                    *static_cast<const CProgressBarComponent*>(pComponent.get()));
                 break;
 
             case COMPONENT_SCROLL_VIEW:
                 pCloned = std::make_shared<CScrollViewComponent>(
-                    *std::dynamic_pointer_cast<CScrollViewComponent>(pComponent));
+                    *static_cast<const CScrollViewComponent*>(pComponent.get()));
                 break;
 
             case COMPONENT_HORIZONTAL_LAYOUT:
                 pCloned = std::make_shared<CHorizontalLayoutComponent>(
-                    *std::dynamic_pointer_cast<CHorizontalLayoutComponent>(pComponent));
+                    *static_cast<const CHorizontalLayoutComponent*>(pComponent.get()));
                 break;
 
             case COMPONENT_VERTICAL_LAYOUT:
                 pCloned = std::make_shared<CVerticalLayoutComponent>(
-                    *std::dynamic_pointer_cast<CVerticalLayoutComponent>(pComponent));
+                    *static_cast<const CVerticalLayoutComponent*>(pComponent.get()));
                 break;
 
             case COMPONENT_GRID_LAYOUT:
                 pCloned = std::make_shared<CGridLayoutComponent>(
-                    *std::dynamic_pointer_cast<CGridLayoutComponent>(pComponent));
+                    *static_cast<const CGridLayoutComponent*>(pComponent.get()));
                 break;
 
             default:
@@ -1512,7 +1515,7 @@ void CComponentManager::CloneInto(const CComponentManager& source)
 
         if (pCloned)
         {
-            m_vComponents.push_back(pCloned);
+            AddComponent(std::move(pCloned));
         }
     }
 }
