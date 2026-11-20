@@ -634,6 +634,12 @@ namespace quark::ui
                     const Rectangle parentRect = ComputeElementCanvasRect(scene, parentIndex, canvasSize);
                     parentSize = { parentRect.width, parentRect.height };
                     parentOffset = { parentRect.x, parentRect.y };
+                    if (const CScrollViewComponent* pScroll = parentEntity.GetScrollViewComponent();
+                        pScroll && pScroll->m_Enabled)
+                    {
+                        parentOffset.x -= pScroll->m_ScrollOffset.x;
+                        parentOffset.y += pScroll->m_ScrollOffset.y;
+                    }
                 }
             }
         }
@@ -647,6 +653,367 @@ namespace quark::ui
         }
 
         return { parentOffset.x, parentOffset.y, parentSize.x, parentSize.y };
+    }
+
+    void CCanvasSystem::ApplyLayoutGroups(CScene& scene, const Vec2& viewportSize)
+    {
+        for (int entityIndex = 0; entityIndex < static_cast<int>(scene.m_vEntities.size()); ++entityIndex)
+        {
+            const CCanvasComponent* pCanvas = scene.m_vEntities[entityIndex].GetCanvasComponent();
+            if (!pCanvas || !pCanvas->m_Enabled)
+            {
+                continue;
+            }
+
+            Vec2 canvasSize = { pCanvas->m_Width, pCanvas->m_Height };
+            if (pCanvas->m_RenderMode != ECanvasRenderMode::WORLD_SPACE &&
+                viewportSize.x > 0.0f && viewportSize.y > 0.0f)
+            {
+                const float scale = ComputeScreenSpaceCanvasScale(*pCanvas, viewportSize);
+                canvasSize = { viewportSize.x / scale, viewportSize.y / scale };
+            }
+
+            ApplyCanvasLayoutGroups(scene, entityIndex, canvasSize);
+        }
+    }
+
+    void CCanvasSystem::ApplyCanvasLayoutGroups(CScene& scene, int canvasEntityIndex, const Vec2& canvasSize)
+    {
+        if (canvasEntityIndex < 0 || canvasEntityIndex >= static_cast<int>(scene.m_vEntities.size()))
+        {
+            return;
+        }
+
+        std::vector<int> vElementIndices;
+        vElementIndices.push_back(canvasEntityIndex);
+        CollectCanvasElementsRecursive(scene, canvasEntityIndex, vElementIndices);
+
+        auto getAlignmentFactors = [](EUiLayoutChildAlignment alignment, float& outAlignX, float& outTopFactor)
+        {
+            switch (alignment)
+            {
+                case EUiLayoutChildAlignment::UPPER_LEFT:
+                    outAlignX = 0.0f;
+                    outTopFactor = 0.0f;
+                    break;
+                case EUiLayoutChildAlignment::UPPER_CENTER:
+                    outAlignX = 0.5f;
+                    outTopFactor = 0.0f;
+                    break;
+                case EUiLayoutChildAlignment::UPPER_RIGHT:
+                    outAlignX = 1.0f;
+                    outTopFactor = 0.0f;
+                    break;
+                case EUiLayoutChildAlignment::MIDDLE_LEFT:
+                    outAlignX = 0.0f;
+                    outTopFactor = 0.5f;
+                    break;
+                case EUiLayoutChildAlignment::MIDDLE_CENTER:
+                    outAlignX = 0.5f;
+                    outTopFactor = 0.5f;
+                    break;
+                case EUiLayoutChildAlignment::MIDDLE_RIGHT:
+                    outAlignX = 1.0f;
+                    outTopFactor = 0.5f;
+                    break;
+                case EUiLayoutChildAlignment::LOWER_LEFT:
+                    outAlignX = 0.0f;
+                    outTopFactor = 1.0f;
+                    break;
+                case EUiLayoutChildAlignment::LOWER_CENTER:
+                    outAlignX = 0.5f;
+                    outTopFactor = 1.0f;
+                    break;
+                case EUiLayoutChildAlignment::LOWER_RIGHT:
+                    outAlignX = 1.0f;
+                    outTopFactor = 1.0f;
+                    break;
+            }
+        };
+
+        auto applyChildSlot = [](CUiRectTransformComponent& childRect, float slotX, float slotY,
+                                 float width, float height, bool controlW, bool controlH)
+        {
+            if (controlW)
+            {
+                childRect.m_Size.x = std::max(1.0f, width);
+            }
+            if (controlH)
+            {
+                childRect.m_Size.y = std::max(1.0f, height);
+            }
+            childRect.m_AnchorMin = { 0.0f, 0.0f };
+            childRect.m_AnchorMax = { 0.0f, 0.0f };
+            const Vec2 newAnchoredPos = {
+                slotX + childRect.m_Size.x * childRect.m_Pivot.x,
+                slotY + childRect.m_Size.y * childRect.m_Pivot.y
+            };
+            childRect.SetAnchoredPosition(newAnchoredPos);
+        };
+
+        for (int parentIndex : vElementIndices)
+        {
+            CEntity& parentEntity = scene.m_vEntities[parentIndex];
+            const CHorizontalLayoutComponent* pHLayout = parentEntity.GetHorizontalLayoutComponent();
+            const CVerticalLayoutComponent* pVLayout = parentEntity.GetVerticalLayoutComponent();
+            const CGridLayoutComponent* pGLayout = parentEntity.GetGridLayoutComponent();
+
+            const bool hasH = pHLayout && pHLayout->m_Enabled;
+            const bool hasV = !hasH && pVLayout && pVLayout->m_Enabled;
+            const bool hasG = !hasH && !hasV && pGLayout && pGLayout->m_Enabled;
+            if (!hasH && !hasV && !hasG)
+            {
+                continue;
+            }
+
+            std::vector<int> vChildren;
+            const int parentId = parentEntity.m_Id;
+            for (int i = 0; i < static_cast<int>(scene.m_vEntities.size()); ++i)
+            {
+                if (i == parentIndex)
+                {
+                    continue;
+                }
+                const CEntity& candidate = scene.m_vEntities[i];
+                if ((candidate.m_ParentId == parentIndex || candidate.m_ParentId == parentId) &&
+                    candidate.GetRectTransformComponent() != nullptr)
+                {
+                    vChildren.push_back(i);
+                }
+            }
+
+            if (vChildren.empty())
+            {
+                continue;
+            }
+
+            const Rectangle parentRect = parentEntity.GetCanvasComponent()
+                ? Rectangle{ 0.0f, 0.0f, canvasSize.x, canvasSize.y }
+                : ComputeElementCanvasRect(scene, parentIndex, canvasSize);
+            const float parentW = std::max(1.0f, parentRect.width);
+            const float parentH = std::max(1.0f, parentRect.height);
+
+            if (hasH)
+            {
+                if (pHLayout->m_ReverseArrangement)
+                {
+                    std::reverse(vChildren.begin(), vChildren.end());
+                }
+
+                const SUiLayoutPadding& pad = pHLayout->m_Padding;
+                const float availW = std::max(0.0f, parentW - (pad.m_Left + pad.m_Right));
+                const float availH = std::max(0.0f, parentH - (pad.m_Top + pad.m_Bottom));
+                const int count = static_cast<int>(vChildren.size());
+                const float totalSpacing = pHLayout->m_Spacing * static_cast<float>(std::max(0, count - 1));
+
+                float alignX = 0.0f;
+                float topFactor = 0.0f;
+                getAlignmentFactors(pHLayout->m_ChildAlignment, alignX, topFactor);
+
+                std::vector<float> vWidths(count, 0.0f);
+                std::vector<float> vEffWidths(count, 0.0f);
+                std::vector<float> vHeights(count, 0.0f);
+                float totalContentW = totalSpacing;
+
+                for (int i = 0; i < count; ++i)
+                {
+                    const CUiRectTransformComponent* pChildRect =
+                        scene.m_vEntities[vChildren[i]].GetRectTransformComponent();
+                    const float w = (pHLayout->m_ChildControlWidth && pHLayout->m_ChildForceExpandWidth)
+                        ? std::max(1.0f, (availW - totalSpacing) / static_cast<float>(count))
+                        : std::max(1.0f, pChildRect->m_Size.x);
+                    const float h = (pHLayout->m_ChildControlHeight && pHLayout->m_ChildForceExpandHeight)
+                        ? std::max(1.0f, availH)
+                        : std::max(1.0f, pChildRect->m_Size.y);
+                    const float scaleX = pHLayout->m_ChildScaleWidth
+                        ? std::max(0.01f, std::fabs(pChildRect->m_Scale2D.x))
+                        : 1.0f;
+                    vWidths[i] = w;
+                    vEffWidths[i] = w * scaleX;
+                    vHeights[i] = h;
+                    totalContentW += vEffWidths[i];
+                }
+
+                const float extraAdvance =
+                    (!pHLayout->m_ChildControlWidth && pHLayout->m_ChildForceExpandWidth && availW > totalContentW)
+                    ? (availW - totalContentW) / static_cast<float>(count)
+                    : 0.0f;
+                const float totalUsedW = (extraAdvance > 0.0f) ? availW : totalContentW;
+                float cursorX = pad.m_Left + (availW - totalUsedW) * alignX;
+
+                for (int i = 0; i < count; ++i)
+                {
+                    CUiRectTransformComponent* pChildRect =
+                        scene.m_vEntities[vChildren[i]].GetRectTransformComponent();
+                    const float scaleY = pHLayout->m_ChildScaleHeight
+                        ? std::max(0.01f, std::fabs(pChildRect->m_Scale2D.y))
+                        : 1.0f;
+                    const float effH = vHeights[i] * scaleY;
+                    const float slotX = cursorX + extraAdvance * alignX;
+                    const float topOffset = pad.m_Top + (availH - effH) * topFactor;
+                    const float slotY = parentH - topOffset - effH;
+
+                    applyChildSlot(*pChildRect, slotX, slotY, vWidths[i], vHeights[i],
+                                   pHLayout->m_ChildControlWidth, pHLayout->m_ChildControlHeight);
+                    cursorX += vEffWidths[i] + extraAdvance + pHLayout->m_Spacing;
+                }
+            }
+            else if (hasV)
+            {
+                if (pVLayout->m_ReverseArrangement)
+                {
+                    std::reverse(vChildren.begin(), vChildren.end());
+                }
+
+                const SUiLayoutPadding& pad = pVLayout->m_Padding;
+                const float availW = std::max(0.0f, parentW - (pad.m_Left + pad.m_Right));
+                const float availH = std::max(0.0f, parentH - (pad.m_Top + pad.m_Bottom));
+                const int count = static_cast<int>(vChildren.size());
+                const float totalSpacing = pVLayout->m_Spacing * static_cast<float>(std::max(0, count - 1));
+
+                float alignX = 0.0f;
+                float topFactor = 0.0f;
+                getAlignmentFactors(pVLayout->m_ChildAlignment, alignX, topFactor);
+
+                std::vector<float> vWidths(count, 0.0f);
+                std::vector<float> vHeights(count, 0.0f);
+                std::vector<float> vEffHeights(count, 0.0f);
+                float totalContentH = totalSpacing;
+
+                for (int i = 0; i < count; ++i)
+                {
+                    const CUiRectTransformComponent* pChildRect =
+                        scene.m_vEntities[vChildren[i]].GetRectTransformComponent();
+                    const float w = (pVLayout->m_ChildControlWidth && pVLayout->m_ChildForceExpandWidth)
+                        ? std::max(1.0f, availW)
+                        : std::max(1.0f, pChildRect->m_Size.x);
+                    const float h = (pVLayout->m_ChildControlHeight && pVLayout->m_ChildForceExpandHeight)
+                        ? std::max(1.0f, (availH - totalSpacing) / static_cast<float>(count))
+                        : std::max(1.0f, pChildRect->m_Size.y);
+                    const float scaleY = pVLayout->m_ChildScaleHeight
+                        ? std::max(0.01f, std::fabs(pChildRect->m_Scale2D.y))
+                        : 1.0f;
+                    vWidths[i] = w;
+                    vHeights[i] = h;
+                    vEffHeights[i] = h * scaleY;
+                    totalContentH += vEffHeights[i];
+                }
+
+                const float extraAdvance =
+                    (!pVLayout->m_ChildControlHeight && pVLayout->m_ChildForceExpandHeight && availH > totalContentH)
+                    ? (availH - totalContentH) / static_cast<float>(count)
+                    : 0.0f;
+                const float totalUsedH = (extraAdvance > 0.0f) ? availH : totalContentH;
+                float cursorTop = pad.m_Top + (availH - totalUsedH) * topFactor;
+
+                for (int i = 0; i < count; ++i)
+                {
+                    CUiRectTransformComponent* pChildRect =
+                        scene.m_vEntities[vChildren[i]].GetRectTransformComponent();
+                    const float scaleX = pVLayout->m_ChildScaleWidth
+                        ? std::max(0.01f, std::fabs(pChildRect->m_Scale2D.x))
+                        : 1.0f;
+                    const float effW = vWidths[i] * scaleX;
+                    const float slotX = pad.m_Left + (availW - effW) * alignX;
+                    const float childTop = cursorTop + extraAdvance * topFactor;
+                    const float slotY = parentH - childTop - vEffHeights[i];
+
+                    applyChildSlot(*pChildRect, slotX, slotY, vWidths[i], vHeights[i],
+                                   pVLayout->m_ChildControlWidth, pVLayout->m_ChildControlHeight);
+                    cursorTop += vEffHeights[i] + extraAdvance + pVLayout->m_Spacing;
+                }
+            }
+            else if (hasG)
+            {
+                const SUiLayoutPadding& pad = pGLayout->m_Padding;
+                const float availW = std::max(0.0f, parentW - (pad.m_Left + pad.m_Right));
+                const float availH = std::max(0.0f, parentH - (pad.m_Top + pad.m_Bottom));
+                const float cellW = std::max(1.0f, pGLayout->m_CellSize.x);
+                const float cellH = std::max(1.0f, pGLayout->m_CellSize.y);
+                const int count = static_cast<int>(vChildren.size());
+
+                int cols = 1;
+                int rows = 1;
+                if (pGLayout->m_Constraint == EUiGridConstraint::FIXED_COLUMN_COUNT)
+                {
+                    cols = std::max(1, pGLayout->m_ConstraintCount);
+                    rows = (count + cols - 1) / cols;
+                }
+                else if (pGLayout->m_Constraint == EUiGridConstraint::FIXED_ROW_COUNT)
+                {
+                    rows = std::max(1, pGLayout->m_ConstraintCount);
+                    cols = (count + rows - 1) / rows;
+                }
+                else
+                {
+                    if (pGLayout->m_StartAxis == EUiGridStartAxis::HORIZONTAL)
+                    {
+                        cols = std::max(1, static_cast<int>(std::floor(
+                            (availW + pGLayout->m_Spacing.x + 0.001f) /
+                            std::max(1.0f, cellW + pGLayout->m_Spacing.x))));
+                        rows = (count + cols - 1) / cols;
+                    }
+                    else
+                    {
+                        rows = std::max(1, static_cast<int>(std::floor(
+                            (availH + pGLayout->m_Spacing.y + 0.001f) /
+                            std::max(1.0f, cellH + pGLayout->m_Spacing.y))));
+                        cols = (count + rows - 1) / rows;
+                    }
+                }
+
+                const int usedCols = (pGLayout->m_StartAxis == EUiGridStartAxis::HORIZONTAL)
+                    ? std::min(count, cols)
+                    : (count + rows - 1) / rows;
+                const int usedRows = (pGLayout->m_StartAxis == EUiGridStartAxis::HORIZONTAL)
+                    ? (count + cols - 1) / cols
+                    : std::min(count, rows);
+
+                const float gridW = static_cast<float>(usedCols) * cellW +
+                    static_cast<float>(std::max(0, usedCols - 1)) * pGLayout->m_Spacing.x;
+                const float gridH = static_cast<float>(usedRows) * cellH +
+                    static_cast<float>(std::max(0, usedRows - 1)) * pGLayout->m_Spacing.y;
+
+                float alignX = 0.0f;
+                float topFactor = 0.0f;
+                getAlignmentFactors(pGLayout->m_ChildAlignment, alignX, topFactor);
+
+                const float startLeft = pad.m_Left + (availW - gridW) * alignX;
+                const float startTop = pad.m_Top + (availH - gridH) * topFactor;
+                const bool fromRight =
+                    (pGLayout->m_StartCorner == EUiGridStartCorner::UPPER_RIGHT ||
+                     pGLayout->m_StartCorner == EUiGridStartCorner::LOWER_RIGHT);
+                const bool fromBottom =
+                    (pGLayout->m_StartCorner == EUiGridStartCorner::LOWER_LEFT ||
+                     pGLayout->m_StartCorner == EUiGridStartCorner::LOWER_RIGHT);
+
+                for (int i = 0; i < count; ++i)
+                {
+                    int col = (pGLayout->m_StartAxis == EUiGridStartAxis::HORIZONTAL)
+                        ? (i % cols)
+                        : (i / rows);
+                    int row = (pGLayout->m_StartAxis == EUiGridStartAxis::HORIZONTAL)
+                        ? (i / cols)
+                        : (i % rows);
+                    if (fromRight)
+                    {
+                        col = (usedCols - 1) - col;
+                    }
+                    if (fromBottom)
+                    {
+                        row = (usedRows - 1) - row;
+                    }
+
+                    const float slotX = startLeft + static_cast<float>(col) * (cellW + pGLayout->m_Spacing.x);
+                    const float childTop = startTop + static_cast<float>(row) * (cellH + pGLayout->m_Spacing.y);
+                    const float slotY = parentH - childTop - cellH;
+
+                    CUiRectTransformComponent* pChildRect =
+                        scene.m_vEntities[vChildren[i]].GetRectTransformComponent();
+                    applyChildSlot(*pChildRect, slotX, slotY, cellW, cellH, true, true);
+                }
+            }
+        }
     }
 
     Mat4 CCanvasSystem::ComputeElementCanvasTransform(const CScene& scene, int entityIndex,
@@ -681,6 +1048,12 @@ namespace quark::ui
                 parentSize = { parentRect.width, parentRect.height };
                 parentTransform = ComputeElementCanvasTransformRecursive(
                     scene, parentIndex, canvasSize, depth + 1);
+                if (const CScrollViewComponent* pScroll = scene.m_vEntities[parentIndex].GetScrollViewComponent();
+                    pScroll && pScroll->m_Enabled)
+                {
+                    parentTransform = parentTransform *
+                        Mat4::translation(-pScroll->m_ScrollOffset.x, pScroll->m_ScrollOffset.y, 0.0f);
+                }
             }
         }
 
@@ -858,6 +1231,8 @@ namespace quark::ui
                 continue;
             }
 
+            ApplyCanvasLayoutGroups(scene, entityIndex, { pCanvas->m_Width, pCanvas->m_Height });
+
             std::vector<int> vElementIndices;
             CollectCanvasElementsRecursive(scene, entityIndex, vElementIndices);
 
@@ -877,23 +1252,23 @@ namespace quark::ui
                     localPoint.x >= 0.0f && localPoint.x <= rect.width &&
                     localPoint.y >= 0.0f && localPoint.y <= rect.height)
                 {
-                    bool isRaycastTarget = false;
-                    if (const auto* pBtn = childEntity.GetButtonComponent())
-                    {
-                        isRaycastTarget = pBtn->m_RaycastTarget;
-                    }
-                    else if (const auto* pImg = childEntity.GetImageComponent())
-                    {
-                        isRaycastTarget = pImg->m_RaycastTarget;
-                    }
-                    else if (const auto* pPnl = childEntity.GetPanelComponent())
-                    {
-                        isRaycastTarget = pPnl->m_RaycastTarget;
-                    }
-                    else if (const auto* pTxt = childEntity.GetTextComponent())
-                    {
-                        isRaycastTarget = pTxt->m_RaycastTarget;
-                    }
+                    const auto* pBtn = childEntity.GetButtonComponent();
+                    const auto* pImg = childEntity.GetImageComponent();
+                    const auto* pPnl = childEntity.GetPanelComponent();
+                    const auto* pTxt = childEntity.GetTextComponent();
+                    const auto* pSld = childEntity.GetSliderComponent();
+                    const auto* pTgl = childEntity.GetToggleComponent();
+                    const auto* pPrg = childEntity.GetProgressBarComponent();
+                    const auto* pScr = childEntity.GetScrollViewComponent();
+                    const bool isRaycastTarget =
+                        (pBtn && pBtn->m_Enabled && pBtn->m_RaycastTarget) ||
+                        (pImg && pImg->m_Enabled && pImg->m_RaycastTarget) ||
+                        (pPnl && pPnl->m_Enabled && pPnl->m_RaycastTarget) ||
+                        (pTxt && pTxt->m_Enabled && pTxt->m_RaycastTarget) ||
+                        (pSld && pSld->m_Enabled && pSld->m_RaycastTarget) ||
+                        (pTgl && pTgl->m_Enabled && pTgl->m_RaycastTarget) ||
+                        (pPrg && pPrg->m_Enabled && pPrg->m_RaycastTarget) ||
+                        (pScr && pScr->m_Enabled && pScr->m_RaycastTarget);
 
                     if (isRaycastTarget)
                     {
@@ -944,6 +1319,7 @@ namespace quark::ui
                 (screenPoint.x - viewport.m_WindowPos.x) / scale,
                 (viewport.m_WindowSize.y - (screenPoint.y - viewport.m_WindowPos.y)) / scale
             };
+            ApplyCanvasLayoutGroups(scene, canvasIndex, canvasSize);
             std::vector<int> vElementIndices;
             CollectCanvasElementsRecursive(scene, canvasIndex, vElementIndices);
 
@@ -969,11 +1345,19 @@ namespace quark::ui
                 const CImageComponent* pImage = element.GetImageComponent();
                 const CPanelComponent* pPanel = element.GetPanelComponent();
                 const CTextComponent* pText = element.GetTextComponent();
+                const CSliderComponent* pSlider = element.GetSliderComponent();
+                const CToggleComponent* pToggle = element.GetToggleComponent();
+                const CProgressBarComponent* pProgress = element.GetProgressBarComponent();
+                const CScrollViewComponent* pScroll = element.GetScrollViewComponent();
                 const bool raycastTarget =
                     (pButton && pButton->m_Enabled && pButton->m_RaycastTarget) ||
                     (pImage && pImage->m_Enabled && pImage->m_RaycastTarget) ||
                     (pPanel && pPanel->m_Enabled && pPanel->m_RaycastTarget) ||
-                    (pText && pText->m_Enabled && pText->m_RaycastTarget);
+                    (pText && pText->m_Enabled && pText->m_RaycastTarget) ||
+                    (pSlider && pSlider->m_Enabled && pSlider->m_RaycastTarget) ||
+                    (pToggle && pToggle->m_Enabled && pToggle->m_RaycastTarget) ||
+                    (pProgress && pProgress->m_Enabled && pProgress->m_RaycastTarget) ||
+                    (pScroll && pScroll->m_Enabled && pScroll->m_RaycastTarget);
                 if (raycastTarget)
                 {
                     hitElementIndex = elementIndex;
@@ -1243,7 +1627,10 @@ namespace quark::ui
             const CEntity& ancestor = scene.m_vEntities[ancestorIndex];
             const CUiRectTransformComponent* pRectTransform =
                 ancestor.GetRectTransformComponent();
-            if (pRectTransform && pRectTransform->m_ClipChildren)
+            const CScrollViewComponent* pAncestorScroll =
+                ancestor.GetScrollViewComponent();
+            if ((pRectTransform && pRectTransform->m_ClipChildren) ||
+                (pAncestorScroll && pAncestorScroll->m_Enabled))
             {
                 const Rectangle rect =
                     ComputeElementCanvasRect(scene, ancestorIndex, canvasSize);
@@ -1405,13 +1792,161 @@ namespace quark::ui
             if (m_HoveredEntityIndex >= 0)
             {
                 m_PressedEntityIndex = m_HoveredEntityIndex;
+                m_PointerDownPosition = rawMouse;
+                m_DragStarted = false;
                 if (auto* pBtn = scene.m_vEntities[m_PressedEntityIndex].GetButtonComponent())
                 {
                     SetSelectedButton(scene, m_PressedEntityIndex);
                     pBtn->m_IsPressed = true;
-                    m_PointerDownPosition = rawMouse;
-                    m_DragStarted = false;
                     DispatchButtonEvent(scene, m_PressedEntityIndex, EUiEventType::POINTER_DOWN);
+                }
+            }
+        }
+
+        auto updateSliderFromMouse = [&](int sliderEntityIndex)
+        {
+            if (sliderEntityIndex < 0 || sliderEntityIndex >= static_cast<int>(scene.m_vEntities.size()))
+            {
+                return;
+            }
+            CEntity& sliderEntity = scene.m_vEntities[sliderEntityIndex];
+            CSliderComponent* pSlider = sliderEntity.GetSliderComponent();
+            if (!pSlider || !pSlider->m_Enabled || !pSlider->m_Interactable)
+            {
+                return;
+            }
+
+            const int canvasIdx = FindCanvasForEntity(scene, sliderEntityIndex);
+            if (canvasIdx < 0)
+            {
+                return;
+            }
+            const CCanvasComponent* pCanvas = scene.m_vEntities[canvasIdx].GetCanvasComponent();
+            if (!pCanvas)
+            {
+                return;
+            }
+
+            Vec2 canvasSize = { pCanvas->m_Width, pCanvas->m_Height };
+            Vec2 canvasPoint = { 0.0f, 0.0f };
+            if (pCanvas->m_RenderMode == ECanvasRenderMode::WORLD_SPACE)
+            {
+                const Ray ray = ScreenToWorldRay(viewport, rawMouse, camera);
+                const Mat4 canvasWorld = GetCanvasWorldMatrix(scene, canvasIdx);
+                float hitDist = 0.0f;
+                if (!RaycastWorldCanvas(scene, *pCanvas, canvasWorld, ray, canvasPoint, hitDist))
+                {
+                    return;
+                }
+            }
+            else
+            {
+                const float scale = ComputeScreenSpaceCanvasScale(*pCanvas, viewport.m_WindowSize);
+                canvasSize = { viewport.m_WindowSize.x / scale, viewport.m_WindowSize.y / scale };
+                canvasPoint = {
+                    (rawMouse.x - viewport.m_WindowPos.x) / scale,
+                    (viewport.m_WindowSize.y - (rawMouse.y - viewport.m_WindowPos.y)) / scale
+                };
+            }
+
+            const Rectangle rect = ComputeElementCanvasRect(scene, sliderEntityIndex, canvasSize);
+            const Mat4 elementTransform = ComputeElementCanvasTransform(scene, sliderEntityIndex, canvasSize);
+            Vec2 localPoint = { 0.0f, 0.0f };
+            if (!TransformCanvasPointToLocal(elementTransform, canvasPoint, localPoint))
+            {
+                return;
+            }
+
+            float normalized = 0.0f;
+            switch (pSlider->m_Direction)
+            {
+                case EUiSliderDirection::LEFT_TO_RIGHT:
+                    normalized = (rect.width > 1e-4f) ? (localPoint.x / rect.width) : 0.0f;
+                    break;
+                case EUiSliderDirection::RIGHT_TO_LEFT:
+                    normalized = (rect.width > 1e-4f) ? (1.0f - localPoint.x / rect.width) : 0.0f;
+                    break;
+                case EUiSliderDirection::BOTTOM_TO_TOP:
+                    normalized = (rect.height > 1e-4f) ? (localPoint.y / rect.height) : 0.0f;
+                    break;
+                case EUiSliderDirection::TOP_TO_BOTTOM:
+                    normalized = (rect.height > 1e-4f) ? (1.0f - localPoint.y / rect.height) : 0.0f;
+                    break;
+            }
+
+            const float prevValue = pSlider->m_Value;
+            pSlider->SetNormalizedValue(normalized);
+            if (std::fabs(pSlider->m_Value - prevValue) > 1e-5f)
+            {
+                if (CScriptComponent* pScript = sliderEntity.GetScriptComponent();
+                    pScript && pScript->m_Enabled && pScript->m_pInstance)
+                {
+                    pScript->m_pInstance->OnUIEvent(
+                        "value_changed",
+                        pSlider->m_OnValueChangedAction.empty() ? "slider_changed" : pSlider->m_OnValueChangedAction);
+                }
+            }
+        };
+
+        if (mouseInside && hit.m_Hit && hit.m_HitEntityIndex >= 0)
+        {
+            const float wheel = GetMouseWheelMove();
+            if (std::fabs(wheel) > 1e-4f)
+            {
+                int scrollIdx = hit.m_HitEntityIndex;
+                int depth = 0;
+                while (scrollIdx >= 0 && scrollIdx < static_cast<int>(scene.m_vEntities.size()) && depth++ < 32)
+                {
+                    CEntity& scrollEntity = scene.m_vEntities[scrollIdx];
+                    if (CScrollViewComponent* pScroll = scrollEntity.GetScrollViewComponent();
+                        pScroll && pScroll->m_Enabled)
+                    {
+                        Vec2 canvasSize = { 800.0f, 600.0f };
+                        if (hit.m_CanvasEntityIndex >= 0 &&
+                            hit.m_CanvasEntityIndex < static_cast<int>(scene.m_vEntities.size()))
+                        {
+                            if (const CCanvasComponent* pCanvas =
+                                    scene.m_vEntities[hit.m_CanvasEntityIndex].GetCanvasComponent())
+                            {
+                                canvasSize = { pCanvas->m_Width, pCanvas->m_Height };
+                                if (pCanvas->m_RenderMode != ECanvasRenderMode::WORLD_SPACE)
+                                {
+                                    const float scale = ComputeScreenSpaceCanvasScale(*pCanvas, viewport.m_WindowSize);
+                                    canvasSize = { viewport.m_WindowSize.x / scale, viewport.m_WindowSize.y / scale };
+                                }
+                            }
+                        }
+
+                        const Rectangle rect = ComputeElementCanvasRect(scene, scrollIdx, canvasSize);
+                        const float maxScrollX = std::max(0.0f, pScroll->m_ContentSize.x - rect.width);
+                        const float maxScrollY = std::max(0.0f, pScroll->m_ContentSize.y - rect.height);
+                        if (pScroll->m_Vertical)
+                        {
+                            pScroll->m_ScrollOffset.y = std::clamp(
+                                pScroll->m_ScrollOffset.y - wheel * pScroll->m_ScrollSensitivity,
+                                0.0f, maxScrollY);
+                            pScroll->m_NormalizedPosition.y = (maxScrollY > 0.0f)
+                                ? (1.0f - pScroll->m_ScrollOffset.y / maxScrollY)
+                                : 1.0f;
+                        }
+                        else if (pScroll->m_Horizontal)
+                        {
+                            pScroll->m_ScrollOffset.x = std::clamp(
+                                pScroll->m_ScrollOffset.x - wheel * pScroll->m_ScrollSensitivity,
+                                0.0f, maxScrollX);
+                            pScroll->m_NormalizedPosition.x = (maxScrollX > 0.0f)
+                                ? (pScroll->m_ScrollOffset.x / maxScrollX)
+                                : 0.0f;
+                        }
+                        break;
+                    }
+                    if (scrollEntity.GetCanvasComponent())
+                    {
+                        break;
+                    }
+                    scrollIdx = scrollEntity.m_ParentId < static_cast<int>(scene.m_vEntities.size())
+                        ? scrollEntity.m_ParentId
+                        : FindEntityIndexById(scene, scrollEntity.m_ParentId);
                 }
             }
         }
@@ -1434,6 +1969,10 @@ namespace quark::ui
                     {
                         DispatchButtonEvent(scene, m_PressedEntityIndex, EUiEventType::DRAG);
                     }
+                }
+                if (scene.m_vEntities[m_PressedEntityIndex].GetSliderComponent())
+                {
+                    updateSliderFromMouse(m_PressedEntityIndex);
                 }
             }
         }
@@ -1459,6 +1998,22 @@ namespace quark::ui
                     if (m_PressedEntityIndex == m_HoveredEntityIndex && pBtn->m_Interactable)
                     {
                         DispatchButtonEvent(scene, m_PressedEntityIndex, EUiEventType::CLICK);
+                    }
+                }
+                if (m_PressedEntityIndex == m_HoveredEntityIndex)
+                {
+                    CEntity& pressedEntity = scene.m_vEntities[m_PressedEntityIndex];
+                    if (CToggleComponent* pToggle = pressedEntity.GetToggleComponent();
+                        pToggle && pToggle->m_Enabled && pToggle->m_Interactable)
+                    {
+                        pToggle->m_IsOn = !pToggle->m_IsOn;
+                        if (CScriptComponent* pScript = pressedEntity.GetScriptComponent();
+                            pScript && pScript->m_Enabled && pScript->m_pInstance)
+                        {
+                            pScript->m_pInstance->OnUIEvent(
+                                "value_changed",
+                                pToggle->m_OnValueChangedAction.empty() ? "toggle_changed" : pToggle->m_OnValueChangedAction);
+                        }
                     }
                 }
             }
@@ -1545,6 +2100,8 @@ namespace quark::ui
                                             float originX, float originY,
                                             float scaleX, float scaleY)
     {
+        ApplyCanvasLayoutGroups(scene, canvasEntityIndex, { canvasWidth, canvasHeight });
+
         std::vector<int> vElementIndices;
         CollectCanvasElementsRecursive(scene, canvasEntityIndex, vElementIndices);
 
@@ -1575,7 +2132,10 @@ namespace quark::ui
                 const CEntity& ancestor = scene.m_vEntities[ancestorIndex];
                 const CUiRectTransformComponent* pAncestorRect =
                     ancestor.GetRectTransformComponent();
-                if (pAncestorRect && pAncestorRect->m_ClipChildren)
+                const CScrollViewComponent* pAncestorScroll =
+                    ancestor.GetScrollViewComponent();
+                if ((pAncestorRect && pAncestorRect->m_ClipChildren) ||
+                    (pAncestorScroll && pAncestorScroll->m_Enabled))
                 {
                     const Rectangle ancestorRect = ComputeElementCanvasRect(
                         scene, ancestorIndex, { canvasWidth, canvasHeight });
@@ -1691,6 +2251,231 @@ namespace quark::ui
                         elementTransform, rect, renderedCanvasHeight, originX, originY,
                         1.5f, pBtn->m_IsHovered ? WHITE : Color{ 120, 120, 130, 255 },
                         true, canvas.m_PixelPerfect);
+                }
+            }
+
+            if (auto* pScroll = entity.GetScrollViewComponent())
+            {
+                if (pScroll->m_Enabled)
+                {
+                    DrawCanvasRect(elementTransform, rect, renderedCanvasHeight, originX, originY,
+                                   pScroll->m_BackgroundColor, false, 0.0f, canvas.m_PixelPerfect);
+                    DrawCanvasRectOutline(elementTransform, rect, renderedCanvasHeight, originX, originY,
+                                          1.0f, Color{ 95, 100, 115, 220 }, false, canvas.m_PixelPerfect);
+
+                    if (pScroll->m_Vertical && pScroll->m_ShowVerticalScrollbar &&
+                        pScroll->m_ContentSize.y > rect.height && rect.width > 12.0f)
+                    {
+                        const Rectangle trackRect = { rect.width - 8.0f, 0.0f, 8.0f, rect.height };
+                        const Mat4 trackTransform = elementTransform * Mat4::translation(trackRect.x, trackRect.y, 0.0f);
+                        DrawCanvasRect(trackTransform, trackRect, renderedCanvasHeight, originX, originY,
+                                       pScroll->m_ScrollbarTrackColor, false, 0.0f, canvas.m_PixelPerfect);
+
+                        const float thumbH = std::clamp(
+                            rect.height * (rect.height / std::max(1.0f, pScroll->m_ContentSize.y)),
+                            14.0f, rect.height);
+                        const float maxScrollY = std::max(1.0f, pScroll->m_ContentSize.y - rect.height);
+                        const float ratioY = std::clamp(pScroll->m_ScrollOffset.y / maxScrollY, 0.0f, 1.0f);
+                        const float thumbY = (1.0f - ratioY) * (rect.height - thumbH);
+                        const Rectangle thumbRect = { 0.0f, 0.0f, 6.0f, thumbH };
+                        const Mat4 thumbTransform = elementTransform * Mat4::translation(rect.width - 7.0f, thumbY, 0.0f);
+                        DrawCanvasRect(thumbTransform, thumbRect, renderedCanvasHeight, originX, originY,
+                                       pScroll->m_ScrollbarThumbColor, true, 0.35f, canvas.m_PixelPerfect);
+                    }
+
+                    if (pScroll->m_Horizontal && pScroll->m_ShowHorizontalScrollbar &&
+                        pScroll->m_ContentSize.x > rect.width && rect.height > 12.0f)
+                    {
+                        const Rectangle trackRect = { 0.0f, 0.0f, rect.width, 8.0f };
+                        DrawCanvasRect(elementTransform, trackRect, renderedCanvasHeight, originX, originY,
+                                       pScroll->m_ScrollbarTrackColor, false, 0.0f, canvas.m_PixelPerfect);
+
+                        const float thumbW = std::clamp(
+                            rect.width * (rect.width / std::max(1.0f, pScroll->m_ContentSize.x)),
+                            14.0f, rect.width);
+                        const float maxScrollX = std::max(1.0f, pScroll->m_ContentSize.x - rect.width);
+                        const float ratioX = std::clamp(pScroll->m_ScrollOffset.x / maxScrollX, 0.0f, 1.0f);
+                        const float thumbX = ratioX * (rect.width - thumbW);
+                        const Rectangle thumbRect = { 0.0f, 0.0f, thumbW, 6.0f };
+                        const Mat4 thumbTransform = elementTransform * Mat4::translation(thumbX, 1.0f, 0.0f);
+                        DrawCanvasRect(thumbTransform, thumbRect, renderedCanvasHeight, originX, originY,
+                                       pScroll->m_ScrollbarThumbColor, true, 0.35f, canvas.m_PixelPerfect);
+                    }
+                }
+            }
+
+            if (auto* pProgress = entity.GetProgressBarComponent())
+            {
+                if (pProgress->m_Enabled)
+                {
+                    DrawCanvasRect(elementTransform, rect, renderedCanvasHeight, originX, originY,
+                                   pProgress->m_BackgroundColor, true, 0.15f, canvas.m_PixelPerfect);
+
+                    const float t = pProgress->GetNormalizedValue();
+                    if (t > 0.0f)
+                    {
+                        Rectangle fillLocal = { 0.0f, 0.0f, rect.width, rect.height };
+                        switch (pProgress->m_Direction)
+                        {
+                            case EUiSliderDirection::LEFT_TO_RIGHT:
+                                fillLocal.width = rect.width * t;
+                                break;
+                            case EUiSliderDirection::RIGHT_TO_LEFT:
+                                fillLocal.x = rect.width * (1.0f - t);
+                                fillLocal.width = rect.width * t;
+                                break;
+                            case EUiSliderDirection::BOTTOM_TO_TOP:
+                                fillLocal.height = rect.height * t;
+                                break;
+                            case EUiSliderDirection::TOP_TO_BOTTOM:
+                                fillLocal.y = rect.height * (1.0f - t);
+                                fillLocal.height = rect.height * t;
+                                break;
+                        }
+                        const Mat4 fillTransform = elementTransform * Mat4::translation(fillLocal.x, fillLocal.y, 0.0f);
+                        DrawCanvasRect(fillTransform, { 0.0f, 0.0f, fillLocal.width, fillLocal.height },
+                                       renderedCanvasHeight, originX, originY,
+                                       pProgress->m_FillColor, true, 0.15f, canvas.m_PixelPerfect);
+                    }
+
+                    DrawCanvasRectOutline(elementTransform, rect, renderedCanvasHeight, originX, originY,
+                                          1.5f, pProgress->m_BorderColor, true, canvas.m_PixelPerfect);
+
+                    if (pProgress->m_ShowPercentageText)
+                    {
+                        const Rectangle screenBounds = TransformCanvasRectToScreenBounds(
+                            elementTransform, rect, renderedCanvasHeight, originX, originY);
+                        const char* pPctText = TextFormat("%d%%", static_cast<int>(std::round(t * 100.0f)));
+                        const int fontSize = std::max(10, static_cast<int>(screenBounds.height * 0.55f));
+                        const int textW = MeasureText(pPctText, fontSize);
+                        DrawText(pPctText,
+                                 static_cast<int>(screenBounds.x + (screenBounds.width - textW) * 0.5f),
+                                 static_cast<int>(screenBounds.y + (screenBounds.height - fontSize) * 0.5f),
+                                 fontSize, pProgress->m_TextColor);
+                    }
+                }
+            }
+
+            if (auto* pSlider = entity.GetSliderComponent())
+            {
+                if (pSlider->m_Enabled)
+                {
+                    const float t = pSlider->GetNormalizedValue();
+                    const bool horizontal =
+                        (pSlider->m_Direction == EUiSliderDirection::LEFT_TO_RIGHT ||
+                         pSlider->m_Direction == EUiSliderDirection::RIGHT_TO_LEFT);
+                    const Color trackColor = pSlider->m_Interactable ? pSlider->m_BackgroundColor : pSlider->m_DisabledColor;
+                    const Color fillColor = pSlider->m_Interactable ? pSlider->m_FillColor : pSlider->m_DisabledColor;
+                    const Color handleColor = pSlider->m_Interactable ? pSlider->m_HandleColor : pSlider->m_DisabledColor;
+
+                    if (horizontal)
+                    {
+                        const float trackH = std::clamp(rect.height * 0.35f, 4.0f, 12.0f);
+                        const float trackY = (rect.height - trackH) * 0.5f;
+                        const Mat4 trackTransform = elementTransform * Mat4::translation(0.0f, trackY, 0.0f);
+                        DrawCanvasRect(trackTransform, { 0.0f, 0.0f, rect.width, trackH },
+                                       renderedCanvasHeight, originX, originY,
+                                       trackColor, true, 0.4f, canvas.m_PixelPerfect);
+
+                        if (t > 0.0f)
+                        {
+                            const float fillW = rect.width * t;
+                            const float fillX = (pSlider->m_Direction == EUiSliderDirection::LEFT_TO_RIGHT)
+                                ? 0.0f
+                                : (rect.width - fillW);
+                            const Mat4 fillTransform = elementTransform * Mat4::translation(fillX, trackY, 0.0f);
+                            DrawCanvasRect(fillTransform, { 0.0f, 0.0f, fillW, trackH },
+                                           renderedCanvasHeight, originX, originY,
+                                           fillColor, true, 0.4f, canvas.m_PixelPerfect);
+                        }
+
+                        const float knobSize = std::clamp(rect.height * 0.85f, 10.0f, 24.0f);
+                        const float normPos = (pSlider->m_Direction == EUiSliderDirection::LEFT_TO_RIGHT) ? t : (1.0f - t);
+                        const float knobX = std::clamp(normPos * rect.width - knobSize * 0.5f,
+                                                       0.0f, std::max(0.0f, rect.width - knobSize));
+                        const float knobY = (rect.height - knobSize) * 0.5f;
+                        const Mat4 knobTransform = elementTransform * Mat4::translation(knobX, knobY, 0.0f);
+                        const Rectangle knobRect = { 0.0f, 0.0f, knobSize, knobSize };
+                        DrawCanvasRect(knobTransform, knobRect, renderedCanvasHeight, originX, originY,
+                                       handleColor, true, 0.5f, canvas.m_PixelPerfect);
+                        DrawCanvasRectOutline(knobTransform, knobRect, renderedCanvasHeight, originX, originY,
+                                              1.5f, Color{ 40, 45, 55, 255 }, true, canvas.m_PixelPerfect);
+                    }
+                    else
+                    {
+                        const float trackW = std::clamp(rect.width * 0.35f, 4.0f, 12.0f);
+                        const float trackX = (rect.width - trackW) * 0.5f;
+                        const Mat4 trackTransform = elementTransform * Mat4::translation(trackX, 0.0f, 0.0f);
+                        DrawCanvasRect(trackTransform, { 0.0f, 0.0f, trackW, rect.height },
+                                       renderedCanvasHeight, originX, originY,
+                                       trackColor, true, 0.4f, canvas.m_PixelPerfect);
+
+                        if (t > 0.0f)
+                        {
+                            const float fillH = rect.height * t;
+                            const float fillY = (pSlider->m_Direction == EUiSliderDirection::BOTTOM_TO_TOP)
+                                ? 0.0f
+                                : (rect.height - fillH);
+                            const Mat4 fillTransform = elementTransform * Mat4::translation(trackX, fillY, 0.0f);
+                            DrawCanvasRect(fillTransform, { 0.0f, 0.0f, trackW, fillH },
+                                           renderedCanvasHeight, originX, originY,
+                                           fillColor, true, 0.4f, canvas.m_PixelPerfect);
+                        }
+
+                        const float knobSize = std::clamp(rect.width * 0.85f, 10.0f, 24.0f);
+                        const float normPos = (pSlider->m_Direction == EUiSliderDirection::BOTTOM_TO_TOP) ? t : (1.0f - t);
+                        const float knobY = std::clamp(normPos * rect.height - knobSize * 0.5f,
+                                                       0.0f, std::max(0.0f, rect.height - knobSize));
+                        const float knobX = (rect.width - knobSize) * 0.5f;
+                        const Mat4 knobTransform = elementTransform * Mat4::translation(knobX, knobY, 0.0f);
+                        const Rectangle knobRect = { 0.0f, 0.0f, knobSize, knobSize };
+                        DrawCanvasRect(knobTransform, knobRect, renderedCanvasHeight, originX, originY,
+                                       handleColor, true, 0.5f, canvas.m_PixelPerfect);
+                        DrawCanvasRectOutline(knobTransform, knobRect, renderedCanvasHeight, originX, originY,
+                                              1.5f, Color{ 40, 45, 55, 255 }, true, canvas.m_PixelPerfect);
+                    }
+                }
+            }
+
+            if (auto* pToggle = entity.GetToggleComponent())
+            {
+                if (pToggle->m_Enabled)
+                {
+                    const float boxSize = std::clamp(std::min(rect.width, rect.height) * 0.75f, 12.0f, 24.0f);
+                    const float boxX = 4.0f;
+                    const float boxY = (rect.height - boxSize) * 0.5f;
+                    const Mat4 boxTransform = elementTransform * Mat4::translation(boxX, boxY, 0.0f);
+                    const Rectangle boxRect = { 0.0f, 0.0f, boxSize, boxSize };
+                    const Color boxColor = pToggle->m_Interactable ? pToggle->m_BoxColor : pToggle->m_DisabledColor;
+
+                    DrawCanvasRect(boxTransform, boxRect, renderedCanvasHeight, originX, originY,
+                                   boxColor, true, 0.2f, canvas.m_PixelPerfect);
+                    DrawCanvasRectOutline(boxTransform, boxRect, renderedCanvasHeight, originX, originY,
+                                          1.5f, Color{ 130, 138, 155, 255 }, true, canvas.m_PixelPerfect);
+
+                    if (pToggle->m_IsOn)
+                    {
+                        const float checkPad = boxSize * 0.22f;
+                        const float checkSize = boxSize - checkPad * 2.0f;
+                        const Mat4 checkTransform = elementTransform *
+                            Mat4::translation(boxX + checkPad, boxY + checkPad, 0.0f);
+                        DrawCanvasRect(checkTransform, { 0.0f, 0.0f, checkSize, checkSize },
+                                       renderedCanvasHeight, originX, originY,
+                                       pToggle->m_CheckmarkColor, true, 0.2f, canvas.m_PixelPerfect);
+                    }
+
+                    if (!pToggle->m_Label.empty())
+                    {
+                        const Rectangle screenBounds = TransformCanvasRectToScreenBounds(
+                            elementTransform, rect, renderedCanvasHeight, originX, originY);
+                        const float scaleFactorY = std::sqrt(
+                            elementTransform.m[4] * elementTransform.m[4] +
+                            elementTransform.m[5] * elementTransform.m[5]);
+                        const int fontSize = std::max(10, static_cast<int>(std::round(pToggle->m_FontSize * scaleFactorY)));
+                        const int labelX = static_cast<int>(screenBounds.x + (boxX + boxSize + 8.0f) * scaleFactorY);
+                        const int labelY = static_cast<int>(screenBounds.y + (screenBounds.height - fontSize) * 0.5f);
+                        DrawText(pToggle->m_Label.c_str(), labelX, labelY, fontSize, pToggle->m_LabelColor);
+                    }
                 }
             }
 

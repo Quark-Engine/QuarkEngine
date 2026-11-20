@@ -28,6 +28,41 @@ class CCollisionComponent;
 namespace quark::script
 {
 
+    class CScriptEntity;
+
+    struct SEntityRef
+    {
+        int m_EntityId = -1;
+        CScriptEntity* m_pResolved = nullptr;
+
+        SEntityRef() = default;
+        explicit SEntityRef(int entityId)
+            : m_EntityId(entityId)
+        {
+        }
+
+        bool IsValid() const
+        {
+            return m_EntityId >= 0;
+        }
+    };
+
+    struct SAssetRef
+    {
+        std::string m_Path;
+
+        SAssetRef() = default;
+        explicit SAssetRef(const std::string& path)
+            : m_Path(path)
+        {
+        }
+
+        bool IsEmpty() const
+        {
+            return m_Path.empty();
+        }
+    };
+
     struct SScriptTransform
     {
         Vec3& position;
@@ -181,6 +216,14 @@ namespace quark::script
         {
         }
 
+        virtual void OnFixedUpdate(float fixedDeltaTime)
+        {
+        }
+
+        virtual void OnLateUpdate(float deltaTime)
+        {
+        }
+
         virtual void OnDestroy()
         {
         }
@@ -205,6 +248,18 @@ namespace quark::script
         {
         }
 
+        virtual void SetPropertyColor(const std::string& name, const Color& value)
+        {
+        }
+
+        virtual void SetPropertyEntityRef(const std::string& name, const SEntityRef& value)
+        {
+        }
+
+        virtual void SetPropertyAssetRef(const std::string& name, const SAssetRef& value)
+        {
+        }
+
         virtual bool GetPropertyFloat(const std::string& name, float& outValue) const
         {
             return false;
@@ -226,6 +281,21 @@ namespace quark::script
         }
 
         virtual bool GetPropertyVec3(const std::string& name, Vec3& outValue) const
+        {
+            return false;
+        }
+
+        virtual bool GetPropertyColor(const std::string& name, Color& outValue) const
+        {
+            return false;
+        }
+
+        virtual bool GetPropertyEntityRef(const std::string& name, SEntityRef& outValue) const
+        {
+            return false;
+        }
+
+        virtual bool GetPropertyAssetRef(const std::string& name, SAssetRef& outValue) const
         {
             return false;
         }
@@ -546,6 +616,8 @@ namespace quark::script
     {
         float (*pfnGetDeltaTime)() = nullptr;
         float (*pfnGetUnscaledDeltaTime)() = nullptr;
+        float (*pfnGetFixedDeltaTime)() = nullptr;
+        void (*pfnSetFixedDeltaTime)(float fixedStep) = nullptr;
         double (*pfnGetTime)() = nullptr;
         float (*pfnGetTimeScale)() = nullptr;
         void (*pfnSetTimeScale)(float scale) = nullptr;
@@ -574,6 +646,23 @@ namespace quark::script
             return 0.0166667f;
         }
 
+        static float GetFixedDeltaTime()
+        {
+            if (g_TimeCallbacks.pfnGetFixedDeltaTime)
+            {
+                return g_TimeCallbacks.pfnGetFixedDeltaTime();
+            }
+            return 0.02f;
+        }
+
+        static void SetFixedDeltaTime(float fixedStep)
+        {
+            if (g_TimeCallbacks.pfnSetFixedDeltaTime)
+            {
+                g_TimeCallbacks.pfnSetFixedDeltaTime(fixedStep);
+            }
+        }
+
         static double GetTime()
         {
             if (g_TimeCallbacks.pfnGetTime)
@@ -597,6 +686,149 @@ namespace quark::script
             if (g_TimeCallbacks.pfnSetTimeScale)
             {
                 g_TimeCallbacks.pfnSetTimeScale(scale);
+            }
+        }
+    };
+
+    struct SSceneCallbacks
+    {
+        CScriptEntity* (*pfnFindEntityByName)(const char* pName) = nullptr;
+        CScriptEntity* (*pfnFindEntityById)(int entityId) = nullptr;
+        int (*pfnFindEntitiesWithTag)(const char* pTag, CScriptEntity** ppOutEntities, int maxCount) = nullptr;
+        CScriptEntity* (*pfnInstantiateEntity)(CScriptEntity* pSourceEntity) = nullptr;
+        CScriptEntity* (*pfnInstantiatePrefab)(const char* pPrefabPath) = nullptr;
+        void (*pfnDestroyEntity)(CScriptEntity* pEntity) = nullptr;
+        void (*pfnDestroyEntityById)(int entityId) = nullptr;
+        bool (*pfnLoadScene)(const char* pScenePath) = nullptr;
+    };
+
+    extern SSceneCallbacks g_SceneCallbacks;
+
+    class Scene
+    {
+    public:
+        static CScriptEntity* FindEntityByName(const std::string& name)
+        {
+            if (g_SceneCallbacks.pfnFindEntityByName)
+            {
+                return g_SceneCallbacks.pfnFindEntityByName(name.c_str());
+            }
+            return nullptr;
+        }
+
+        static CScriptEntity* FindEntityById(int entityId)
+        {
+            if (g_SceneCallbacks.pfnFindEntityById)
+            {
+                return g_SceneCallbacks.pfnFindEntityById(entityId);
+            }
+            return nullptr;
+        }
+
+        static std::vector<CScriptEntity*> FindEntitiesWithTag(const std::string& tag)
+        {
+            std::vector<CScriptEntity*> vResults;
+            if (!g_SceneCallbacks.pfnFindEntitiesWithTag)
+            {
+                return vResults;
+            }
+
+            const int count = g_SceneCallbacks.pfnFindEntitiesWithTag(tag.c_str(), nullptr, 0);
+            if (count <= 0)
+            {
+                return vResults;
+            }
+
+            vResults.resize(static_cast<size_t>(count), nullptr);
+            const int written = g_SceneCallbacks.pfnFindEntitiesWithTag(
+                tag.c_str(), vResults.data(), count);
+            if (written < count)
+            {
+                vResults.resize(static_cast<size_t>(std::max(0, written)));
+            }
+            return vResults;
+        }
+
+        static CScriptEntity* Instantiate(CScriptEntity* pEntity)
+        {
+            if (g_SceneCallbacks.pfnInstantiateEntity && pEntity)
+            {
+                return g_SceneCallbacks.pfnInstantiateEntity(pEntity);
+            }
+            return nullptr;
+        }
+
+        static CScriptEntity* Instantiate(const std::string& prefabPath)
+        {
+            if (g_SceneCallbacks.pfnInstantiatePrefab && !prefabPath.empty())
+            {
+                return g_SceneCallbacks.pfnInstantiatePrefab(prefabPath.c_str());
+            }
+            return nullptr;
+        }
+
+        static CScriptEntity* Instantiate(const SAssetRef& prefabAsset)
+        {
+            return Instantiate(prefabAsset.m_Path);
+        }
+
+        static void Destroy(CScriptEntity* pEntity)
+        {
+            if (g_SceneCallbacks.pfnDestroyEntity && pEntity)
+            {
+                g_SceneCallbacks.pfnDestroyEntity(pEntity);
+            }
+        }
+
+        static void Destroy(int entityId)
+        {
+            if (g_SceneCallbacks.pfnDestroyEntityById && entityId >= 0)
+            {
+                g_SceneCallbacks.pfnDestroyEntityById(entityId);
+            }
+        }
+
+        static bool LoadScene(const std::string& scenePath)
+        {
+            if (g_SceneCallbacks.pfnLoadScene && !scenePath.empty())
+            {
+                return g_SceneCallbacks.pfnLoadScene(scenePath.c_str());
+            }
+            return false;
+        }
+    };
+
+    struct SDebugCallbacks
+    {
+        void (*pfnLog)(int level, const char* pMessage) = nullptr;
+    };
+
+    extern SDebugCallbacks g_DebugCallbacks;
+
+    class Debug
+    {
+    public:
+        static void Log(const std::string& message)
+        {
+            if (g_DebugCallbacks.pfnLog)
+            {
+                g_DebugCallbacks.pfnLog(0, message.c_str());
+            }
+        }
+
+        static void LogWarning(const std::string& message)
+        {
+            if (g_DebugCallbacks.pfnLog)
+            {
+                g_DebugCallbacks.pfnLog(1, message.c_str());
+            }
+        }
+
+        static void LogError(const std::string& message)
+        {
+            if (g_DebugCallbacks.pfnLog)
+            {
+                g_DebugCallbacks.pfnLog(2, message.c_str());
             }
         }
     };
@@ -715,7 +947,13 @@ using Mouse = ::quark::script::Mouse;
 using MouseBtn = ::quark::script::Mouse;
 using Time = ::quark::script::Time;
 using Math = ::quark::script::Math;
+using Scene = ::quark::script::Scene;
+using Debug = ::quark::script::Debug;
 using ScriptEntity = ::quark::script::CScriptEntity;
+using SEntityRef = ::quark::script::SEntityRef;
+using SAssetRef = ::quark::script::SAssetRef;
+using EntityRef = ::quark::script::SEntityRef;
+using AssetRef = ::quark::script::SAssetRef;
 
 #define REGISTER_SCRIPT(ScriptClass)                                              \
     extern "C" QUARK_SCRIPT_API IScript* Create_##ScriptClass()                   \

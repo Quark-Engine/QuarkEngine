@@ -141,6 +141,34 @@ void CComponentUIHelper::DrawEntityInspector(CEditor& editor, CEntity& entity, S
                 {
                     DrawButtonComponent(editor, entity, pButton.get());
                 }
+                else if (auto pSlider = std::dynamic_pointer_cast<CSliderComponent>(pComp))
+                {
+                    DrawSliderComponent(editor, pSlider.get());
+                }
+                else if (auto pToggle = std::dynamic_pointer_cast<CToggleComponent>(pComp))
+                {
+                    DrawToggleComponent(editor, pToggle.get());
+                }
+                else if (auto pProgressBar = std::dynamic_pointer_cast<CProgressBarComponent>(pComp))
+                {
+                    DrawProgressBarComponent(editor, pProgressBar.get());
+                }
+                else if (auto pScrollView = std::dynamic_pointer_cast<CScrollViewComponent>(pComp))
+                {
+                    DrawScrollViewComponent(editor, pScrollView.get());
+                }
+                else if (auto pHLayout = std::dynamic_pointer_cast<CHorizontalLayoutComponent>(pComp))
+                {
+                    DrawHorizontalLayoutComponent(editor, pHLayout.get());
+                }
+                else if (auto pVLayout = std::dynamic_pointer_cast<CVerticalLayoutComponent>(pComp))
+                {
+                    DrawVerticalLayoutComponent(editor, pVLayout.get());
+                }
+                else if (auto pGLayout = std::dynamic_pointer_cast<CGridLayoutComponent>(pComp))
+                {
+                    DrawGridLayoutComponent(editor, pGLayout.get());
+                }
                 else if (auto pScript = std::dynamic_pointer_cast<CScriptComponent>(pComp))
                 {
                     DrawScriptComponent(editor, entity, pScript.get());
@@ -403,6 +431,100 @@ void CComponentUIHelper::DrawEntityInspector(CEditor& editor, CEntity& entity, S
                         pComponentsManager->AddComponent(std::make_shared<CUiRectTransformComponent>());
                     }
                     pComponentsManager->AddComponent(std::make_shared<CTextComponent>());
+                }
+            }
+            if (ImGui::MenuItem("Slider"))
+            {
+                if (!pComponentsManager->GetComponentOfType<CSliderComponent>())
+                {
+                    editor.SaveState();
+                    pComponentsManager->RemoveMeshAndMaterialForUi(false);
+                    if (!pComponentsManager->GetComponentOfType<CUiRectTransformComponent>())
+                    {
+                        pComponentsManager->AddComponent(std::make_shared<CUiRectTransformComponent>());
+                    }
+                    pComponentsManager->AddComponent(std::make_shared<CSliderComponent>());
+                }
+            }
+            if (ImGui::MenuItem("Toggle"))
+            {
+                if (!pComponentsManager->GetComponentOfType<CToggleComponent>())
+                {
+                    editor.SaveState();
+                    pComponentsManager->RemoveMeshAndMaterialForUi(false);
+                    if (!pComponentsManager->GetComponentOfType<CUiRectTransformComponent>())
+                    {
+                        pComponentsManager->AddComponent(std::make_shared<CUiRectTransformComponent>());
+                    }
+                    pComponentsManager->AddComponent(std::make_shared<CToggleComponent>());
+                }
+            }
+            if (ImGui::MenuItem("Progress Bar"))
+            {
+                if (!pComponentsManager->GetComponentOfType<CProgressBarComponent>())
+                {
+                    editor.SaveState();
+                    pComponentsManager->RemoveMeshAndMaterialForUi(false);
+                    if (!pComponentsManager->GetComponentOfType<CUiRectTransformComponent>())
+                    {
+                        pComponentsManager->AddComponent(std::make_shared<CUiRectTransformComponent>());
+                    }
+                    pComponentsManager->AddComponent(std::make_shared<CProgressBarComponent>());
+                }
+            }
+            if (ImGui::MenuItem("Scroll View"))
+            {
+                if (!pComponentsManager->GetComponentOfType<CScrollViewComponent>())
+                {
+                    editor.SaveState();
+                    pComponentsManager->RemoveMeshAndMaterialForUi(false);
+                    auto pRect = pComponentsManager->GetComponentOfType<CUiRectTransformComponent>();
+                    if (!pRect)
+                    {
+                        pRect = std::make_shared<CUiRectTransformComponent>();
+                        pComponentsManager->AddComponent(pRect);
+                    }
+                    pRect->m_ClipChildren = true;
+                    pComponentsManager->AddComponent(std::make_shared<CScrollViewComponent>());
+                }
+            }
+            if (ImGui::MenuItem("Horizontal Layout Group"))
+            {
+                if (!pComponentsManager->GetComponentOfType<CHorizontalLayoutComponent>())
+                {
+                    editor.SaveState();
+                    pComponentsManager->RemoveMeshAndMaterialForUi(false);
+                    if (!pComponentsManager->GetComponentOfType<CUiRectTransformComponent>())
+                    {
+                        pComponentsManager->AddComponent(std::make_shared<CUiRectTransformComponent>());
+                    }
+                    pComponentsManager->AddComponent(std::make_shared<CHorizontalLayoutComponent>());
+                }
+            }
+            if (ImGui::MenuItem("Vertical Layout Group"))
+            {
+                if (!pComponentsManager->GetComponentOfType<CVerticalLayoutComponent>())
+                {
+                    editor.SaveState();
+                    pComponentsManager->RemoveMeshAndMaterialForUi(false);
+                    if (!pComponentsManager->GetComponentOfType<CUiRectTransformComponent>())
+                    {
+                        pComponentsManager->AddComponent(std::make_shared<CUiRectTransformComponent>());
+                    }
+                    pComponentsManager->AddComponent(std::make_shared<CVerticalLayoutComponent>());
+                }
+            }
+            if (ImGui::MenuItem("Grid Layout Group"))
+            {
+                if (!pComponentsManager->GetComponentOfType<CGridLayoutComponent>())
+                {
+                    editor.SaveState();
+                    pComponentsManager->RemoveMeshAndMaterialForUi(false);
+                    if (!pComponentsManager->GetComponentOfType<CUiRectTransformComponent>())
+                    {
+                        pComponentsManager->AddComponent(std::make_shared<CUiRectTransformComponent>());
+                    }
+                    pComponentsManager->AddComponent(std::make_shared<CGridLayoutComponent>());
                 }
             }
             if (ImGui::MenuItem("UI"))
@@ -1514,6 +1636,112 @@ void CComponentUIHelper::DrawScriptComponent(CEditor& editor, CEntity& entity, C
                     field.m_Vec3Value = { aVec[0], aVec[1], aVec[2] };
                     valueChanged = true;
                 }
+                break;
+            }
+            case quark::script::EScriptFieldType::COLOR:
+            {
+                float aCol[4] = {
+                    field.m_ColorValue.r / 255.0f,
+                    field.m_ColorValue.g / 255.0f,
+                    field.m_ColorValue.b / 255.0f,
+                    field.m_ColorValue.a / 255.0f
+                };
+                if (ImGui::ColorEdit4(field.m_Name.c_str(), aCol))
+                {
+                    field.m_ColorValue = {
+                        static_cast<unsigned char>(std::clamp(aCol[0] * 255.0f, 0.0f, 255.0f)),
+                        static_cast<unsigned char>(std::clamp(aCol[1] * 255.0f, 0.0f, 255.0f)),
+                        static_cast<unsigned char>(std::clamp(aCol[2] * 255.0f, 0.0f, 255.0f)),
+                        static_cast<unsigned char>(std::clamp(aCol[3] * 255.0f, 0.0f, 255.0f))
+                    };
+                    valueChanged = true;
+                }
+                break;
+            }
+            case quark::script::EScriptFieldType::ENTITY_REF:
+            {
+                std::string currentLabel = "None (Entity)";
+                if (field.m_EntityIdValue >= 0)
+                {
+                    for (const auto& candidate : editor.m_Scene.m_vEntities)
+                    {
+                        if (candidate.m_Id == field.m_EntityIdValue)
+                        {
+                            currentLabel = candidate.m_Name + " (#" + std::to_string(candidate.m_Id) + ")";
+                            break;
+                        }
+                    }
+                }
+                if (ImGui::BeginCombo(field.m_Name.c_str(), currentLabel.c_str()))
+                {
+                    if (ImGui::Selectable("None (Entity)", field.m_EntityIdValue < 0))
+                    {
+                        field.m_EntityIdValue = -1;
+                        valueChanged = true;
+                    }
+                    for (const auto& candidate : editor.m_Scene.m_vEntities)
+                    {
+                        const std::string itemLabel = candidate.m_Name + " (#" + std::to_string(candidate.m_Id) + ")";
+                        const bool isSelected = (field.m_EntityIdValue == candidate.m_Id);
+                        if (ImGui::Selectable(itemLabel.c_str(), isSelected))
+                        {
+                            field.m_EntityIdValue = candidate.m_Id;
+                            valueChanged = true;
+                        }
+                    }
+                    ImGui::EndCombo();
+                }
+                if (ImGui::BeginDragDropTarget())
+                {
+                    if (const ImGuiPayload* pPayload = ImGui::AcceptDragDropPayload("ENTITY_INDEX"))
+                    {
+                        if (pPayload->IsDelivery() && pPayload->DataSize == sizeof(int))
+                        {
+                            const int droppedIndex = *static_cast<const int*>(pPayload->Data);
+                            if (droppedIndex >= 0 && droppedIndex < static_cast<int>(editor.m_Scene.m_vEntities.size()))
+                            {
+                                field.m_EntityIdValue = editor.m_Scene.m_vEntities[droppedIndex].m_Id;
+                                valueChanged = true;
+                            }
+                        }
+                    }
+                    ImGui::EndDragDropTarget();
+                }
+                break;
+            }
+            case quark::script::EScriptFieldType::ASSET_REF:
+            {
+                char aAssetBuf[512] = {};
+                const size_t copied = field.m_AssetPathValue.copy(aAssetBuf, sizeof(aAssetBuf) - 1);
+                aAssetBuf[copied] = '\0';
+                ImGui::SetNextItemWidth(ImGui::GetContentRegionAvail().x - 110.0f);
+                if (ImGui::InputText("##asset_ref_path", aAssetBuf, sizeof(aAssetBuf)))
+                {
+                    field.m_AssetPathValue = aAssetBuf;
+                    valueChanged = true;
+                }
+                if (editor.m_Ui.m_Layout.m_FileDragging &&
+                    ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenBlockedByActiveItem) &&
+                    ImGui::IsMouseReleased(ImGuiMouseButton_Left) &&
+                    !editor.m_Ui.m_AssetBrowser.m_Drag.m_FilePath.empty())
+                {
+                    field.m_AssetPathValue = editor.m_Ui.m_AssetBrowser.m_Drag.m_FilePath.generic_string();
+                    valueChanged = true;
+                }
+                ImGui::SameLine();
+                if (ImGui::Button("...##browse_asset_ref"))
+                {
+                    const std::string browsed = BrowseForFileDialog(
+                        "Asset Files (*.prefab;*.png;*.jpg;*.wav;*.ogg;*.obj;*.glb)",
+                        "Asset Files (*.prefab;*.png;*.jpg;*.wav;*.ogg;*.obj;*.glb)\0*.prefab;*.png;*.jpg;*.wav;*.ogg;*.obj;*.glb\0All Files (*.*)\0*.*\0");
+                    if (!browsed.empty())
+                    {
+                        field.m_AssetPathValue = browsed;
+                        valueChanged = true;
+                    }
+                }
+                ImGui::SameLine();
+                ImGui::TextUnformatted(field.m_Name.c_str());
                 break;
             }
         }
@@ -2911,6 +3139,600 @@ void CComponentUIHelper::DrawUiComponent(CEditor& editor, CEntity& entity, CUiCo
         pUi->SyncToRuntimeDesc(
             pComponents->GetComponentOfType<CUiRectTransformComponent>().get(),
             pComponents->GetComponentOfType<CTextComponent>().get());
+        editor.m_SceneDirty = true;
+    }
+}
+
+namespace
+{
+    bool DrawLayoutPaddingEditor(CEditor& editor, SUiLayoutPadding& padding)
+    {
+        bool changed = false;
+        float aPad[4] = { padding.m_Left, padding.m_Right, padding.m_Top, padding.m_Bottom };
+        if (ImGui::DragFloat4("Padding (L, R, T, B)", aPad, 1.0f, 0.0f, 2048.0f, "%.0f"))
+        {
+            padding.m_Left = std::max(0.0f, aPad[0]);
+            padding.m_Right = std::max(0.0f, aPad[1]);
+            padding.m_Top = std::max(0.0f, aPad[2]);
+            padding.m_Bottom = std::max(0.0f, aPad[3]);
+            changed = true;
+        }
+        if (ImGui::IsItemActivated())
+        {
+            editor.SaveState();
+        }
+        return changed;
+    }
+
+    bool DrawChildAlignmentCombo(CEditor& editor, EUiLayoutChildAlignment& alignment)
+    {
+        const char* apAlignments[] = {
+            "Upper Left", "Upper Center", "Upper Right",
+            "Middle Left", "Middle Center", "Middle Right",
+            "Lower Left", "Lower Center", "Lower Right"
+        };
+        int current = static_cast<int>(alignment);
+        if (ImGui::Combo("Child Alignment", &current, apAlignments, IM_ARRAYSIZE(apAlignments)))
+        {
+            editor.SaveState();
+            alignment = static_cast<EUiLayoutChildAlignment>(current);
+            return true;
+        }
+        return false;
+    }
+} // anonymous
+
+void CComponentUIHelper::DrawSliderComponent(CEditor& editor, CSliderComponent* pSlider)
+{
+    if (!pSlider)
+    {
+        return;
+    }
+
+    bool changed = false;
+    if (ImGui::Checkbox("Interactable", &pSlider->m_Interactable))
+    {
+        editor.SaveState();
+        changed = true;
+    }
+    if (ImGui::Checkbox("Raycast Target", &pSlider->m_RaycastTarget))
+    {
+        editor.SaveState();
+        changed = true;
+    }
+
+    const char* apDirections[] = {
+        "Left To Right",
+        "Right To Left",
+        "Bottom To Top",
+        "Top To Bottom"
+    };
+    int dir = static_cast<int>(pSlider->m_Direction);
+    if (ImGui::Combo("Direction", &dir, apDirections, IM_ARRAYSIZE(apDirections)))
+    {
+        editor.SaveState();
+        pSlider->m_Direction = static_cast<EUiSliderDirection>(dir);
+        changed = true;
+    }
+
+    if (ImGui::DragFloat("Min Value", &pSlider->m_MinValue, 0.1f))
+    {
+        changed = true;
+    }
+    if (ImGui::IsItemActivated())
+    {
+        editor.SaveState();
+    }
+
+    if (ImGui::DragFloat("Max Value", &pSlider->m_MaxValue, 0.1f))
+    {
+        changed = true;
+    }
+    if (ImGui::IsItemActivated())
+    {
+        editor.SaveState();
+    }
+
+    if (ImGui::Checkbox("Whole Numbers", &pSlider->m_WholeNumbers))
+    {
+        editor.SaveState();
+        if (pSlider->m_WholeNumbers)
+        {
+            pSlider->m_Value = std::round(pSlider->m_Value);
+        }
+        changed = true;
+    }
+
+    const float minVal = std::min(pSlider->m_MinValue, pSlider->m_MaxValue);
+    const float maxVal = std::max(pSlider->m_MinValue, pSlider->m_MaxValue);
+    if (ImGui::SliderFloat("Value", &pSlider->m_Value, minVal, maxVal,
+                           pSlider->m_WholeNumbers ? "%.0f" : "%.2f"))
+    {
+        if (pSlider->m_WholeNumbers)
+        {
+            pSlider->m_Value = std::round(pSlider->m_Value);
+        }
+        changed = true;
+    }
+    if (ImGui::IsItemActivated())
+    {
+        editor.SaveState();
+    }
+
+    changed |= EditGuiColor4(editor, "Background Color", pSlider->m_BackgroundColor);
+    changed |= EditGuiColor4(editor, "Fill Color", pSlider->m_FillColor);
+    changed |= EditGuiColor4(editor, "Handle Color", pSlider->m_HandleColor);
+    changed |= EditGuiColor4(editor, "Disabled Color", pSlider->m_DisabledColor);
+
+    char aActionBuf[256] = {};
+    std::snprintf(aActionBuf, sizeof(aActionBuf), "%s", pSlider->m_OnValueChangedAction.c_str());
+    if (ImGui::InputText("On Value Changed Action", aActionBuf, sizeof(aActionBuf)))
+    {
+        pSlider->m_OnValueChangedAction = aActionBuf;
+        changed = true;
+    }
+    if (ImGui::IsItemActivated())
+    {
+        editor.SaveState();
+    }
+
+    if (changed)
+    {
+        editor.m_SceneDirty = true;
+    }
+}
+
+void CComponentUIHelper::DrawToggleComponent(CEditor& editor, CToggleComponent* pToggle)
+{
+    if (!pToggle)
+    {
+        return;
+    }
+
+    bool changed = false;
+    if (ImGui::Checkbox("Interactable", &pToggle->m_Interactable))
+    {
+        editor.SaveState();
+        changed = true;
+    }
+    if (ImGui::Checkbox("Raycast Target", &pToggle->m_RaycastTarget))
+    {
+        editor.SaveState();
+        changed = true;
+    }
+    if (ImGui::Checkbox("Is On", &pToggle->m_IsOn))
+    {
+        editor.SaveState();
+        changed = true;
+    }
+
+    char aLabelBuf[256] = {};
+    std::snprintf(aLabelBuf, sizeof(aLabelBuf), "%s", pToggle->m_Label.c_str());
+    if (ImGui::InputText("Label", aLabelBuf, sizeof(aLabelBuf)))
+    {
+        pToggle->m_Label = aLabelBuf;
+        changed = true;
+    }
+    if (ImGui::IsItemActivated())
+    {
+        editor.SaveState();
+    }
+
+    if (ImGui::DragInt("Font Size", &pToggle->m_FontSize, 1.0f, 8, 128))
+    {
+        pToggle->m_FontSize = std::clamp(pToggle->m_FontSize, 8, 128);
+        changed = true;
+    }
+    if (ImGui::IsItemActivated())
+    {
+        editor.SaveState();
+    }
+
+    changed |= EditGuiColor4(editor, "Box Color", pToggle->m_BoxColor);
+    changed |= EditGuiColor4(editor, "Checkmark Color", pToggle->m_CheckmarkColor);
+    changed |= EditGuiColor4(editor, "Label Color", pToggle->m_LabelColor);
+    changed |= EditGuiColor4(editor, "Disabled Color", pToggle->m_DisabledColor);
+
+    char aActionBuf[256] = {};
+    std::snprintf(aActionBuf, sizeof(aActionBuf), "%s", pToggle->m_OnValueChangedAction.c_str());
+    if (ImGui::InputText("On Value Changed Action", aActionBuf, sizeof(aActionBuf)))
+    {
+        pToggle->m_OnValueChangedAction = aActionBuf;
+        changed = true;
+    }
+    if (ImGui::IsItemActivated())
+    {
+        editor.SaveState();
+    }
+
+    if (changed)
+    {
+        editor.m_SceneDirty = true;
+    }
+}
+
+void CComponentUIHelper::DrawProgressBarComponent(CEditor& editor, CProgressBarComponent* pProgressBar)
+{
+    if (!pProgressBar)
+    {
+        return;
+    }
+
+    bool changed = false;
+    if (ImGui::Checkbox("Raycast Target", &pProgressBar->m_RaycastTarget))
+    {
+        editor.SaveState();
+        changed = true;
+    }
+
+    const char* apDirections[] = {
+        "Left To Right",
+        "Right To Left",
+        "Bottom To Top",
+        "Top To Bottom"
+    };
+    int dir = static_cast<int>(pProgressBar->m_Direction);
+    if (ImGui::Combo("Direction", &dir, apDirections, IM_ARRAYSIZE(apDirections)))
+    {
+        editor.SaveState();
+        pProgressBar->m_Direction = static_cast<EUiSliderDirection>(dir);
+        changed = true;
+    }
+
+    if (ImGui::DragFloat("Min Value", &pProgressBar->m_MinValue, 0.1f))
+    {
+        changed = true;
+    }
+    if (ImGui::IsItemActivated())
+    {
+        editor.SaveState();
+    }
+
+    if (ImGui::DragFloat("Max Value", &pProgressBar->m_MaxValue, 0.1f))
+    {
+        changed = true;
+    }
+    if (ImGui::IsItemActivated())
+    {
+        editor.SaveState();
+    }
+
+    const float minVal = std::min(pProgressBar->m_MinValue, pProgressBar->m_MaxValue);
+    const float maxVal = std::max(pProgressBar->m_MinValue, pProgressBar->m_MaxValue);
+    if (ImGui::SliderFloat("Value", &pProgressBar->m_Value, minVal, maxVal, "%.1f"))
+    {
+        changed = true;
+    }
+    if (ImGui::IsItemActivated())
+    {
+        editor.SaveState();
+    }
+
+    if (ImGui::Checkbox("Show Percentage Text", &pProgressBar->m_ShowPercentageText))
+    {
+        editor.SaveState();
+        changed = true;
+    }
+
+    changed |= EditGuiColor4(editor, "Background Color", pProgressBar->m_BackgroundColor);
+    changed |= EditGuiColor4(editor, "Fill Color", pProgressBar->m_FillColor);
+    changed |= EditGuiColor4(editor, "Border Color", pProgressBar->m_BorderColor);
+    changed |= EditGuiColor4(editor, "Text Color", pProgressBar->m_TextColor);
+
+    if (changed)
+    {
+        editor.m_SceneDirty = true;
+    }
+}
+
+void CComponentUIHelper::DrawScrollViewComponent(CEditor& editor, CScrollViewComponent* pScrollView)
+{
+    if (!pScrollView)
+    {
+        return;
+    }
+
+    bool changed = false;
+    if (ImGui::Checkbox("Raycast Target", &pScrollView->m_RaycastTarget))
+    {
+        editor.SaveState();
+        changed = true;
+    }
+    if (ImGui::Checkbox("Horizontal", &pScrollView->m_Horizontal))
+    {
+        editor.SaveState();
+        changed = true;
+    }
+    if (ImGui::Checkbox("Vertical", &pScrollView->m_Vertical))
+    {
+        editor.SaveState();
+        changed = true;
+    }
+
+    if (ImGui::DragFloat("Scroll Sensitivity", &pScrollView->m_ScrollSensitivity, 0.5f, 1.0f, 500.0f, "%.1f"))
+    {
+        changed = true;
+    }
+    if (ImGui::IsItemActivated())
+    {
+        editor.SaveState();
+    }
+
+    float aContentSize[2] = { pScrollView->m_ContentSize.x, pScrollView->m_ContentSize.y };
+    if (ImGui::DragFloat2("Content Size", aContentSize, 1.0f, 10.0f, 16384.0f, "%.0f"))
+    {
+        pScrollView->m_ContentSize = { std::max(10.0f, aContentSize[0]), std::max(10.0f, aContentSize[1]) };
+        changed = true;
+    }
+    if (ImGui::IsItemActivated())
+    {
+        editor.SaveState();
+    }
+
+    float aScrollOffset[2] = { pScrollView->m_ScrollOffset.x, pScrollView->m_ScrollOffset.y };
+    if (ImGui::DragFloat2("Scroll Offset", aScrollOffset, 1.0f, 0.0f, 16384.0f, "%.1f"))
+    {
+        pScrollView->m_ScrollOffset = { std::max(0.0f, aScrollOffset[0]), std::max(0.0f, aScrollOffset[1]) };
+        changed = true;
+    }
+    if (ImGui::IsItemActivated())
+    {
+        editor.SaveState();
+    }
+
+    if (ImGui::Checkbox("Show Horizontal Scrollbar", &pScrollView->m_ShowHorizontalScrollbar))
+    {
+        editor.SaveState();
+        changed = true;
+    }
+    if (ImGui::Checkbox("Show Vertical Scrollbar", &pScrollView->m_ShowVerticalScrollbar))
+    {
+        editor.SaveState();
+        changed = true;
+    }
+
+    changed |= EditGuiColor4(editor, "Background Color", pScrollView->m_BackgroundColor);
+    changed |= EditGuiColor4(editor, "Scrollbar Track Color", pScrollView->m_ScrollbarTrackColor);
+    changed |= EditGuiColor4(editor, "Scrollbar Thumb Color", pScrollView->m_ScrollbarThumbColor);
+
+    if (changed)
+    {
+        editor.m_SceneDirty = true;
+    }
+}
+
+void CComponentUIHelper::DrawHorizontalLayoutComponent(CEditor& editor, CHorizontalLayoutComponent* pLayout)
+{
+    if (!pLayout)
+    {
+        return;
+    }
+
+    bool changed = false;
+    changed |= DrawLayoutPaddingEditor(editor, pLayout->m_Padding);
+
+    if (ImGui::DragFloat("Spacing", &pLayout->m_Spacing, 0.5f, -512.0f, 2048.0f, "%.1f"))
+    {
+        changed = true;
+    }
+    if (ImGui::IsItemActivated())
+    {
+        editor.SaveState();
+    }
+
+    changed |= DrawChildAlignmentCombo(editor, pLayout->m_ChildAlignment);
+
+    if (ImGui::Checkbox("Reverse Arrangement", &pLayout->m_ReverseArrangement))
+    {
+        editor.SaveState();
+        changed = true;
+    }
+
+    ImGui::TextUnformatted("Control Child Size");
+    ImGui::PushID("h_ctrl");
+    if (ImGui::Checkbox("Width", &pLayout->m_ChildControlWidth))
+    {
+        editor.SaveState();
+        changed = true;
+    }
+    ImGui::SameLine();
+    if (ImGui::Checkbox("Height", &pLayout->m_ChildControlHeight))
+    {
+        editor.SaveState();
+        changed = true;
+    }
+    ImGui::PopID();
+
+    ImGui::TextUnformatted("Use Child Scale");
+    ImGui::PushID("h_scale");
+    if (ImGui::Checkbox("Width", &pLayout->m_ChildScaleWidth))
+    {
+        editor.SaveState();
+        changed = true;
+    }
+    ImGui::SameLine();
+    if (ImGui::Checkbox("Height", &pLayout->m_ChildScaleHeight))
+    {
+        editor.SaveState();
+        changed = true;
+    }
+    ImGui::PopID();
+
+    ImGui::TextUnformatted("Child Force Expand");
+    ImGui::PushID("h_expand");
+    if (ImGui::Checkbox("Width", &pLayout->m_ChildForceExpandWidth))
+    {
+        editor.SaveState();
+        changed = true;
+    }
+    ImGui::SameLine();
+    if (ImGui::Checkbox("Height", &pLayout->m_ChildForceExpandHeight))
+    {
+        editor.SaveState();
+        changed = true;
+    }
+    ImGui::PopID();
+
+    if (changed)
+    {
+        editor.m_SceneDirty = true;
+    }
+}
+
+void CComponentUIHelper::DrawVerticalLayoutComponent(CEditor& editor, CVerticalLayoutComponent* pLayout)
+{
+    if (!pLayout)
+    {
+        return;
+    }
+
+    bool changed = false;
+    changed |= DrawLayoutPaddingEditor(editor, pLayout->m_Padding);
+
+    if (ImGui::DragFloat("Spacing", &pLayout->m_Spacing, 0.5f, -512.0f, 2048.0f, "%.1f"))
+    {
+        changed = true;
+    }
+    if (ImGui::IsItemActivated())
+    {
+        editor.SaveState();
+    }
+
+    changed |= DrawChildAlignmentCombo(editor, pLayout->m_ChildAlignment);
+
+    if (ImGui::Checkbox("Reverse Arrangement", &pLayout->m_ReverseArrangement))
+    {
+        editor.SaveState();
+        changed = true;
+    }
+
+    ImGui::TextUnformatted("Control Child Size");
+    ImGui::PushID("v_ctrl");
+    if (ImGui::Checkbox("Width", &pLayout->m_ChildControlWidth))
+    {
+        editor.SaveState();
+        changed = true;
+    }
+    ImGui::SameLine();
+    if (ImGui::Checkbox("Height", &pLayout->m_ChildControlHeight))
+    {
+        editor.SaveState();
+        changed = true;
+    }
+    ImGui::PopID();
+
+    ImGui::TextUnformatted("Use Child Scale");
+    ImGui::PushID("v_scale");
+    if (ImGui::Checkbox("Width", &pLayout->m_ChildScaleWidth))
+    {
+        editor.SaveState();
+        changed = true;
+    }
+    ImGui::SameLine();
+    if (ImGui::Checkbox("Height", &pLayout->m_ChildScaleHeight))
+    {
+        editor.SaveState();
+        changed = true;
+    }
+    ImGui::PopID();
+
+    ImGui::TextUnformatted("Child Force Expand");
+    ImGui::PushID("v_expand");
+    if (ImGui::Checkbox("Width", &pLayout->m_ChildForceExpandWidth))
+    {
+        editor.SaveState();
+        changed = true;
+    }
+    ImGui::SameLine();
+    if (ImGui::Checkbox("Height", &pLayout->m_ChildForceExpandHeight))
+    {
+        editor.SaveState();
+        changed = true;
+    }
+    ImGui::PopID();
+
+    if (changed)
+    {
+        editor.m_SceneDirty = true;
+    }
+}
+
+void CComponentUIHelper::DrawGridLayoutComponent(CEditor& editor, CGridLayoutComponent* pLayout)
+{
+    if (!pLayout)
+    {
+        return;
+    }
+
+    bool changed = false;
+    changed |= DrawLayoutPaddingEditor(editor, pLayout->m_Padding);
+
+    float aCellSize[2] = { pLayout->m_CellSize.x, pLayout->m_CellSize.y };
+    if (ImGui::DragFloat2("Cell Size", aCellSize, 1.0f, 1.0f, 4096.0f, "%.0f"))
+    {
+        pLayout->m_CellSize = { std::max(1.0f, aCellSize[0]), std::max(1.0f, aCellSize[1]) };
+        changed = true;
+    }
+    if (ImGui::IsItemActivated())
+    {
+        editor.SaveState();
+    }
+
+    float aSpacing[2] = { pLayout->m_Spacing.x, pLayout->m_Spacing.y };
+    if (ImGui::DragFloat2("Spacing", aSpacing, 0.5f, -512.0f, 2048.0f, "%.1f"))
+    {
+        pLayout->m_Spacing = { aSpacing[0], aSpacing[1] };
+        changed = true;
+    }
+    if (ImGui::IsItemActivated())
+    {
+        editor.SaveState();
+    }
+
+    const char* apCorners[] = { "Upper Left", "Upper Right", "Lower Left", "Lower Right" };
+    int corner = static_cast<int>(pLayout->m_StartCorner);
+    if (ImGui::Combo("Start Corner", &corner, apCorners, IM_ARRAYSIZE(apCorners)))
+    {
+        editor.SaveState();
+        pLayout->m_StartCorner = static_cast<EUiGridStartCorner>(corner);
+        changed = true;
+    }
+
+    const char* apAxes[] = { "Horizontal", "Vertical" };
+    int axis = static_cast<int>(pLayout->m_StartAxis);
+    if (ImGui::Combo("Start Axis", &axis, apAxes, IM_ARRAYSIZE(apAxes)))
+    {
+        editor.SaveState();
+        pLayout->m_StartAxis = static_cast<EUiGridStartAxis>(axis);
+        changed = true;
+    }
+
+    changed |= DrawChildAlignmentCombo(editor, pLayout->m_ChildAlignment);
+
+    const char* apConstraints[] = { "Flexible", "Fixed Column Count", "Fixed Row Count" };
+    int constraint = static_cast<int>(pLayout->m_Constraint);
+    if (ImGui::Combo("Constraint", &constraint, apConstraints, IM_ARRAYSIZE(apConstraints)))
+    {
+        editor.SaveState();
+        pLayout->m_Constraint = static_cast<EUiGridConstraint>(constraint);
+        changed = true;
+    }
+
+    if (pLayout->m_Constraint != EUiGridConstraint::FLEXIBLE)
+    {
+        if (ImGui::DragInt("Constraint Count", &pLayout->m_ConstraintCount, 1.0f, 1, 256))
+        {
+            pLayout->m_ConstraintCount = std::max(1, pLayout->m_ConstraintCount);
+            changed = true;
+        }
+        if (ImGui::IsItemActivated())
+        {
+            editor.SaveState();
+        }
+    }
+
+    if (changed)
+    {
         editor.m_SceneDirty = true;
     }
 }

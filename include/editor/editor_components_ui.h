@@ -24,6 +24,13 @@ public:
     static void DrawPanelComponent(CEditor& editor, CEntity& entity, CPanelComponent* pPanel);
     static void DrawButtonComponent(CEditor& editor, CEntity& entity, CButtonComponent* pButton);
     static void DrawUiTextComponent(CEditor& editor, CTextComponent* pText);
+    static void DrawSliderComponent(CEditor& editor, CSliderComponent* pSlider);
+    static void DrawToggleComponent(CEditor& editor, CToggleComponent* pToggle);
+    static void DrawProgressBarComponent(CEditor& editor, CProgressBarComponent* pProgressBar);
+    static void DrawScrollViewComponent(CEditor& editor, CScrollViewComponent* pScrollView);
+    static void DrawHorizontalLayoutComponent(CEditor& editor, CHorizontalLayoutComponent* pLayout);
+    static void DrawVerticalLayoutComponent(CEditor& editor, CVerticalLayoutComponent* pLayout);
+    static void DrawGridLayoutComponent(CEditor& editor, CGridLayoutComponent* pLayout);
     static void DrawScriptComponent(CEditor& editor, CEntity& entity, CScriptComponent* pScript);
     static void DrawUiComponent(CEditor& editor, CEntity& entity, CUiComponent* pUi);
 };

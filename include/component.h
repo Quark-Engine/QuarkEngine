@@ -56,7 +56,14 @@ enum EComponentType
     COMPONENT_CANVAS,
     COMPONENT_IMAGE,
     COMPONENT_PANEL,
-    COMPONENT_BUTTON
+    COMPONENT_BUTTON,
+    COMPONENT_SLIDER,
+    COMPONENT_TOGGLE,
+    COMPONENT_PROGRESS_BAR,
+    COMPONENT_SCROLL_VIEW,
+    COMPONENT_HORIZONTAL_LAYOUT,
+    COMPONENT_VERTICAL_LAYOUT,
+    COMPONENT_GRID_LAYOUT
 };
 
 enum class ECanvasRenderMode
@@ -96,6 +103,56 @@ enum class EUiNavigation
     VERTICAL = 2,
     AUTOMATIC = 3,
     EXPLICIT = 4
+};
+
+enum class EUiSliderDirection : int
+{
+    LEFT_TO_RIGHT = 0,
+    RIGHT_TO_LEFT = 1,
+    BOTTOM_TO_TOP = 2,
+    TOP_TO_BOTTOM = 3
+};
+
+enum class EUiLayoutChildAlignment : int
+{
+    UPPER_LEFT = 0,
+    UPPER_CENTER = 1,
+    UPPER_RIGHT = 2,
+    MIDDLE_LEFT = 3,
+    MIDDLE_CENTER = 4,
+    MIDDLE_RIGHT = 5,
+    LOWER_LEFT = 6,
+    LOWER_CENTER = 7,
+    LOWER_RIGHT = 8
+};
+
+enum class EUiGridStartCorner : int
+{
+    UPPER_LEFT = 0,
+    UPPER_RIGHT = 1,
+    LOWER_LEFT = 2,
+    LOWER_RIGHT = 3
+};
+
+enum class EUiGridStartAxis : int
+{
+    HORIZONTAL = 0,
+    VERTICAL = 1
+};
+
+enum class EUiGridConstraint : int
+{
+    FLEXIBLE = 0,
+    FIXED_COLUMN_COUNT = 1,
+    FIXED_ROW_COUNT = 2
+};
+
+struct SUiLayoutPadding
+{
+    float m_Left = 0.0f;
+    float m_Right = 0.0f;
+    float m_Top = 0.0f;
+    float m_Bottom = 0.0f;
 };
 
 enum class EUiEventType
@@ -871,6 +928,259 @@ public:
     void Deserialize(const nlohmann::json& json) override;
 };
 
+class CSliderComponent : public IComponent
+{
+public:
+    bool m_Interactable = true;
+    EUiTransition m_Transition = EUiTransition::COLOR_TINT;
+    Color m_BackgroundColor = { 45, 45, 52, 255 };
+    Color m_FillColor = { 70, 145, 240, 255 };
+    Color m_HandleColor = { 235, 235, 240, 255 };
+    Color m_HighlightedColor = { 255, 255, 255, 255 };
+    Color m_PressedColor = { 180, 180, 195, 255 };
+    Color m_DisabledColor = { 90, 90, 95, 160 };
+    EUiSliderDirection m_Direction = EUiSliderDirection::LEFT_TO_RIGHT;
+    float m_MinValue = 0.0f;
+    float m_MaxValue = 1.0f;
+    bool m_WholeNumbers = false;
+    float m_Value = 0.5f;
+    std::string m_OnValueChangedAction;
+    bool m_RaycastTarget = true;
+
+    bool m_IsHovered = false;
+    bool m_IsPressed = false;
+
+    CSliderComponent()
+        : IComponent(COMPONENT_SLIDER, "Slider")
+    {
+    }
+
+    EComponentType GetType() const override
+    {
+        return COMPONENT_SLIDER;
+    }
+
+    std::string GetTypeName() const override
+    {
+        return "Slider";
+    }
+
+    float GetNormalizedValue() const;
+    void SetNormalizedValue(float normalized);
+    void Serialize(nlohmann::json& json) const override;
+    void Deserialize(const nlohmann::json& json) override;
+};
+
+class CToggleComponent : public IComponent
+{
+public:
+    bool m_Interactable = true;
+    EUiTransition m_Transition = EUiTransition::COLOR_TINT;
+    bool m_IsOn = true;
+    Color m_BoxColor = { 55, 55, 65, 255 };
+    Color m_HighlightedColor = { 75, 75, 90, 255 };
+    Color m_PressedColor = { 40, 40, 50, 255 };
+    Color m_DisabledColor = { 40, 40, 45, 150 };
+    Color m_CheckmarkColor = { 80, 180, 255, 255 };
+    Color m_LabelColor = { 235, 238, 245, 255 };
+    int m_FontSize = 18;
+    std::string m_Label = "Toggle";
+    std::string m_OnValueChangedAction;
+    bool m_RaycastTarget = true;
+
+    bool m_IsHovered = false;
+    bool m_IsPressed = false;
+
+    CToggleComponent()
+        : IComponent(COMPONENT_TOGGLE, "Toggle")
+    {
+    }
+
+    EComponentType GetType() const override
+    {
+        return COMPONENT_TOGGLE;
+    }
+
+    std::string GetTypeName() const override
+    {
+        return "Toggle";
+    }
+
+    void Serialize(nlohmann::json& json) const override;
+    void Deserialize(const nlohmann::json& json) override;
+};
+
+class CProgressBarComponent : public IComponent
+{
+public:
+    float m_MinValue = 0.0f;
+    float m_MaxValue = 1.0f;
+    float m_Value = 0.65f;
+    EUiSliderDirection m_Direction = EUiSliderDirection::LEFT_TO_RIGHT;
+    Color m_BackgroundColor = { 38, 40, 48, 255 };
+    Color m_FillColor = { 76, 175, 80, 255 };
+    Color m_BorderColor = { 90, 95, 110, 255 };
+    Color m_TextColor = { 240, 242, 248, 255 };
+    bool m_ShowPercentageText = true;
+    bool m_RaycastTarget = false;
+
+    CProgressBarComponent()
+        : IComponent(COMPONENT_PROGRESS_BAR, "Progress Bar")
+    {
+    }
+
+    EComponentType GetType() const override
+    {
+        return COMPONENT_PROGRESS_BAR;
+    }
+
+    std::string GetTypeName() const override
+    {
+        return "Progress Bar";
+    }
+
+    float GetNormalizedValue() const;
+    void Serialize(nlohmann::json& json) const override;
+    void Deserialize(const nlohmann::json& json) override;
+};
+
+class CScrollViewComponent : public IComponent
+{
+public:
+    int m_ContentEntityId = -1;
+    bool m_Horizontal = false;
+    bool m_Vertical = true;
+    int m_MovementType = 1;
+    float m_Elasticity = 0.1f;
+    bool m_Inertia = true;
+    float m_DecelerationRate = 0.135f;
+    float m_ScrollSensitivity = 24.0f;
+    Vec2 m_NormalizedPosition = { 0.0f, 1.0f };
+    Vec2 m_ScrollOffset = { 0.0f, 0.0f };
+    Vec2 m_ContentSize = { 300.0f, 600.0f };
+    bool m_ShowHorizontalScrollbar = false;
+    bool m_ShowVerticalScrollbar = true;
+    Color m_BackgroundColor = { 28, 30, 38, 210 };
+    Color m_ScrollbarTrackColor = { 22, 24, 30, 220 };
+    Color m_ScrollbarThumbColor = { 95, 105, 125, 240 };
+    bool m_RaycastTarget = true;
+
+    CScrollViewComponent()
+        : IComponent(COMPONENT_SCROLL_VIEW, "Scroll View")
+    {
+    }
+
+    EComponentType GetType() const override
+    {
+        return COMPONENT_SCROLL_VIEW;
+    }
+
+    std::string GetTypeName() const override
+    {
+        return "Scroll View";
+    }
+
+    void Serialize(nlohmann::json& json) const override;
+    void Deserialize(const nlohmann::json& json) override;
+};
+
+class CHorizontalLayoutComponent : public IComponent
+{
+public:
+    SUiLayoutPadding m_Padding;
+    float m_Spacing = 8.0f;
+    EUiLayoutChildAlignment m_ChildAlignment = EUiLayoutChildAlignment::UPPER_LEFT;
+    bool m_ReverseArrangement = false;
+    bool m_ChildControlWidth = true;
+    bool m_ChildControlHeight = true;
+    bool m_ChildScaleWidth = false;
+    bool m_ChildScaleHeight = false;
+    bool m_ChildForceExpandWidth = true;
+    bool m_ChildForceExpandHeight = true;
+
+    CHorizontalLayoutComponent()
+        : IComponent(COMPONENT_HORIZONTAL_LAYOUT, "Horizontal Layout Group")
+    {
+    }
+
+    EComponentType GetType() const override
+    {
+        return COMPONENT_HORIZONTAL_LAYOUT;
+    }
+
+    std::string GetTypeName() const override
+    {
+        return "Horizontal Layout Group";
+    }
+
+    void Serialize(nlohmann::json& json) const override;
+    void Deserialize(const nlohmann::json& json) override;
+};
+
+class CVerticalLayoutComponent : public IComponent
+{
+public:
+    SUiLayoutPadding m_Padding;
+    float m_Spacing = 8.0f;
+    EUiLayoutChildAlignment m_ChildAlignment = EUiLayoutChildAlignment::UPPER_LEFT;
+    bool m_ReverseArrangement = false;
+    bool m_ChildControlWidth = true;
+    bool m_ChildControlHeight = true;
+    bool m_ChildScaleWidth = false;
+    bool m_ChildScaleHeight = false;
+    bool m_ChildForceExpandWidth = true;
+    bool m_ChildForceExpandHeight = true;
+
+    CVerticalLayoutComponent()
+        : IComponent(COMPONENT_VERTICAL_LAYOUT, "Vertical Layout Group")
+    {
+    }
+
+    EComponentType GetType() const override
+    {
+        return COMPONENT_VERTICAL_LAYOUT;
+    }
+
+    std::string GetTypeName() const override
+    {
+        return "Vertical Layout Group";
+    }
+
+    void Serialize(nlohmann::json& json) const override;
+    void Deserialize(const nlohmann::json& json) override;
+};
+
+class CGridLayoutComponent : public IComponent
+{
+public:
+    SUiLayoutPadding m_Padding;
+    Vec2 m_CellSize = { 100.0f, 100.0f };
+    Vec2 m_Spacing = { 8.0f, 8.0f };
+    EUiGridStartCorner m_StartCorner = EUiGridStartCorner::UPPER_LEFT;
+    EUiGridStartAxis m_StartAxis = EUiGridStartAxis::HORIZONTAL;
+    EUiLayoutChildAlignment m_ChildAlignment = EUiLayoutChildAlignment::UPPER_LEFT;
+    EUiGridConstraint m_Constraint = EUiGridConstraint::FLEXIBLE;
+    int m_ConstraintCount = 2;
+
+    CGridLayoutComponent()
+        : IComponent(COMPONENT_GRID_LAYOUT, "Grid Layout Group")
+    {
+    }
+
+    EComponentType GetType() const override
+    {
+        return COMPONENT_GRID_LAYOUT;
+    }
+
+    std::string GetTypeName() const override
+    {
+        return "Grid Layout Group";
+    }
+
+    void Serialize(nlohmann::json& json) const override;
+    void Deserialize(const nlohmann::json& json) override;
+};
+
 class CUiComponent : public IComponent
 {
 public:
@@ -1154,6 +1464,48 @@ public:
     CTextComponent* GetText()
     {
         auto pComp = GetComponentOfType<CTextComponent>();
+        return pComp ? pComp.get() : nullptr;
+    }
+
+    CSliderComponent* GetSlider()
+    {
+        auto pComp = GetComponentOfType<CSliderComponent>();
+        return pComp ? pComp.get() : nullptr;
+    }
+
+    CToggleComponent* GetToggle()
+    {
+        auto pComp = GetComponentOfType<CToggleComponent>();
+        return pComp ? pComp.get() : nullptr;
+    }
+
+    CProgressBarComponent* GetProgressBar()
+    {
+        auto pComp = GetComponentOfType<CProgressBarComponent>();
+        return pComp ? pComp.get() : nullptr;
+    }
+
+    CScrollViewComponent* GetScrollView()
+    {
+        auto pComp = GetComponentOfType<CScrollViewComponent>();
+        return pComp ? pComp.get() : nullptr;
+    }
+
+    CHorizontalLayoutComponent* GetHorizontalLayout()
+    {
+        auto pComp = GetComponentOfType<CHorizontalLayoutComponent>();
+        return pComp ? pComp.get() : nullptr;
+    }
+
+    CVerticalLayoutComponent* GetVerticalLayout()
+    {
+        auto pComp = GetComponentOfType<CVerticalLayoutComponent>();
+        return pComp ? pComp.get() : nullptr;
+    }
+
+    CGridLayoutComponent* GetGridLayout()
+    {
+        auto pComp = GetComponentOfType<CGridLayoutComponent>();
         return pComp ? pComp.get() : nullptr;
     }
 

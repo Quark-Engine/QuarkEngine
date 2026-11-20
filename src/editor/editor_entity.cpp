@@ -391,8 +391,109 @@ CEntity CEntityFactory::UiImage(CScene& scene, int parentIndex)
     return entity;
 }
 
-bool CEntityFactory::SavePrefab(const CScene& scene, int rootEntityIndex,
-                                const fs::path& directoryPath, fs::path* pOutFilePath)
+CEntity CEntityFactory::UiSlider(CScene& scene, int parentIndex)
+{
+    CEntity entity;
+    entity.m_Name = scene.MakeUniqueName("Slider");
+    entity.m_Id = static_cast<int>(scene.m_vEntities.size());
+    entity.m_ParentId = parentIndex;
+
+    CComponentManager* pCm = entity.GetComponents();
+    pCm->RemoveMeshAndMaterialForUi(false);
+
+    auto pRectTransform = std::make_shared<CUiRectTransformComponent>();
+    pRectTransform->m_Size = { 180.0f, 24.0f };
+    pRectTransform->m_AnchorMin = { 0.5f, 0.5f };
+    pRectTransform->m_AnchorMax = { 0.5f, 0.5f };
+    pRectTransform->m_Pivot = { 0.5f, 0.5f };
+
+    auto pSlider = std::make_shared<CSliderComponent>();
+    pSlider->m_MinValue = 0.0f;
+    pSlider->m_MaxValue = 1.0f;
+    pSlider->m_Value = 0.5f;
+
+    pCm->AddComponent(pRectTransform);
+    pCm->AddComponent(pSlider);
+    return entity;
+}
+
+CEntity CEntityFactory::UiToggle(CScene& scene, int parentIndex)
+{
+    CEntity entity;
+    entity.m_Name = scene.MakeUniqueName("Toggle");
+    entity.m_Id = static_cast<int>(scene.m_vEntities.size());
+    entity.m_ParentId = parentIndex;
+
+    CComponentManager* pCm = entity.GetComponents();
+    pCm->RemoveMeshAndMaterialForUi(false);
+
+    auto pRectTransform = std::make_shared<CUiRectTransformComponent>();
+    pRectTransform->m_Size = { 140.0f, 26.0f };
+    pRectTransform->m_AnchorMin = { 0.5f, 0.5f };
+    pRectTransform->m_AnchorMax = { 0.5f, 0.5f };
+    pRectTransform->m_Pivot = { 0.5f, 0.5f };
+
+    auto pToggle = std::make_shared<CToggleComponent>();
+    pToggle->m_IsOn = true;
+    pToggle->m_Label = "Toggle";
+
+    pCm->AddComponent(pRectTransform);
+    pCm->AddComponent(pToggle);
+    return entity;
+}
+
+CEntity CEntityFactory::UiProgressBar(CScene& scene, int parentIndex)
+{
+    CEntity entity;
+    entity.m_Name = scene.MakeUniqueName("Progress Bar");
+    entity.m_Id = static_cast<int>(scene.m_vEntities.size());
+    entity.m_ParentId = parentIndex;
+
+    CComponentManager* pCm = entity.GetComponents();
+    pCm->RemoveMeshAndMaterialForUi(false);
+
+    auto pRectTransform = std::make_shared<CUiRectTransformComponent>();
+    pRectTransform->m_Size = { 200.0f, 24.0f };
+    pRectTransform->m_AnchorMin = { 0.5f, 0.5f };
+    pRectTransform->m_AnchorMax = { 0.5f, 0.5f };
+    pRectTransform->m_Pivot = { 0.5f, 0.5f };
+
+    auto pProgressBar = std::make_shared<CProgressBarComponent>();
+    pProgressBar->m_MinValue = 0.0f;
+    pProgressBar->m_MaxValue = 100.0f;
+    pProgressBar->m_Value = 65.0f;
+
+    pCm->AddComponent(pRectTransform);
+    pCm->AddComponent(pProgressBar);
+    return entity;
+}
+
+CEntity CEntityFactory::UiScrollView(CScene& scene, int parentIndex)
+{
+    CEntity entity;
+    entity.m_Name = scene.MakeUniqueName("Scroll View");
+    entity.m_Id = static_cast<int>(scene.m_vEntities.size());
+    entity.m_ParentId = parentIndex;
+
+    CComponentManager* pCm = entity.GetComponents();
+    pCm->RemoveMeshAndMaterialForUi(false);
+
+    auto pRectTransform = std::make_shared<CUiRectTransformComponent>();
+    pRectTransform->m_Size = { 260.0f, 220.0f };
+    pRectTransform->m_AnchorMin = { 0.5f, 0.5f };
+    pRectTransform->m_AnchorMax = { 0.5f, 0.5f };
+    pRectTransform->m_Pivot = { 0.5f, 0.5f };
+    pRectTransform->m_ClipChildren = true;
+
+    auto pScrollView = std::make_shared<CScrollViewComponent>();
+    pScrollView->m_ContentSize = { 260.0f, 500.0f };
+
+    pCm->AddComponent(pRectTransform);
+    pCm->AddComponent(pScrollView);
+    return entity;
+}
+
+bool CEntityFactory::SavePrefabToFile(const CScene& scene, int rootEntityIndex, const fs::path& filePath)
 {
     if (rootEntityIndex < 0 || rootEntityIndex >= static_cast<int>(scene.m_vEntities.size()))
     {
@@ -405,11 +506,11 @@ bool CEntityFactory::SavePrefab(const CScene& scene, int rootEntityIndex,
         return false;
     }
 
-    std::error_code ec;
-    fs::create_directories(directoryPath, ec);
-
-    const std::string baseFileName = SanitizePrefabFileName(scene.m_vEntities[rootEntityIndex].m_Name);
-    const fs::path filePath = directoryPath / (baseFileName + ".prefab");
+    if (filePath.has_parent_path())
+    {
+        std::error_code ec;
+        fs::create_directories(filePath.parent_path(), ec);
+    }
 
     std::ofstream f(filePath);
     if (!f.is_open())
@@ -426,12 +527,30 @@ bool CEntityFactory::SavePrefab(const CScene& scene, int rootEntityIndex,
         return false;
     }
 
+    const_cast<CScene&>(scene).m_vEntities[rootEntityIndex].m_PrefabPath = filePath.generic_string();
+    TraceLog(LogLevel::Info, "PREFAB", TextFormat("Saved prefab: %s", filePath.string().c_str()));
+    return true;
+}
+
+bool CEntityFactory::SavePrefab(const CScene& scene, int rootEntityIndex,
+                                const fs::path& directoryPath, fs::path* pOutFilePath)
+{
+    if (rootEntityIndex < 0 || rootEntityIndex >= static_cast<int>(scene.m_vEntities.size()))
+    {
+        return false;
+    }
+
+    const std::string baseFileName = SanitizePrefabFileName(scene.m_vEntities[rootEntityIndex].m_Name);
+    const fs::path filePath = directoryPath / (baseFileName + ".prefab");
+    if (!SavePrefabToFile(scene, rootEntityIndex, filePath))
+    {
+        return false;
+    }
+
     if (pOutFilePath)
     {
         *pOutFilePath = filePath;
     }
-
-    TraceLog(LogLevel::Info, "PREFAB", TextFormat("Saved prefab: %s", filePath.string().c_str()));
     return true;
 }
 
@@ -466,6 +585,15 @@ std::vector<int> CEntityFactory::InstantiatePrefab(CScene& scene, CAssetLibrary&
         return {};
     }
 
+    if (!vCreatedIndices.empty())
+    {
+        const int rootCreatedIdx = vCreatedIndices.front();
+        if (rootCreatedIdx >= 0 && rootCreatedIdx < static_cast<int>(scene.m_vEntities.size()))
+        {
+            scene.m_vEntities[rootCreatedIdx].m_PrefabPath = filename.generic_string();
+        }
+    }
+
     for (int createdIndex : vCreatedIndices)
     {
         if (createdIndex < 0 || createdIndex >= static_cast<int>(scene.m_vEntities.size()))
@@ -478,6 +606,175 @@ std::vector<int> CEntityFactory::InstantiatePrefab(CScene& scene, CAssetLibrary&
     }
 
     return vCreatedIndices;
+}
+
+namespace
+{
+    void CollectSubtreeChildrenInOrder(const CScene& scene, int parentIndex, std::vector<int>& vOutIndices)
+    {
+        for (int i = 0; i < static_cast<int>(scene.m_vEntities.size()); ++i)
+        {
+            if (scene.m_vEntities[i].m_ParentId == parentIndex)
+            {
+                vOutIndices.push_back(i);
+                CollectSubtreeChildrenInOrder(scene, i, vOutIndices);
+            }
+        }
+    }
+
+    bool PathsReferToSamePrefab(const std::string& pathA, const fs::path& pathB)
+    {
+        if (pathA.empty() || pathB.empty())
+        {
+            return false;
+        }
+        const fs::path normA = fs::path(pathA).lexically_normal();
+        const fs::path normB = pathB.lexically_normal();
+        if (normA == normB || normA.generic_string() == normB.generic_string())
+        {
+            return true;
+        }
+        std::error_code ec;
+        if (fs::exists(normA, ec) && fs::exists(normB, ec) && fs::equivalent(normA, normB, ec))
+        {
+            return true;
+        }
+        return false;
+    }
+} // anonymous
+
+bool CEntityFactory::RevertPrefabInstance(CScene& scene, CAssetLibrary& assets, int rootEntityIndex,
+                                          const CComponentFactoryRegistry& factories)
+{
+    if (rootEntityIndex < 0 || rootEntityIndex >= static_cast<int>(scene.m_vEntities.size()))
+    {
+        return false;
+    }
+
+    const std::string prefabPathStr = scene.m_vEntities[rootEntityIndex].m_PrefabPath;
+    if (prefabPathStr.empty())
+    {
+        return false;
+    }
+
+    std::ifstream f(prefabPathStr);
+    if (!f.is_open())
+    {
+        TraceLog(LogLevel::Error, "PREFAB", TextFormat("Failed to open prefab %s", prefabPathStr.c_str()));
+        return false;
+    }
+
+    std::stringstream buffer;
+    buffer << f.rdbuf();
+
+    CScene tempPrefabScene;
+    std::vector<int> vPrefabIndices;
+    if (!quark::CSceneDocument::InstantiatePrefab(buffer.str(), tempPrefabScene, factories, -1, &vPrefabIndices) ||
+        tempPrefabScene.m_vEntities.empty())
+    {
+        return false;
+    }
+
+    CEntity& rootTarget = scene.m_vEntities[rootEntityIndex];
+    const std::string savedName = rootTarget.m_Name;
+    const int savedParentId = rootTarget.m_ParentId;
+    const int savedId = rootTarget.m_Id;
+    bool hasSavedTransform = false;
+    CTransformComponent savedTransform;
+    if (const CTransformComponent* pOldTransform = rootTarget.GetTransformComponent())
+    {
+        savedTransform = *pOldTransform;
+        hasSavedTransform = true;
+    }
+    bool hasSavedRectPos = false;
+    Vec2 savedAnchoredPos = { 0.0f, 0.0f };
+    if (const CUiRectTransformComponent* pOldRect = rootTarget.GetRectTransformComponent())
+    {
+        savedAnchoredPos = pOldRect->m_AnchoredPosition;
+        hasSavedRectPos = true;
+    }
+
+    rootTarget = tempPrefabScene.m_vEntities[0];
+    rootTarget.m_Id = savedId;
+    rootTarget.m_Name = savedName;
+    rootTarget.m_ParentId = savedParentId;
+    rootTarget.m_PrefabPath = prefabPathStr;
+    if (hasSavedTransform && rootTarget.GetTransformComponent())
+    {
+        rootTarget.GetTransformComponent()->m_Position = savedTransform.m_Position;
+        rootTarget.GetTransformComponent()->m_Rotation = savedTransform.m_Rotation;
+        rootTarget.GetTransformComponent()->m_Scale = savedTransform.m_Scale;
+    }
+    if (hasSavedRectPos && rootTarget.GetRectTransformComponent())
+    {
+        rootTarget.GetRectTransformComponent()->SetAnchoredPosition(savedAnchoredPos);
+    }
+    quark::CSceneRuntime::RestoreEntityModel(rootTarget, assets);
+    quark::CSceneRuntime::ResetEntityLightRuntime(rootTarget);
+
+    std::vector<int> vExistingChildren;
+    CollectSubtreeChildrenInOrder(scene, rootEntityIndex, vExistingChildren);
+
+    const size_t prefabChildCount = tempPrefabScene.m_vEntities.size() - 1;
+    std::vector<int> vMappedSceneIndices(tempPrefabScene.m_vEntities.size(), rootEntityIndex);
+
+    for (size_t childIdx = 0; childIdx < prefabChildCount; ++childIdx)
+    {
+        const size_t prefabEntityIndex = childIdx + 1;
+        CEntity prefabChild = tempPrefabScene.m_vEntities[prefabEntityIndex];
+        const int prefabParentIdx = (prefabChild.m_ParentId >= 0 &&
+                                     prefabChild.m_ParentId < static_cast<int>(vMappedSceneIndices.size()))
+            ? prefabChild.m_ParentId
+            : 0;
+        const int mappedParentSceneIdx = vMappedSceneIndices[prefabParentIdx];
+
+        if (childIdx < vExistingChildren.size())
+        {
+            const int targetSceneIdx = vExistingChildren[childIdx];
+            vMappedSceneIndices[prefabEntityIndex] = targetSceneIdx;
+            prefabChild.m_Id = scene.m_vEntities[targetSceneIdx].m_Id;
+            prefabChild.m_ParentId = mappedParentSceneIdx;
+            scene.m_vEntities[targetSceneIdx] = std::move(prefabChild);
+            quark::CSceneRuntime::RestoreEntityModel(scene.m_vEntities[targetSceneIdx], assets);
+            quark::CSceneRuntime::ResetEntityLightRuntime(scene.m_vEntities[targetSceneIdx]);
+        }
+        else
+        {
+            const int newSceneIdx = static_cast<int>(scene.m_vEntities.size());
+            vMappedSceneIndices[prefabEntityIndex] = newSceneIdx;
+            prefabChild.m_Id = newSceneIdx;
+            prefabChild.m_Name = scene.MakeUniqueName(prefabChild.m_Name);
+            prefabChild.m_ParentId = mappedParentSceneIdx;
+            scene.m_vEntities.push_back(std::move(prefabChild));
+            quark::CSceneRuntime::RestoreEntityModel(scene.m_vEntities[newSceneIdx], assets);
+            quark::CSceneRuntime::ResetEntityLightRuntime(scene.m_vEntities[newSceneIdx]);
+        }
+    }
+
+    return true;
+}
+
+int CEntityFactory::SyncPrefabInstances(CScene& scene, CAssetLibrary& assets, const fs::path& prefabPath,
+                                        const CComponentFactoryRegistry& factories,
+                                        int skipRootEntityIndex)
+{
+    int syncedCount = 0;
+    const int initialCount = static_cast<int>(scene.m_vEntities.size());
+    for (int i = 0; i < initialCount; ++i)
+    {
+        if (i == skipRootEntityIndex)
+        {
+            continue;
+        }
+        if (PathsReferToSamePrefab(scene.m_vEntities[i].m_PrefabPath, prefabPath))
+        {
+            if (RevertPrefabInstance(scene, assets, i, factories))
+            {
+                ++syncedCount;
+            }
+        }
+    }
+    return syncedCount;
 }
 
 CEntity CEntityFactory::FromPrefab(CScene& scene, const CAssetLibrary& assets, const fs::path filename,

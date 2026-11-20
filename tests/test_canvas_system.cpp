@@ -4,6 +4,8 @@
 #include "engine/component_factory_registry.h"
 #include "engine/scene_document.h"
 #include "engine/transform.h"
+#include "scripting/script_component.h"
+#include "scripting/script_engine.h"
 
 #include "QuarkCore/QuarkCore.hpp"
 
@@ -679,4 +681,182 @@ TEST(CanvasSystem, example_scene_creation)
     CScene loadedScene;
     CHECK(quark::CSceneDocument::Deserialize(buffer.str(), loadedScene, registry));
     CHECK(loadedScene.m_vEntities.size() == 11);
+}
+
+TEST(CanvasSystem, new_ui_widgets_and_unity_layouts)
+{
+    CComponentFactoryRegistry registry;
+    CScene scene;
+
+    const int canvasIdx = AddEntity(scene, "Canvas", -1);
+    scene.m_vEntities[canvasIdx].GetComponents()->RemoveMeshAndMaterialForUi(true);
+    auto pCanvas = std::make_shared<CCanvasComponent>();
+    pCanvas->m_Width = 800.0f;
+    pCanvas->m_Height = 600.0f;
+    scene.m_vEntities[canvasIdx].GetComponents()->AddComponent(pCanvas);
+
+    const int hGroupIdx = AddEntity(scene, "HGroup", scene.m_vEntities[canvasIdx].m_Id);
+    scene.m_vEntities[hGroupIdx].GetComponents()->RemoveMeshAndMaterialForUi(false);
+    auto pHRect = std::make_shared<CUiRectTransformComponent>();
+    pHRect->m_AnchorMin = { 0.0f, 0.0f };
+    pHRect->m_AnchorMax = { 0.0f, 0.0f };
+    pHRect->m_Pivot = { 0.0f, 0.0f };
+    pHRect->m_AnchoredPosition = { 0.0f, 0.0f };
+    pHRect->m_Size = { 400.0f, 100.0f };
+    scene.m_vEntities[hGroupIdx].GetComponents()->AddComponent(pHRect);
+
+    auto pHLayout = std::make_shared<CHorizontalLayoutComponent>();
+    pHLayout->m_Padding = { 10.0f, 10.0f, 5.0f, 5.0f };
+    pHLayout->m_Spacing = 20.0f;
+    pHLayout->m_ChildControlWidth = true;
+    pHLayout->m_ChildForceExpandWidth = true;
+    pHLayout->m_ChildControlHeight = true;
+    pHLayout->m_ChildForceExpandHeight = true;
+    scene.m_vEntities[hGroupIdx].GetComponents()->AddComponent(pHLayout);
+
+    const int sliderIdx = AddEntity(scene, "Slider", scene.m_vEntities[hGroupIdx].m_Id);
+    scene.m_vEntities[sliderIdx].GetComponents()->RemoveMeshAndMaterialForUi(false);
+    scene.m_vEntities[sliderIdx].GetComponents()->AddComponent(std::make_shared<CUiRectTransformComponent>());
+    auto pSlider = std::make_shared<CSliderComponent>();
+    pSlider->m_MinValue = 0.0f;
+    pSlider->m_MaxValue = 10.0f;
+    pSlider->m_WholeNumbers = true;
+    pSlider->SetNormalizedValue(0.36f);
+    CHECK_NEAR(pSlider->m_Value, 4.0f, 0.001f);
+    scene.m_vEntities[sliderIdx].GetComponents()->AddComponent(pSlider);
+
+    const int toggleIdx = AddEntity(scene, "Toggle", scene.m_vEntities[hGroupIdx].m_Id);
+    scene.m_vEntities[toggleIdx].GetComponents()->RemoveMeshAndMaterialForUi(false);
+    scene.m_vEntities[toggleIdx].GetComponents()->AddComponent(std::make_shared<CUiRectTransformComponent>());
+    auto pToggle = std::make_shared<CToggleComponent>();
+    pToggle->m_IsOn = true;
+    pToggle->m_Label = "Sound Enabled";
+    scene.m_vEntities[toggleIdx].GetComponents()->AddComponent(pToggle);
+
+    quark::ui::CCanvasSystem::Get().ApplyCanvasLayoutGroups(scene, canvasIdx, { 800.0f, 600.0f });
+
+    const Rectangle sliderRect = quark::ui::CCanvasSystem::Get().ComputeElementCanvasRect(
+        scene, sliderIdx, { 800.0f, 600.0f });
+    const Rectangle toggleRect = quark::ui::CCanvasSystem::Get().ComputeElementCanvasRect(
+        scene, toggleIdx, { 800.0f, 600.0f });
+    CHECK_NEAR(sliderRect.x, 10.0f, 0.01f);
+    CHECK_NEAR(sliderRect.width, 180.0f, 0.01f);
+    CHECK_NEAR(sliderRect.height, 90.0f, 0.01f);
+    CHECK_NEAR(toggleRect.x, 210.0f, 0.01f);
+    CHECK_NEAR(toggleRect.width, 180.0f, 0.01f);
+
+    const int gridIdx = AddEntity(scene, "Grid", scene.m_vEntities[canvasIdx].m_Id);
+    scene.m_vEntities[gridIdx].GetComponents()->RemoveMeshAndMaterialForUi(false);
+    auto pGridRect = std::make_shared<CUiRectTransformComponent>();
+    pGridRect->m_AnchorMin = { 0.0f, 0.0f };
+    pGridRect->m_AnchorMax = { 0.0f, 0.0f };
+    pGridRect->m_Pivot = { 0.0f, 0.0f };
+    pGridRect->m_AnchoredPosition = { 0.0f, 200.0f };
+    pGridRect->m_Size = { 300.0f, 200.0f };
+    scene.m_vEntities[gridIdx].GetComponents()->AddComponent(pGridRect);
+    auto pGrid = std::make_shared<CGridLayoutComponent>();
+    pGrid->m_CellSize = { 80.0f, 40.0f };
+    pGrid->m_Spacing = { 10.0f, 10.0f };
+    pGrid->m_Constraint = EUiGridConstraint::FIXED_COLUMN_COUNT;
+    pGrid->m_ConstraintCount = 2;
+    scene.m_vEntities[gridIdx].GetComponents()->AddComponent(pGrid);
+
+    for (int c = 0; c < 3; ++c)
+    {
+        const int cellIdx = AddEntity(scene, "Cell" + std::to_string(c), scene.m_vEntities[gridIdx].m_Id);
+        scene.m_vEntities[cellIdx].GetComponents()->RemoveMeshAndMaterialForUi(false);
+        scene.m_vEntities[cellIdx].GetComponents()->AddComponent(std::make_shared<CUiRectTransformComponent>());
+        scene.m_vEntities[cellIdx].GetComponents()->AddComponent(std::make_shared<CProgressBarComponent>());
+    }
+
+    quark::ui::CCanvasSystem::Get().ApplyCanvasLayoutGroups(scene, canvasIdx, { 800.0f, 600.0f });
+    const Rectangle cell0Rect = quark::ui::CCanvasSystem::Get().ComputeElementCanvasRect(
+        scene, gridIdx + 1, { 800.0f, 600.0f });
+    const Rectangle cell1Rect = quark::ui::CCanvasSystem::Get().ComputeElementCanvasRect(
+        scene, gridIdx + 2, { 800.0f, 600.0f });
+    const Rectangle cell2Rect = quark::ui::CCanvasSystem::Get().ComputeElementCanvasRect(
+        scene, gridIdx + 3, { 800.0f, 600.0f });
+    CHECK_NEAR(cell1Rect.x - cell0Rect.x, 90.0f, 0.01f);
+    CHECK_NEAR(cell0Rect.y - cell2Rect.y, 50.0f, 0.01f);
+
+    const std::string doc = quark::CSceneDocument::Serialize(scene);
+    CScene restored;
+    CHECK(quark::CSceneDocument::Deserialize(doc, restored, registry));
+    CHECK(restored.m_vEntities[sliderIdx].GetSliderComponent() != nullptr);
+    CHECK(restored.m_vEntities[toggleIdx].GetToggleComponent() != nullptr);
+    CHECK(restored.m_vEntities[hGroupIdx].GetHorizontalLayoutComponent() != nullptr);
+    CHECK(restored.m_vEntities[gridIdx].GetGridLayoutComponent() != nullptr);
+}
+
+TEST(CanvasSystem, scripting_sdk_scene_management_and_new_field_types)
+{
+    auto& scriptEngine = quark::script::CScriptEngine::Get();
+    scriptEngine.ClearLogs();
+
+    quark::script::Debug::Log("Hello Info");
+    quark::script::Debug::LogWarning("Hello Warn");
+    quark::script::Debug::LogError("Hello Error");
+    const auto vLogs = scriptEngine.GetLogs();
+    CHECK(vLogs.size() == 3);
+    CHECK(vLogs[0].m_Message == "Hello Info");
+    CHECK(vLogs[1].m_Level == quark::script::EScriptLogLevel::WARNING);
+    CHECK(vLogs[2].m_Level == quark::script::EScriptLogLevel::ERR);
+
+    CScriptComponent scriptComp;
+    scriptComp.m_ScriptName = "PlayerController";
+    quark::script::SScriptField colorField;
+    colorField.m_Name = "m_TintColor";
+    colorField.m_Type = quark::script::EScriptFieldType::COLOR;
+    colorField.m_ColorValue = { 12, 34, 56, 200 };
+    scriptComp.m_vFields.push_back(colorField);
+
+    quark::script::SScriptField entityRefField;
+    entityRefField.m_Name = "m_TargetEntity";
+    entityRefField.m_Type = quark::script::EScriptFieldType::ENTITY_REF;
+    entityRefField.m_EntityIdValue = 42;
+    scriptComp.m_vFields.push_back(entityRefField);
+
+    quark::script::SScriptField assetRefField;
+    assetRefField.m_Name = "m_WeaponPrefab";
+    assetRefField.m_Type = quark::script::EScriptFieldType::ASSET_REF;
+    assetRefField.m_AssetPathValue = "resources/sword.prefab";
+    scriptComp.m_vFields.push_back(assetRefField);
+
+    nlohmann::json scriptJson;
+    scriptComp.Serialize(scriptJson);
+
+    CScriptComponent restoredScript;
+    restoredScript.Deserialize(scriptJson);
+    CHECK(restoredScript.m_vFields.size() == 3);
+    CHECK(restoredScript.m_vFields[0].m_Type == quark::script::EScriptFieldType::COLOR);
+    CHECK(restoredScript.m_vFields[0].m_ColorValue.r == 12);
+    CHECK(restoredScript.m_vFields[0].m_ColorValue.g == 34);
+    CHECK(restoredScript.m_vFields[1].m_Type == quark::script::EScriptFieldType::ENTITY_REF);
+    CHECK(restoredScript.m_vFields[1].m_EntityIdValue == 42);
+    CHECK(restoredScript.m_vFields[2].m_Type == quark::script::EScriptFieldType::ASSET_REF);
+    CHECK(restoredScript.m_vFields[2].m_AssetPathValue == "resources/sword.prefab");
+
+    CScene scene;
+    const int playerIdx = AddEntity(scene, "Player", -1);
+    scene.m_vEntities[playerIdx].m_vTags.push_back("Hero");
+    const int enemy1Idx = AddEntity(scene, "Goblin", -1);
+    scene.m_vEntities[enemy1Idx].m_vTags.push_back("Enemy");
+    const int enemy2Idx = AddEntity(scene, "Orc", -1);
+    scene.m_vEntities[enemy2Idx].m_vTags.push_back("Enemy");
+
+    scriptEngine.StartPlay(scene, "");
+    quark::script::CScriptEntity* pPlayer = quark::script::Scene::FindEntityByName("Player");
+    CHECK(pPlayer != nullptr);
+    CHECK(pPlayer->GetName() == "Player");
+
+    const auto vEnemies = quark::script::Scene::FindEntitiesWithTag("Enemy");
+    CHECK(vEnemies.size() == 2);
+
+    quark::script::CScriptEntity* pCloned = quark::script::Scene::Instantiate(pPlayer);
+    CHECK(pCloned != nullptr);
+    CHECK(scene.m_vEntities.size() == 4);
+
+    quark::script::Scene::Destroy(pCloned);
+    CHECK(scene.m_vEntities.size() == 3);
+    scriptEngine.StopPlay(scene);
 }

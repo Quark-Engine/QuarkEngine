@@ -24,17 +24,28 @@ public:
     static CEntity UiButton(CScene& scene, int parentIndex = -1);
     static CEntity UiText(CScene& scene, int parentIndex = -1);
     static CEntity UiImage(CScene& scene, int parentIndex = -1);
+    static CEntity UiSlider(CScene& scene, int parentIndex = -1);
+    static CEntity UiToggle(CScene& scene, int parentIndex = -1);
+    static CEntity UiProgressBar(CScene& scene, int parentIndex = -1);
+    static CEntity UiScrollView(CScene& scene, int parentIndex = -1);
 
     static void AssignName(CEntity& entity, const char* pNewName);
 
     static bool SavePrefab(const CScene& scene, int rootEntityIndex, const fs::path& directoryPath,
                            fs::path* pOutFilePath = nullptr);
+    static bool SavePrefabToFile(const CScene& scene, int rootEntityIndex, const fs::path& filePath);
     static void SavePrefab(CEntity entity, const fs::path path);
 
     static std::vector<int> InstantiatePrefab(CScene& scene, CAssetLibrary& assets,
                                               const fs::path& filename,
                                               const CComponentFactoryRegistry& factories,
                                               int parentIndex = -1);
+
+    static bool RevertPrefabInstance(CScene& scene, CAssetLibrary& assets, int rootEntityIndex,
+                                     const CComponentFactoryRegistry& factories);
+    static int SyncPrefabInstances(CScene& scene, CAssetLibrary& assets, const fs::path& prefabPath,
+                                   const CComponentFactoryRegistry& factories,
+                                   int skipRootEntityIndex = -1);
 
     static CEntity FromPrefab(CScene& scene, const CAssetLibrary& assets, const fs::path filename,
                               const CComponentFactoryRegistry& factories);

@@ -42,6 +42,9 @@ namespace quark::ui
         void Initialize();
         void Shutdown();
 
+        void ApplyLayoutGroups(CScene& scene, const Vec2& viewportSize = { 1920.0f, 1080.0f });
+        void ApplyCanvasLayoutGroups(CScene& scene, int canvasEntityIndex, const Vec2& canvasSize);
+
         Rectangle ComputeElementCanvasRect(const CScene& scene, int entityIndex,
                                            const Vec2& canvasSize) const;
         Mat4 ComputeElementCanvasTransform(const CScene& scene, int entityIndex, const Vec2& canvasSize) const;

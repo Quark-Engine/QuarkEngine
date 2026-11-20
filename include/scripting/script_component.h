@@ -17,7 +17,10 @@ namespace quark::script
         INT,
         BOOL,
         STRING,
-        VEC3
+        VEC3,
+        COLOR,
+        ENTITY_REF,
+        ASSET_REF
     };
 
     struct SScriptField
@@ -29,6 +32,9 @@ namespace quark::script
         bool m_BoolValue = false;
         std::string m_StringValue;
         Vec3 m_Vec3Value = { 0.0f, 0.0f, 0.0f };
+        Color m_ColorValue = { 255, 255, 255, 255 };
+        int m_EntityIdValue = -1;
+        std::string m_AssetPathValue;
     };
 
     class CScriptComponent : public IComponent
@@ -61,6 +67,9 @@ namespace quark::script
         void SetFieldValue(const std::string& name, bool value);
         void SetFieldValue(const std::string& name, const std::string& value);
         void SetFieldValue(const std::string& name, const Vec3& value);
+        void SetFieldValue(const std::string& name, const Color& value);
+        void SetFieldEntityId(const std::string& name, int entityId);
+        void SetFieldAssetPath(const std::string& name, const std::string& assetPath);
 
         void SyncWithHeaderFields(const std::vector<SScriptField>& vHeaderFields);
         void ApplyFieldsToInstance();

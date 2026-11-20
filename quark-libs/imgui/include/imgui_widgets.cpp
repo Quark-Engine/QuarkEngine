@@ -1396,7 +1396,10 @@ bool ImGui::Checkbox(const char* label, bool* v)
         check_bb.Min.y + (square_sz - label_size.y) * 0.5f
     );
 
-    draw->AddText(label_pos, text_col, label);
+    if (label_size.x > 0.0f)
+    {
+        draw->AddText(label_pos, text_col, label, FindRenderedTextEnd(label));
+    }
 
     IMGUI_TEST_ENGINE_ITEM_INFO(id, label, g.LastItemData.StatusFlags | ImGuiItemStatusFlags_Checkable | (*v ? ImGuiItemStatusFlags_Checked : 0));
     return pressed;

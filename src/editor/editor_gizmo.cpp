@@ -45,7 +45,488 @@ namespace
     Vec2 s_UiDragStartCenter = { 0.0f, 0.0f };
     int s_UiDragEntityIndex = -1;
     bool s_UiDragging = false;
-}
+
+    int s_ActiveUiHandle = -1;
+    int s_ActiveUiHandleEntity = -1;
+    int s_ActiveColliderHandle = -1;
+    int s_ActiveColliderEntity = -1;
+    float s_ColliderDragStartExtent = 0.5f;
+    Vec3 s_ColliderDragStartCenter = { 0.0f, 0.0f, 0.0f };
+    ImVec2 s_ColliderDragStartMouse = { 0.0f, 0.0f };
+
+    bool ProjectWorldPointToViewport(const Vec3& worldPos, const Mat4& view, const Mat4& projection,
+                                     const CViewportState& viewport, ImVec2& outScreenPos)
+    {
+        const Vec4 clip = projection * (view * Vec4{ worldPos.x, worldPos.y, worldPos.z, 1.0f });
+        if (clip.w <= 1e-5f)
+        {
+            return false;
+        }
+        const float ndcX = clip.x / clip.w;
+        const float ndcY = clip.y / clip.w;
+        outScreenPos.x = viewport.m_WindowPos.x + (ndcX * 0.5f + 0.5f) * viewport.m_WindowSize.x;
+        outScreenPos.y = viewport.m_WindowPos.y + (-ndcY * 0.5f + 0.5f) * viewport.m_WindowSize.y;
+        return true;
+    }
+
+    bool DrawInteractiveUiRectAndAnchorsGizmo(
+        CEditor& editor, int selectedEntityIndex, int canvasIndex,
+        const CCanvasComponent* pCanvas, CUiRectTransformComponent* pRectTransform,
+        const CViewportState& viewport, float zoom2D, float targetX, float targetY)
+    {
+        if (!pCanvas || !pRectTransform || selectedEntityIndex == canvasIndex || editor.m_IsPlaying)
+        {
+            return false;
+        }
+
+        const float canvasW = pCanvas->m_Width;
+        const float canvasH = pCanvas->m_Height;
+        const float canvasX = (viewport.m_WindowSize.x - canvasW) * 0.5f;
+        const float canvasY = (viewport.m_WindowSize.y - canvasH) * 0.5f;
+
+        auto canvasToScreen = [&](float cx, float cy) -> ImVec2
+        {
+            const float wx = canvasX + cx;
+            const float wy = canvasY + (canvasH - cy);
+            return ImVec2(
+                viewport.m_WindowPos.x + viewport.m_WindowSize.x * 0.5f + (wx - targetX) * zoom2D,
+                viewport.m_WindowPos.y + viewport.m_WindowSize.y * 0.5f + (wy - targetY) * zoom2D);
+        };
+
+        auto screenToCanvas = [&](ImVec2 screenPt) -> Vec2
+        {
+            const float wx = (screenPt.x - viewport.m_WindowPos.x - viewport.m_WindowSize.x * 0.5f) / zoom2D + targetX;
+            const float wy = (screenPt.y - viewport.m_WindowPos.y - viewport.m_WindowSize.y * 0.5f) / zoom2D + targetY;
+            return Vec2{
+                wx - canvasX,
+                canvasH - (wy - canvasY)
+            };
+        };
+
+        const CEntity& entity = editor.m_Scene.m_vEntities[selectedEntityIndex];
+        Rectangle parentCanvasRect = { 0.0f, 0.0f, canvasW, canvasH };
+        if (entity.m_ParentId >= 0)
+        {
+            int parentIdx = -1;
+            if (entity.m_ParentId < static_cast<int>(editor.m_Scene.m_vEntities.size()) &&
+                editor.m_Scene.m_vEntities[entity.m_ParentId].m_Id == entity.m_ParentId)
+            {
+                parentIdx = entity.m_ParentId;
+            }
+            else
+            {
+                for (int i = 0; i < static_cast<int>(editor.m_Scene.m_vEntities.size()); ++i)
+                {
+                    if (editor.m_Scene.m_vEntities[i].m_Id == entity.m_ParentId)
+                    {
+                        parentIdx = i;
+                        break;
+                    }
+                }
+            }
+            if (parentIdx >= 0 && parentIdx != canvasIndex)
+            {
+                parentCanvasRect = quark::ui::CCanvasSystem::Get().ComputeElementCanvasRect(
+                    editor.m_Scene, parentIdx, { canvasW, canvasH });
+            }
+        }
+
+        const Rectangle elemRect = quark::ui::CCanvasSystem::Get().ComputeElementCanvasRect(
+            editor.m_Scene, selectedEntityIndex, { canvasW, canvasH });
+
+        const Vec2 aAnchorCanvasPts[4] = {
+            {
+                parentCanvasRect.x + parentCanvasRect.width * pRectTransform->m_AnchorMin.x,
+                parentCanvasRect.y + parentCanvasRect.height * pRectTransform->m_AnchorMin.y
+            },
+            {
+                parentCanvasRect.x + parentCanvasRect.width * pRectTransform->m_AnchorMax.x,
+                parentCanvasRect.y + parentCanvasRect.height * pRectTransform->m_AnchorMin.y
+            },
+            {
+                parentCanvasRect.x + parentCanvasRect.width * pRectTransform->m_AnchorMax.x,
+                parentCanvasRect.y + parentCanvasRect.height * pRectTransform->m_AnchorMax.y
+            },
+            {
+                parentCanvasRect.x + parentCanvasRect.width * pRectTransform->m_AnchorMin.x,
+                parentCanvasRect.y + parentCanvasRect.height * pRectTransform->m_AnchorMax.y
+            }
+        };
+
+        const Vec2 aCornerCanvasPts[4] = {
+            { elemRect.x, elemRect.y },
+            { elemRect.x + elemRect.width, elemRect.y },
+            { elemRect.x + elemRect.width, elemRect.y + elemRect.height },
+            { elemRect.x, elemRect.y + elemRect.height }
+        };
+
+        ImDrawList* pDrawList = ImGui::GetWindowDrawList();
+        const ImVec2 anchorScreenMin = canvasToScreen(aAnchorCanvasPts[0].x, aAnchorCanvasPts[2].y);
+        const ImVec2 anchorScreenMax = canvasToScreen(aAnchorCanvasPts[2].x, aAnchorCanvasPts[0].y);
+        pDrawList->AddRect(anchorScreenMin, anchorScreenMax, IM_COL32(0, 220, 255, 130), 0.0f, 0, 1.0f);
+
+        const ImVec2 mousePos = ImGui::GetIO().MousePos;
+        int hoveredHandle = -1;
+        constexpr float kHitRadius = 8.0f;
+
+        for (int i = 0; i < 4; ++i)
+        {
+            const ImVec2 sp = canvasToScreen(aAnchorCanvasPts[i].x, aAnchorCanvasPts[i].y);
+            const float dx = mousePos.x - sp.x;
+            const float dy = mousePos.y - sp.y;
+            if (dx * dx + dy * dy <= kHitRadius * kHitRadius)
+            {
+                hoveredHandle = i;
+            }
+        }
+        for (int i = 0; i < 4; ++i)
+        {
+            const ImVec2 sp = canvasToScreen(aCornerCanvasPts[i].x, aCornerCanvasPts[i].y);
+            const float dx = mousePos.x - sp.x;
+            const float dy = mousePos.y - sp.y;
+            if (dx * dx + dy * dy <= kHitRadius * kHitRadius)
+            {
+                hoveredHandle = 4 + i;
+            }
+        }
+
+        for (int i = 0; i < 4; ++i)
+        {
+            const ImVec2 sp = canvasToScreen(aAnchorCanvasPts[i].x, aAnchorCanvasPts[i].y);
+            const bool activeOrHovered = (s_ActiveUiHandle == i || hoveredHandle == i);
+            const ImU32 fillCol = activeOrHovered ? IM_COL32(255, 240, 80, 255) : IM_COL32(0, 215, 255, 230);
+            const float r = activeOrHovered ? 7.0f : 5.5f;
+            pDrawList->AddQuadFilled(
+                ImVec2(sp.x, sp.y - r),
+                ImVec2(sp.x + r, sp.y),
+                ImVec2(sp.x, sp.y + r),
+                ImVec2(sp.x - r, sp.y),
+                fillCol);
+            pDrawList->AddQuad(
+                ImVec2(sp.x, sp.y - r),
+                ImVec2(sp.x + r, sp.y),
+                ImVec2(sp.x, sp.y + r),
+                ImVec2(sp.x - r, sp.y),
+                IM_COL32(20, 30, 40, 255), 1.5f);
+        }
+
+        for (int i = 0; i < 4; ++i)
+        {
+            const ImVec2 sp = canvasToScreen(aCornerCanvasPts[i].x, aCornerCanvasPts[i].y);
+            const bool activeOrHovered = (s_ActiveUiHandle == (4 + i) || hoveredHandle == (4 + i));
+            const ImU32 fillCol = activeOrHovered ? IM_COL32(255, 255, 255, 255) : IM_COL32(255, 200, 50, 240);
+            const float r = activeOrHovered ? 5.5f : 4.5f;
+            pDrawList->AddRectFilled(ImVec2(sp.x - r, sp.y - r), ImVec2(sp.x + r, sp.y + r), fillCol);
+            pDrawList->AddRect(ImVec2(sp.x - r, sp.y - r), ImVec2(sp.x + r, sp.y + r), IM_COL32(25, 25, 30, 255), 0.0f, 0, 1.2f);
+        }
+
+        if (viewport.m_Hovered && IsMouseButtonPressed(MOUSE_BUTTON_LEFT) && hoveredHandle >= 0)
+        {
+            editor.SaveState();
+            s_ActiveUiHandle = hoveredHandle;
+            s_ActiveUiHandleEntity = selectedEntityIndex;
+        }
+
+        if (s_ActiveUiHandle >= 0 && s_ActiveUiHandleEntity == selectedEntityIndex)
+        {
+            if (IsMouseButtonDown(MOUSE_BUTTON_LEFT))
+            {
+                const Vec2 mouseCanvas = screenToCanvas(mousePos);
+                if (s_ActiveUiHandle < 4)
+                {
+                    const float normX = std::clamp(
+                        (mouseCanvas.x - parentCanvasRect.x) / std::max(1.0f, parentCanvasRect.width),
+                        0.0f, 1.0f);
+                    const float normY = std::clamp(
+                        (mouseCanvas.y - parentCanvasRect.y) / std::max(1.0f, parentCanvasRect.height),
+                        0.0f, 1.0f);
+
+                    if (s_ActiveUiHandle == 0 || s_ActiveUiHandle == 3)
+                    {
+                        pRectTransform->m_AnchorMin.x = std::min(normX, pRectTransform->m_AnchorMax.x);
+                    }
+                    else
+                    {
+                        pRectTransform->m_AnchorMax.x = std::max(normX, pRectTransform->m_AnchorMin.x);
+                    }
+
+                    if (s_ActiveUiHandle == 0 || s_ActiveUiHandle == 1)
+                    {
+                        pRectTransform->m_AnchorMin.y = std::min(normY, pRectTransform->m_AnchorMax.y);
+                    }
+                    else
+                    {
+                        pRectTransform->m_AnchorMax.y = std::max(normY, pRectTransform->m_AnchorMin.y);
+                    }
+                }
+                else
+                {
+                    const int cornerIdx = s_ActiveUiHandle - 4;
+                    float left = elemRect.x;
+                    float bottom = elemRect.y;
+                    float right = elemRect.x + elemRect.width;
+                    float top = elemRect.y + elemRect.height;
+
+                    if (cornerIdx == 0 || cornerIdx == 3)
+                    {
+                        left = std::min(mouseCanvas.x, right - 4.0f);
+                    }
+                    else
+                    {
+                        right = std::max(mouseCanvas.x, left + 4.0f);
+                    }
+
+                    if (cornerIdx == 0 || cornerIdx == 1)
+                    {
+                        bottom = std::min(mouseCanvas.y, top - 4.0f);
+                    }
+                    else
+                    {
+                        top = std::max(mouseCanvas.y, bottom + 4.0f);
+                    }
+
+                    const float newW = std::max(4.0f, right - left);
+                    const float newH = std::max(4.0f, top - bottom);
+                    const float localX = left - parentCanvasRect.x;
+                    const float localY = bottom - parentCanvasRect.y;
+
+                    pRectTransform->m_Size = { newW, newH };
+                    if (pRectTransform->m_AnchorMin.x == pRectTransform->m_AnchorMax.x &&
+                        pRectTransform->m_AnchorMin.y == pRectTransform->m_AnchorMax.y)
+                    {
+                        const float anchorX = parentCanvasRect.width * pRectTransform->m_AnchorMin.x;
+                        const float anchorY = parentCanvasRect.height * pRectTransform->m_AnchorMin.y;
+                        const float pivotX = localX + newW * pRectTransform->m_Pivot.x;
+                        const float pivotY = localY + newH * pRectTransform->m_Pivot.y;
+                        pRectTransform->SetAnchoredPosition({ pivotX - anchorX, pivotY - anchorY });
+                    }
+                    else
+                    {
+                        const float anchorMinX = parentCanvasRect.width * pRectTransform->m_AnchorMin.x;
+                        const float anchorMinY = parentCanvasRect.height * pRectTransform->m_AnchorMin.y;
+                        const float anchorMaxX = parentCanvasRect.width * pRectTransform->m_AnchorMax.x;
+                        const float anchorMaxY = parentCanvasRect.height * pRectTransform->m_AnchorMax.y;
+                        pRectTransform->m_OffsetMin = { localX - anchorMinX, localY - anchorMinY };
+                        pRectTransform->m_OffsetMax = { (localX + newW) - anchorMaxX, (localY + newH) - anchorMaxY };
+                    }
+                }
+                editor.m_SceneDirty = true;
+                return true;
+            }
+            else
+            {
+                s_ActiveUiHandle = -1;
+                s_ActiveUiHandleEntity = -1;
+            }
+        }
+
+        return hoveredHandle >= 0;
+    }
+
+    bool DrawInteractiveColliderGizmo(
+        CEditor& editor, CEntity& entity, int entityIndex,
+        const Mat4& view, const Mat4& projection, const CViewportState& viewport)
+    {
+        if (editor.m_Scene2DMode || editor.m_IsPlaying)
+        {
+            return false;
+        }
+
+        CCollisionComponent* pCollision = entity.GetCollisionComponent();
+        if (!pCollision || !pCollision->m_Enabled)
+        {
+            return false;
+        }
+
+        const Mat4 entityWorld = quark::ComposeWorld(editor.m_Scene, entity);
+        const Vec3 localCenter = pCollision->m_Center;
+        const Vec3 worldCenter = entityWorld * localCenter;
+
+        Vec3 aLocalHalf = {
+            std::max(0.05f, pCollision->m_Size.x * 0.5f),
+            std::max(0.05f, pCollision->m_Size.y * 0.5f),
+            std::max(0.05f, pCollision->m_Size.z * 0.5f)
+        };
+        if (pCollision->m_ColliderType == COLLIDER_SPHERE)
+        {
+            const float r = std::max(0.05f, pCollision->m_Radius);
+            aLocalHalf = { r, r, r };
+        }
+        else if (pCollision->m_ColliderType == COLLIDER_CAPSULE)
+        {
+            const float r = std::max(0.05f, pCollision->m_Radius);
+            const float hh = std::max(r, pCollision->m_Height * 0.5f);
+            aLocalHalf = { r, hh, r };
+        }
+
+        const Vec3 aLocalDirs[6] = {
+            { 1.0f, 0.0f, 0.0f },
+            { -1.0f, 0.0f, 0.0f },
+            { 0.0f, 1.0f, 0.0f },
+            { 0.0f, -1.0f, 0.0f },
+            { 0.0f, 0.0f, 1.0f },
+            { 0.0f, 0.0f, -1.0f }
+        };
+        const float aExtents[3] = { aLocalHalf.x, aLocalHalf.y, aLocalHalf.z };
+
+        ImDrawList* pDrawList = ImGui::GetWindowDrawList();
+        const ImU32 wireColor = IM_COL32(60, 235, 110, 210);
+
+        const Vec3 aBoxCorners[8] = {
+            entityWorld * (localCenter + Vec3{ -aLocalHalf.x, -aLocalHalf.y, -aLocalHalf.z }),
+            entityWorld * (localCenter + Vec3{  aLocalHalf.x, -aLocalHalf.y, -aLocalHalf.z }),
+            entityWorld * (localCenter + Vec3{  aLocalHalf.x,  aLocalHalf.y, -aLocalHalf.z }),
+            entityWorld * (localCenter + Vec3{ -aLocalHalf.x,  aLocalHalf.y, -aLocalHalf.z }),
+            entityWorld * (localCenter + Vec3{ -aLocalHalf.x, -aLocalHalf.y,  aLocalHalf.z }),
+            entityWorld * (localCenter + Vec3{  aLocalHalf.x, -aLocalHalf.y,  aLocalHalf.z }),
+            entityWorld * (localCenter + Vec3{  aLocalHalf.x,  aLocalHalf.y,  aLocalHalf.z }),
+            entityWorld * (localCenter + Vec3{ -aLocalHalf.x,  aLocalHalf.y,  aLocalHalf.z })
+        };
+        ImVec2 aScreenCorners[8] = {};
+        bool aCornerVisible[8] = {};
+        for (int i = 0; i < 8; ++i)
+        {
+            aCornerVisible[i] = ProjectWorldPointToViewport(
+                aBoxCorners[i], view, projection, viewport, aScreenCorners[i]);
+        }
+        constexpr int aEdges[12][2] = {
+            { 0, 1 }, { 1, 2 }, { 2, 3 }, { 3, 0 },
+            { 4, 5 }, { 5, 6 }, { 6, 7 }, { 7, 4 },
+            { 0, 4 }, { 1, 5 }, { 2, 6 }, { 3, 7 }
+        };
+        for (const auto& edge : aEdges)
+        {
+            if (aCornerVisible[edge[0]] && aCornerVisible[edge[1]])
+            {
+                pDrawList->AddLine(aScreenCorners[edge[0]], aScreenCorners[edge[1]], wireColor, 1.5f);
+            }
+        }
+
+        const ImVec2 mousePos = ImGui::GetIO().MousePos;
+        int hoveredHandle = -1;
+        ImVec2 aHandleScreen[6] = {};
+        bool aHandleVis[6] = {};
+
+        for (int i = 0; i < 6; ++i)
+        {
+            const int axis = i / 2;
+            const Vec3 handleLocal = localCenter + aLocalDirs[i] * aExtents[axis];
+            const Vec3 handleWorld = entityWorld * handleLocal;
+            aHandleVis[i] = ProjectWorldPointToViewport(
+                handleWorld, view, projection, viewport, aHandleScreen[i]);
+            if (aHandleVis[i])
+            {
+                const float dx = mousePos.x - aHandleScreen[i].x;
+                const float dy = mousePos.y - aHandleScreen[i].y;
+                if (dx * dx + dy * dy <= 64.0f)
+                {
+                    hoveredHandle = i;
+                }
+            }
+        }
+
+        for (int i = 0; i < 6; ++i)
+        {
+            if (!aHandleVis[i])
+            {
+                continue;
+            }
+            const bool activeOrHovered = (s_ActiveColliderHandle == i || hoveredHandle == i);
+            const float r = activeOrHovered ? 6.0f : 4.5f;
+            const ImU32 fillCol = activeOrHovered ? IM_COL32(180, 255, 120, 255) : IM_COL32(50, 230, 100, 240);
+            pDrawList->AddRectFilled(
+                ImVec2(aHandleScreen[i].x - r, aHandleScreen[i].y - r),
+                ImVec2(aHandleScreen[i].x + r, aHandleScreen[i].y + r),
+                fillCol);
+            pDrawList->AddRect(
+                ImVec2(aHandleScreen[i].x - r, aHandleScreen[i].y - r),
+                ImVec2(aHandleScreen[i].x + r, aHandleScreen[i].y + r),
+                IM_COL32(15, 35, 20, 255), 0.0f, 0, 1.3f);
+        }
+
+        if (viewport.m_Hovered && IsMouseButtonPressed(MOUSE_BUTTON_LEFT) && hoveredHandle >= 0)
+        {
+            editor.SaveState();
+            s_ActiveColliderHandle = hoveredHandle;
+            s_ActiveColliderEntity = entityIndex;
+            s_ColliderDragStartExtent = aExtents[hoveredHandle / 2];
+            s_ColliderDragStartCenter = pCollision->m_Center;
+            s_ColliderDragStartMouse = mousePos;
+        }
+
+        if (s_ActiveColliderHandle >= 0 && s_ActiveColliderEntity == entityIndex)
+        {
+            if (IsMouseButtonDown(MOUSE_BUTTON_LEFT))
+            {
+                const int axis = s_ActiveColliderHandle / 2;
+                const Vec3 unitOffsetWorld = entityWorld * (localCenter + aLocalDirs[s_ActiveColliderHandle]);
+                ImVec2 centerScreen = {};
+                ImVec2 unitScreen = {};
+                if (ProjectWorldPointToViewport(worldCenter, view, projection, viewport, centerScreen) &&
+                    ProjectWorldPointToViewport(unitOffsetWorld, view, projection, viewport, unitScreen))
+                {
+                    const ImVec2 screenAxis(unitScreen.x - centerScreen.x, unitScreen.y - centerScreen.y);
+                    const float axisLenSq = screenAxis.x * screenAxis.x + screenAxis.y * screenAxis.y;
+                    if (axisLenSq > 1e-3f)
+                    {
+                        const ImVec2 mouseDelta(
+                            mousePos.x - s_ColliderDragStartMouse.x,
+                            mousePos.y - s_ColliderDragStartMouse.y);
+                        const float deltaUnits =
+                            (mouseDelta.x * screenAxis.x + mouseDelta.y * screenAxis.y) / axisLenSq;
+                        const float newExtent = std::max(0.05f, s_ColliderDragStartExtent + deltaUnits);
+
+                        if (IsKeyDown(KEY_LEFT_SHIFT) || IsKeyDown(KEY_RIGHT_SHIFT))
+                        {
+                            const float shiftAmount = (newExtent - s_ColliderDragStartExtent) * 0.5f;
+                            pCollision->m_Center = s_ColliderDragStartCenter + aLocalDirs[s_ActiveColliderHandle] * shiftAmount;
+                        }
+
+                        if (pCollision->m_ColliderType == COLLIDER_SPHERE)
+                        {
+                            pCollision->m_Radius = newExtent;
+                        }
+                        else if (pCollision->m_ColliderType == COLLIDER_CAPSULE)
+                        {
+                            if (axis == 1)
+                            {
+                                pCollision->m_Height = std::max(pCollision->m_Radius * 2.0f, newExtent * 2.0f);
+                            }
+                            else
+                            {
+                                pCollision->m_Radius = newExtent;
+                            }
+                        }
+                        else
+                        {
+                            if (axis == 0)
+                            {
+                                pCollision->m_Size.x = newExtent * 2.0f;
+                            }
+                            else if (axis == 1)
+                            {
+                                pCollision->m_Size.y = newExtent * 2.0f;
+                            }
+                            else
+                            {
+                                pCollision->m_Size.z = newExtent * 2.0f;
+                            }
+                        }
+                        editor.m_SceneDirty = true;
+                    }
+                }
+                return true;
+            }
+            else
+            {
+                s_ActiveColliderHandle = -1;
+                s_ActiveColliderEntity = -1;
+            }
+        }
+
+        return hoveredHandle >= 0;
+    }
+} // anonymous
 
 void CGizmoController::Draw(CEditor& editor, CFlyCamera& camera)
 {
@@ -366,6 +847,14 @@ void CGizmoController::Draw(CEditor& editor, CFlyCamera& camera)
                 1.5f);
         }
 
+        if (DrawInteractiveUiRectAndAnchorsGizmo(
+                editor, selectedEntityIndex, canvasIndex, pCanvas, pRectTransform.get(),
+                viewport, zoom2D, targetX, targetY) &&
+            s_ActiveUiHandle >= 0)
+        {
+            return;
+        }
+
         float aUiViewMat4[16] = {};
         float aUiProjectionMat4[16] = {};
         float aUiTransformMat4[16] = {};
@@ -497,6 +986,12 @@ void CGizmoController::Draw(CEditor& editor, CFlyCamera& camera)
     memcpy(aProjectionMat4, &projection, sizeof(aProjectionMat4));
 
     CMeshEditor::DrawOverlay(editor, camera.GetCamera());
+
+    if (DrawInteractiveColliderGizmo(editor, *pEntity, selectedEntityIndex, view, projection, viewport) &&
+        s_ActiveColliderHandle >= 0)
+    {
+        return;
+    }
 
     if (pMesh && edit.m_Enabled && HasValidModelData(pMesh->m_Model))
     {

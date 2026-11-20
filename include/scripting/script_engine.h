@@ -12,6 +12,20 @@
 namespace quark::script
 {
 
+    enum class EScriptLogLevel
+    {
+        INFO = 0,
+        WARNING = 1,
+        ERR = 2
+    };
+
+    struct SScriptLogEntry
+    {
+        EScriptLogLevel m_Level = EScriptLogLevel::INFO;
+        std::string m_Message;
+        double m_Timestamp = 0.0;
+    };
+
     struct SParsedScriptInfo
     {
         std::string m_ClassName;
@@ -80,6 +94,15 @@ namespace quark::script
             return m_CursorLocked;
         }
 
+        void LogMessage(EScriptLogLevel level, const std::string& message, bool emitToTraceLog = true);
+        std::vector<SScriptLogEntry> GetLogs() const;
+        void ClearLogs();
+
+        CScene* GetActiveScene() const
+        {
+            return m_pActiveScene;
+        }
+
     private:
         CScriptEngine();
         ~CScriptEngine();
@@ -89,11 +112,17 @@ namespace quark::script
 
         CDynamicLibrary m_Dll;
         CDynamicLibrary* m_pActiveDll = nullptr;
+        CScene* m_pActiveScene = nullptr;
+        std::string m_ActiveProjectPath;
+        float m_FixedAccumulator = 0.0f;
         bool m_IsPlaying = false;
         bool m_ViewportHovered = true;
         bool m_CursorLocked = false;
         std::string m_LoadedDllPath;
         std::vector<SParsedScriptInfo> m_vAvailableScripts;
+        std::vector<int> m_vPendingDestroyIds;
+        std::string m_PendingLoadScenePath;
+        std::vector<SScriptLogEntry> m_vLogs;
     };
 
 } // quark::script

@@ -80,6 +80,10 @@ namespace quark
             ej["tags"] = entity.m_vTags;
             ej["is_group"] = entity.m_IsGroup;
             ej["parent_id"] = entity.m_ParentId;
+            if (!entity.m_PrefabPath.empty())
+            {
+                ej["prefab_path"] = entity.m_PrefabPath;
+            }
 
             if (entity.m_pComponents)
             {
@@ -268,6 +272,10 @@ namespace quark
             if (ej.contains("parent_id"))
             {
                 entity.m_ParentId = ej["parent_id"].get<int>();
+            }
+            if (ej.contains("prefab_path") && ej["prefab_path"].is_string())
+            {
+                entity.m_PrefabPath = ej["prefab_path"].get<std::string>();
             }
             if (ej.contains("components"))
             {

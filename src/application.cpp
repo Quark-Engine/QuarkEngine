@@ -32,19 +32,36 @@ namespace
     static std::ofstream s_EngineLogFile;
     static std::mutex s_EngineLogMutex;
 
-    void WriteEngineLog(LogLevel, const char* pMessage)
+    void WriteEngineLog(LogLevel level, const char* pMessage)
     {
         if (pMessage == nullptr)
         {
             return;
         }
 
-        std::lock_guard<std::mutex> lock(s_EngineLogMutex);
-        if (s_EngineLogFile.is_open())
         {
-            s_EngineLogFile << pMessage << '\n';
-            s_EngineLogFile.flush();
+            std::lock_guard<std::mutex> lock(s_EngineLogMutex);
+            if (s_EngineLogFile.is_open())
+            {
+                s_EngineLogFile << pMessage << '\n';
+                s_EngineLogFile.flush();
+            }
         }
+
+        quark::script::EScriptLogLevel scriptLevel = quark::script::EScriptLogLevel::INFO;
+        if (level == LogLevel::Warn)
+        {
+            scriptLevel = quark::script::EScriptLogLevel::WARNING;
+        }
+        else if (level == LogLevel::Error)
+        {
+            scriptLevel = quark::script::EScriptLogLevel::ERR;
+        }
+        else if (level != LogLevel::Info)
+        {
+            return;
+        }
+        quark::script::CScriptEngine::Get().LogMessage(scriptLevel, pMessage, false);
     }
 
     void InitializeEngineLog()
@@ -932,6 +949,53 @@ void CApplication::RenderFrame()
     EndDrawing();
     m_FrameTimings.m_EndDrawingMs = ElapsedMilliseconds(endDrawingStart);
     m_PluginBridge.SetFrameTimings(m_FrameTimings);
+
+    SProfilerFrameStats profilerStats{};
+    const float frameDt = static_cast<float>(GetFrameTime());
+    profilerStats.m_FrameTimeMs = frameDt * 1000.0f;
+    profilerStats.m_Fps = (frameDt > 1e-6f) ? (1.0f / frameDt) : static_cast<float>(GetFPS());
+    profilerStats.m_UpdateFrameMs = m_FrameTimings.m_UpdateFrameMs;
+    profilerStats.m_SceneRendererUpdateMs = m_FrameTimings.m_SceneRendererUpdateMs;
+    profilerStats.m_ShadowPassMs = m_FrameTimings.m_ShadowPassMs;
+    profilerStats.m_Main3dPassMs = m_FrameTimings.m_Main3dPassMs;
+    profilerStats.m_ImguiEditorMs = m_FrameTimings.m_ImguiEditorMs;
+    profilerStats.m_EntityCount = static_cast<int>(m_Editor.m_Scene.m_vEntities.size());
+
+    const float vpW = m_Editor.m_Ui.m_Viewport.m_WindowSize.x;
+    const float vpH = m_Editor.m_Ui.m_Viewport.m_WindowSize.y;
+    const float vpAspect = (vpH > 0.0f) ? (vpW / vpH) : 1.0f;
+    for (int i = 0; i < static_cast<int>(m_Editor.m_Scene.m_vEntities.size()); ++i)
+    {
+        const CEntity& ent = m_Editor.m_Scene.m_vEntities[i];
+        if (const CLightComponent* pLight = ent.GetLightComponent(); pLight && pLight->m_Enabled)
+        {
+            ++profilerStats.m_ActiveLightCount;
+        }
+        const CMeshComponent* pMesh = ent.GetMeshComponent();
+        const CTransformComponent* pTransform = ent.GetTransformComponent();
+        if (!pMesh || !pMesh->m_Enabled || !pTransform)
+        {
+            continue;
+        }
+        if (m_SceneRenderer.IsMeshVisible(i, renderCamera, vpAspect))
+        {
+            ++profilerStats.m_VisibleMeshCount;
+            const int meshCount = std::max(1, pMesh->m_Model.meshCount);
+            profilerStats.m_DrawCalls += meshCount;
+            if (pMesh->m_Model.meshes != nullptr)
+            {
+                for (int m = 0; m < pMesh->m_Model.meshCount; ++m)
+                {
+                    profilerStats.m_TriangleCount += pMesh->m_Model.meshes[m].triangleCount;
+                }
+            }
+        }
+    }
+    if (m_Editor.m_Preferences.m_ShadowsEnabled && profilerStats.m_ActiveLightCount > 0)
+    {
+        profilerStats.m_DrawCalls += profilerStats.m_VisibleMeshCount * profilerStats.m_ActiveLightCount;
+    }
+    m_Editor.RecordProfilerSample(profilerStats);
 }
 
 void CApplication::Run()

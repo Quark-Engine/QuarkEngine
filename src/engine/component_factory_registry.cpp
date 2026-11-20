@@ -75,6 +75,34 @@ void CComponentFactoryRegistry::SeedBuiltIns()
          {
              return std::make_shared<CButtonComponent>();
          });
+    seed("Slider", []()
+         {
+             return std::make_shared<CSliderComponent>();
+         });
+    seed("Toggle", []()
+         {
+             return std::make_shared<CToggleComponent>();
+         });
+    seed("Progress Bar", []()
+         {
+             return std::make_shared<CProgressBarComponent>();
+         });
+    seed("Scroll View", []()
+         {
+             return std::make_shared<CScrollViewComponent>();
+         });
+    seed("Horizontal Layout Group", []()
+         {
+             return std::make_shared<CHorizontalLayoutComponent>();
+         });
+    seed("Vertical Layout Group", []()
+         {
+             return std::make_shared<CVerticalLayoutComponent>();
+         });
+    seed("Grid Layout Group", []()
+         {
+             return std::make_shared<CGridLayoutComponent>();
+         });
     seed("Script", []()
          {
              return std::make_shared<CScriptComponent>();

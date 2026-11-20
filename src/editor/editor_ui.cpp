@@ -15,6 +15,7 @@
 
 #include "editor/editor.h"
 #include "gui/gui_renderer_bridge.h"
+#include "scripting/script_engine.h"
 
 #include "application_plugin_bridge.h"
 
@@ -240,6 +241,8 @@ void CEditor::DrawUi(Shader shader, CFlyCamera& camera, SPluginContext* pPluginC
     DrawConfirmationModals();
     DrawBuildSettingsModal();
     DrawBuildConsole();
+    DrawConsoleWindow();
+    DrawProfilerWindow();
     ImGui::EndDisabled();
 
     if (IsHistoryRestorePending())
@@ -372,6 +375,8 @@ void CEditor::DrawMainMenuBar(SPluginContext* pPluginCtx, ImGuiID dockspaceId,
             ImGui::MenuItem(lang.Word("assets"), nullptr, &m_Preferences.m_ShowAssets);
             ImGui::MenuItem(lang.Word("scene"), nullptr, &m_Preferences.m_ShowScene);
             ImGui::MenuItem("Game", nullptr, &m_ShowGameView);
+            ImGui::MenuItem("Console", nullptr, &m_ShowConsole);
+            ImGui::MenuItem("Profiler", nullptr, &m_ShowProfiler);
             ImGui::MenuItem("Build Console", nullptr, &m_ShowBuildConsole);
             ImGui::EndMenu();
         }
@@ -464,6 +469,46 @@ void CEditor::DrawMainMenuBar(SPluginContext* pPluginCtx, ImGuiID dockspaceId,
                     SaveState();
                     const int parentId = GetOrCreateCanvasForUi(m_Scene.m_Selected);
                     CEntity entity = CEntityFactory::UiImage(m_Scene, parentId);
+                    m_Scene.m_vEntities.push_back(std::move(entity));
+                    const int entityIndex = static_cast<int>(m_Scene.m_vEntities.size()) - 1;
+                    DispatchPluginEvent(PLUGIN_EVENT_ENTITY_CREATED, entityIndex);
+                    m_Scene.SelectEntity(entityIndex, false);
+                }
+                if (ImGui::MenuItem("Slider"))
+                {
+                    SaveState();
+                    const int parentId = GetOrCreateCanvasForUi(m_Scene.m_Selected);
+                    CEntity entity = CEntityFactory::UiSlider(m_Scene, parentId);
+                    m_Scene.m_vEntities.push_back(std::move(entity));
+                    const int entityIndex = static_cast<int>(m_Scene.m_vEntities.size()) - 1;
+                    DispatchPluginEvent(PLUGIN_EVENT_ENTITY_CREATED, entityIndex);
+                    m_Scene.SelectEntity(entityIndex, false);
+                }
+                if (ImGui::MenuItem("Toggle"))
+                {
+                    SaveState();
+                    const int parentId = GetOrCreateCanvasForUi(m_Scene.m_Selected);
+                    CEntity entity = CEntityFactory::UiToggle(m_Scene, parentId);
+                    m_Scene.m_vEntities.push_back(std::move(entity));
+                    const int entityIndex = static_cast<int>(m_Scene.m_vEntities.size()) - 1;
+                    DispatchPluginEvent(PLUGIN_EVENT_ENTITY_CREATED, entityIndex);
+                    m_Scene.SelectEntity(entityIndex, false);
+                }
+                if (ImGui::MenuItem("Progress Bar"))
+                {
+                    SaveState();
+                    const int parentId = GetOrCreateCanvasForUi(m_Scene.m_Selected);
+                    CEntity entity = CEntityFactory::UiProgressBar(m_Scene, parentId);
+                    m_Scene.m_vEntities.push_back(std::move(entity));
+                    const int entityIndex = static_cast<int>(m_Scene.m_vEntities.size()) - 1;
+                    DispatchPluginEvent(PLUGIN_EVENT_ENTITY_CREATED, entityIndex);
+                    m_Scene.SelectEntity(entityIndex, false);
+                }
+                if (ImGui::MenuItem("Scroll View"))
+                {
+                    SaveState();
+                    const int parentId = GetOrCreateCanvasForUi(m_Scene.m_Selected);
+                    CEntity entity = CEntityFactory::UiScrollView(m_Scene, parentId);
                     m_Scene.m_vEntities.push_back(std::move(entity));
                     const int entityIndex = static_cast<int>(m_Scene.m_vEntities.size()) - 1;
                     DispatchPluginEvent(PLUGIN_EVENT_ENTITY_CREATED, entityIndex);
@@ -780,6 +825,46 @@ void CEditor::HierarchyDrawCreateMenu(int parentIndex)
                 DispatchPluginEvent(PLUGIN_EVENT_ENTITY_CREATED, entityIndex);
                 m_Scene.SelectEntity(entityIndex, false);
             }
+            if (ImGui::MenuItem("Slider"))
+            {
+                SaveState();
+                const int parentId = GetOrCreateCanvasForUi(parentIndex);
+                CEntity entity = CEntityFactory::UiSlider(m_Scene, parentId);
+                m_Scene.m_vEntities.push_back(std::move(entity));
+                const int entityIndex = static_cast<int>(m_Scene.m_vEntities.size()) - 1;
+                DispatchPluginEvent(PLUGIN_EVENT_ENTITY_CREATED, entityIndex);
+                m_Scene.SelectEntity(entityIndex, false);
+            }
+            if (ImGui::MenuItem("Toggle"))
+            {
+                SaveState();
+                const int parentId = GetOrCreateCanvasForUi(parentIndex);
+                CEntity entity = CEntityFactory::UiToggle(m_Scene, parentId);
+                m_Scene.m_vEntities.push_back(std::move(entity));
+                const int entityIndex = static_cast<int>(m_Scene.m_vEntities.size()) - 1;
+                DispatchPluginEvent(PLUGIN_EVENT_ENTITY_CREATED, entityIndex);
+                m_Scene.SelectEntity(entityIndex, false);
+            }
+            if (ImGui::MenuItem("Progress Bar"))
+            {
+                SaveState();
+                const int parentId = GetOrCreateCanvasForUi(parentIndex);
+                CEntity entity = CEntityFactory::UiProgressBar(m_Scene, parentId);
+                m_Scene.m_vEntities.push_back(std::move(entity));
+                const int entityIndex = static_cast<int>(m_Scene.m_vEntities.size()) - 1;
+                DispatchPluginEvent(PLUGIN_EVENT_ENTITY_CREATED, entityIndex);
+                m_Scene.SelectEntity(entityIndex, false);
+            }
+            if (ImGui::MenuItem("Scroll View"))
+            {
+                SaveState();
+                const int parentId = GetOrCreateCanvasForUi(parentIndex);
+                CEntity entity = CEntityFactory::UiScrollView(m_Scene, parentId);
+                m_Scene.m_vEntities.push_back(std::move(entity));
+                const int entityIndex = static_cast<int>(m_Scene.m_vEntities.size()) - 1;
+                DispatchPluginEvent(PLUGIN_EVENT_ENTITY_CREATED, entityIndex);
+                m_Scene.SelectEntity(entityIndex, false);
+            }
 
             ImGui::Separator();
             auto createUiEntity = [this, parentIndex](EGuiWidgetType type)
@@ -1023,6 +1108,61 @@ void CEditor::DrawInspectorPanel(Shader shader, SPluginContext* pPluginCtx)
     {
         ImGui::Separator();
         ImGui::Spacing();
+
+        int prefabRootIndex = -1;
+        int cursorIndex = m_Scene.m_Selected;
+        int searchDepth = 0;
+        while (cursorIndex >= 0 && cursorIndex < static_cast<int>(m_Scene.m_vEntities.size()) && searchDepth++ < 64)
+        {
+            if (!m_Scene.m_vEntities[cursorIndex].m_PrefabPath.empty())
+            {
+                prefabRootIndex = cursorIndex;
+                break;
+            }
+            cursorIndex = m_Scene.m_vEntities[cursorIndex].m_ParentId;
+        }
+
+        if (prefabRootIndex >= 0)
+        {
+            CEntity& prefabRoot = m_Scene.m_vEntities[prefabRootIndex];
+            const std::filesystem::path prefabFilePath(prefabRoot.m_PrefabPath);
+            ImGui::TextColored(ImVec4(0.45f, 0.78f, 1.0f, 1.0f), "Prefab: %s",
+                               prefabFilePath.filename().string().c_str());
+            if (ImGui::Button("Apply"))
+            {
+                if (CEntityFactory::SavePrefabToFile(m_Scene, prefabRootIndex, prefabFilePath))
+                {
+                    SaveState();
+                    const int synced = CEntityFactory::SyncPrefabInstances(
+                        m_Scene, m_Assets, prefabFilePath, m_ComponentFactories, prefabRootIndex);
+                    m_SceneDirty = true;
+                    SetStatusMessage(TextFormat("Applied to prefab %s (synced %d instance(s))",
+                                                prefabFilePath.filename().string().c_str(), synced));
+                }
+            }
+            ImGui::SameLine();
+            if (ImGui::Button("Revert"))
+            {
+                SaveState();
+                if (CEntityFactory::RevertPrefabInstance(m_Scene, m_Assets, prefabRootIndex, m_ComponentFactories))
+                {
+                    pEntity = m_Scene.GetSelected();
+                    m_SceneDirty = true;
+                    SetStatusMessage(TextFormat("Reverted prefab instance: %s",
+                                                prefabFilePath.filename().string().c_str()));
+                }
+            }
+            ImGui::SameLine();
+            if (ImGui::Button("Unpack"))
+            {
+                SaveState();
+                prefabRoot.m_PrefabPath.clear();
+                m_SceneDirty = true;
+                SetStatusMessage("Unpacked prefab instance");
+            }
+            ImGui::Separator();
+            ImGui::Spacing();
+        }
 
         char aInspectorName[128] = {};
         const size_t copied = pEntity->m_Name.copy(aInspectorName, sizeof(aInspectorName) - 1);
@@ -2312,6 +2452,220 @@ void CEditor::DrawBuildConsole()
             ImGui::SetScrollHereY(1.0f);
         }
         ImGui::EndChild();
+    }
+    ImGui::End();
+}
+
+void CEditor::RecordProfilerSample(const SProfilerFrameStats& stats)
+{
+    m_LastProfilerStats = stats;
+    m_aProfilerFpsHistory[static_cast<size_t>(m_ProfilerHistoryCursor)] = stats.m_Fps;
+    m_aProfilerFrameTimeHistory[static_cast<size_t>(m_ProfilerHistoryCursor)] = stats.m_FrameTimeMs;
+    m_aProfilerDrawCallHistory[static_cast<size_t>(m_ProfilerHistoryCursor)] = static_cast<float>(stats.m_DrawCalls);
+    m_ProfilerHistoryCursor = (m_ProfilerHistoryCursor + 1) % static_cast<int>(m_aProfilerFpsHistory.size());
+}
+
+void CEditor::DrawConsoleWindow()
+{
+    if (!m_ShowConsole)
+    {
+        return;
+    }
+
+    if (ImGui::Begin("Console", &m_ShowConsole))
+    {
+        auto& scriptEngine = quark::script::CScriptEngine::Get();
+        const std::vector<quark::script::SScriptLogEntry> vLogs = scriptEngine.GetLogs();
+
+        int infoCount = 0;
+        int warnCount = 0;
+        int errorCount = 0;
+        for (const auto& entry : vLogs)
+        {
+            if (entry.m_Level == quark::script::EScriptLogLevel::INFO)
+            {
+                ++infoCount;
+            }
+            else if (entry.m_Level == quark::script::EScriptLogLevel::WARNING)
+            {
+                ++warnCount;
+            }
+            else if (entry.m_Level == quark::script::EScriptLogLevel::ERR)
+            {
+                ++errorCount;
+            }
+        }
+
+        if (ImGui::SmallButton("Clear"))
+        {
+            scriptEngine.ClearLogs();
+        }
+        ImGui::SameLine(0.0f, 12.0f);
+        ImGui::PushID("console_info");
+        ImGui::Checkbox(TextFormat("Info (%d)", infoCount), &m_ConsoleShowInfo);
+        ImGui::PopID();
+        ImGui::SameLine(0.0f, 12.0f);
+        ImGui::PushID("console_warn");
+        ImGui::Checkbox(TextFormat("Warnings (%d)", warnCount), &m_ConsoleShowWarn);
+        ImGui::PopID();
+        ImGui::SameLine(0.0f, 12.0f);
+        ImGui::PushID("console_err");
+        ImGui::Checkbox(TextFormat("Errors (%d)", errorCount), &m_ConsoleShowError);
+        ImGui::PopID();
+        ImGui::SameLine(0.0f, 12.0f);
+        ImGui::Checkbox("Auto-scroll", &m_ConsoleAutoScroll);
+        ImGui::SameLine(0.0f, 12.0f);
+        ImGui::SetNextItemWidth(200.0f);
+        ImGui::InputTextWithHint("##console_search", "Filter logs...", m_aConsoleSearch, sizeof(m_aConsoleSearch));
+
+        ImGui::Separator();
+        ImGui::BeginChild("##console_scroll_region", ImVec2(0.0f, 0.0f), false,
+                          ImGuiWindowFlags_HorizontalScrollbar);
+
+        std::string filterLower(m_aConsoleSearch);
+        std::transform(filterLower.begin(), filterLower.end(), filterLower.begin(),
+                       [](unsigned char c)
+                       {
+                           return static_cast<char>(std::tolower(c));
+                       });
+
+        for (const auto& entry : vLogs)
+        {
+            if (entry.m_Level == quark::script::EScriptLogLevel::INFO && !m_ConsoleShowInfo)
+            {
+                continue;
+            }
+            if (entry.m_Level == quark::script::EScriptLogLevel::WARNING && !m_ConsoleShowWarn)
+            {
+                continue;
+            }
+            if (entry.m_Level == quark::script::EScriptLogLevel::ERR && !m_ConsoleShowError)
+            {
+                continue;
+            }
+
+            if (!filterLower.empty())
+            {
+                std::string msgLower = entry.m_Message;
+                std::transform(msgLower.begin(), msgLower.end(), msgLower.begin(),
+                               [](unsigned char c)
+                               {
+                                   return static_cast<char>(std::tolower(c));
+                               });
+                if (msgLower.find(filterLower) == std::string::npos)
+                {
+                    continue;
+                }
+            }
+
+            ImVec4 color = ImVec4(0.86f, 0.88f, 0.92f, 1.0f);
+            const char* pPrefix = "[INFO]";
+            if (entry.m_Level == quark::script::EScriptLogLevel::WARNING)
+            {
+                color = ImVec4(0.98f, 0.80f, 0.28f, 1.0f);
+                pPrefix = "[WARN]";
+            }
+            else if (entry.m_Level == quark::script::EScriptLogLevel::ERR)
+            {
+                color = ImVec4(0.98f, 0.36f, 0.36f, 1.0f);
+                pPrefix = "[ERROR]";
+            }
+
+            ImGui::PushStyleColor(ImGuiCol_Text, color);
+            ImGui::Text("%s %s", pPrefix, entry.m_Message.c_str());
+            ImGui::PopStyleColor();
+        }
+
+        if (m_ConsoleAutoScroll && ImGui::GetScrollY() >= ImGui::GetScrollMaxY())
+        {
+            ImGui::SetScrollHereY(1.0f);
+        }
+        ImGui::EndChild();
+    }
+    ImGui::End();
+}
+
+void CEditor::DrawProfilerWindow()
+{
+    if (!m_ShowProfiler)
+    {
+        return;
+    }
+
+    if (ImGui::Begin("Profiler", &m_ShowProfiler))
+    {
+        ImGui::Text("FPS: %.1f   |   Frame Time: %.2f ms",
+                    m_LastProfilerStats.m_Fps, m_LastProfilerStats.m_FrameTimeMs);
+        ImGui::Text("Draw Calls: %d   |   Triangles: %d   |   Entities: %d (Visible Meshes: %d, Lights: %d)",
+                    m_LastProfilerStats.m_DrawCalls,
+                    m_LastProfilerStats.m_TriangleCount,
+                    m_LastProfilerStats.m_EntityCount,
+                    m_LastProfilerStats.m_VisibleMeshCount,
+                    m_LastProfilerStats.m_ActiveLightCount);
+
+        ImGui::Spacing();
+        ImGui::PlotLines("FPS History",
+                         m_aProfilerFpsHistory.data(),
+                         static_cast<int>(m_aProfilerFpsHistory.size()),
+                         m_ProfilerHistoryCursor,
+                         TextFormat("%.1f FPS", m_LastProfilerStats.m_Fps),
+                         0.0f, 240.0f, ImVec2(0.0f, 65.0f));
+        ImGui::PlotLines("Frame Time (ms)",
+                         m_aProfilerFrameTimeHistory.data(),
+                         static_cast<int>(m_aProfilerFrameTimeHistory.size()),
+                         m_ProfilerHistoryCursor,
+                         TextFormat("%.2f ms", m_LastProfilerStats.m_FrameTimeMs),
+                         0.0f, 50.0f, ImVec2(0.0f, 65.0f));
+        ImGui::PlotLines("Draw Calls",
+                         m_aProfilerDrawCallHistory.data(),
+                         static_cast<int>(m_aProfilerDrawCallHistory.size()),
+                         m_ProfilerHistoryCursor,
+                         TextFormat("%d calls", m_LastProfilerStats.m_DrawCalls),
+                         0.0f, 500.0f, ImVec2(0.0f, 55.0f));
+
+        ImGui::Spacing();
+        ImGui::Separator();
+        ImGui::TextUnformatted("CPU Stage Timings (ms)");
+        if (ImGui::BeginTable("ProfilerTimingsTable", 2, ImGuiTableFlags_Borders | ImGuiTableFlags_RowBg))
+        {
+            ImGui::TableSetupColumn("Stage");
+            ImGui::TableSetupColumn("Time (ms)");
+            ImGui::TableHeadersRow();
+
+            auto addTimingRow = [](const char* pName, float ms)
+            {
+                ImGui::TableNextRow();
+                ImGui::TableSetColumnIndex(0);
+                ImGui::TextUnformatted(pName);
+                ImGui::TableSetColumnIndex(1);
+                ImGui::Text("%.3f ms", ms);
+            };
+
+            addTimingRow("Update Frame (Scene & Scripts)", m_LastProfilerStats.m_UpdateFrameMs);
+            addTimingRow("Scene Renderer Update", m_LastProfilerStats.m_SceneRendererUpdateMs);
+            addTimingRow("Shadow Pass", m_LastProfilerStats.m_ShadowPassMs);
+            addTimingRow("Main 3D Pass", m_LastProfilerStats.m_Main3dPassMs);
+            addTimingRow("ImGui Editor Pass", m_LastProfilerStats.m_ImguiEditorMs);
+            addTimingRow("  - Hierarchy Panel", m_UiTimings.m_HierarchyMs);
+            addTimingRow("  - Inspector Panel", m_UiTimings.m_InspectorMs);
+            addTimingRow("  - Scene / Game Viewport", m_UiTimings.m_ScenePanelMs);
+            addTimingRow("  - Asset Browser", m_UiTimings.m_AssetsMs);
+            ImGui::EndTable();
+        }
+
+        ImGui::Spacing();
+        ImGui::Separator();
+        const std::vector<SThreadUsageSnapshot> vThreadUsage = m_CpuTaskPool.GetThreadUsageSnapshot();
+        ImGui::Text("CTaskPool Threads (%zu tracked threads)", vThreadUsage.size());
+        for (const SThreadUsageSnapshot& info : vThreadUsage)
+        {
+            const float fraction = std::clamp(info.m_UtilizationPercent / 100.0f, 0.0f, 1.0f);
+            const std::string overlay = TextFormat("%s: %.1f%% (%s)",
+                                                   info.m_Name.c_str(),
+                                                   info.m_UtilizationPercent,
+                                                   info.m_CurrentTask.c_str());
+            ImGui::ProgressBar(fraction, ImVec2(-1.0f, 18.0f), overlay.c_str());
+        }
     }
     ImGui::End();
 }

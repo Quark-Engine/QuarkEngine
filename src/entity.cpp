@@ -124,6 +124,7 @@ CEntity::CEntity(const CEntity& other)
       m_vTags(other.m_vTags),
       m_ParentId(other.m_ParentId),
       m_IsGroup(other.m_IsGroup),
+      m_PrefabPath(other.m_PrefabPath),
       m_pComponents(std::make_unique<CComponentManager>())
 {
     if (other.m_pComponents)
@@ -144,6 +145,7 @@ CEntity& CEntity::operator=(const CEntity& other)
     m_vTags = other.m_vTags;
     m_ParentId = other.m_ParentId;
     m_IsGroup = other.m_IsGroup;
+    m_PrefabPath = other.m_PrefabPath;
 
     m_pComponents = std::make_unique<CComponentManager>();
     if (other.m_pComponents)
@@ -304,6 +306,76 @@ const CTextComponent* CEntity::GetTextComponent() const
     return m_pComponents ? m_pComponents->GetText() : nullptr;
 }
 
+CSliderComponent* CEntity::GetSliderComponent()
+{
+    return m_pComponents ? m_pComponents->GetSlider() : nullptr;
+}
+
+const CSliderComponent* CEntity::GetSliderComponent() const
+{
+    return m_pComponents ? m_pComponents->GetSlider() : nullptr;
+}
+
+CToggleComponent* CEntity::GetToggleComponent()
+{
+    return m_pComponents ? m_pComponents->GetToggle() : nullptr;
+}
+
+const CToggleComponent* CEntity::GetToggleComponent() const
+{
+    return m_pComponents ? m_pComponents->GetToggle() : nullptr;
+}
+
+CProgressBarComponent* CEntity::GetProgressBarComponent()
+{
+    return m_pComponents ? m_pComponents->GetProgressBar() : nullptr;
+}
+
+const CProgressBarComponent* CEntity::GetProgressBarComponent() const
+{
+    return m_pComponents ? m_pComponents->GetProgressBar() : nullptr;
+}
+
+CScrollViewComponent* CEntity::GetScrollViewComponent()
+{
+    return m_pComponents ? m_pComponents->GetScrollView() : nullptr;
+}
+
+const CScrollViewComponent* CEntity::GetScrollViewComponent() const
+{
+    return m_pComponents ? m_pComponents->GetScrollView() : nullptr;
+}
+
+CHorizontalLayoutComponent* CEntity::GetHorizontalLayoutComponent()
+{
+    return m_pComponents ? m_pComponents->GetHorizontalLayout() : nullptr;
+}
+
+const CHorizontalLayoutComponent* CEntity::GetHorizontalLayoutComponent() const
+{
+    return m_pComponents ? m_pComponents->GetHorizontalLayout() : nullptr;
+}
+
+CVerticalLayoutComponent* CEntity::GetVerticalLayoutComponent()
+{
+    return m_pComponents ? m_pComponents->GetVerticalLayout() : nullptr;
+}
+
+const CVerticalLayoutComponent* CEntity::GetVerticalLayoutComponent() const
+{
+    return m_pComponents ? m_pComponents->GetVerticalLayout() : nullptr;
+}
+
+CGridLayoutComponent* CEntity::GetGridLayoutComponent()
+{
+    return m_pComponents ? m_pComponents->GetGridLayout() : nullptr;
+}
+
+const CGridLayoutComponent* CEntity::GetGridLayoutComponent() const
+{
+    return m_pComponents ? m_pComponents->GetGridLayout() : nullptr;
+}
+
 bool CEntity::HasUiComponent() const
 {
     return GetUiComponent() != nullptr ||
@@ -312,5 +384,12 @@ bool CEntity::HasUiComponent() const
            GetImageComponent() != nullptr ||
            GetPanelComponent() != nullptr ||
            GetButtonComponent() != nullptr ||
-           GetTextComponent() != nullptr;
+           GetTextComponent() != nullptr ||
+           GetSliderComponent() != nullptr ||
+           GetToggleComponent() != nullptr ||
+           GetProgressBarComponent() != nullptr ||
+           GetScrollViewComponent() != nullptr ||
+           GetHorizontalLayoutComponent() != nullptr ||
+           GetVerticalLayoutComponent() != nullptr ||
+           GetGridLayoutComponent() != nullptr;
 }

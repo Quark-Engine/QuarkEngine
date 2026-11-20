@@ -66,9 +66,20 @@ namespace
             return false;
         }
 
+        const int syncedCount = CEntityFactory::SyncPrefabInstances(
+            editor.m_Scene, editor.m_Assets, savedPath, editor.m_ComponentFactories, entityIndex);
         editor.m_Ui.m_AssetBrowser.m_AssetListCacheDirty = true;
         editor.m_Assets.RequestRefresh(editor.m_ProjectPath);
-        editor.SetStatusMessage(TextFormat("Saved prefab: %s", savedPath.filename().string().c_str()));
+        if (syncedCount > 0)
+        {
+            editor.SetStatusMessage(
+                TextFormat("Saved prefab: %s (synced %d instance(s))",
+                           savedPath.filename().string().c_str(), syncedCount));
+        }
+        else
+        {
+            editor.SetStatusMessage(TextFormat("Saved prefab: %s", savedPath.filename().string().c_str()));
+        }
         return true;
     }
 
@@ -139,6 +150,8 @@ namespace
         hppOut << "    void OnCreate() override;\n";
         hppOut << "    void OnStart() override;\n";
         hppOut << "    void OnUpdate(float deltaTime) override;\n";
+        hppOut << "    void OnFixedUpdate(float fixedDeltaTime) override;\n";
+        hppOut << "    void OnLateUpdate(float deltaTime) override;\n";
         hppOut << "    void OnDestroy() override;\n";
         hppOut << "};\n\n";
         hppOut << "#endif // __" << upperName << "_HPP__\n";
@@ -157,6 +170,14 @@ namespace
         cppOut << "void " << safeName << "::OnUpdate(float deltaTime)\n";
         cppOut << "{\n";
         cppOut << "    // Script updating...\n";
+        cppOut << "}\n\n";
+        cppOut << "void " << safeName << "::OnFixedUpdate(float fixedDeltaTime)\n";
+        cppOut << "{\n";
+        cppOut << "    // Physics / fixed step update...\n";
+        cppOut << "}\n\n";
+        cppOut << "void " << safeName << "::OnLateUpdate(float deltaTime)\n";
+        cppOut << "{\n";
+        cppOut << "    // Camera / post-update...\n";
         cppOut << "}\n\n";
         cppOut << "void " << safeName << "::OnDestroy()\n";
         cppOut << "{\n";
@@ -865,14 +886,31 @@ void DrawAssetsUi(CEditor& editor)
                 const ImVec2 size(ICON_SIZE, ICON_SIZE + 20.0f);
                 ImGui::InvisibleButton("asset_btn", size);
 
-                if (entry.m_IsDirectory && ImGui::BeginDragDropTarget())
+                if ((entry.m_IsDirectory || entry.m_IsPrefab) && ImGui::BeginDragDropTarget())
                 {
                     if (const ImGuiPayload* pPayload = ImGui::AcceptDragDropPayload("ENTITY_INDEX"))
                     {
                         if (pPayload->IsDelivery() && pPayload->DataSize == sizeof(int))
                         {
                             const int entityIdx = *static_cast<const int*>(pPayload->Data);
-                            SaveEntityBranchToDirectory(editor, entityIdx, editor.m_CurrentAssetPath / entry.m_FileName);
+                            if (entry.m_IsDirectory)
+                            {
+                                SaveEntityBranchToDirectory(editor, entityIdx, editor.m_CurrentAssetPath / entry.m_FileName);
+                            }
+                            else if (entry.m_IsPrefab)
+                            {
+                                const fs::path targetPrefabPath = editor.m_CurrentAssetPath / entry.m_FileName;
+                                if (CEntityFactory::SavePrefabToFile(editor.m_Scene, entityIdx, targetPrefabPath))
+                                {
+                                    const int syncedCount = CEntityFactory::SyncPrefabInstances(
+                                        editor.m_Scene, editor.m_Assets, targetPrefabPath,
+                                        editor.m_ComponentFactories, entityIdx);
+                                    editor.SetStatusMessage(
+                                        TextFormat("Updated prefab: %s (synced %d instance(s))",
+                                                   entry.m_FileName.c_str(), syncedCount));
+                                    editor.m_SceneDirty = true;
+                                }
+                            }
                             entityDroppedOnSubfolder = true;
                         }
                     }

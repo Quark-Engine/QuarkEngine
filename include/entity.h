@@ -79,6 +79,20 @@ public:
     const CButtonComponent* GetButtonComponent() const;
     CTextComponent* GetTextComponent();
     const CTextComponent* GetTextComponent() const;
+    CSliderComponent* GetSliderComponent();
+    const CSliderComponent* GetSliderComponent() const;
+    CToggleComponent* GetToggleComponent();
+    const CToggleComponent* GetToggleComponent() const;
+    CProgressBarComponent* GetProgressBarComponent();
+    const CProgressBarComponent* GetProgressBarComponent() const;
+    CScrollViewComponent* GetScrollViewComponent();
+    const CScrollViewComponent* GetScrollViewComponent() const;
+    CHorizontalLayoutComponent* GetHorizontalLayoutComponent();
+    const CHorizontalLayoutComponent* GetHorizontalLayoutComponent() const;
+    CVerticalLayoutComponent* GetVerticalLayoutComponent();
+    const CVerticalLayoutComponent* GetVerticalLayoutComponent() const;
+    CGridLayoutComponent* GetGridLayoutComponent();
+    const CGridLayoutComponent* GetGridLayoutComponent() const;
     bool HasUiComponent() const;
 
     int m_Id = 0;
@@ -86,6 +100,7 @@ public:
     std::vector<std::string> m_vTags;
     int m_ParentId = -1;
     bool m_IsGroup = false;
+    std::string m_PrefabPath;
 
     std::unique_ptr<CComponentManager> m_pComponents;
 };

@@ -16,6 +16,7 @@
 #include "scene.h"
 #include "text_mesh.h"
 
+#include <array>
 #include <filesystem>
 #include <future>
 #include <mutex>
@@ -39,6 +40,22 @@ struct SEditorUiTimings
     float m_ModelViewerMs = 0.0f;
 };
 
+struct SProfilerFrameStats
+{
+    float m_Fps = 0.0f;
+    float m_FrameTimeMs = 0.0f;
+    float m_UpdateFrameMs = 0.0f;
+    float m_SceneRendererUpdateMs = 0.0f;
+    float m_ShadowPassMs = 0.0f;
+    float m_Main3dPassMs = 0.0f;
+    float m_ImguiEditorMs = 0.0f;
+    int m_DrawCalls = 0;
+    int m_TriangleCount = 0;
+    int m_EntityCount = 0;
+    int m_VisibleMeshCount = 0;
+    int m_ActiveLightCount = 0;
+};
+
 struct SBuildTaskResult
 {
     bool m_Succeeded = false;
@@ -60,6 +77,7 @@ public:
     {
         return m_UiTimings;
     }
+    void RecordProfilerSample(const SProfilerFrameStats& stats);
     void DrawAssetsUi();
     void HandleInput();
     void SaveState();
@@ -137,6 +155,19 @@ public:
     std::vector<std::string> m_vBuildConsoleLines;
     std::future<SBuildTaskResult> m_BuildFuture;
 
+    bool m_ShowConsole = true;
+    bool m_ShowProfiler = false;
+    bool m_ConsoleShowInfo = true;
+    bool m_ConsoleShowWarn = true;
+    bool m_ConsoleShowError = true;
+    bool m_ConsoleAutoScroll = true;
+    char m_aConsoleSearch[128] = {};
+    SProfilerFrameStats m_LastProfilerStats{};
+    std::array<float, 120> m_aProfilerFpsHistory{};
+    std::array<float, 120> m_aProfilerFrameTimeHistory{};
+    std::array<float, 120> m_aProfilerDrawCallHistory{};
+    int m_ProfilerHistoryCursor = 0;
+
 private:
     void SetScene2DMode(CFlyCamera& camera, bool enabled);
     void StartSnapshotRestore(const quark::SSceneSnapshot& snapshot, bool playRestore);
@@ -154,6 +185,8 @@ private:
     void DrawConfirmationModals();
     void DrawBuildSettingsModal();
     void DrawBuildConsole();
+    void DrawConsoleWindow();
+    void DrawProfilerWindow();
     void StartBuild(bool runAfterBuild);
     void PollBuild();
 

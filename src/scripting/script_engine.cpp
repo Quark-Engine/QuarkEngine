@@ -1,5 +1,8 @@
 #include "scripting/script_engine.h"
 #include "QuarkEngine/SDK.h"
+#include "editor/editor_hierarchy_utils.h"
+#include "engine/component_factory_registry.h"
+#include "engine/scene_document.h"
 #include "entity.h"
 #include "project.h"
 
@@ -509,6 +512,66 @@ namespace quark::script
                     }
                 }
             }
+            else if (typeToken == "Color" || typeToken == "qc::Color")
+            {
+                field.m_Type = EScriptFieldType::COLOR;
+                if (!defaultValStr.empty())
+                {
+                    size_t braceStart = defaultValStr.find('{');
+                    size_t braceEnd = defaultValStr.find('}');
+                    if (braceStart != std::string::npos && braceEnd != std::string::npos)
+                    {
+                        std::string channels = defaultValStr.substr(braceStart + 1, braceEnd - braceStart - 1);
+                        std::replace(channels.begin(), channels.end(), ',', ' ');
+                        std::istringstream ciss(channels);
+                        int r = 255;
+                        int g = 255;
+                        int b = 255;
+                        int a = 255;
+                        ciss >> r >> g >> b;
+                        if (!(ciss >> a))
+                        {
+                            a = 255;
+                        }
+                        field.m_ColorValue = {
+                            static_cast<unsigned char>(std::clamp(r, 0, 255)),
+                            static_cast<unsigned char>(std::clamp(g, 0, 255)),
+                            static_cast<unsigned char>(std::clamp(b, 0, 255)),
+                            static_cast<unsigned char>(std::clamp(a, 0, 255))
+                        };
+                    }
+                }
+            }
+            else if (typeToken == "SEntityRef" || typeToken == "EntityRef" ||
+                     typeToken == "quark::script::SEntityRef")
+            {
+                field.m_Type = EScriptFieldType::ENTITY_REF;
+                if (!defaultValStr.empty())
+                {
+                    try
+                    {
+                        field.m_EntityIdValue = std::stoi(defaultValStr);
+                    }
+                    catch (...)
+                    {
+                        field.m_EntityIdValue = -1;
+                    }
+                }
+            }
+            else if (typeToken == "SAssetRef" || typeToken == "AssetRef" ||
+                     typeToken == "quark::script::SAssetRef")
+            {
+                field.m_Type = EScriptFieldType::ASSET_REF;
+                if (!defaultValStr.empty())
+                {
+                    size_t firstQuote = defaultValStr.find('"');
+                    size_t lastQuote = defaultValStr.rfind('"');
+                    if (firstQuote != std::string::npos && lastQuote != std::string::npos && lastQuote > firstQuote)
+                    {
+                        field.m_AssetPathValue = defaultValStr.substr(firstQuote + 1, lastQuote - firstQuote - 1);
+                    }
+                }
+            }
             else
             {
                 continue;
@@ -565,11 +628,67 @@ namespace quark::script
 
     SInputCallbacks g_InputCallbacks;
     STimeCallbacks g_TimeCallbacks;
+    SSceneCallbacks g_SceneCallbacks;
+    SDebugCallbacks g_DebugCallbacks;
 
     static float s_ScriptTimeScale = 1.0f;
     static float s_ScriptDeltaTime = 0.0166667f;
+    static float s_ScriptFixedDeltaTime = 0.02f;
     static double s_ScriptAccumulatedTime = 0.0;
     static int s_DiscardMouseDeltaFrames = 0;
+    static std::unordered_map<int, std::unique_ptr<CScriptEntity>> s_EntityWrappers;
+
+    namespace
+    {
+
+        CScriptEntity* GetOrCreateScriptEntityWrapper(CEntity& entity)
+        {
+            CScriptComponent* pScriptComp = entity.GetScriptComponent();
+            if (pScriptComp && pScriptComp->m_pScriptEntity)
+            {
+                CTransformComponent* pTransform = entity.GetTransformComponent();
+                Vec3* pPos = pTransform ? &pTransform->m_Position : nullptr;
+                Vec3* pRot = pTransform ? &pTransform->m_Rotation : nullptr;
+                Vec3* pScale = pTransform ? &pTransform->m_Scale : nullptr;
+                bool* pHasOverride = pTransform ? &pTransform->m_HasLocalMatrixOverride : nullptr;
+                pScriptComp->m_pScriptEntity->SetTransformPointers(pPos, pRot, pScale, pHasOverride);
+                return pScriptComp->m_pScriptEntity.get();
+            }
+
+            CTransformComponent* pTransform = entity.GetTransformComponent();
+            Vec3* pPos = pTransform ? &pTransform->m_Position : nullptr;
+            Vec3* pRot = pTransform ? &pTransform->m_Rotation : nullptr;
+            Vec3* pScale = pTransform ? &pTransform->m_Scale : nullptr;
+            bool* pHasOverride = pTransform ? &pTransform->m_HasLocalMatrixOverride : nullptr;
+
+            auto& pWrapper = s_EntityWrappers[entity.m_Id];
+            pWrapper = std::make_unique<CScriptEntity>(&entity, pPos, pRot, pScale, pHasOverride);
+            return pWrapper.get();
+        }
+
+        void RefreshSceneScriptEntityPointers(CScene& scene)
+        {
+            for (auto& entity : scene.m_vEntities)
+            {
+                CScriptComponent* pScriptComp = entity.GetScriptComponent();
+                if (pScriptComp && pScriptComp->m_pScriptEntity)
+                {
+                    CTransformComponent* pTransform = entity.GetTransformComponent();
+                    Vec3* pPos = pTransform ? &pTransform->m_Position : nullptr;
+                    Vec3* pRot = pTransform ? &pTransform->m_Rotation : nullptr;
+                    Vec3* pScale = pTransform ? &pTransform->m_Scale : nullptr;
+                    bool* pHasOverride = pTransform ? &pTransform->m_HasLocalMatrixOverride : nullptr;
+                    pScriptComp->m_pScriptEntity = std::make_unique<CScriptEntity>(
+                        &entity, pPos, pRot, pScale, pHasOverride);
+                    if (pScriptComp->m_pInstance)
+                    {
+                        pScriptComp->m_pInstance->m_Entity = pScriptComp->m_pScriptEntity.get();
+                    }
+                }
+            }
+        }
+
+    } // anonymous
 
     CScriptEngine::CScriptEngine()
     {
@@ -701,6 +820,14 @@ namespace quark::script
         {
             return s_ScriptDeltaTime;
         };
+        g_TimeCallbacks.pfnGetFixedDeltaTime = []() -> float
+        {
+            return s_ScriptFixedDeltaTime;
+        };
+        g_TimeCallbacks.pfnSetFixedDeltaTime = [](float fixedStep)
+        {
+            s_ScriptFixedDeltaTime = std::clamp(fixedStep, 0.001f, 1.0f);
+        };
         g_TimeCallbacks.pfnGetTime = []() -> double
         {
             return s_ScriptAccumulatedTime;
@@ -712,6 +839,450 @@ namespace quark::script
         g_TimeCallbacks.pfnSetTimeScale = [](float scale)
         {
             s_ScriptTimeScale = std::max(0.0f, scale);
+        };
+
+        g_SceneCallbacks.pfnFindEntityByName = [](const char* pName) -> CScriptEntity*
+        {
+            CScene* pScene = CScriptEngine::Get().GetActiveScene();
+            if (!pScene || !pName)
+            {
+                return nullptr;
+            }
+            for (auto& entity : pScene->m_vEntities)
+            {
+                if (entity.m_Name == pName)
+                {
+                    return GetOrCreateScriptEntityWrapper(entity);
+                }
+            }
+            return nullptr;
+        };
+
+        g_SceneCallbacks.pfnFindEntityById = [](int entityId) -> CScriptEntity*
+        {
+            CScene* pScene = CScriptEngine::Get().GetActiveScene();
+            if (!pScene || entityId < 0)
+            {
+                return nullptr;
+            }
+            for (auto& entity : pScene->m_vEntities)
+            {
+                if (entity.m_Id == entityId)
+                {
+                    return GetOrCreateScriptEntityWrapper(entity);
+                }
+            }
+            if (entityId < static_cast<int>(pScene->m_vEntities.size()))
+            {
+                return GetOrCreateScriptEntityWrapper(pScene->m_vEntities[entityId]);
+            }
+            return nullptr;
+        };
+
+        g_SceneCallbacks.pfnFindEntitiesWithTag = [](const char* pTag, CScriptEntity** ppOutEntities, int maxCount) -> int
+        {
+            CScene* pScene = CScriptEngine::Get().GetActiveScene();
+            if (!pScene || !pTag || pTag[0] == '\0')
+            {
+                return 0;
+            }
+            int foundCount = 0;
+            for (auto& entity : pScene->m_vEntities)
+            {
+                const bool hasTag = std::find(entity.m_vTags.begin(), entity.m_vTags.end(), pTag) != entity.m_vTags.end();
+                if (!hasTag)
+                {
+                    continue;
+                }
+                if (ppOutEntities && foundCount < maxCount)
+                {
+                    ppOutEntities[foundCount] = GetOrCreateScriptEntityWrapper(entity);
+                }
+                ++foundCount;
+            }
+            return foundCount;
+        };
+
+        g_SceneCallbacks.pfnInstantiateEntity = [](CScriptEntity* pSourceEntity) -> CScriptEntity*
+        {
+            CScene* pScene = CScriptEngine::Get().GetActiveScene();
+            if (!pScene || !pSourceEntity || !pSourceEntity->GetRawEntity())
+            {
+                return nullptr;
+            }
+            const int sourceId = pSourceEntity->GetId();
+            int sourceIndex = -1;
+            for (int i = 0; i < static_cast<int>(pScene->m_vEntities.size()); ++i)
+            {
+                if (pScene->m_vEntities[i].m_Id == sourceId || &pScene->m_vEntities[i] == pSourceEntity->GetRawEntity())
+                {
+                    sourceIndex = i;
+                    break;
+                }
+            }
+            if (sourceIndex < 0)
+            {
+                return nullptr;
+            }
+
+            CEntity cloned = pScene->m_vEntities[sourceIndex];
+            cloned.m_Id = static_cast<int>(pScene->m_vEntities.size());
+            auto isNameTaken = [pScene](const std::string& candidate)
+            {
+                for (const auto& entity : pScene->m_vEntities)
+                {
+                    if (entity.m_Name == candidate)
+                    {
+                        return true;
+                    }
+                }
+                return false;
+            };
+            std::string uniqueName = cloned.m_Name;
+            for (int suffix = 1; isNameTaken(uniqueName); ++suffix)
+            {
+                uniqueName = cloned.m_Name + " (" + std::to_string(suffix) + ")";
+            }
+            cloned.m_Name = uniqueName;
+            pScene->m_vEntities.push_back(std::move(cloned));
+            RefreshSceneScriptEntityPointers(*pScene);
+
+            CEntity& spawned = pScene->m_vEntities.back();
+            if (CScriptComponent* pScriptComp = spawned.GetScriptComponent())
+            {
+                if (!pScriptComp->m_ScriptName.empty())
+                {
+                    IScript* pInstance = CScriptEngine::Get().CreateScript(pScriptComp->m_ScriptName);
+                    if (pInstance)
+                    {
+                        pScriptComp->m_pInstance = pInstance;
+                        CTransformComponent* pTransform = spawned.GetTransformComponent();
+                        Vec3* pPos = pTransform ? &pTransform->m_Position : nullptr;
+                        Vec3* pRot = pTransform ? &pTransform->m_Rotation : nullptr;
+                        Vec3* pScale = pTransform ? &pTransform->m_Scale : nullptr;
+                        bool* pHasOverride = pTransform ? &pTransform->m_HasLocalMatrixOverride : nullptr;
+                        pScriptComp->m_pScriptEntity = std::make_unique<CScriptEntity>(
+                            &spawned, pPos, pRot, pScale, pHasOverride);
+                        pInstance->m_Entity = pScriptComp->m_pScriptEntity.get();
+                        pScriptComp->ApplyFieldsToInstance();
+                        pInstance->OnCreate();
+                        if (pScriptComp->m_Enabled)
+                        {
+                            pInstance->OnStart();
+                        }
+                    }
+                }
+            }
+            return GetOrCreateScriptEntityWrapper(spawned);
+        };
+
+        g_SceneCallbacks.pfnInstantiatePrefab = [](const char* pPrefabPath) -> CScriptEntity*
+        {
+            CScene* pScene = CScriptEngine::Get().GetActiveScene();
+            if (!pScene || !pPrefabPath || pPrefabPath[0] == '\0')
+            {
+                return nullptr;
+            }
+
+            fs::path resolvedPath(pPrefabPath);
+            std::error_code ec;
+            if (!fs::is_regular_file(resolvedPath, ec))
+            {
+                for (const auto& candidate : {
+                         fs::path(pPrefabPath),
+                         fs::current_path() / pPrefabPath,
+                         fs::current_path() / "resources" / pPrefabPath })
+                {
+                    if (fs::is_regular_file(candidate, ec))
+                    {
+                        resolvedPath = candidate;
+                        break;
+                    }
+                }
+            }
+
+            std::ifstream prefabFile(resolvedPath);
+            if (!prefabFile.is_open())
+            {
+                return nullptr;
+            }
+            std::stringstream buffer;
+            buffer << prefabFile.rdbuf();
+
+            CComponentFactoryRegistry defaultFactories;
+            const CComponentFactoryRegistry* pFactories = pScene->m_pComponentRegistry
+                ? pScene->m_pComponentRegistry
+                : &defaultFactories;
+            std::vector<int> vCreatedIndices;
+            if (!quark::CSceneDocument::InstantiatePrefab(buffer.str(), *pScene, *pFactories, -1, &vCreatedIndices) ||
+                vCreatedIndices.empty())
+            {
+                return nullptr;
+            }
+
+            RefreshSceneScriptEntityPointers(*pScene);
+            for (int createdIdx : vCreatedIndices)
+            {
+                if (createdIdx < 0 || createdIdx >= static_cast<int>(pScene->m_vEntities.size()))
+                {
+                    continue;
+                }
+                CEntity& spawned = pScene->m_vEntities[createdIdx];
+                if (CScriptComponent* pScriptComp = spawned.GetScriptComponent())
+                {
+                    if (!pScriptComp->m_ScriptName.empty())
+                    {
+                        IScript* pInstance = CScriptEngine::Get().CreateScript(pScriptComp->m_ScriptName);
+                        if (pInstance)
+                        {
+                            pScriptComp->m_pInstance = pInstance;
+                            CTransformComponent* pTransform = spawned.GetTransformComponent();
+                            Vec3* pPos = pTransform ? &pTransform->m_Position : nullptr;
+                            Vec3* pRot = pTransform ? &pTransform->m_Rotation : nullptr;
+                            Vec3* pScale = pTransform ? &pTransform->m_Scale : nullptr;
+                            bool* pHasOverride = pTransform ? &pTransform->m_HasLocalMatrixOverride : nullptr;
+                            pScriptComp->m_pScriptEntity = std::make_unique<CScriptEntity>(
+                                &spawned, pPos, pRot, pScale, pHasOverride);
+                            pInstance->m_Entity = pScriptComp->m_pScriptEntity.get();
+                            pScriptComp->ApplyFieldsToInstance();
+                            pInstance->OnCreate();
+                            if (pScriptComp->m_Enabled)
+                            {
+                                pInstance->OnStart();
+                            }
+                        }
+                    }
+                }
+            }
+
+            return GetOrCreateScriptEntityWrapper(pScene->m_vEntities[vCreatedIndices.front()]);
+        };
+
+        g_SceneCallbacks.pfnDestroyEntity = [](CScriptEntity* pEntity)
+        {
+            if (pEntity)
+            {
+                g_SceneCallbacks.pfnDestroyEntityById(pEntity->GetId());
+            }
+        };
+
+        g_SceneCallbacks.pfnDestroyEntityById = [](int entityId)
+        {
+            CScene* pScene = CScriptEngine::Get().GetActiveScene();
+            if (!pScene || entityId < 0)
+            {
+                return;
+            }
+            for (int i = 0; i < static_cast<int>(pScene->m_vEntities.size()); ++i)
+            {
+                if (pScene->m_vEntities[i].m_Id == entityId)
+                {
+                    CEntity& target = pScene->m_vEntities[i];
+                    if (CScriptComponent* pScriptComp = target.GetScriptComponent())
+                    {
+                        if (pScriptComp->m_pInstance)
+                        {
+                            pScriptComp->m_pInstance->OnDestroy();
+                            CScriptEngine::Get().DestroyScript(pScriptComp->m_ScriptName, pScriptComp->m_pInstance);
+                            pScriptComp->m_pInstance = nullptr;
+                            pScriptComp->m_pScriptEntity.reset();
+                        }
+                    }
+                    std::vector<int> vToErase;
+                    std::vector<int> vStack = { i };
+                    std::vector<bool> vVisited(pScene->m_vEntities.size(), false);
+                    while (!vStack.empty())
+                    {
+                        const int cur = vStack.back();
+                        vStack.pop_back();
+                        if (cur < 0 || cur >= static_cast<int>(vVisited.size()) || vVisited[cur])
+                        {
+                            continue;
+                        }
+                        vVisited[cur] = true;
+                        vToErase.push_back(cur);
+                        for (int childIdx = 0; childIdx < static_cast<int>(pScene->m_vEntities.size()); ++childIdx)
+                        {
+                            if (pScene->m_vEntities[childIdx].m_ParentId == cur)
+                            {
+                                vStack.push_back(childIdx);
+                            }
+                        }
+                    }
+                    std::sort(vToErase.begin(), vToErase.end(), std::greater<int>());
+                    for (int eraseIdx : vToErase)
+                    {
+                        if (eraseIdx != i)
+                        {
+                            if (CScriptComponent* pChildScript = pScene->m_vEntities[eraseIdx].GetScriptComponent())
+                            {
+                                if (pChildScript->m_pInstance)
+                                {
+                                    pChildScript->m_pInstance->OnDestroy();
+                                    CScriptEngine::Get().DestroyScript(pChildScript->m_ScriptName, pChildScript->m_pInstance);
+                                    pChildScript->m_pInstance = nullptr;
+                                    pChildScript->m_pScriptEntity.reset();
+                                }
+                            }
+                        }
+                        pScene->m_vEntities.erase(pScene->m_vEntities.begin() + eraseIdx);
+                        for (int rem = 0; rem < static_cast<int>(pScene->m_vEntities.size()); ++rem)
+                        {
+                            CEntity& remaining = pScene->m_vEntities[rem];
+                            remaining.m_Id = rem;
+                            if (remaining.m_ParentId == eraseIdx)
+                            {
+                                remaining.m_ParentId = -1;
+                            }
+                            else if (remaining.m_ParentId > eraseIdx)
+                            {
+                                --remaining.m_ParentId;
+                            }
+                        }
+                    }
+                    pScene->m_Selected = -1;
+                    pScene->m_vSelectedEntities.clear();
+                    RefreshSceneScriptEntityPointers(*pScene);
+                    break;
+                }
+            }
+        };
+
+        g_SceneCallbacks.pfnLoadScene = [](const char* pScenePath) -> bool
+        {
+            CScene* pScene = CScriptEngine::Get().GetActiveScene();
+            if (!pScene || !pScenePath || pScenePath[0] == '\0')
+            {
+                return false;
+            }
+
+            fs::path resolvedPath(pScenePath);
+            std::error_code ec;
+            if (!fs::is_regular_file(resolvedPath, ec))
+            {
+                for (const auto& candidate : {
+                         fs::path(pScenePath),
+                         fs::current_path() / pScenePath,
+                         fs::current_path() / "resources" / pScenePath })
+                {
+                    if (fs::is_regular_file(candidate, ec))
+                    {
+                        resolvedPath = candidate;
+                        break;
+                    }
+                }
+            }
+
+            std::ifstream sceneFile(resolvedPath);
+            if (!sceneFile.is_open())
+            {
+                return false;
+            }
+            std::stringstream buffer;
+            buffer << sceneFile.rdbuf();
+
+            CComponentFactoryRegistry defaultFactories;
+            const CComponentFactoryRegistry* pFactories = pScene->m_pComponentRegistry
+                ? pScene->m_pComponentRegistry
+                : &defaultFactories;
+
+            CScene loadedScene;
+            loadedScene.m_pComponentRegistry = pScene->m_pComponentRegistry;
+            if (!quark::CSceneDocument::Deserialize(buffer.str(), loadedScene, *pFactories))
+            {
+                return false;
+            }
+
+            for (auto& existing : pScene->m_vEntities)
+            {
+                if (CScriptComponent* pScriptComp = existing.GetScriptComponent())
+                {
+                    if (pScriptComp->m_pInstance)
+                    {
+                        pScriptComp->m_pInstance->OnDestroy();
+                        CScriptEngine::Get().DestroyScript(pScriptComp->m_ScriptName, pScriptComp->m_pInstance);
+                        pScriptComp->m_pInstance = nullptr;
+                        pScriptComp->m_pScriptEntity.reset();
+                    }
+                }
+            }
+
+            for (auto& existing : pScene->m_vEntities)
+            {
+                if (CMeshComponent* pMesh = existing.GetMeshComponent())
+                {
+                    pMesh->ReleaseOwnedResources();
+                }
+                if (CCanvasComponent* pCanvas = existing.GetCanvasComponent())
+                {
+                    pCanvas->ReleaseOwnedResources();
+                }
+                if (CImageComponent* pImage = existing.GetImageComponent())
+                {
+                    pImage->ReleaseOwnedResources();
+                }
+                if (CPanelComponent* pPanel = existing.GetPanelComponent())
+                {
+                    pPanel->ReleaseOwnedResources();
+                }
+            }
+            pScene->m_vEntities = std::move(loadedScene.m_vEntities);
+            pScene->m_Selected = -1;
+            pScene->m_vSelectedEntities.clear();
+            s_EntityWrappers.clear();
+
+            for (auto& entity : pScene->m_vEntities)
+            {
+                CScriptComponent* pScriptComp = entity.GetScriptComponent();
+                if (!pScriptComp || pScriptComp->m_ScriptName.empty())
+                {
+                    continue;
+                }
+                IScript* pInstance = CScriptEngine::Get().CreateScript(pScriptComp->m_ScriptName);
+                if (!pInstance)
+                {
+                    continue;
+                }
+                pScriptComp->m_pInstance = pInstance;
+                CTransformComponent* pTransform = entity.GetTransformComponent();
+                Vec3* pPos = pTransform ? &pTransform->m_Position : nullptr;
+                Vec3* pRot = pTransform ? &pTransform->m_Rotation : nullptr;
+                Vec3* pScale = pTransform ? &pTransform->m_Scale : nullptr;
+                bool* pHasOverride = pTransform ? &pTransform->m_HasLocalMatrixOverride : nullptr;
+                pScriptComp->m_pScriptEntity = std::make_unique<CScriptEntity>(
+                    &entity, pPos, pRot, pScale, pHasOverride);
+                pInstance->m_Entity = pScriptComp->m_pScriptEntity.get();
+                pScriptComp->ApplyFieldsToInstance();
+                pInstance->OnCreate();
+            }
+
+            for (auto& entity : pScene->m_vEntities)
+            {
+                CScriptComponent* pScriptComp = entity.GetScriptComponent();
+                if (pScriptComp && pScriptComp->m_pInstance && pScriptComp->m_Enabled)
+                {
+                    pScriptComp->m_pInstance->OnStart();
+                }
+            }
+            return true;
+        };
+
+        g_DebugCallbacks.pfnLog = [](int level, const char* pMessage)
+        {
+            if (!pMessage)
+            {
+                return;
+            }
+            EScriptLogLevel logLevel = EScriptLogLevel::INFO;
+            if (level == 1)
+            {
+                logLevel = EScriptLogLevel::WARNING;
+            }
+            else if (level >= 2)
+            {
+                logLevel = EScriptLogLevel::ERR;
+            }
+            CScriptEngine::Get().LogMessage(logLevel, pMessage);
         };
 
         m_pActiveDll = &m_Dll;
@@ -833,6 +1404,8 @@ namespace quark::script
             bridgeOut << "namespace quark::script\n{\n";
             bridgeOut << "    SInputCallbacks g_InputCallbacks;\n";
             bridgeOut << "    STimeCallbacks g_TimeCallbacks;\n";
+            bridgeOut << "    SSceneCallbacks g_SceneCallbacks;\n";
+            bridgeOut << "    SDebugCallbacks g_DebugCallbacks;\n";
             bridgeOut << "}\n\n";
             bridgeOut << "extern \"C\" QUARK_SCRIPT_API void SetScriptInputCallbacks(const ::quark::script::SInputCallbacks* pCallbacks)\n";
             bridgeOut << "{\n";
@@ -846,6 +1419,20 @@ namespace quark::script
             bridgeOut << "    if (pCallbacks)\n";
             bridgeOut << "    {\n";
             bridgeOut << "        ::quark::script::g_TimeCallbacks = *pCallbacks;\n";
+            bridgeOut << "    }\n";
+            bridgeOut << "}\n\n";
+            bridgeOut << "extern \"C\" QUARK_SCRIPT_API void SetScriptSceneCallbacks(const ::quark::script::SSceneCallbacks* pCallbacks)\n";
+            bridgeOut << "{\n";
+            bridgeOut << "    if (pCallbacks)\n";
+            bridgeOut << "    {\n";
+            bridgeOut << "        ::quark::script::g_SceneCallbacks = *pCallbacks;\n";
+            bridgeOut << "    }\n";
+            bridgeOut << "}\n\n";
+            bridgeOut << "extern \"C\" QUARK_SCRIPT_API void SetScriptDebugCallbacks(const ::quark::script::SDebugCallbacks* pCallbacks)\n";
+            bridgeOut << "{\n";
+            bridgeOut << "    if (pCallbacks)\n";
+            bridgeOut << "    {\n";
+            bridgeOut << "        ::quark::script::g_DebugCallbacks = *pCallbacks;\n";
             bridgeOut << "    }\n";
             bridgeOut << "}\n";
             bridgeOut.close();
@@ -1069,6 +1656,22 @@ namespace quark::script
             TraceLog(LogLevel::Info, "SCRIPT", "Configured script time callbacks bridge");
         }
 
+        using FSetScriptSceneCallbacks = void (*)(const SSceneCallbacks*);
+        auto pfnSetScene = reinterpret_cast<FSetScriptSceneCallbacks>(m_Dll.GetSymbol("SetScriptSceneCallbacks"));
+        if (pfnSetScene)
+        {
+            pfnSetScene(&g_SceneCallbacks);
+            TraceLog(LogLevel::Info, "SCRIPT", "Configured script scene callbacks bridge");
+        }
+
+        using FSetScriptDebugCallbacks = void (*)(const SDebugCallbacks*);
+        auto pfnSetDebug = reinterpret_cast<FSetScriptDebugCallbacks>(m_Dll.GetSymbol("SetScriptDebugCallbacks"));
+        if (pfnSetDebug)
+        {
+            pfnSetDebug(&g_DebugCallbacks);
+            TraceLog(LogLevel::Info, "SCRIPT", "Configured script debug callbacks bridge");
+        }
+
         TraceLog(LogLevel::Info, "SCRIPT", TextFormat("Loaded script DLL '%s'", dllPath.c_str()));
         return true;
     }
@@ -1143,8 +1746,13 @@ namespace quark::script
 
         s_ScriptTimeScale = 1.0f;
         s_ScriptDeltaTime = 0.0166667f;
+        s_ScriptFixedDeltaTime = 0.02f;
         s_ScriptAccumulatedTime = 0.0;
         s_DiscardMouseDeltaFrames = 2;
+        s_EntityWrappers.clear();
+        m_pActiveScene = &scene;
+        m_ActiveProjectPath = projectPath;
+        m_FixedAccumulator = 0.0f;
 
         if (pExternalDll && pExternalDll->IsOpen())
         {
@@ -1160,6 +1768,18 @@ namespace quark::script
             if (pfnSetTime)
             {
                 pfnSetTime(&g_TimeCallbacks);
+            }
+            using FSetScriptSceneCallbacks = void (*)(const SSceneCallbacks*);
+            auto pfnSetScene = reinterpret_cast<FSetScriptSceneCallbacks>(m_pActiveDll->GetSymbol("SetScriptSceneCallbacks"));
+            if (pfnSetScene)
+            {
+                pfnSetScene(&g_SceneCallbacks);
+            }
+            using FSetScriptDebugCallbacks = void (*)(const SDebugCallbacks*);
+            auto pfnSetDebug = reinterpret_cast<FSetScriptDebugCallbacks>(m_pActiveDll->GetSymbol("SetScriptDebugCallbacks"));
+            if (pfnSetDebug)
+            {
+                pfnSetDebug(&g_DebugCallbacks);
             }
         }
         else if (m_Dll.IsOpen())
@@ -1386,16 +2006,44 @@ namespace quark::script
             return;
         }
 
+        m_pActiveScene = &scene;
         s_ScriptDeltaTime = deltaTime;
         const float scaledDelta = deltaTime * s_ScriptTimeScale;
         s_ScriptAccumulatedTime += static_cast<double>(scaledDelta);
 
-        for (auto& entity : scene.m_vEntities)
+        const float fixedStep = std::max(0.001f, s_ScriptFixedDeltaTime);
+        m_FixedAccumulator += scaledDelta;
+        int fixedIterations = 0;
+        constexpr int MAX_FIXED_STEPS_PER_FRAME = 8;
+        while (m_FixedAccumulator >= fixedStep && fixedIterations < MAX_FIXED_STEPS_PER_FRAME)
         {
-            CScriptComponent* pScriptComp = entity.GetScriptComponent();
+            m_FixedAccumulator -= fixedStep;
+            ++fixedIterations;
+            for (size_t i = 0; i < scene.m_vEntities.size(); ++i)
+            {
+                CScriptComponent* pScriptComp = scene.m_vEntities[i].GetScriptComponent();
+                if (pScriptComp && pScriptComp->m_pInstance && pScriptComp->m_Enabled)
+                {
+                    pScriptComp->m_pInstance->OnFixedUpdate(fixedStep);
+                }
+            }
+        }
+
+        for (size_t i = 0; i < scene.m_vEntities.size(); ++i)
+        {
+            CScriptComponent* pScriptComp = scene.m_vEntities[i].GetScriptComponent();
             if (pScriptComp && pScriptComp->m_pInstance && pScriptComp->m_Enabled)
             {
                 pScriptComp->m_pInstance->OnUpdate(scaledDelta);
+            }
+        }
+
+        for (size_t i = 0; i < scene.m_vEntities.size(); ++i)
+        {
+            CScriptComponent* pScriptComp = scene.m_vEntities[i].GetScriptComponent();
+            if (pScriptComp && pScriptComp->m_pInstance && pScriptComp->m_Enabled)
+            {
+                pScriptComp->m_pInstance->OnLateUpdate(scaledDelta);
             }
         }
     }
@@ -1422,10 +2070,59 @@ namespace quark::script
         SetCursorLocked(false);
         s_ScriptTimeScale = 1.0f;
         s_DiscardMouseDeltaFrames = 0;
+        s_EntityWrappers.clear();
+        m_pActiveScene = nullptr;
+        m_FixedAccumulator = 0.0f;
 
         UnloadScriptDll();
         m_pActiveDll = &m_Dll;
         m_IsPlaying = false;
+    }
+
+    void CScriptEngine::LogMessage(EScriptLogLevel level, const std::string& message, bool emitToTraceLog)
+    {
+        static thread_local bool s_InLogMessage = false;
+        if (s_InLogMessage)
+        {
+            return;
+        }
+        s_InLogMessage = true;
+
+        SScriptLogEntry entry;
+        entry.m_Level = level;
+        entry.m_Message = message;
+        entry.m_Timestamp = s_ScriptAccumulatedTime;
+        m_vLogs.push_back(std::move(entry));
+        if (m_vLogs.size() > 2000)
+        {
+            m_vLogs.erase(m_vLogs.begin());
+        }
+
+        if (emitToTraceLog)
+        {
+            LogLevel coreLevel = LogLevel::Info;
+            if (level == EScriptLogLevel::WARNING)
+            {
+                coreLevel = LogLevel::Warn;
+            }
+            else if (level == EScriptLogLevel::ERR)
+            {
+                coreLevel = LogLevel::Error;
+            }
+            TraceLog(coreLevel, "SCRIPT", message.c_str());
+        }
+
+        s_InLogMessage = false;
+    }
+
+    std::vector<SScriptLogEntry> CScriptEngine::GetLogs() const
+    {
+        return m_vLogs;
+    }
+
+    void CScriptEngine::ClearLogs()
+    {
+        m_vLogs.clear();
     }
 
     void CScriptEngine::RefreshAvailableScripts(const std::string& projectPath)

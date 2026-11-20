@@ -133,6 +133,20 @@ namespace quark::script
                 case EScriptFieldType::VEC3:
                     fieldJson["value"] = { field.m_Vec3Value.x, field.m_Vec3Value.y, field.m_Vec3Value.z };
                     break;
+                case EScriptFieldType::COLOR:
+                    fieldJson["value"] = {
+                        field.m_ColorValue.r,
+                        field.m_ColorValue.g,
+                        field.m_ColorValue.b,
+                        field.m_ColorValue.a
+                    };
+                    break;
+                case EScriptFieldType::ENTITY_REF:
+                    fieldJson["value"] = field.m_EntityIdValue;
+                    break;
+                case EScriptFieldType::ASSET_REF:
+                    fieldJson["value"] = field.m_AssetPathValue;
+                    break;
             }
             fieldsArray.push_back(fieldJson);
         }
@@ -197,6 +211,29 @@ namespace quark::script
                             if (val.is_array() && val.size() >= 3)
                             {
                                 field.m_Vec3Value = { val[0].get<float>(), val[1].get<float>(), val[2].get<float>() };
+                            }
+                            break;
+                        case EScriptFieldType::COLOR:
+                            if (val.is_array() && val.size() >= 4)
+                            {
+                                field.m_ColorValue = {
+                                    static_cast<unsigned char>(val[0].get<int>()),
+                                    static_cast<unsigned char>(val[1].get<int>()),
+                                    static_cast<unsigned char>(val[2].get<int>()),
+                                    static_cast<unsigned char>(val[3].get<int>())
+                                };
+                            }
+                            break;
+                        case EScriptFieldType::ENTITY_REF:
+                            if (val.is_number_integer())
+                            {
+                                field.m_EntityIdValue = val.get<int>();
+                            }
+                            break;
+                        case EScriptFieldType::ASSET_REF:
+                            if (val.is_string())
+                            {
+                                field.m_AssetPathValue = val.get<std::string>();
                             }
                             break;
                     }
@@ -275,6 +312,33 @@ namespace quark::script
         }
     }
 
+    void CScriptComponent::SetFieldValue(const std::string& name, const Color& value)
+    {
+        SScriptField* pField = FindField(name);
+        if (pField)
+        {
+            pField->m_ColorValue = value;
+        }
+    }
+
+    void CScriptComponent::SetFieldEntityId(const std::string& name, int entityId)
+    {
+        SScriptField* pField = FindField(name);
+        if (pField)
+        {
+            pField->m_EntityIdValue = entityId;
+        }
+    }
+
+    void CScriptComponent::SetFieldAssetPath(const std::string& name, const std::string& assetPath)
+    {
+        SScriptField* pField = FindField(name);
+        if (pField)
+        {
+            pField->m_AssetPathValue = assetPath;
+        }
+    }
+
     void CScriptComponent::SyncWithHeaderFields(const std::vector<SScriptField>& vHeaderFields)
     {
         std::vector<SScriptField> vUpdated;
@@ -349,6 +413,33 @@ namespace quark::script
                     currentOffset = (currentOffset + alignof(std::string) - 1) & ~(alignof(std::string) - 1);
                     m_pInstance->SetPropertyString(field.m_Name, field.m_StringValue);
                     currentOffset += sizeof(std::string);
+                    break;
+                }
+                case EScriptFieldType::COLOR:
+                {
+                    currentOffset = (currentOffset + alignof(Color) - 1) & ~(alignof(Color) - 1);
+                    auto* pDst = reinterpret_cast<Color*>(reinterpret_cast<char*>(m_pInstance) + currentOffset);
+                    *pDst = field.m_ColorValue;
+                    m_pInstance->SetPropertyColor(field.m_Name, field.m_ColorValue);
+                    currentOffset += sizeof(Color);
+                    break;
+                }
+                case EScriptFieldType::ENTITY_REF:
+                {
+                    currentOffset = (currentOffset + alignof(SEntityRef) - 1) & ~(alignof(SEntityRef) - 1);
+                    auto* pDst = reinterpret_cast<SEntityRef*>(reinterpret_cast<char*>(m_pInstance) + currentOffset);
+                    pDst->m_EntityId = field.m_EntityIdValue;
+                    pDst->m_pResolved = Scene::FindEntityById(field.m_EntityIdValue);
+                    m_pInstance->SetPropertyEntityRef(field.m_Name, *pDst);
+                    currentOffset += sizeof(SEntityRef);
+                    break;
+                }
+                case EScriptFieldType::ASSET_REF:
+                {
+                    currentOffset = (currentOffset + alignof(SAssetRef) - 1) & ~(alignof(SAssetRef) - 1);
+                    SAssetRef assetRef(field.m_AssetPathValue);
+                    m_pInstance->SetPropertyAssetRef(field.m_Name, assetRef);
+                    currentOffset += sizeof(SAssetRef);
                     break;
                 }
             }
@@ -440,6 +531,49 @@ namespace quark::script
                         field.m_StringValue = val;
                     }
                     currentOffset += sizeof(std::string);
+                    break;
+                }
+                case EScriptFieldType::COLOR:
+                {
+                    currentOffset = (currentOffset + alignof(Color) - 1) & ~(alignof(Color) - 1);
+                    Color val{};
+                    if (m_pInstance->GetPropertyColor(field.m_Name, val))
+                    {
+                        field.m_ColorValue = val;
+                    }
+                    else
+                    {
+                        auto* pSrc = reinterpret_cast<const Color*>(reinterpret_cast<const char*>(m_pInstance) + currentOffset);
+                        field.m_ColorValue = *pSrc;
+                    }
+                    currentOffset += sizeof(Color);
+                    break;
+                }
+                case EScriptFieldType::ENTITY_REF:
+                {
+                    currentOffset = (currentOffset + alignof(SEntityRef) - 1) & ~(alignof(SEntityRef) - 1);
+                    SEntityRef val{};
+                    if (m_pInstance->GetPropertyEntityRef(field.m_Name, val))
+                    {
+                        field.m_EntityIdValue = val.m_EntityId;
+                    }
+                    else
+                    {
+                        auto* pSrc = reinterpret_cast<const SEntityRef*>(reinterpret_cast<const char*>(m_pInstance) + currentOffset);
+                        field.m_EntityIdValue = pSrc->m_EntityId;
+                    }
+                    currentOffset += sizeof(SEntityRef);
+                    break;
+                }
+                case EScriptFieldType::ASSET_REF:
+                {
+                    currentOffset = (currentOffset + alignof(SAssetRef) - 1) & ~(alignof(SAssetRef) - 1);
+                    SAssetRef val{};
+                    if (m_pInstance->GetPropertyAssetRef(field.m_Name, val))
+                    {
+                        field.m_AssetPathValue = val.m_Path;
+                    }
+                    currentOffset += sizeof(SAssetRef);
                     break;
                 }
             }

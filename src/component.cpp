@@ -939,6 +939,352 @@ void CButtonComponent::Deserialize(const nlohmann::json& json)
     }
 }
 
+namespace
+{
+    nlohmann::json SerializeLayoutPadding(const SUiLayoutPadding& padding)
+    {
+        return {
+            { "left", padding.m_Left },
+            { "right", padding.m_Right },
+            { "top", padding.m_Top },
+            { "bottom", padding.m_Bottom }
+        };
+    }
+
+    void DeserializeLayoutPadding(const nlohmann::json& json, const char* pKey, SUiLayoutPadding& outPadding)
+    {
+        if (!json.contains(pKey) || !json[pKey].is_object())
+        {
+            return;
+        }
+        const auto& padJson = json[pKey];
+        outPadding.m_Left = padJson.value("left", outPadding.m_Left);
+        outPadding.m_Right = padJson.value("right", outPadding.m_Right);
+        outPadding.m_Top = padJson.value("top", outPadding.m_Top);
+        outPadding.m_Bottom = padJson.value("bottom", outPadding.m_Bottom);
+    }
+} // anonymous
+
+float CSliderComponent::GetNormalizedValue() const
+{
+    const float span = m_MaxValue - m_MinValue;
+    if (std::abs(span) <= 1e-6f)
+    {
+        return 0.0f;
+    }
+    return std::clamp((m_Value - m_MinValue) / span, 0.0f, 1.0f);
+}
+
+void CSliderComponent::SetNormalizedValue(float normalized)
+{
+    const float clamped = std::clamp(normalized, 0.0f, 1.0f);
+    float val = m_MinValue + clamped * (m_MaxValue - m_MinValue);
+    if (m_WholeNumbers)
+    {
+        val = std::round(val);
+    }
+    m_Value = std::clamp(val, std::min(m_MinValue, m_MaxValue), std::max(m_MinValue, m_MaxValue));
+}
+
+void CSliderComponent::Serialize(nlohmann::json& json) const
+{
+    json["interactable"] = m_Interactable;
+    json["raycast_target"] = m_RaycastTarget;
+    json["direction"] = static_cast<int>(m_Direction);
+    json["min_value"] = m_MinValue;
+    json["max_value"] = m_MaxValue;
+    json["value"] = m_Value;
+    json["whole_numbers"] = m_WholeNumbers;
+    json["background_color"] = SerializeGuiColor(m_BackgroundColor);
+    json["fill_color"] = SerializeGuiColor(m_FillColor);
+    json["handle_color"] = SerializeGuiColor(m_HandleColor);
+    json["disabled_color"] = SerializeGuiColor(m_DisabledColor);
+    json["on_value_changed_action"] = m_OnValueChangedAction;
+}
+
+void CSliderComponent::Deserialize(const nlohmann::json& json)
+{
+    m_Interactable = json.value("interactable", m_Interactable);
+    m_RaycastTarget = json.value("raycast_target", m_RaycastTarget);
+    if (json.contains("direction") && json["direction"].is_number_integer())
+    {
+        const int dir = json["direction"].get<int>();
+        if (dir >= static_cast<int>(EUiSliderDirection::LEFT_TO_RIGHT) &&
+            dir <= static_cast<int>(EUiSliderDirection::TOP_TO_BOTTOM))
+        {
+            m_Direction = static_cast<EUiSliderDirection>(dir);
+        }
+    }
+    m_MinValue = json.value("min_value", m_MinValue);
+    m_MaxValue = json.value("max_value", m_MaxValue);
+    m_Value = json.value("value", m_Value);
+    m_WholeNumbers = json.value("whole_numbers", m_WholeNumbers);
+    if (m_WholeNumbers)
+    {
+        m_Value = std::round(m_Value);
+    }
+    DeserializeGuiColor(json, "background_color", m_BackgroundColor);
+    DeserializeGuiColor(json, "fill_color", m_FillColor);
+    DeserializeGuiColor(json, "handle_color", m_HandleColor);
+    DeserializeGuiColor(json, "disabled_color", m_DisabledColor);
+    m_OnValueChangedAction = json.value("on_value_changed_action", m_OnValueChangedAction);
+}
+
+void CToggleComponent::Serialize(nlohmann::json& json) const
+{
+    json["interactable"] = m_Interactable;
+    json["raycast_target"] = m_RaycastTarget;
+    json["is_on"] = m_IsOn;
+    json["label"] = m_Label;
+    json["font_size"] = m_FontSize;
+    json["box_color"] = SerializeGuiColor(m_BoxColor);
+    json["checkmark_color"] = SerializeGuiColor(m_CheckmarkColor);
+    json["label_color"] = SerializeGuiColor(m_LabelColor);
+    json["disabled_color"] = SerializeGuiColor(m_DisabledColor);
+    json["on_value_changed_action"] = m_OnValueChangedAction;
+}
+
+void CToggleComponent::Deserialize(const nlohmann::json& json)
+{
+    m_Interactable = json.value("interactable", m_Interactable);
+    m_RaycastTarget = json.value("raycast_target", m_RaycastTarget);
+    m_IsOn = json.value("is_on", m_IsOn);
+    m_Label = json.value("label", m_Label);
+    m_FontSize = std::max(1, json.value("font_size", m_FontSize));
+    DeserializeGuiColor(json, "box_color", m_BoxColor);
+    DeserializeGuiColor(json, "checkmark_color", m_CheckmarkColor);
+    DeserializeGuiColor(json, "label_color", m_LabelColor);
+    DeserializeGuiColor(json, "disabled_color", m_DisabledColor);
+    m_OnValueChangedAction = json.value("on_value_changed_action", m_OnValueChangedAction);
+}
+
+float CProgressBarComponent::GetNormalizedValue() const
+{
+    const float span = m_MaxValue - m_MinValue;
+    if (std::abs(span) <= 1e-6f)
+    {
+        return 0.0f;
+    }
+    return std::clamp((m_Value - m_MinValue) / span, 0.0f, 1.0f);
+}
+
+void CProgressBarComponent::Serialize(nlohmann::json& json) const
+{
+    json["raycast_target"] = m_RaycastTarget;
+    json["direction"] = static_cast<int>(m_Direction);
+    json["min_value"] = m_MinValue;
+    json["max_value"] = m_MaxValue;
+    json["value"] = m_Value;
+    json["show_percentage_text"] = m_ShowPercentageText;
+    json["background_color"] = SerializeGuiColor(m_BackgroundColor);
+    json["fill_color"] = SerializeGuiColor(m_FillColor);
+    json["border_color"] = SerializeGuiColor(m_BorderColor);
+    json["text_color"] = SerializeGuiColor(m_TextColor);
+}
+
+void CProgressBarComponent::Deserialize(const nlohmann::json& json)
+{
+    m_RaycastTarget = json.value("raycast_target", m_RaycastTarget);
+    if (json.contains("direction") && json["direction"].is_number_integer())
+    {
+        const int dir = json["direction"].get<int>();
+        if (dir >= static_cast<int>(EUiSliderDirection::LEFT_TO_RIGHT) &&
+            dir <= static_cast<int>(EUiSliderDirection::TOP_TO_BOTTOM))
+        {
+            m_Direction = static_cast<EUiSliderDirection>(dir);
+        }
+    }
+    m_MinValue = json.value("min_value", m_MinValue);
+    m_MaxValue = json.value("max_value", m_MaxValue);
+    m_Value = json.value("value", m_Value);
+    m_ShowPercentageText = json.value("show_percentage_text", m_ShowPercentageText);
+    DeserializeGuiColor(json, "background_color", m_BackgroundColor);
+    DeserializeGuiColor(json, "fill_color", m_FillColor);
+    DeserializeGuiColor(json, "border_color", m_BorderColor);
+    DeserializeGuiColor(json, "text_color", m_TextColor);
+}
+
+void CScrollViewComponent::Serialize(nlohmann::json& json) const
+{
+    json["raycast_target"] = m_RaycastTarget;
+    json["horizontal"] = m_Horizontal;
+    json["vertical"] = m_Vertical;
+    json["scroll_sensitivity"] = m_ScrollSensitivity;
+    json["content_size"] = { m_ContentSize.x, m_ContentSize.y };
+    json["normalized_position"] = { m_NormalizedPosition.x, m_NormalizedPosition.y };
+    json["scroll_offset"] = { m_ScrollOffset.x, m_ScrollOffset.y };
+    json["show_horizontal_scrollbar"] = m_ShowHorizontalScrollbar;
+    json["show_vertical_scrollbar"] = m_ShowVerticalScrollbar;
+    json["background_color"] = SerializeGuiColor(m_BackgroundColor);
+    json["scrollbar_track_color"] = SerializeGuiColor(m_ScrollbarTrackColor);
+    json["scrollbar_thumb_color"] = SerializeGuiColor(m_ScrollbarThumbColor);
+}
+
+void CScrollViewComponent::Deserialize(const nlohmann::json& json)
+{
+    m_RaycastTarget = json.value("raycast_target", m_RaycastTarget);
+    m_Horizontal = json.value("horizontal", m_Horizontal);
+    m_Vertical = json.value("vertical", m_Vertical);
+    m_ScrollSensitivity = json.value("scroll_sensitivity", m_ScrollSensitivity);
+    if (json.contains("content_size") && json["content_size"].is_array() && json["content_size"].size() >= 2)
+    {
+        m_ContentSize = { json["content_size"][0].get<float>(), json["content_size"][1].get<float>() };
+    }
+    if (json.contains("normalized_position") && json["normalized_position"].is_array() && json["normalized_position"].size() >= 2)
+    {
+        m_NormalizedPosition = {
+            std::clamp(json["normalized_position"][0].get<float>(), 0.0f, 1.0f),
+            std::clamp(json["normalized_position"][1].get<float>(), 0.0f, 1.0f)
+        };
+    }
+    if (json.contains("scroll_offset") && json["scroll_offset"].is_array() && json["scroll_offset"].size() >= 2)
+    {
+        m_ScrollOffset = { json["scroll_offset"][0].get<float>(), json["scroll_offset"][1].get<float>() };
+    }
+    m_ShowHorizontalScrollbar = json.value("show_horizontal_scrollbar", m_ShowHorizontalScrollbar);
+    m_ShowVerticalScrollbar = json.value("show_vertical_scrollbar", m_ShowVerticalScrollbar);
+    DeserializeGuiColor(json, "background_color", m_BackgroundColor);
+    DeserializeGuiColor(json, "scrollbar_track_color", m_ScrollbarTrackColor);
+    DeserializeGuiColor(json, "scrollbar_thumb_color", m_ScrollbarThumbColor);
+}
+
+void CHorizontalLayoutComponent::Serialize(nlohmann::json& json) const
+{
+    json["padding"] = SerializeLayoutPadding(m_Padding);
+    json["spacing"] = m_Spacing;
+    json["child_alignment"] = static_cast<int>(m_ChildAlignment);
+    json["reverse_arrangement"] = m_ReverseArrangement;
+    json["child_control_width"] = m_ChildControlWidth;
+    json["child_control_height"] = m_ChildControlHeight;
+    json["child_scale_width"] = m_ChildScaleWidth;
+    json["child_scale_height"] = m_ChildScaleHeight;
+    json["child_force_expand_width"] = m_ChildForceExpandWidth;
+    json["child_force_expand_height"] = m_ChildForceExpandHeight;
+}
+
+void CHorizontalLayoutComponent::Deserialize(const nlohmann::json& json)
+{
+    DeserializeLayoutPadding(json, "padding", m_Padding);
+    m_Spacing = json.value("spacing", m_Spacing);
+    if (json.contains("child_alignment") && json["child_alignment"].is_number_integer())
+    {
+        const int align = json["child_alignment"].get<int>();
+        if (align >= static_cast<int>(EUiLayoutChildAlignment::UPPER_LEFT) &&
+            align <= static_cast<int>(EUiLayoutChildAlignment::LOWER_RIGHT))
+        {
+            m_ChildAlignment = static_cast<EUiLayoutChildAlignment>(align);
+        }
+    }
+    m_ReverseArrangement = json.value("reverse_arrangement", m_ReverseArrangement);
+    m_ChildControlWidth = json.value("child_control_width", m_ChildControlWidth);
+    m_ChildControlHeight = json.value("child_control_height", m_ChildControlHeight);
+    m_ChildScaleWidth = json.value("child_scale_width", m_ChildScaleWidth);
+    m_ChildScaleHeight = json.value("child_scale_height", m_ChildScaleHeight);
+    m_ChildForceExpandWidth = json.value("child_force_expand_width", m_ChildForceExpandWidth);
+    m_ChildForceExpandHeight = json.value("child_force_expand_height", m_ChildForceExpandHeight);
+}
+
+void CVerticalLayoutComponent::Serialize(nlohmann::json& json) const
+{
+    json["padding"] = SerializeLayoutPadding(m_Padding);
+    json["spacing"] = m_Spacing;
+    json["child_alignment"] = static_cast<int>(m_ChildAlignment);
+    json["reverse_arrangement"] = m_ReverseArrangement;
+    json["child_control_width"] = m_ChildControlWidth;
+    json["child_control_height"] = m_ChildControlHeight;
+    json["child_scale_width"] = m_ChildScaleWidth;
+    json["child_scale_height"] = m_ChildScaleHeight;
+    json["child_force_expand_width"] = m_ChildForceExpandWidth;
+    json["child_force_expand_height"] = m_ChildForceExpandHeight;
+}
+
+void CVerticalLayoutComponent::Deserialize(const nlohmann::json& json)
+{
+    DeserializeLayoutPadding(json, "padding", m_Padding);
+    m_Spacing = json.value("spacing", m_Spacing);
+    if (json.contains("child_alignment") && json["child_alignment"].is_number_integer())
+    {
+        const int align = json["child_alignment"].get<int>();
+        if (align >= static_cast<int>(EUiLayoutChildAlignment::UPPER_LEFT) &&
+            align <= static_cast<int>(EUiLayoutChildAlignment::LOWER_RIGHT))
+        {
+            m_ChildAlignment = static_cast<EUiLayoutChildAlignment>(align);
+        }
+    }
+    m_ReverseArrangement = json.value("reverse_arrangement", m_ReverseArrangement);
+    m_ChildControlWidth = json.value("child_control_width", m_ChildControlWidth);
+    m_ChildControlHeight = json.value("child_control_height", m_ChildControlHeight);
+    m_ChildScaleWidth = json.value("child_scale_width", m_ChildScaleWidth);
+    m_ChildScaleHeight = json.value("child_scale_height", m_ChildScaleHeight);
+    m_ChildForceExpandWidth = json.value("child_force_expand_width", m_ChildForceExpandWidth);
+    m_ChildForceExpandHeight = json.value("child_force_expand_height", m_ChildForceExpandHeight);
+}
+
+void CGridLayoutComponent::Serialize(nlohmann::json& json) const
+{
+    json["padding"] = SerializeLayoutPadding(m_Padding);
+    json["cell_size"] = { m_CellSize.x, m_CellSize.y };
+    json["spacing"] = { m_Spacing.x, m_Spacing.y };
+    json["start_corner"] = static_cast<int>(m_StartCorner);
+    json["start_axis"] = static_cast<int>(m_StartAxis);
+    json["child_alignment"] = static_cast<int>(m_ChildAlignment);
+    json["constraint"] = static_cast<int>(m_Constraint);
+    json["constraint_count"] = m_ConstraintCount;
+}
+
+void CGridLayoutComponent::Deserialize(const nlohmann::json& json)
+{
+    DeserializeLayoutPadding(json, "padding", m_Padding);
+    if (json.contains("cell_size") && json["cell_size"].is_array() && json["cell_size"].size() >= 2)
+    {
+        m_CellSize = {
+            std::max(1.0f, json["cell_size"][0].get<float>()),
+            std::max(1.0f, json["cell_size"][1].get<float>())
+        };
+    }
+    if (json.contains("spacing") && json["spacing"].is_array() && json["spacing"].size() >= 2)
+    {
+        m_Spacing = { json["spacing"][0].get<float>(), json["spacing"][1].get<float>() };
+    }
+    if (json.contains("start_corner") && json["start_corner"].is_number_integer())
+    {
+        const int corner = json["start_corner"].get<int>();
+        if (corner >= static_cast<int>(EUiGridStartCorner::UPPER_LEFT) &&
+            corner <= static_cast<int>(EUiGridStartCorner::LOWER_RIGHT))
+        {
+            m_StartCorner = static_cast<EUiGridStartCorner>(corner);
+        }
+    }
+    if (json.contains("start_axis") && json["start_axis"].is_number_integer())
+    {
+        const int axis = json["start_axis"].get<int>();
+        if (axis >= static_cast<int>(EUiGridStartAxis::HORIZONTAL) &&
+            axis <= static_cast<int>(EUiGridStartAxis::VERTICAL))
+        {
+            m_StartAxis = static_cast<EUiGridStartAxis>(axis);
+        }
+    }
+    if (json.contains("child_alignment") && json["child_alignment"].is_number_integer())
+    {
+        const int align = json["child_alignment"].get<int>();
+        if (align >= static_cast<int>(EUiLayoutChildAlignment::UPPER_LEFT) &&
+            align <= static_cast<int>(EUiLayoutChildAlignment::LOWER_RIGHT))
+        {
+            m_ChildAlignment = static_cast<EUiLayoutChildAlignment>(align);
+        }
+    }
+    if (json.contains("constraint") && json["constraint"].is_number_integer())
+    {
+        const int constraint = json["constraint"].get<int>();
+        if (constraint >= static_cast<int>(EUiGridConstraint::FLEXIBLE) &&
+            constraint <= static_cast<int>(EUiGridConstraint::FIXED_ROW_COUNT))
+        {
+            m_Constraint = static_cast<EUiGridConstraint>(constraint);
+        }
+    }
+    m_ConstraintCount = std::max(1, json.value("constraint_count", m_ConstraintCount));
+}
+
 void CComponentManager::Deserialize(const nlohmann::json& json, const CComponentFactoryRegistry& factories)
 {
     if (!json.contains("components"))
@@ -1123,6 +1469,41 @@ void CComponentManager::CloneInto(const CComponentManager& source)
             case COMPONENT_BUTTON:
                 pCloned = std::make_shared<CButtonComponent>(
                     *std::dynamic_pointer_cast<CButtonComponent>(pComponent));
+                break;
+
+            case COMPONENT_SLIDER:
+                pCloned = std::make_shared<CSliderComponent>(
+                    *std::dynamic_pointer_cast<CSliderComponent>(pComponent));
+                break;
+
+            case COMPONENT_TOGGLE:
+                pCloned = std::make_shared<CToggleComponent>(
+                    *std::dynamic_pointer_cast<CToggleComponent>(pComponent));
+                break;
+
+            case COMPONENT_PROGRESS_BAR:
+                pCloned = std::make_shared<CProgressBarComponent>(
+                    *std::dynamic_pointer_cast<CProgressBarComponent>(pComponent));
+                break;
+
+            case COMPONENT_SCROLL_VIEW:
+                pCloned = std::make_shared<CScrollViewComponent>(
+                    *std::dynamic_pointer_cast<CScrollViewComponent>(pComponent));
+                break;
+
+            case COMPONENT_HORIZONTAL_LAYOUT:
+                pCloned = std::make_shared<CHorizontalLayoutComponent>(
+                    *std::dynamic_pointer_cast<CHorizontalLayoutComponent>(pComponent));
+                break;
+
+            case COMPONENT_VERTICAL_LAYOUT:
+                pCloned = std::make_shared<CVerticalLayoutComponent>(
+                    *std::dynamic_pointer_cast<CVerticalLayoutComponent>(pComponent));
+                break;
+
+            case COMPONENT_GRID_LAYOUT:
+                pCloned = std::make_shared<CGridLayoutComponent>(
+                    *std::dynamic_pointer_cast<CGridLayoutComponent>(pComponent));
                 break;
 
             default:
