@@ -45,6 +45,9 @@ private:
     std::string m_ProjectPath;
     std::string m_ActiveFontLanguage;
     double m_LastAutosaveTime = 0.0;
+    double m_LastTitleUpdateTime = -1.0;
+    int m_LastTitleFps = -1;
+    bool m_LastTitleDirty = false;
     int m_LastSelectedEntity = -1;
 
     bool m_Headless = false;

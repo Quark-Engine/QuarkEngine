@@ -471,9 +471,19 @@ void CApplication::UpdateFrame()
         m_LastAutosaveTime = GetTime();
     }
 
-    const std::string projectTitle = fs::path(m_Editor.m_ProjectPath).filename().string();
-    SetWindowTitle(TextFormat("Quark Engine | %s%s | FPS: %d",
-                              projectTitle.c_str(), m_Editor.m_SceneDirty ? "*" : "", GetFPS()));
+    const double nowSeconds = GetTime();
+    const int currentFps = GetFPS();
+    if (m_LastTitleUpdateTime < 0.0 ||
+        m_Editor.m_SceneDirty != m_LastTitleDirty ||
+        (nowSeconds - m_LastTitleUpdateTime >= 0.25 && currentFps != m_LastTitleFps))
+    {
+        const std::string projectTitle = fs::path(m_Editor.m_ProjectPath).filename().string();
+        SetWindowTitle(TextFormat("Quark Engine | %s%s | FPS: %d",
+                                  projectTitle.c_str(), m_Editor.m_SceneDirty ? "*" : "", currentFps));
+        m_LastTitleUpdateTime = nowSeconds;
+        m_LastTitleFps = currentFps;
+        m_LastTitleDirty = m_Editor.m_SceneDirty;
+    }
 
     Camera3D gameCamera = m_Camera.GetCamera();
     m_Editor.m_GameCameraAvailable = FindSceneCamera(m_Editor.m_Scene, gameCamera);
