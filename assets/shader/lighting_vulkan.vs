@@ -9,12 +9,21 @@ layout(location = 3) in vec4 aNormal;
 layout(location = 4) in vec4 aWorldPosition;
 layout(location = 5) in vec4 aTangent;
 
+struct InstanceTransform {
+    mat4 modelViewProjection;
+    mat4 model;
+};
+
+layout(std430, set = 0, binding = 11) readonly buffer InstanceTransforms {
+    InstanceTransform instances[];
+};
+
 layout(push_constant) uniform MeshTransform {
     mat4 modelViewProjection;
     mat4 model;
     vec4 materialColor;
     int objectSpaceTransform;
-    int _padding0;
+    int useInstanceBuffer;
     int _padding1;
     int _padding2;
 } meshTransform;
@@ -29,11 +38,18 @@ void main()
 {
     fragTexCoord = aTexCoord0;
     if (meshTransform.objectSpaceTransform != 0) {
-        gl_Position  = meshTransform.modelViewProjection * aPosition;
+        mat4 activeMvp = (meshTransform.useInstanceBuffer != 0)
+            ? instances[gl_InstanceIndex].modelViewProjection
+            : meshTransform.modelViewProjection;
+        mat4 activeModel = (meshTransform.useInstanceBuffer != 0)
+            ? instances[gl_InstanceIndex].model
+            : meshTransform.model;
+
+        gl_Position  = activeMvp * aPosition;
         fragColor    = aColor * meshTransform.materialColor;
-        fragNormal   = normalize(mat3(meshTransform.model) * aNormal.xyz);
-        fragPosition = (meshTransform.model * aPosition).xyz;
-        fragTangent  = normalize(mat3(meshTransform.model) * aTangent.xyz);
+        fragNormal   = normalize(mat3(activeModel) * aNormal.xyz);
+        fragPosition = (activeModel * aPosition).xyz;
+        fragTangent  = normalize(mat3(activeModel) * aTangent.xyz);
     } else {
         gl_Position  = aPosition;
         fragColor    = aColor;

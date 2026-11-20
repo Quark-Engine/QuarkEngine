@@ -1,8 +1,13 @@
+cbuffer ShadowParams : register(b0)
+{
+    float4x4 mvp;
+    float4x4 normalMatrix;
+};
+
 struct VSInput
 {
-    float4 aPosition      : POSITION;
-    float4 aNormal        : NORMAL;
-    float4 aWorldPosition : WORLD_POSITION;
+    float4 aPosition : POSITION;
+    float4 aNormal   : NORMAL;
 };
 
 struct VSOutput
@@ -14,7 +19,7 @@ struct VSOutput
 VSOutput main(VSInput input)
 {
     VSOutput output;
-    output.position = input.aPosition;
-    output.vNormal  = normalize(input.aNormal.xyz);
+    output.position = mul(mvp, input.aPosition);
+    output.vNormal  = normalize(mul((float3x3)normalMatrix, input.aNormal.xyz));
     return output;
 }

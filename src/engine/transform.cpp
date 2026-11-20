@@ -42,6 +42,42 @@ namespace quark
         return -1;
     }
 
+    namespace
+    {
+        constexpr int MAX_TRANSFORM_DEPTH = 64;
+
+        Mat4 ComposeWorldFixed(const CScene& scene, int entityIndex, int* pStack, int depth)
+        {
+            if (entityIndex < 0 || entityIndex >= static_cast<int>(scene.m_vEntities.size()))
+            {
+                return Mat4::identity();
+            }
+
+            if (depth >= MAX_TRANSFORM_DEPTH)
+            {
+                return ComposeLocal(scene.m_vEntities[entityIndex]);
+            }
+
+            for (int i = 0; i < depth; ++i)
+            {
+                if (pStack[i] == entityIndex)
+                {
+                    return ComposeLocal(scene.m_vEntities[entityIndex]);
+                }
+            }
+
+            pStack[depth] = entityIndex;
+            const CEntity& entity = scene.m_vEntities[entityIndex];
+            Mat4 world = ComposeLocal(entity);
+            if (entity.m_ParentId != entityIndex &&
+                entity.m_ParentId >= 0 && entity.m_ParentId < static_cast<int>(scene.m_vEntities.size()))
+            {
+                world = ComposeWorldFixed(scene, entity.m_ParentId, pStack, depth + 1) * world;
+            }
+            return world;
+        }
+    } // anonymous
+
     Mat4 ComposeWorld(const CScene& scene, int entityIndex, std::vector<int>& vStack)
     {
         if (entityIndex < 0 || entityIndex >= static_cast<int>(scene.m_vEntities.size()))
@@ -68,8 +104,8 @@ namespace quark
 
     Mat4 ComposeWorld(const CScene& scene, int entityIndex)
     {
-        std::vector<int> vStack;
-        return ComposeWorld(scene, entityIndex, vStack);
+        int aStack[MAX_TRANSFORM_DEPTH];
+        return ComposeWorldFixed(scene, entityIndex, aStack, 0);
     }
 
     Mat4 ComposeWorld(const CScene& scene, const CEntity& entity)

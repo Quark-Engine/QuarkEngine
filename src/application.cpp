@@ -933,35 +933,10 @@ void CApplication::RenderFrame()
     profilerStats.m_ImguiEditorMs = m_FrameTimings.m_ImguiEditorMs;
     profilerStats.m_EntityCount = static_cast<int>(m_Editor.m_Scene.m_vEntities.size());
 
-    const float vpW = m_Editor.m_Ui.m_Viewport.m_WindowSize.x;
-    const float vpH = m_Editor.m_Ui.m_Viewport.m_WindowSize.y;
-    const float vpAspect = (vpH > 0.0f) ? (vpW / vpH) : 1.0f;
-    for (int i = 0; i < static_cast<int>(m_Editor.m_Scene.m_vEntities.size()); ++i)
-    {
-        const CEntity& ent = m_Editor.m_Scene.m_vEntities[i];
-        if (const CLightComponent* pLight = ent.GetLightComponent(); pLight && pLight->m_Enabled)
-        {
-            ++profilerStats.m_ActiveLightCount;
-        }
-        const CMeshComponent* pMesh = ent.GetMeshComponent();
-        const CTransformComponent* pTransform = ent.GetTransformComponent();
-        if (!pMesh || !pMesh->m_Enabled || !pTransform)
-        {
-            continue;
-        }
-        if (m_SceneRenderer.IsMeshVisible(i, renderCamera, vpAspect))
-        {
-            ++profilerStats.m_VisibleMeshCount;
-            if (pMesh->m_Model.meshes != nullptr)
-            {
-                for (int m = 0; m < pMesh->m_Model.meshCount; ++m)
-                {
-                    profilerStats.m_TriangleCount += pMesh->m_Model.meshes[m].triangleCount;
-                }
-            }
-        }
-    }
     const SRenderBatchStats batchStats = m_SceneRenderer.GetLastBatchStats();
+    profilerStats.m_VisibleMeshCount = batchStats.m_VisibleMeshCount;
+    profilerStats.m_TriangleCount = batchStats.m_TriangleCount;
+    profilerStats.m_ActiveLightCount = m_SceneRenderer.GetActiveLightCount();
     profilerStats.m_DrawCalls = batchStats.m_DrawCalls;
     if (m_Editor.m_Preferences.m_ShadowsEnabled && profilerStats.m_ActiveLightCount > 0)
     {

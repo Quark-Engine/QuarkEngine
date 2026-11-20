@@ -27,6 +27,9 @@ struct SRenderBatchStats
     int m_DrawCalls = 0;
     int m_InstancedBatches = 0;
     int m_InstancedCount = 0;
+    int m_VisibleMeshCount = 0;
+    int m_TriangleCount = 0;
+    int m_ActiveLightCount = 0;
 };
 
 struct SRenderCommand
@@ -101,6 +104,10 @@ public:
     {
         return m_LastBatchStats;
     }
+    int GetActiveLightCount() const
+    {
+        return m_ActiveLightCount;
+    }
 
     void Unload();
 
@@ -142,6 +149,7 @@ private:
     std::vector<Matrix> m_vInstanceTransforms;
     SSceneRendererTimings m_Timings{};
     SRenderBatchStats m_LastBatchStats{};
+    int m_ActiveLightCount = 0;
     CTaskPool* m_pTaskPool = nullptr;
 };
 

@@ -39,6 +39,13 @@ cbuffer LightingParams : register(b0)
     float shadowBias;
     int shadowFilterQuality;
     float _padGlobal;
+    float4x4 model;
+    float4x4 mvp;
+    float4x4 normalMatrix;
+    float4 colDiffuse;
+    int useInstancing;
+    int instanceBase;
+    int2 _padInst;
 };
 
 struct PSInput

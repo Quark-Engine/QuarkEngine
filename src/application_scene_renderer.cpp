@@ -658,6 +658,14 @@ void CSceneRenderer::Update(CScene& scene, CLightRegistry& lights, const Vec3& c
     SetShaderValue(m_LightingShader, m_ShadowFilterLoc, shadowFilterQuality);
     PrepareSceneLightUniforms(scene, lights, m_LightingShader, m_aLightEnabledLocations, sceneCenter,
                               m_vFrameData);
+    m_ActiveLightCount = 0;
+    for (const CEntity& entity : scene.m_vEntities)
+    {
+        if (const CLightComponent* pLight = entity.GetLightComponent(); pLight && pLight->m_Enabled)
+        {
+            ++m_ActiveLightCount;
+        }
+    }
     if (m_VulkanBackend)
     {
         WriteVulkanGlobals(scene, shadowsEnabled, shadowBias, shadowFilterQuality);
@@ -852,6 +860,7 @@ void CSceneRenderer::RenderSceneMeshes(CScene& scene, const Camera3D& camera, fl
 
         CEntityTextureService::RefreshEntityRenderState(entity);
         EnsureLightingShader(pMeshComp);
+        ++m_LastBatchStats.m_VisibleMeshCount;
 
         const Mat4& meshWorldTransform = GetCachedMeshWorldTransform(entityIndex);
         const bool hasOverride = CMeshOverrideService::Has(entity);
@@ -879,6 +888,7 @@ void CSceneRenderer::RenderSceneMeshes(CScene& scene, const Camera3D& camera, fl
             {
                 continue;
             }
+            m_LastBatchStats.m_TriangleCount += mesh.triangleCount;
 
             int materialIndex = 0;
             if (pMeshComp->m_Model.meshMaterial &&
