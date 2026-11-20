@@ -1,5 +1,6 @@
 #ifndef __COMPONENT_H__
 #define __COMPONENT_H__
+
 #include "QuarkCore/QuarkCore.hpp"
 #include "QuarkGUI/QuarkGUI.h"
 #include "lighting.h"
@@ -47,6 +48,7 @@ enum EComponentType
     COMPONENT_MATERIAL,
     COMPONENT_LIGHT,
     COMPONENT_COLLISION,
+    COMPONENT_RIGIDBODY,
     COMPONENT_CUSTOM,
     COMPONENT_CAMERA,
     COMPONENT_SCRIPT,
@@ -627,6 +629,82 @@ public:
     void Serialize(nlohmann::json& json) const override;
     void Deserialize(const nlohmann::json& json) override;
     void OnEntityTransformChanged() override;
+};
+
+class CRigidbodyComponent : public IComponent
+{
+public:
+    float m_Mass = 1.0f;
+    float m_LinearDrag = 0.05f;
+    float m_Friction = 0.5f;
+    float m_Restitution = 0.2f;
+    bool m_UseGravity = true;
+    bool m_IsKinematic = false;
+    bool m_FreezePositionX = false;
+    bool m_FreezePositionY = false;
+    bool m_FreezePositionZ = false;
+
+    Vec3 m_Velocity = { 0.0f, 0.0f, 0.0f };
+    Vec3 m_AccumulatedForce = { 0.0f, 0.0f, 0.0f };
+    bool m_IsGrounded = false;
+
+    CRigidbodyComponent()
+    {
+        m_Name = "Rigidbody";
+        m_Type = COMPONENT_RIGIDBODY;
+    }
+
+    EComponentType GetType() const override
+    {
+        return COMPONENT_RIGIDBODY;
+    }
+    std::string GetTypeName() const override
+    {
+        return "Rigidbody";
+    }
+
+    float GetInverseMass() const
+    {
+        if (!m_Enabled || m_IsKinematic)
+        {
+            return 0.0f;
+        }
+        return 1.0f / (m_Mass > 0.001f ? m_Mass : 0.001f);
+    }
+
+    void AddForce(const Vec3& force)
+    {
+        if (!m_Enabled || m_IsKinematic)
+        {
+            return;
+        }
+        m_AccumulatedForce = m_AccumulatedForce + force;
+    }
+
+    void AddImpulse(const Vec3& impulse)
+    {
+        if (!m_Enabled || m_IsKinematic)
+        {
+            return;
+        }
+        const float invMass = GetInverseMass();
+        m_Velocity = m_Velocity + impulse * invMass;
+    }
+
+    void SetVelocity(const Vec3& velocity)
+    {
+        m_Velocity = velocity;
+    }
+
+    void ResetRuntimeState()
+    {
+        m_Velocity = { 0.0f, 0.0f, 0.0f };
+        m_AccumulatedForce = { 0.0f, 0.0f, 0.0f };
+        m_IsGrounded = false;
+    }
+
+    void Serialize(nlohmann::json& json) const override;
+    void Deserialize(const nlohmann::json& json) override;
 };
 
 class CCameraComponent : public IComponent
@@ -1565,6 +1643,11 @@ public:
     CCollisionComponent* GetCollision() const
     {
         return GetFastComponent<CCollisionComponent>(COMPONENT_COLLISION);
+    }
+
+    CRigidbodyComponent* GetRigidbody() const
+    {
+        return GetFastComponent<CRigidbodyComponent>(COMPONENT_RIGIDBODY);
     }
 
     CCameraComponent* GetCamera() const

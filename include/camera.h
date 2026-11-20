@@ -1,5 +1,6 @@
 #ifndef __CAMERA_H__
 #define __CAMERA_H__
+
 #include "QuarkCore/QuarkCore.hpp"
 #include "editor/editor_preferences.h"
 #include "scene.h"

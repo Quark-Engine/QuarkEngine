@@ -96,6 +96,84 @@ void CComponentUIHelper::DrawEntityInspector(CEditor& editor, CEntity& entity, S
                     case COMPONENT_COLLISION:
                         DrawCollisionComponent(editor, entity, static_cast<CCollisionComponent*>(pComp.get()));
                         break;
+                    case COMPONENT_RIGIDBODY:
+                    {
+                        auto* pBody = static_cast<CRigidbodyComponent*>(pComp.get());
+                        float mass = pBody->m_Mass;
+                        if (ImGui::DragFloat("Mass", &mass, 0.1f, 0.001f, 10000.0f, "%.3f"))
+                        {
+                            pBody->m_Mass = std::max(0.001f, mass);
+                        }
+                        if (ImGui::IsItemActivated())
+                        {
+                            editor.SaveState();
+                        }
+
+                        float drag = pBody->m_LinearDrag;
+                        if (ImGui::DragFloat("Linear Drag", &drag, 0.01f, 0.0f, 100.0f, "%.3f"))
+                        {
+                            pBody->m_LinearDrag = std::max(0.0f, drag);
+                        }
+                        if (ImGui::IsItemActivated())
+                        {
+                            editor.SaveState();
+                        }
+
+                        float friction = pBody->m_Friction;
+                        if (ImGui::SliderFloat("Friction", &friction, 0.0f, 1.0f, "%.2f"))
+                        {
+                            pBody->m_Friction = friction;
+                        }
+                        if (ImGui::IsItemActivated())
+                        {
+                            editor.SaveState();
+                        }
+
+                        float restitution = pBody->m_Restitution;
+                        if (ImGui::SliderFloat("Restitution", &restitution, 0.0f, 1.0f, "%.2f"))
+                        {
+                            pBody->m_Restitution = restitution;
+                        }
+                        if (ImGui::IsItemActivated())
+                        {
+                            editor.SaveState();
+                        }
+
+                        if (ImGui::Checkbox("Use Gravity", &pBody->m_UseGravity))
+                        {
+                            editor.SaveState();
+                        }
+                        if (ImGui::Checkbox("Is Kinematic", &pBody->m_IsKinematic))
+                        {
+                            editor.SaveState();
+                        }
+
+                        ImGui::TextDisabled("Freeze Position");
+                        ImGui::SameLine();
+                        if (ImGui::Checkbox("X##FreezeX", &pBody->m_FreezePositionX))
+                        {
+                            editor.SaveState();
+                        }
+                        ImGui::SameLine();
+                        if (ImGui::Checkbox("Y##FreezeY", &pBody->m_FreezePositionY))
+                        {
+                            editor.SaveState();
+                        }
+                        ImGui::SameLine();
+                        if (ImGui::Checkbox("Z##FreezeZ", &pBody->m_FreezePositionZ))
+                        {
+                            editor.SaveState();
+                        }
+
+                        if (editor.m_IsPlaying)
+                        {
+                            ImGui::Separator();
+                            ImGui::Text("Velocity: (%.2f, %.2f, %.2f)",
+                                        pBody->m_Velocity.x, pBody->m_Velocity.y, pBody->m_Velocity.z);
+                            ImGui::Text("Grounded: %s", pBody->m_IsGrounded ? "Yes" : "No");
+                        }
+                        break;
+                    }
                     case COMPONENT_CAMERA:
                     {
                         auto* pCamera = static_cast<CCameraComponent*>(pComp.get());
@@ -248,6 +326,16 @@ void CComponentUIHelper::DrawEntityInspector(CEditor& editor, CEntity& entity, S
                 {
                     editor.SaveState();
                     pComponentsManager->AddComponent(std::make_shared<CCollisionComponent>());
+                }
+            }
+
+            const bool hasRigidbody = (pComponentsManager->GetRigidbody() != nullptr);
+            if (ImGui::MenuItem("Rigidbody"))
+            {
+                if (!hasRigidbody)
+                {
+                    editor.SaveState();
+                    pComponentsManager->AddComponent(std::make_shared<CRigidbodyComponent>());
                 }
             }
 

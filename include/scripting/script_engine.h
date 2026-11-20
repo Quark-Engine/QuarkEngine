@@ -2,6 +2,7 @@
 #define __SCRIPT_ENGINE_H__
 
 #include "dynamic_library.h"
+#include "engine/physics_world.h"
 #include "scene.h"
 #include "scripting/script_component.h"
 #include <functional>
@@ -103,6 +104,11 @@ namespace quark::script
             return m_pActiveScene;
         }
 
+        quark::physics::CPhysicsWorld& GetPhysicsWorld()
+        {
+            return m_PhysicsWorld;
+        }
+
     private:
         CScriptEngine();
         ~CScriptEngine();
@@ -113,6 +119,7 @@ namespace quark::script
         CDynamicLibrary m_Dll;
         CDynamicLibrary* m_pActiveDll = nullptr;
         CScene* m_pActiveScene = nullptr;
+        quark::physics::CPhysicsWorld m_PhysicsWorld;
         std::string m_ActiveProjectPath;
         float m_FixedAccumulator = 0.0f;
         bool m_IsPlaying = false;

@@ -629,6 +629,7 @@ namespace quark::script
     SInputCallbacks g_InputCallbacks;
     STimeCallbacks g_TimeCallbacks;
     SSceneCallbacks g_SceneCallbacks;
+    SPhysicsCallbacks g_PhysicsCallbacks;
     SDebugCallbacks g_DebugCallbacks;
 
     static float s_ScriptTimeScale = 1.0f;
@@ -1267,6 +1268,101 @@ namespace quark::script
             return true;
         };
 
+        g_PhysicsCallbacks.pfnRaycast = [](Vec3 origin, Vec3 direction, float maxDistance,
+                                           bool includeTriggers, int ignoreEntityId,
+                                           SRaycastHit* pOutHit) -> bool
+        {
+            CScene* pScene = CScriptEngine::Get().GetActiveScene();
+            if (!pScene || !pOutHit)
+            {
+                return false;
+            }
+            quark::physics::SPhysicsRaycastHit rawHit;
+            if (!CScriptEngine::Get().GetPhysicsWorld().Raycast(
+                    *pScene, origin, direction, maxDistance, rawHit, includeTriggers, ignoreEntityId))
+            {
+                *pOutHit = {};
+                return false;
+            }
+
+            pOutHit->m_Hit = true;
+            pOutHit->m_EntityId = rawHit.m_EntityId;
+            pOutHit->m_Point = rawHit.m_Point;
+            pOutHit->m_Normal = rawHit.m_Normal;
+            pOutHit->m_Distance = rawHit.m_Distance;
+            const int hitIndex = pScene->FindEntityIndexById(rawHit.m_EntityId);
+            if (hitIndex >= 0 && hitIndex < static_cast<int>(pScene->m_vEntities.size()))
+            {
+                pOutHit->m_pEntity = GetOrCreateScriptEntityWrapper(pScene->m_vEntities[static_cast<size_t>(hitIndex)]);
+            }
+            return true;
+        };
+        g_PhysicsCallbacks.pfnAddForce = [](CScriptEntity* pEntity, Vec3 force)
+        {
+            if (!pEntity || !pEntity->GetRawEntity())
+            {
+                return;
+            }
+            if (CRigidbodyComponent* pBody = pEntity->GetRawEntity()->GetRigidbodyComponent())
+            {
+                pBody->AddForce(force);
+            }
+        };
+        g_PhysicsCallbacks.pfnAddImpulse = [](CScriptEntity* pEntity, Vec3 impulse)
+        {
+            if (!pEntity || !pEntity->GetRawEntity())
+            {
+                return;
+            }
+            if (CRigidbodyComponent* pBody = pEntity->GetRawEntity()->GetRigidbodyComponent())
+            {
+                pBody->AddImpulse(impulse);
+            }
+        };
+        g_PhysicsCallbacks.pfnSetVelocity = [](CScriptEntity* pEntity, Vec3 velocity)
+        {
+            if (!pEntity || !pEntity->GetRawEntity())
+            {
+                return;
+            }
+            if (CRigidbodyComponent* pBody = pEntity->GetRawEntity()->GetRigidbodyComponent())
+            {
+                pBody->SetVelocity(velocity);
+            }
+        };
+        g_PhysicsCallbacks.pfnGetVelocity = [](CScriptEntity* pEntity) -> Vec3
+        {
+            if (!pEntity || !pEntity->GetRawEntity())
+            {
+                return { 0.0f, 0.0f, 0.0f };
+            }
+            if (const CRigidbodyComponent* pBody = pEntity->GetRawEntity()->GetRigidbodyComponent())
+            {
+                return pBody->m_Velocity;
+            }
+            return { 0.0f, 0.0f, 0.0f };
+        };
+        g_PhysicsCallbacks.pfnIsGrounded = [](CScriptEntity* pEntity) -> bool
+        {
+            if (!pEntity || !pEntity->GetRawEntity())
+            {
+                return false;
+            }
+            if (const CRigidbodyComponent* pBody = pEntity->GetRawEntity()->GetRigidbodyComponent())
+            {
+                return pBody->m_IsGrounded;
+            }
+            return false;
+        };
+        g_PhysicsCallbacks.pfnSetGravity = [](Vec3 gravity)
+        {
+            CScriptEngine::Get().GetPhysicsWorld().SetGravity(gravity);
+        };
+        g_PhysicsCallbacks.pfnGetGravity = []() -> Vec3
+        {
+            return CScriptEngine::Get().GetPhysicsWorld().GetGravity();
+        };
+
         g_DebugCallbacks.pfnLog = [](int level, const char* pMessage)
         {
             if (!pMessage)
@@ -1405,6 +1501,7 @@ namespace quark::script
             bridgeOut << "    SInputCallbacks g_InputCallbacks;\n";
             bridgeOut << "    STimeCallbacks g_TimeCallbacks;\n";
             bridgeOut << "    SSceneCallbacks g_SceneCallbacks;\n";
+            bridgeOut << "    SPhysicsCallbacks g_PhysicsCallbacks;\n";
             bridgeOut << "    SDebugCallbacks g_DebugCallbacks;\n";
             bridgeOut << "}\n\n";
             bridgeOut << "extern \"C\" QUARK_SCRIPT_API void SetScriptInputCallbacks(const ::quark::script::SInputCallbacks* pCallbacks)\n";
@@ -1426,6 +1523,13 @@ namespace quark::script
             bridgeOut << "    if (pCallbacks)\n";
             bridgeOut << "    {\n";
             bridgeOut << "        ::quark::script::g_SceneCallbacks = *pCallbacks;\n";
+            bridgeOut << "    }\n";
+            bridgeOut << "}\n\n";
+            bridgeOut << "extern \"C\" QUARK_SCRIPT_API void SetScriptPhysicsCallbacks(const ::quark::script::SPhysicsCallbacks* pCallbacks)\n";
+            bridgeOut << "{\n";
+            bridgeOut << "    if (pCallbacks)\n";
+            bridgeOut << "    {\n";
+            bridgeOut << "        ::quark::script::g_PhysicsCallbacks = *pCallbacks;\n";
             bridgeOut << "    }\n";
             bridgeOut << "}\n\n";
             bridgeOut << "extern \"C\" QUARK_SCRIPT_API void SetScriptDebugCallbacks(const ::quark::script::SDebugCallbacks* pCallbacks)\n";
@@ -1664,6 +1768,14 @@ namespace quark::script
             TraceLog(LogLevel::Info, "SCRIPT", "Configured script scene callbacks bridge");
         }
 
+        using FSetScriptPhysicsCallbacks = void (*)(const SPhysicsCallbacks*);
+        auto pfnSetPhysics = reinterpret_cast<FSetScriptPhysicsCallbacks>(m_Dll.GetSymbol("SetScriptPhysicsCallbacks"));
+        if (pfnSetPhysics)
+        {
+            pfnSetPhysics(&g_PhysicsCallbacks);
+            TraceLog(LogLevel::Info, "SCRIPT", "Configured script physics callbacks bridge");
+        }
+
         using FSetScriptDebugCallbacks = void (*)(const SDebugCallbacks*);
         auto pfnSetDebug = reinterpret_cast<FSetScriptDebugCallbacks>(m_Dll.GetSymbol("SetScriptDebugCallbacks"));
         if (pfnSetDebug)
@@ -1750,6 +1862,14 @@ namespace quark::script
         s_ScriptAccumulatedTime = 0.0;
         s_DiscardMouseDeltaFrames = 2;
         s_EntityWrappers.clear();
+        m_PhysicsWorld.Reset();
+        for (auto& entity : scene.m_vEntities)
+        {
+            if (CRigidbodyComponent* pBody = entity.GetRigidbodyComponent())
+            {
+                pBody->ResetRuntimeState();
+            }
+        }
         m_pActiveScene = &scene;
         m_ActiveProjectPath = projectPath;
         m_FixedAccumulator = 0.0f;
@@ -1774,6 +1894,12 @@ namespace quark::script
             if (pfnSetScene)
             {
                 pfnSetScene(&g_SceneCallbacks);
+            }
+            using FSetScriptPhysicsCallbacks = void (*)(const SPhysicsCallbacks*);
+            auto pfnSetPhysics = reinterpret_cast<FSetScriptPhysicsCallbacks>(m_pActiveDll->GetSymbol("SetScriptPhysicsCallbacks"));
+            if (pfnSetPhysics)
+            {
+                pfnSetPhysics(&g_PhysicsCallbacks);
             }
             using FSetScriptDebugCallbacks = void (*)(const SDebugCallbacks*);
             auto pfnSetDebug = reinterpret_cast<FSetScriptDebugCallbacks>(m_pActiveDll->GetSymbol("SetScriptDebugCallbacks"));
@@ -2027,6 +2153,62 @@ namespace quark::script
                     pScriptComp->m_pInstance->OnFixedUpdate(fixedStep);
                 }
             }
+
+            std::vector<quark::physics::SPhysicsEvent> vPhysicsEvents;
+            m_PhysicsWorld.Step(scene, fixedStep, vPhysicsEvents);
+
+            const auto dispatchToEntity = [&](int targetId, int otherId,
+                                              const quark::physics::SPhysicsEvent& ev,
+                                              const Vec3& normalForTarget)
+            {
+                const int targetIdx = scene.FindEntityIndexById(targetId);
+                const int otherIdx = scene.FindEntityIndexById(otherId);
+                if (targetIdx < 0 || otherIdx < 0)
+                {
+                    return;
+                }
+                CEntity& targetEntity = scene.m_vEntities[static_cast<size_t>(targetIdx)];
+                CScriptComponent* pScriptComp = targetEntity.GetScriptComponent();
+                if (!pScriptComp || !pScriptComp->m_pInstance || !pScriptComp->m_Enabled)
+                {
+                    return;
+                }
+                CScriptEntity* pOtherWrapper = GetOrCreateScriptEntityWrapper(
+                    scene.m_vEntities[static_cast<size_t>(otherIdx)]);
+                if (!pOtherWrapper)
+                {
+                    return;
+                }
+
+                using quark::physics::EPhysicsEventType;
+                switch (ev.m_Type)
+                {
+                    case EPhysicsEventType::COLLISION_ENTER:
+                        pScriptComp->m_pInstance->OnCollisionEnter({ pOtherWrapper, ev.m_Point, normalForTarget, ev.m_Penetration });
+                        break;
+                    case EPhysicsEventType::COLLISION_STAY:
+                        pScriptComp->m_pInstance->OnCollisionStay({ pOtherWrapper, ev.m_Point, normalForTarget, ev.m_Penetration });
+                        break;
+                    case EPhysicsEventType::COLLISION_EXIT:
+                        pScriptComp->m_pInstance->OnCollisionExit(pOtherWrapper);
+                        break;
+                    case EPhysicsEventType::TRIGGER_ENTER:
+                        pScriptComp->m_pInstance->OnTriggerEnter(pOtherWrapper);
+                        break;
+                    case EPhysicsEventType::TRIGGER_STAY:
+                        pScriptComp->m_pInstance->OnTriggerStay(pOtherWrapper);
+                        break;
+                    case EPhysicsEventType::TRIGGER_EXIT:
+                        pScriptComp->m_pInstance->OnTriggerExit(pOtherWrapper);
+                        break;
+                }
+            };
+
+            for (const quark::physics::SPhysicsEvent& ev : vPhysicsEvents)
+            {
+                dispatchToEntity(ev.m_EntityA, ev.m_EntityB, ev, ev.m_Normal * -1.0f);
+                dispatchToEntity(ev.m_EntityB, ev.m_EntityA, ev, ev.m_Normal);
+            }
         }
 
         for (size_t i = 0; i < scene.m_vEntities.size(); ++i)
@@ -2068,6 +2250,14 @@ namespace quark::script
         }
 
         SetCursorLocked(false);
+        m_PhysicsWorld.Reset();
+        for (auto& entity : scene.m_vEntities)
+        {
+            if (CRigidbodyComponent* pBody = entity.GetRigidbodyComponent())
+            {
+                pBody->ResetRuntimeState();
+            }
+        }
         s_ScriptTimeScale = 1.0f;
         s_DiscardMouseDeltaFrames = 0;
         s_EntityWrappers.clear();

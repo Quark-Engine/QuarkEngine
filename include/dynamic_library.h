@@ -1,5 +1,6 @@
 #ifndef __DYNAMIC_LIBRARY_H__
 #define __DYNAMIC_LIBRARY_H__
+
 #include <string>
 
 #ifdef _WIN32

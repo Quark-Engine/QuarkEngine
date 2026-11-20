@@ -1,5 +1,6 @@
 #ifndef __PROJECT_H__
 #define __PROJECT_H__
+
 #include <string>
 #include <vector>
 #include "scene.h"

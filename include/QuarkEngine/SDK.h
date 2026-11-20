@@ -24,6 +24,7 @@ class CMaterialComponent;
 class CLightComponent;
 class CCameraComponent;
 class CCollisionComponent;
+class CRigidbodyComponent;
 
 namespace quark::script
 {
@@ -186,6 +187,7 @@ namespace quark::script
         CLightComponent* GetLightComponent();
         CCameraComponent* GetCameraComponent();
         CCollisionComponent* GetCollisionComponent();
+        CRigidbodyComponent* GetRigidbodyComponent();
 
     private:
         SScriptTransform GetFallbackTransform();
@@ -195,6 +197,24 @@ namespace quark::script
         Vec3* m_pRotation = nullptr;
         Vec3* m_pScale = nullptr;
         bool* m_pHasLocalMatrixOverride = nullptr;
+    };
+
+    struct SCollisionInfo
+    {
+        CScriptEntity* m_pOther = nullptr;
+        Vec3 m_Point = { 0.0f, 0.0f, 0.0f };
+        Vec3 m_Normal = { 0.0f, 1.0f, 0.0f };
+        float m_Penetration = 0.0f;
+    };
+
+    struct SRaycastHit
+    {
+        bool m_Hit = false;
+        CScriptEntity* m_pEntity = nullptr;
+        int m_EntityId = -1;
+        Vec3 m_Point = { 0.0f, 0.0f, 0.0f };
+        Vec3 m_Normal = { 0.0f, 1.0f, 0.0f };
+        float m_Distance = 0.0f;
     };
 
     class IScript
@@ -301,6 +321,30 @@ namespace quark::script
         }
 
         virtual void OnUIEvent(const std::string& eventName, const std::string& actionName)
+        {
+        }
+
+        virtual void OnCollisionEnter(const SCollisionInfo& collision)
+        {
+        }
+
+        virtual void OnCollisionStay(const SCollisionInfo& collision)
+        {
+        }
+
+        virtual void OnCollisionExit(CScriptEntity* pOther)
+        {
+        }
+
+        virtual void OnTriggerEnter(CScriptEntity* pOther)
+        {
+        }
+
+        virtual void OnTriggerStay(CScriptEntity* pOther)
+        {
+        }
+
+        virtual void OnTriggerExit(CScriptEntity* pOther)
         {
         }
     };
@@ -798,6 +842,101 @@ namespace quark::script
         }
     };
 
+    struct SPhysicsCallbacks
+    {
+        bool (*pfnRaycast)(Vec3 origin, Vec3 direction, float maxDistance,
+                           bool includeTriggers, int ignoreEntityId,
+                           SRaycastHit* pOutHit) = nullptr;
+        void (*pfnAddForce)(CScriptEntity* pEntity, Vec3 force) = nullptr;
+        void (*pfnAddImpulse)(CScriptEntity* pEntity, Vec3 impulse) = nullptr;
+        void (*pfnSetVelocity)(CScriptEntity* pEntity, Vec3 velocity) = nullptr;
+        Vec3 (*pfnGetVelocity)(CScriptEntity* pEntity) = nullptr;
+        bool (*pfnIsGrounded)(CScriptEntity* pEntity) = nullptr;
+        void (*pfnSetGravity)(Vec3 gravity) = nullptr;
+        Vec3 (*pfnGetGravity)() = nullptr;
+    };
+
+    extern SPhysicsCallbacks g_PhysicsCallbacks;
+
+    class Physics
+    {
+    public:
+        static bool Raycast(const Vec3& origin,
+                            const Vec3& direction,
+                            float maxDistance,
+                            SRaycastHit& outHit,
+                            bool includeTriggers = false,
+                            int ignoreEntityId = -1)
+        {
+            outHit = {};
+            if (g_PhysicsCallbacks.pfnRaycast)
+            {
+                return g_PhysicsCallbacks.pfnRaycast(
+                    origin, direction, maxDistance, includeTriggers, ignoreEntityId, &outHit);
+            }
+            return false;
+        }
+
+        static void AddForce(CScriptEntity* pEntity, const Vec3& force)
+        {
+            if (g_PhysicsCallbacks.pfnAddForce && pEntity)
+            {
+                g_PhysicsCallbacks.pfnAddForce(pEntity, force);
+            }
+        }
+
+        static void AddImpulse(CScriptEntity* pEntity, const Vec3& impulse)
+        {
+            if (g_PhysicsCallbacks.pfnAddImpulse && pEntity)
+            {
+                g_PhysicsCallbacks.pfnAddImpulse(pEntity, impulse);
+            }
+        }
+
+        static void SetVelocity(CScriptEntity* pEntity, const Vec3& velocity)
+        {
+            if (g_PhysicsCallbacks.pfnSetVelocity && pEntity)
+            {
+                g_PhysicsCallbacks.pfnSetVelocity(pEntity, velocity);
+            }
+        }
+
+        static Vec3 GetVelocity(CScriptEntity* pEntity)
+        {
+            if (g_PhysicsCallbacks.pfnGetVelocity && pEntity)
+            {
+                return g_PhysicsCallbacks.pfnGetVelocity(pEntity);
+            }
+            return { 0.0f, 0.0f, 0.0f };
+        }
+
+        static bool IsGrounded(CScriptEntity* pEntity)
+        {
+            if (g_PhysicsCallbacks.pfnIsGrounded && pEntity)
+            {
+                return g_PhysicsCallbacks.pfnIsGrounded(pEntity);
+            }
+            return false;
+        }
+
+        static void SetGravity(const Vec3& gravity)
+        {
+            if (g_PhysicsCallbacks.pfnSetGravity)
+            {
+                g_PhysicsCallbacks.pfnSetGravity(gravity);
+            }
+        }
+
+        static Vec3 GetGravity()
+        {
+            if (g_PhysicsCallbacks.pfnGetGravity)
+            {
+                return g_PhysicsCallbacks.pfnGetGravity();
+            }
+            return { 0.0f, -9.81f, 0.0f };
+        }
+    };
+
     struct SDebugCallbacks
     {
         void (*pfnLog)(int level, const char* pMessage) = nullptr;
@@ -948,7 +1087,12 @@ using MouseBtn = ::quark::script::Mouse;
 using Time = ::quark::script::Time;
 using Math = ::quark::script::Math;
 using Scene = ::quark::script::Scene;
+using Physics = ::quark::script::Physics;
 using Debug = ::quark::script::Debug;
+using SCollisionInfo = ::quark::script::SCollisionInfo;
+using CollisionInfo = ::quark::script::SCollisionInfo;
+using SRaycastHit = ::quark::script::SRaycastHit;
+using RaycastHit = ::quark::script::SRaycastHit;
 using ScriptEntity = ::quark::script::CScriptEntity;
 using SEntityRef = ::quark::script::SEntityRef;
 using SAssetRef = ::quark::script::SAssetRef;

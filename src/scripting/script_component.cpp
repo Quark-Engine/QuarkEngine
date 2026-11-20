@@ -62,6 +62,11 @@ namespace quark::script
         return m_pEntity ? m_pEntity->GetCollisionComponent() : nullptr;
     }
 
+    CRigidbodyComponent* CScriptEntity::GetRigidbodyComponent()
+    {
+        return m_pEntity ? m_pEntity->GetRigidbodyComponent() : nullptr;
+    }
+
     CScriptComponent::CScriptComponent()
         : IComponent(COMPONENT_SCRIPT, "Script")
     {

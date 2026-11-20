@@ -1,5 +1,6 @@
 #ifndef __HUB_H__
 #define __HUB_H__
+
 #include "QuarkCore/QuarkCore.hpp"
 #include "editor/editor_preferences.h"
 #include "qcImGui.h"

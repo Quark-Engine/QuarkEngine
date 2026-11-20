@@ -1,5 +1,6 @@
 #ifndef __LIGHTING_H__
 #define __LIGHTING_H__
+
 #include "QuarkCore/QuarkCore.hpp"
 #include "QuarkCore/QuarkLights.hpp"
 

@@ -37,6 +37,10 @@ void CComponentFactoryRegistry::SeedBuiltIns()
          {
              return std::make_shared<CCollisionComponent>();
          });
+    seed("Rigidbody", []()
+         {
+             return std::make_shared<CRigidbodyComponent>();
+         });
     seed("Camera", []()
          {
              return std::make_shared<CCameraComponent>();

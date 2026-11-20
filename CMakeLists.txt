@@ -1,5 +1,9 @@
-cmake_minimum_required(VERSION 3.10)
+cmake_minimum_required(VERSION 3.16)
 project(QuarkEngine)
+
+if(MSVC)
+    add_compile_options(/MP)
+endif()
 
 execute_process(
     COMMAND git rev-parse --short=7 HEAD
@@ -64,6 +68,7 @@ if(MSVC)
     target_link_options(QuarkCoreRuntime PRIVATE
         "/WHOLEARCHIVE:$<TARGET_FILE:QuarkCore-Combined>"
         "/WHOLEARCHIVE:$<TARGET_FILE:QuarkCore>"
+        "$<$<CONFIG:Debug>:/DEBUG:FASTLINK>"
     )
 elseif(APPLE)
     target_link_libraries(QuarkCoreRuntime PRIVATE
@@ -135,6 +140,7 @@ add_library(QuarkEngineRuntime SHARED
     src/engine/scene_document.cpp
     src/engine/scene_package.cpp
     src/engine/scene_runtime.cpp
+    src/engine/physics_world.cpp
     src/engine/transform.cpp
     src/engine/canvas_system.cpp
     src/entity.cpp
@@ -220,6 +226,37 @@ else()
         "IMGUI_IMPL_API=__attribute__((visibility(\"default\")))"
     )
 endif()
+if(MSVC)
+    target_link_options(QuarkEngineRuntime PRIVATE
+        "$<$<CONFIG:Debug>:/DEBUG:FASTLINK>"
+    )
+endif()
+set_source_files_properties(
+    quark-libs/imgui/include/imgui.cpp
+    quark-libs/imgui/include/imgui_draw.cpp
+    quark-libs/imgui/include/imgui_widgets.cpp
+    quark-libs/imgui/include/imgui_tables.cpp
+    imgui/imgui_impl_sdl3.cpp
+    imgui/imgui_impl_opengl3.cpp
+    imgui/imgui_impl_dx11.cpp
+    src/ImGuizmo.cpp
+    PROPERTIES SKIP_PRECOMPILE_HEADERS ON
+)
+target_precompile_headers(QuarkEngineRuntime PRIVATE
+    <algorithm>
+    <array>
+    <cmath>
+    <cstdint>
+    <filesystem>
+    <functional>
+    <memory>
+    <string>
+    <unordered_map>
+    <unordered_set>
+    <vector>
+    <nlohmann/json.hpp>
+    <QuarkCore/QuarkCore.hpp>
+)
 set_target_properties(QuarkEngineRuntime PROPERTIES
     PREFIX ""
     OUTPUT_NAME "QuarkEngine"
@@ -325,6 +362,70 @@ elseif(UNIX)
     )
 endif()
 
+if(BUILD_ENGINE OR QUARK_BUILD_TESTS)
+    add_library(QuarkEngineCore STATIC
+        src/gui/gui_renderer_bridge.cpp
+        src/dynamic_library.cpp
+        src/component.cpp
+        src/editable_mesh.cpp
+        src/engine/cpu_task_pool.cpp
+        src/engine/scene_document.cpp
+        src/engine/material_texture_restore.cpp
+        src/engine/physics_world.cpp
+        src/engine/transform.cpp
+        src/engine/canvas_system.cpp
+        src/engine/component_factory_registry.cpp
+        src/entity.cpp
+        src/editor/editor_hierarchy_utils.cpp
+        src/lighting.cpp
+        src/scripting/script_component.cpp
+        src/scripting/script_engine.cpp
+    )
+
+    target_include_directories(QuarkEngineCore PUBLIC
+        ${CMAKE_SOURCE_DIR}/quark-libs/QuarkCore/include
+        ${CMAKE_SOURCE_DIR}/quark-libs/imgui/include
+        ${CMAKE_SOURCE_DIR}/imgui
+        ${CMAKE_SOURCE_DIR}/include
+        ${CMAKE_SOURCE_DIR}/src
+    )
+
+    target_link_libraries(QuarkEngineCore PUBLIC
+        QuarkCore-Combined
+        QuarkEngineGUI
+    )
+
+    if(WIN32)
+        target_compile_definitions(QuarkEngineCore PRIVATE
+            USE_LIBTYPE_SHARED
+            IMGUI_API=__declspec\(dllimport\)
+        )
+    else()
+        target_compile_definitions(QuarkEngineCore PRIVATE
+            USE_LIBTYPE_SHARED
+            "IMGUI_API=__attribute__((visibility(\"default\")))"
+        )
+    endif()
+
+    target_compile_definitions(QuarkEngineCore PRIVATE QUARKENGINE_BUILD QUARKCORE_STATIC)
+
+    target_precompile_headers(QuarkEngineCore PRIVATE
+        <algorithm>
+        <array>
+        <cmath>
+        <cstdint>
+        <filesystem>
+        <functional>
+        <memory>
+        <string>
+        <unordered_map>
+        <unordered_set>
+        <vector>
+        <nlohmann/json.hpp>
+        <QuarkCore/QuarkCore.hpp>
+    )
+endif()
+
 if(BUILD_ENGINE)
     set(CMAKE_RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/bin)
 
@@ -348,11 +449,8 @@ if(BUILD_ENGINE)
         src/editor/editor_theme.cpp
         src/editor/editor_ui.cpp
         src/editor/editor_utils.cpp
-        src/scripting/script_component.cpp
-        src/scripting/script_engine.cpp
         src/editor/editor_viewers.cpp
         src/editor/editor.cpp
-        src/editor/editor_hierarchy_utils.cpp
         src/editor/editor_preferences.cpp
         src/editor/editor_file_utils.cpp
         src/editor/runtime_builder.cpp
@@ -363,29 +461,15 @@ if(BUILD_ENGINE)
         src/application_plugin_bridge.cpp
         src/application_scene_renderer.cpp
         src/camera.cpp
-        src/component.cpp
         src/command_line.cpp
-        src/dynamic_library.cpp
-        src/editable_mesh.cpp
         src/assets/asset_library.cpp
         src/assets/preview_cache.cpp
         src/assets/texture_cache.cpp
-        src/engine/transform.cpp
-    src/engine/canvas_system.cpp
-        src/engine/cpu_task_pool.cpp
-        src/engine/component_factory_registry.cpp
-        src/engine/scene_document.cpp
         src/engine/scene_package.cpp
         src/engine/scene_runtime.cpp
-        src/engine/material_texture_restore.cpp
         src/engine/material_loader.cpp
-        src/entity.cpp
         src/hub.cpp
         src/language_manager.cpp
-        src/lighting.cpp
-        src/gui/gui_renderer_bridge.cpp
-        src/scripting/script_component.cpp
-        src/scripting/script_engine.cpp
         src/main.cpp
         src/models.cpp
         src/project.cpp
@@ -412,6 +496,7 @@ if(BUILD_ENGINE)
             target_link_options(${PROJECT_NAME} PRIVATE
                 "$<$<CONFIG:Release>:/SUBSYSTEM:WINDOWS>"
                 "$<$<CONFIG:Release>:/ENTRY:mainCRTStartup>"
+                "$<$<CONFIG:Debug>:/DEBUG:FASTLINK>"
             )
         else()
             target_link_options(${PROJECT_NAME} PRIVATE
@@ -439,6 +524,7 @@ if(BUILD_ENGINE)
     endif()
 
     target_link_libraries(${PROJECT_NAME} PRIVATE
+        QuarkEngineCore
         QuarkCore-Combined
         QuarkEngineGUI
         imgui
@@ -451,6 +537,27 @@ if(BUILD_ENGINE)
         QUARK_ENGINE_CONFIGURATION="$<CONFIG>"
         QUARK_ENGINE_BUILD="${QUARK_ENGINE_BUILD}"
         QUARK_ENGINE_BUILD_DATE="${QUARK_ENGINE_BUILD_DATE}"
+    )
+    set_source_files_properties(
+        src/hub.cpp
+        src/editor/editor_desktop.cpp
+        src/editor/editor_ui.cpp
+        PROPERTIES SKIP_PRECOMPILE_HEADERS ON
+    )
+    target_precompile_headers(${PROJECT_NAME} PRIVATE
+        <algorithm>
+        <array>
+        <cmath>
+        <cstdint>
+        <filesystem>
+        <functional>
+        <memory>
+        <string>
+        <unordered_map>
+        <unordered_set>
+        <vector>
+        <nlohmann/json.hpp>
+        <QuarkCore/QuarkCore.hpp>
     )
     if(WIN32)
         target_link_libraries(${PROJECT_NAME} PRIVATE imgui-direct3d11)
@@ -619,21 +726,7 @@ if(QUARK_BUILD_TESTS)
         tests/test_direct_texture.cpp
         tests/test_cpu_task_pool.cpp
         tests/test_canvas_system.cpp
-        src/gui/gui_renderer_bridge.cpp
-        src/dynamic_library.cpp
-        src/component.cpp
-        src/editable_mesh.cpp
-        src/engine/cpu_task_pool.cpp
-        src/engine/scene_document.cpp
-        src/engine/material_texture_restore.cpp
-        src/engine/transform.cpp
-    src/engine/canvas_system.cpp
-        src/engine/component_factory_registry.cpp
-        src/entity.cpp
-        src/editor/editor_hierarchy_utils.cpp
-        src/lighting.cpp
-        src/scripting/script_component.cpp
-        src/scripting/script_engine.cpp
+        tests/test_physics.cpp
     )
 
     target_include_directories(QuarkEngineTests PRIVATE
@@ -643,7 +736,11 @@ if(QUARK_BUILD_TESTS)
         ${CMAKE_SOURCE_DIR}/include
     )
 
-    target_link_libraries(QuarkEngineTests PRIVATE QuarkCore-Combined QuarkEngineGUI)
+    target_link_libraries(QuarkEngineTests PRIVATE QuarkEngineCore QuarkCore-Combined QuarkEngineGUI)
+    target_precompile_headers(QuarkEngineTests REUSE_FROM QuarkEngineCore)
+    if(MSVC)
+        target_link_options(QuarkEngineTests PRIVATE "$<$<CONFIG:Debug>:/DEBUG:FASTLINK>")
+    endif()
 
     if(WIN32)
         target_compile_definitions(QuarkEngineTests PRIVATE

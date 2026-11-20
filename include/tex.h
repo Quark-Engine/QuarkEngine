@@ -1,5 +1,6 @@
 #ifndef __TEX_H__
 #define __TEX_H__
+
 #include "editor/editor_preferences.h"
 #include "entity.h"
 #include "scene.h"

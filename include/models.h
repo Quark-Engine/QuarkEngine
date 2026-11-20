@@ -1,5 +1,6 @@
 #ifndef __MODELS_H__
 #define __MODELS_H__
+
 #include "entity.h"
 #include "text_mesh.h"
 

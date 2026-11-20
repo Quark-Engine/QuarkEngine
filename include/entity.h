@@ -1,5 +1,6 @@
 #ifndef __ENTITY_H__
 #define __ENTITY_H__
+
 #include "lighting.h"
 #include "component.h"
 
@@ -61,6 +62,8 @@ public:
     const CMaterialComponent* GetMaterialComponent() const;
     CCollisionComponent* GetCollisionComponent();
     const CCollisionComponent* GetCollisionComponent() const;
+    CRigidbodyComponent* GetRigidbodyComponent();
+    const CRigidbodyComponent* GetRigidbodyComponent() const;
     CCameraComponent* GetCameraComponent();
     CScriptComponent* GetScriptComponent();
     const CScriptComponent* GetScriptComponent() const;

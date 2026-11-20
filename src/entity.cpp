@@ -216,6 +216,16 @@ const CCollisionComponent* CEntity::GetCollisionComponent() const
     return m_pComponents ? m_pComponents->GetCollision() : nullptr;
 }
 
+CRigidbodyComponent* CEntity::GetRigidbodyComponent()
+{
+    return m_pComponents ? m_pComponents->GetRigidbody() : nullptr;
+}
+
+const CRigidbodyComponent* CEntity::GetRigidbodyComponent() const
+{
+    return m_pComponents ? m_pComponents->GetRigidbody() : nullptr;
+}
+
 CCameraComponent* CEntity::GetCameraComponent()
 {
     return m_pComponents ? m_pComponents->GetCamera() : nullptr;

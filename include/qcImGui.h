@@ -1,5 +1,6 @@
 #ifndef __QC_IMGUI_H__
 #define __QC_IMGUI_H__
+
 #include "imgui.h"
 #include "QuarkCore/QuarkCore.hpp"
 #if defined(_WIN32)

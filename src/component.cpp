@@ -224,6 +224,60 @@ void CCollisionComponent::OnEntityTransformChanged()
     m_Dirty = true;
 }
 
+void CRigidbodyComponent::Serialize(nlohmann::json& json) const
+{
+    json["mass"] = m_Mass;
+    json["linear_drag"] = m_LinearDrag;
+    json["friction"] = m_Friction;
+    json["restitution"] = m_Restitution;
+    json["use_gravity"] = m_UseGravity;
+    json["is_kinematic"] = m_IsKinematic;
+    json["freeze_position_x"] = m_FreezePositionX;
+    json["freeze_position_y"] = m_FreezePositionY;
+    json["freeze_position_z"] = m_FreezePositionZ;
+}
+
+void CRigidbodyComponent::Deserialize(const nlohmann::json& json)
+{
+    if (json.contains("mass"))
+    {
+        m_Mass = std::max(0.001f, json["mass"].get<float>());
+    }
+    if (json.contains("linear_drag"))
+    {
+        m_LinearDrag = std::max(0.0f, json["linear_drag"].get<float>());
+    }
+    if (json.contains("friction"))
+    {
+        m_Friction = std::clamp(json["friction"].get<float>(), 0.0f, 1.0f);
+    }
+    if (json.contains("restitution"))
+    {
+        m_Restitution = std::clamp(json["restitution"].get<float>(), 0.0f, 1.0f);
+    }
+    if (json.contains("use_gravity"))
+    {
+        m_UseGravity = json["use_gravity"].get<bool>();
+    }
+    if (json.contains("is_kinematic"))
+    {
+        m_IsKinematic = json["is_kinematic"].get<bool>();
+    }
+    if (json.contains("freeze_position_x"))
+    {
+        m_FreezePositionX = json["freeze_position_x"].get<bool>();
+    }
+    if (json.contains("freeze_position_y"))
+    {
+        m_FreezePositionY = json["freeze_position_y"].get<bool>();
+    }
+    if (json.contains("freeze_position_z"))
+    {
+        m_FreezePositionZ = json["freeze_position_z"].get<bool>();
+    }
+    ResetRuntimeState();
+}
+
 namespace
 {
 
@@ -1427,6 +1481,11 @@ void CComponentManager::CloneInto(const CComponentManager& source)
             case COMPONENT_COLLISION:
                 pCloned = std::make_shared<CCollisionComponent>(
                     *static_cast<const CCollisionComponent*>(pComponent.get()));
+                break;
+
+            case COMPONENT_RIGIDBODY:
+                pCloned = std::make_shared<CRigidbodyComponent>(
+                    *static_cast<const CRigidbodyComponent*>(pComponent.get()));
                 break;
 
             case COMPONENT_CAMERA:

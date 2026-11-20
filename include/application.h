@@ -1,5 +1,6 @@
 #ifndef __APPLICATION_H__
 #define __APPLICATION_H__
+
 #include "QuarkCore/QuarkCore.hpp"
 #include "application_plugin_bridge.h"
 #include "application_scene_renderer.h"

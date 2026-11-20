@@ -1,5 +1,6 @@
 #ifndef __PLUGIN_MANAGER_H__
 #define __PLUGIN_MANAGER_H__
+
 #include "plugin.h"
 #include "dynamic_library.h"
 #include <vector>
