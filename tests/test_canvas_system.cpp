@@ -683,7 +683,7 @@ TEST(CanvasSystem, example_scene_creation)
     CHECK(loadedScene.m_vEntities.size() == 11);
 }
 
-TEST(CanvasSystem, new_ui_widgets_and_unity_layouts)
+TEST(CanvasSystem, new_ui_widgets_and_layout_groups)
 {
     CComponentFactoryRegistry registry;
     CScene scene;

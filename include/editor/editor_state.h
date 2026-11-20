@@ -181,6 +181,8 @@ struct SAssetBrowserCreatePopup
 struct SLocalEntry
 {
     std::string m_FileName;
+    std::filesystem::path m_FullPath;
+    std::string m_DisplayLabel;
     bool m_IsDirectory = false;
     bool m_IsDirectoryEmpty = false;
     bool m_IsImage = false;
@@ -188,8 +190,20 @@ struct SLocalEntry
     bool m_IsMaterial = false;
     bool m_IsTextureMeta = false;
     bool m_IsPrefab = false;
+    bool m_IsScript = false;
+    bool m_IsScene = false;
     Texture m_PreviewTexture = {};
     std::string m_Extension;
+};
+
+struct SAssetFolderTreeNode
+{
+    std::string m_DisplayName;
+    std::filesystem::path m_FolderPath;
+    std::string m_NormalizedPath;
+    std::string m_NodeId;
+    bool m_DefaultOpen = false;
+    std::vector<SAssetFolderTreeNode> m_vChildren;
 };
 
 struct SAssetBrowserState
@@ -199,6 +213,9 @@ struct SAssetBrowserState
 
     char m_aSearchBuffer[128] = "";
     std::string m_DependencyCachePath;
+    std::string m_CachedDependencyRelativePath;
+    bool m_CachedSelectedIsRegularFile = false;
+    bool m_CachedSelectedIsTexture = false;
     std::vector<std::string> m_vCachedFileDependencies;
     bool m_DependencyCacheReady = false;
     int m_RenameTarget = -1;
@@ -207,11 +224,20 @@ struct SAssetBrowserState
     bool m_DuplicatePopupOpen = false;
     std::string m_DuplicateName;
 
+    int m_FavoriteFilter = 0;
+    int m_CachedFavoriteFilter = -1;
+    bool m_ListViewMode = true;
+    float m_LeftSidebarWidth = 210.0f;
+
     std::filesystem::path m_CachedPath;
+    std::string m_CachedNormalizedCurrentPath;
+    std::string m_CachedProjectPath;
     std::string m_CachedSearch;
     int m_CachedFilter = -1;
     bool m_AssetListCacheDirty = true;
     std::vector<SLocalEntry> m_vCachedEntries;
+    std::vector<SAssetFolderTreeNode> m_vCachedFolderRoots;
+    std::vector<std::pair<std::string, std::filesystem::path>> m_vCachedBreadcrumbs;
 
     SAssetBrowserCreatePopup m_Create;
 };
