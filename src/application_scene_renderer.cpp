@@ -2,7 +2,9 @@
 
 #include "component.h"
 #include "lighting.h"
+#include "models.h"
 #include "scene.h"
+#include "tex.h"
 #include "engine/cpu_task_pool.h"
 #include "engine/transform.h"
 
@@ -750,8 +752,332 @@ void CSceneRenderer::SetUseTexture(bool useTexture)
     {
         return;
     }
-    int use = useTexture ? 1 : 0;
+    const int use = useTexture ? 1 : 0;
+    if (m_LastUseTexState == use)
+    {
+        return;
+    }
+    m_LastUseTexState = use;
     SetShaderValue(m_LightingShader, m_UseTexLoc, &use, SHADER_UNIFORM_INT);
+}
+
+void CSceneRenderer::RenderSceneMeshes(CScene& scene, const Camera3D& camera, float aspectRatio,
+                                       const CPreferences* pPreferences, bool drawEditorOverlays)
+{
+    m_vRenderCommands.clear();
+    m_LastBatchStats = {};
+
+    const int entityCount = static_cast<int>(scene.m_vEntities.size());
+    for (int entityIndex = 0; entityIndex < entityCount; ++entityIndex)
+    {
+        CEntity& entity = scene.m_vEntities[entityIndex];
+        CMeshComponent* pMeshComp = entity.GetMeshComponent();
+        CTransformComponent* pTransform = entity.GetTransformComponent();
+        CMaterialComponent* pMatComp = entity.GetMaterialComponent();
+        if (!pMeshComp || !pMeshComp->m_Enabled || !pTransform || !pMatComp)
+        {
+            continue;
+        }
+        if (pMeshComp->m_Model.meshCount <= 0 || !pMeshComp->m_Model.meshes ||
+            pMeshComp->m_Model.materialCount <= 0 || !pMeshComp->m_Model.materials)
+        {
+            continue;
+        }
+        if (!IsMeshVisible(entityIndex, camera, aspectRatio))
+        {
+            continue;
+        }
+
+        CEntityTextureService::RefreshEntityRenderState(entity);
+        EnsureLightingShader(pMeshComp);
+
+        const Mat4& meshWorldTransform = GetCachedMeshWorldTransform(entityIndex);
+        const bool hasOverride = CMeshOverrideService::Has(entity);
+        const bool canInstance = !hasOverride && !pMeshComp->m_MeshTrianglesDetached;
+        const bool disableBackfaceCulling = hasOverride ||
+            pMeshComp->m_MeshTrianglesDetached ||
+            quark::HasNegativeDeterminant(meshWorldTransform);
+
+        float distanceSq = 0.0f;
+        if (entityIndex < static_cast<int>(m_vFrameData.size()) && m_vFrameData[entityIndex].m_HasMesh)
+        {
+            const BoundingBox& bounds = m_vFrameData[entityIndex].m_WorldBounds;
+            const Vec3 center = (bounds.min + bounds.max) * 0.5f;
+            const Vec3 delta = center - camera.position;
+            distanceSq = delta.x * delta.x + delta.y * delta.y + delta.z * delta.z;
+        }
+
+        const bool hasComponentTex = (pMatComp->m_Texture.id != 0);
+        const Color tintColor = pMatComp->m_Color;
+
+        for (int meshIndex = 0; meshIndex < pMeshComp->m_Model.meshCount; ++meshIndex)
+        {
+            const Mesh& mesh = pMeshComp->m_Model.meshes[meshIndex];
+            if (mesh.vertexCount <= 0)
+            {
+                continue;
+            }
+
+            int materialIndex = 0;
+            if (pMeshComp->m_Model.meshMaterial &&
+                pMeshComp->m_Model.meshMaterial[meshIndex] >= 0 &&
+                pMeshComp->m_Model.meshMaterial[meshIndex] < pMeshComp->m_Model.materialCount)
+            {
+                materialIndex = pMeshComp->m_Model.meshMaterial[meshIndex];
+            }
+
+            const Material& material = pMeshComp->m_Model.materials[materialIndex];
+            const std::uint32_t shaderId = material.shader ? material.shader->id : m_LightingShader.id;
+
+            std::uint32_t textureId = 0;
+            bool hasTexture = hasComponentTex;
+            Color baseAlbedo = WHITE;
+            if (material.maps)
+            {
+                baseAlbedo = material.maps[MATERIAL_MAP_ALBEDO].color;
+                if (material.maps[MATERIAL_MAP_ALBEDO].texture.valid ||
+                    material.maps[MATERIAL_MAP_ALBEDO].texture.id != 0)
+                {
+                    textureId = material.maps[MATERIAL_MAP_ALBEDO].texture.id;
+                    hasTexture = true;
+                }
+            }
+            if (textureId == 0 && hasComponentTex)
+            {
+                textureId = pMatComp->m_Texture.id;
+            }
+
+            const Color effectiveColor = {
+                static_cast<unsigned char>((static_cast<int>(baseAlbedo.r) * static_cast<int>(tintColor.r)) / 255),
+                static_cast<unsigned char>((static_cast<int>(baseAlbedo.g) * static_cast<int>(tintColor.g)) / 255),
+                static_cast<unsigned char>((static_cast<int>(baseAlbedo.b) * static_cast<int>(tintColor.b)) / 255),
+                static_cast<unsigned char>((static_cast<int>(baseAlbedo.a) * static_cast<int>(tintColor.a)) / 255)
+            };
+
+            std::uint64_t materialId = 1469598103934665603ull;
+            HashValue(materialId, shaderId);
+            HashValue(materialId, textureId);
+            HashValue(materialId, effectiveColor);
+            if (material.maps)
+            {
+                for (int mapIdx = MATERIAL_MAP_METALNESS; mapIdx <= MATERIAL_MAP_EMISSION; ++mapIdx)
+                {
+                    HashValue(materialId, material.maps[mapIdx].texture.id);
+                    HashValue(materialId, material.maps[mapIdx].value);
+                }
+            }
+
+            std::uint64_t meshId = 1469598103934665603ull;
+            if (canInstance)
+            {
+                if (!pMeshComp->m_AssetName.empty())
+                {
+                    HashBytes(meshId, pMeshComp->m_AssetName.data(), pMeshComp->m_AssetName.size());
+                }
+                else
+                {
+                    const int objType = static_cast<int>(pMeshComp->m_Type);
+                    HashValue(meshId, objType);
+                    HashValue(meshId, pMeshComp->m_Segments);
+                }
+                HashValue(meshId, meshIndex);
+                HashValue(meshId, mesh.vertexCount);
+                HashValue(meshId, mesh.triangleCount);
+            }
+            else
+            {
+                HashValue(meshId, entityIndex);
+                HashValue(meshId, meshIndex);
+                HashValue(meshId, mesh.vaoId);
+            }
+
+            SRenderCommand cmd = {};
+            cmd.m_EntityIndex = entityIndex;
+            cmd.m_MeshIndex = meshIndex;
+            cmd.m_ShaderId = shaderId;
+            cmd.m_MaterialId = materialId;
+            cmd.m_TextureId = textureId;
+            cmd.m_MeshId = meshId;
+            cmd.m_HasTexture = hasTexture;
+            cmd.m_DisableBackfaceCulling = disableBackfaceCulling;
+            cmd.m_IsTransparent = (effectiveColor.a < 255);
+            cmd.m_CanInstance = canInstance;
+            cmd.m_DistanceSq = distanceSq;
+            cmd.m_EffectiveColor = effectiveColor;
+            cmd.m_Transform = meshWorldTransform;
+            cmd.m_pMesh = &mesh;
+            cmd.m_Material = material;
+            m_vRenderCommands.push_back(cmd);
+        }
+    }
+
+    std::sort(m_vRenderCommands.begin(), m_vRenderCommands.end(),
+              [](const SRenderCommand& a, const SRenderCommand& b)
+              {
+                  if (a.m_IsTransparent != b.m_IsTransparent)
+                  {
+                      return !a.m_IsTransparent;
+                  }
+                  if (a.m_IsTransparent)
+                  {
+                      if (a.m_DistanceSq != b.m_DistanceSq)
+                      {
+                          return a.m_DistanceSq > b.m_DistanceSq;
+                      }
+                  }
+                  if (a.m_ShaderId != b.m_ShaderId)
+                  {
+                      return a.m_ShaderId < b.m_ShaderId;
+                  }
+                  if (a.m_MaterialId != b.m_MaterialId)
+                  {
+                      return a.m_MaterialId < b.m_MaterialId;
+                  }
+                  if (a.m_TextureId != b.m_TextureId)
+                  {
+                      return a.m_TextureId < b.m_TextureId;
+                  }
+                  if (a.m_MeshId != b.m_MeshId)
+                  {
+                      return a.m_MeshId < b.m_MeshId;
+                  }
+                  if (a.m_DisableBackfaceCulling != b.m_DisableBackfaceCulling)
+                  {
+                      return !a.m_DisableBackfaceCulling;
+                  }
+                  return a.m_DistanceSq < b.m_DistanceSq;
+              });
+
+    m_LastBatchStats.m_SubmittedCommands = static_cast<int>(m_vRenderCommands.size());
+    m_LastUseTexState = -1;
+    bool backfaceCullingDisabled = false;
+
+    BeginLightingPass();
+
+    const size_t commandCount = m_vRenderCommands.size();
+    size_t index = 0;
+    while (index < commandCount)
+    {
+        const SRenderCommand& first = m_vRenderCommands[index];
+
+        if (first.m_DisableBackfaceCulling != backfaceCullingDisabled)
+        {
+            if (first.m_DisableBackfaceCulling)
+            {
+                DisableBackfaceCulling();
+            }
+            else
+            {
+                EnableBackfaceCulling();
+            }
+            backfaceCullingDisabled = first.m_DisableBackfaceCulling;
+        }
+
+        SetUseTexture(first.m_HasTexture);
+
+        size_t batchEnd = index + 1;
+        if (first.m_CanInstance && !first.m_IsTransparent)
+        {
+            while (batchEnd < commandCount)
+            {
+                const SRenderCommand& next = m_vRenderCommands[batchEnd];
+                if (!next.m_CanInstance ||
+                    next.m_IsTransparent ||
+                    next.m_ShaderId != first.m_ShaderId ||
+                    next.m_MaterialId != first.m_MaterialId ||
+                    next.m_TextureId != first.m_TextureId ||
+                    next.m_MeshId != first.m_MeshId ||
+                    next.m_DisableBackfaceCulling != first.m_DisableBackfaceCulling ||
+                    next.m_HasTexture != first.m_HasTexture)
+                {
+                    break;
+                }
+                ++batchEnd;
+            }
+        }
+
+        const size_t batchSize = batchEnd - index;
+        Material batchMaterial = first.m_Material;
+        Color savedAlbedoColor = WHITE;
+        const bool hasMaps = (batchMaterial.maps != nullptr);
+        if (hasMaps)
+        {
+            savedAlbedoColor = batchMaterial.maps[MATERIAL_MAP_ALBEDO].color;
+            batchMaterial.maps[MATERIAL_MAP_ALBEDO].color = first.m_EffectiveColor;
+        }
+
+        if (batchSize > 1)
+        {
+            m_vInstanceTransforms.clear();
+            m_vInstanceTransforms.reserve(batchSize);
+            for (size_t i = index; i < batchEnd; ++i)
+            {
+                m_vInstanceTransforms.push_back(m_vRenderCommands[i].m_Transform);
+            }
+            DrawMeshInstanced(*first.m_pMesh, batchMaterial, m_vInstanceTransforms.data(),
+                              static_cast<int>(m_vInstanceTransforms.size()));
+            ++m_LastBatchStats.m_InstancedBatches;
+            m_LastBatchStats.m_InstancedCount += static_cast<int>(batchSize);
+        }
+        else
+        {
+            DrawMesh(*first.m_pMesh, batchMaterial, first.m_Transform);
+        }
+
+        if (hasMaps)
+        {
+            batchMaterial.maps[MATERIAL_MAP_ALBEDO].color = savedAlbedoColor;
+        }
+
+        ++m_LastBatchStats.m_DrawCalls;
+        index = batchEnd;
+    }
+
+    if (backfaceCullingDisabled)
+    {
+        EnableBackfaceCulling();
+    }
+
+    EndLightingPass();
+
+    if (drawEditorOverlays && pPreferences &&
+        (pPreferences->m_WireframeEnabled || pPreferences->m_ShowColliders))
+    {
+        const Color wireframeColor = {
+            static_cast<unsigned char>(pPreferences->m_WireframeRed),
+            static_cast<unsigned char>(pPreferences->m_WireframeGreen),
+            static_cast<unsigned char>(pPreferences->m_WireframeBlue),
+            255
+        };
+        for (int entityIndex = 0; entityIndex < entityCount; ++entityIndex)
+        {
+            CEntity& entity = scene.m_vEntities[entityIndex];
+            CMeshComponent* pMeshComp = entity.GetMeshComponent();
+            CTransformComponent* pTransform = entity.GetTransformComponent();
+            CMaterialComponent* pMatComp = entity.GetMaterialComponent();
+            if (!pMeshComp || !pMeshComp->m_Enabled || !pTransform)
+            {
+                continue;
+            }
+            if (!IsMeshVisible(entityIndex, camera, aspectRatio))
+            {
+                continue;
+            }
+
+            const Mat4& worldTransform = GetCachedWorldTransform(entityIndex);
+            if (pPreferences->m_WireframeEnabled && pMatComp && pMatComp->m_OutlineColor.a > 0)
+            {
+                PushMatrix();
+                MultMatrix(worldTransform);
+                DrawModelWires(pMeshComp->m_Model, { 0, 0, 0 }, 1.0f, wireframeColor);
+                PopMatrix();
+            }
+            if (pPreferences->m_ShowColliders)
+            {
+                DrawCollisionDebug(entity, worldTransform, *pPreferences);
+            }
+        }
+    }
 }
 
 void CSceneRenderer::Unload()

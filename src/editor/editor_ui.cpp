@@ -139,8 +139,10 @@ void CEditor::DrawUi(Shader shader, CFlyCamera& camera, SPluginContext* pPluginC
     m_UiTimings = {};
     m_Ui.m_Viewport.m_Hovered = false;
     m_Ui.m_Viewport.m_Focused = false;
+    m_Ui.m_Viewport.m_Visible = false;
     m_Ui.m_GameViewport.m_Hovered = false;
     m_Ui.m_GameViewport.m_Focused = false;
+    m_Ui.m_GameViewport.m_Visible = false;
     const bool rtl = CLanguageManager::Get().m_Current == "arabic";
     if (rtl)
     {
@@ -1278,6 +1280,7 @@ void CEditor::DrawScenePanel(CFlyCamera& camera, SPluginContext* pPluginCtx)
         (viewport.m_Hovered || camera.m_Active) ? ImGuiWindowFlags_NoMove : ImGuiWindowFlags_None;
     if (ImGui::Begin(lang.Word("scene"), &m_Preferences.m_ShowScene, sceneWindowFlags))
     {
+        viewport.m_Visible = true;
         m_pPluginManager->DrawUiRegion(UI_INSPECTOR, *pPluginCtx);
         if (!m_IsPlaying)
         {
@@ -1385,6 +1388,7 @@ void CEditor::DrawGamePanel(CFlyCamera& camera)
     m_SelectGameTab = false;
     if (isOpen)
     {
+        m_Ui.m_GameViewport.m_Visible = true;
         m_GameViewActive = ImGui::IsWindowFocused(ImGuiFocusedFlags_RootAndChildWindows);
         if (!m_IsPlaying && m_GameViewActive)
         {

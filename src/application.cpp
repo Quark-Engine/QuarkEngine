@@ -496,13 +496,16 @@ void CApplication::RenderFrame()
     ClearBackground(DARKGRAY);
     quark::ui::CCanvasSystem::Get().UpdateCanvasTextures(m_Editor.m_Scene);
 
-    if (m_Editor.m_Ui.m_Viewport.m_RenderTexture.id > 0 && IsRenderTextureValid(m_Editor.m_Ui.m_Viewport.m_RenderTexture))
+    m_FrameTimings.m_Main3dPassMs = 0.0f;
+
+    if (m_Editor.m_Ui.m_Viewport.m_Visible &&
+        m_Editor.m_Ui.m_Viewport.m_RenderTexture.id > 0 &&
+        IsRenderTextureValid(m_Editor.m_Ui.m_Viewport.m_RenderTexture))
     {
         BeginTextureMode(m_Editor.m_Ui.m_Viewport.m_RenderTexture);
         ClearBackground(Color{ static_cast<unsigned char>(m_Editor.m_Preferences.m_BackgroundRed),
                                static_cast<unsigned char>(m_Editor.m_Preferences.m_BackgroundGreen),
                                static_cast<unsigned char>(m_Editor.m_Preferences.m_BackgroundBlue), 255 });
-        m_FrameTimings.m_Main3dPassMs = 0.0f;
         if (!m_Editor.m_Scene2DMode)
         {
             const auto main3dStart = std::chrono::steady_clock::now();
@@ -521,54 +524,40 @@ void CApplication::RenderFrame()
             const float viewportWidth = m_Editor.m_Ui.m_Viewport.m_WindowSize.x;
             const float viewportHeight = m_Editor.m_Ui.m_Viewport.m_WindowSize.y;
             const float aspectRatio = viewportHeight > 0.0f ? viewportWidth / viewportHeight : 1.0f;
-            for (int entityIndex = 0; entityIndex < static_cast<int>(m_Editor.m_Scene.m_vEntities.size()); ++entityIndex)
+
+            m_SceneRenderer.RenderSceneMeshes(m_Editor.m_Scene, renderCamera, aspectRatio,
+                                              &m_Editor.m_Preferences, true);
+
+            if (m_Editor.m_Preferences.m_ShowSelectionVisualization || m_Editor.m_Preferences.m_ShowBoundingBoxes)
             {
-                auto& e = m_Editor.m_Scene.m_vEntities[entityIndex];
-                CMeshComponent* pMesh = e.GetMeshComponent();
-                CTransformComponent* pTransform = e.GetTransformComponent();
-                CMaterialComponent* pMat = e.GetMaterialComponent();
-                if (!pMesh || !pMesh->m_Enabled || !pTransform)
+                for (int entityIndex = 0; entityIndex < static_cast<int>(m_Editor.m_Scene.m_vEntities.size()); ++entityIndex)
                 {
-                    continue;
-                }
-
-                const Mat4& worldTransform = m_SceneRenderer.GetCachedWorldTransform(entityIndex);
-                if (!m_SceneRenderer.IsMeshVisible(entityIndex, renderCamera, aspectRatio))
-                {
-                    continue;
-                }
-
-                m_SceneRenderer.EnsureLightingShader(pMesh);
-                bool hasTexture = (pMat && pMat->m_Texture.id != 0);
-                if (!hasTexture && pMesh && pMesh->m_Model.materialCount > 0 && pMesh->m_Model.materials)
-                {
-                    for (int matIdx = 0; matIdx < pMesh->m_Model.materialCount; ++matIdx)
+                    auto& e = m_Editor.m_Scene.m_vEntities[entityIndex];
+                    CMeshComponent* pMesh = e.GetMeshComponent();
+                    CTransformComponent* pTransform = e.GetTransformComponent();
+                    if (!pMesh || !pMesh->m_Enabled || !pTransform || pMesh->m_Model.meshCount <= 0)
                     {
-                        if (pMesh->m_Model.materials[matIdx].maps && (pMesh->m_Model.materials[matIdx].maps[MATERIAL_MAP_ALBEDO].texture.valid || pMesh->m_Model.materials[matIdx].maps[MATERIAL_MAP_ALBEDO].texture.id != 0))
-                        {
-                            hasTexture = true;
-                            break;
-                        }
+                        continue;
                     }
-                }
-                m_SceneRenderer.SetUseTexture(hasTexture);
-                m_SceneRenderer.BeginLightingPass();
-                CEntityTextureService::DrawEntityWithTexture(e, worldTransform, m_Editor.m_Preferences);
-                m_SceneRenderer.EndLightingPass();
-                if (m_Editor.m_Preferences.m_ShowSelectionVisualization && m_Editor.m_Scene.IsSelected(entityIndex) && pMesh->m_Model.meshCount > 0)
-                {
-                    PushMatrix();
-                    MultMatrix(m_SceneRenderer.GetCachedMeshWorldTransform(entityIndex));
-                    const bool primarySelection = entityIndex == m_Editor.m_Scene.m_Selected;
-                    DrawBoundingBox(GetModelBoundingBox(pMesh->m_Model), Color{ static_cast<unsigned char>(m_Editor.m_Preferences.m_SelectionRed), static_cast<unsigned char>(m_Editor.m_Preferences.m_SelectionGreen), static_cast<unsigned char>(m_Editor.m_Preferences.m_SelectionBlue), static_cast<unsigned char>(primarySelection ? 255 : 150) });
-                    PopMatrix();
-                }
-                if (m_Editor.m_Preferences.m_ShowBoundingBoxes && pMesh->m_Model.meshCount > 0)
-                {
-                    PushMatrix();
-                    MultMatrix(m_SceneRenderer.GetCachedMeshWorldTransform(entityIndex));
-                    DrawBoundingBox(GetModelBoundingBox(pMesh->m_Model), Color{ static_cast<unsigned char>(m_Editor.m_Preferences.m_BoundsRed), static_cast<unsigned char>(m_Editor.m_Preferences.m_BoundsGreen), static_cast<unsigned char>(m_Editor.m_Preferences.m_BoundsBlue), 255 });
-                    PopMatrix();
+                    if (!m_SceneRenderer.IsMeshVisible(entityIndex, renderCamera, aspectRatio))
+                    {
+                        continue;
+                    }
+                    if (m_Editor.m_Preferences.m_ShowSelectionVisualization && m_Editor.m_Scene.IsSelected(entityIndex))
+                    {
+                        PushMatrix();
+                        MultMatrix(m_SceneRenderer.GetCachedMeshWorldTransform(entityIndex));
+                        const bool primarySelection = entityIndex == m_Editor.m_Scene.m_Selected;
+                        DrawBoundingBox(GetModelBoundingBox(pMesh->m_Model), Color{ static_cast<unsigned char>(m_Editor.m_Preferences.m_SelectionRed), static_cast<unsigned char>(m_Editor.m_Preferences.m_SelectionGreen), static_cast<unsigned char>(m_Editor.m_Preferences.m_SelectionBlue), static_cast<unsigned char>(primarySelection ? 255 : 150) });
+                        PopMatrix();
+                    }
+                    if (m_Editor.m_Preferences.m_ShowBoundingBoxes)
+                    {
+                        PushMatrix();
+                        MultMatrix(m_SceneRenderer.GetCachedMeshWorldTransform(entityIndex));
+                        DrawBoundingBox(GetModelBoundingBox(pMesh->m_Model), Color{ static_cast<unsigned char>(m_Editor.m_Preferences.m_BoundsRed), static_cast<unsigned char>(m_Editor.m_Preferences.m_BoundsGreen), static_cast<unsigned char>(m_Editor.m_Preferences.m_BoundsBlue), 255 });
+                        PopMatrix();
+                    }
                 }
             }
             if (m_Editor.m_Preferences.m_ShowLightHelpers)
@@ -709,7 +698,8 @@ void CApplication::RenderFrame()
     }
 
     CViewportState& gameViewport = m_Editor.m_Ui.m_GameViewport;
-    if (m_Editor.m_ShowGameView && gameViewport.m_RenderTexture.id > 0 &&
+    if (m_Editor.m_ShowGameView && gameViewport.m_Visible &&
+        gameViewport.m_RenderTexture.id > 0 &&
         IsRenderTextureValid(gameViewport.m_RenderTexture))
     {
         const auto game3dStart = std::chrono::steady_clock::now();
@@ -732,36 +722,8 @@ void CApplication::RenderFrame()
             const float aspectRatio =
                 viewportHeight > 0.0f ? viewportWidth / viewportHeight : 1.0f;
             BeginMode3D(gameCamera);
-            for (int entityIndex = 0;
-                 entityIndex <
-                 static_cast<int>(m_Editor.m_Scene.m_vEntities.size());
-                 ++entityIndex)
-            {
-                CEntity& entity = m_Editor.m_Scene.m_vEntities[entityIndex];
-                CMeshComponent* pMesh = entity.GetMeshComponent();
-                CTransformComponent* pTransform = entity.GetTransformComponent();
-                CMaterialComponent* pMaterial = entity.GetMaterialComponent();
-                if (!pMesh || !pMesh->m_Enabled || !pTransform)
-                {
-                    continue;
-                }
-
-                const Mat4& worldTransform =
-                    m_SceneRenderer.GetCachedWorldTransform(entityIndex);
-                if (!m_SceneRenderer.IsMeshVisible(entityIndex, gameCamera,
-                                                   aspectRatio))
-                {
-                    continue;
-                }
-
-                m_SceneRenderer.EnsureLightingShader(pMesh);
-                m_SceneRenderer.SetUseTexture(pMaterial != nullptr &&
-                                              pMaterial->m_Texture.id != 0);
-                m_SceneRenderer.BeginLightingPass();
-                CEntityTextureService::DrawEntityWithTexture(
-                    entity, worldTransform, m_Editor.m_Preferences);
-                m_SceneRenderer.EndLightingPass();
-            }
+            m_SceneRenderer.RenderSceneMeshes(m_Editor.m_Scene, gameCamera, aspectRatio,
+                                              &m_Editor.m_Preferences, false);
             quark::ui::CCanvasSystem::Get().RenderWorldSpaceCanvases(m_Editor.m_Scene, gameCamera);
             EndMode3D();
         }
@@ -980,8 +942,6 @@ void CApplication::RenderFrame()
         if (m_SceneRenderer.IsMeshVisible(i, renderCamera, vpAspect))
         {
             ++profilerStats.m_VisibleMeshCount;
-            const int meshCount = std::max(1, pMesh->m_Model.meshCount);
-            profilerStats.m_DrawCalls += meshCount;
             if (pMesh->m_Model.meshes != nullptr)
             {
                 for (int m = 0; m < pMesh->m_Model.meshCount; ++m)
@@ -991,6 +951,8 @@ void CApplication::RenderFrame()
             }
         }
     }
+    const SRenderBatchStats batchStats = m_SceneRenderer.GetLastBatchStats();
+    profilerStats.m_DrawCalls = batchStats.m_DrawCalls;
     if (m_Editor.m_Preferences.m_ShadowsEnabled && profilerStats.m_ActiveLightCount > 0)
     {
         profilerStats.m_DrawCalls += profilerStats.m_VisibleMeshCount * profilerStats.m_ActiveLightCount;

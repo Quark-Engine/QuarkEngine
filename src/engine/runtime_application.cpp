@@ -403,22 +403,11 @@ extern "C"
                               static_cast<unsigned char>(preferences.m_BackgroundBlue), 255 });
             quark::ui::CCanvasSystem::Get().UpdateCanvasTextures(scene);
             BeginMode3D(camera);
-            for (int entityIndex = 0; entityIndex < static_cast<int>(scene.m_vEntities.size()); ++entityIndex)
-            {
-                CEntity& entity = scene.m_vEntities[entityIndex];
-                CMeshComponent* pMesh = entity.GetMeshComponent();
-                if (!pMesh || !pMesh->m_Enabled)
-                {
-                    continue;
-                }
-                renderer.EnsureLightingShader(pMesh);
-                CMaterialComponent* pMaterial = entity.GetMaterialComponent();
-                renderer.SetUseTexture(pMaterial && pMaterial->m_Texture.id != 0);
-                renderer.BeginLightingPass();
-                CEntityTextureService::DrawEntityWithTexture(
-                    entity, renderer.GetCachedWorldTransform(entityIndex), preferences);
-                renderer.EndLightingPass();
-            }
+            const float runtimeHeight = static_cast<float>(GetScreenHeight());
+            const float runtimeAspect = runtimeHeight > 0.0f
+                ? static_cast<float>(GetScreenWidth()) / runtimeHeight
+                : 1.0f;
+            renderer.RenderSceneMeshes(scene, camera, runtimeAspect, &preferences, false);
             quark::ui::CCanvasSystem::Get().RenderWorldSpaceCanvases(scene, camera);
             EndMode3D();
             quark::gui::RenderSceneGui(scene, GetMousePosition(), true);

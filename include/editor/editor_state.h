@@ -93,6 +93,7 @@ public:
     ImVec2 m_WindowSize = { 0, 0 };
     bool m_Hovered = false;
     bool m_Focused = false;
+    bool m_Visible = false;
 
     void Release();
     void Unload();

@@ -56,4 +56,6 @@ public:
     static void CloneModelMaterials(CEntity* pEntity);
 };
 
+void DrawCollisionDebug(CEntity& entity, const Mat4& worldTransform, const CPreferences& preferences);
+
 #endif // __TEX_H__

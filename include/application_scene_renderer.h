@@ -12,12 +12,40 @@
 class CScene;
 class CLightRegistry;
 class CMeshComponent;
+class CPreferences;
 class CTaskPool;
 
 struct SSceneRendererTimings
 {
     float m_UpdateMs = 0.0f;
     float m_ShadowPassMs = 0.0f;
+};
+
+struct SRenderBatchStats
+{
+    int m_SubmittedCommands = 0;
+    int m_DrawCalls = 0;
+    int m_InstancedBatches = 0;
+    int m_InstancedCount = 0;
+};
+
+struct SRenderCommand
+{
+    int m_EntityIndex = -1;
+    int m_MeshIndex = 0;
+    std::uint32_t m_ShaderId = 0;
+    std::uint64_t m_MaterialId = 0;
+    std::uint32_t m_TextureId = 0;
+    std::uint64_t m_MeshId = 0;
+    bool m_HasTexture = false;
+    bool m_DisableBackfaceCulling = false;
+    bool m_IsTransparent = false;
+    bool m_CanInstance = false;
+    float m_DistanceSq = 0.0f;
+    Color m_EffectiveColor = WHITE;
+    Mat4 m_Transform = Mat4::identity();
+    const Mesh* m_pMesh = nullptr;
+    Material m_Material{};
 };
 
 struct SSceneEntityFrameData
@@ -46,6 +74,9 @@ public:
 
     void EnsureLightingShader(CMeshComponent* pMesh);
 
+    void RenderSceneMeshes(CScene& scene, const Camera3D& camera, float aspectRatio,
+                           const CPreferences* pPreferences, bool drawEditorOverlays);
+
     bool IsMeshVisible(CMeshComponent* pMesh, const Mat4& worldTransform,
                        const Camera3D& camera, float aspectRatio) const;
     bool IsMeshVisible(int entityIndex, const Camera3D& camera, float aspectRatio) const;
@@ -66,6 +97,10 @@ public:
     {
         return m_Timings;
     }
+    SRenderBatchStats GetLastBatchStats() const
+    {
+        return m_LastBatchStats;
+    }
 
     void Unload();
 
@@ -84,6 +119,7 @@ private:
     int m_ShadowBiasLoc = -1;
     int m_ShadowFilterLoc = -1;
     int m_UseTexLoc = -1;
+    int m_LastUseTexState = -1;
     int m_AmbientLoc = -1;
     int m_EmissionColorLoc = -1;
     int m_EmissionPowerLoc = -1;
@@ -99,7 +135,10 @@ private:
     bool m_ShadowCacheValid = false;
     bool m_ShadowBindingsAssigned = false;
     std::vector<SSceneEntityFrameData> m_vFrameData;
+    std::vector<SRenderCommand> m_vRenderCommands;
+    std::vector<Matrix> m_vInstanceTransforms;
     SSceneRendererTimings m_Timings{};
+    SRenderBatchStats m_LastBatchStats{};
     CTaskPool* m_pTaskPool = nullptr;
 };
 
