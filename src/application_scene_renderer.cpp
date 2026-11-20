@@ -128,8 +128,23 @@ namespace
             return false;
         }
 
-        const float tanHalfFov = tanf(camera.fovy * DEG2RAD * 0.5f);
         const float safeAspect = std::max(aspectRatio, 0.01f);
+        if (camera.projection == CAMERA_ORTHOGRAPHIC)
+        {
+            const float halfHeight = std::max(camera.fovy * 0.5f, 0.01f);
+            const float halfWidth = halfHeight * safeAspect;
+            if (std::fabs(relative.dot(up)) > halfHeight + radius)
+            {
+                return false;
+            }
+            if (std::fabs(relative.dot(right)) > halfWidth + radius)
+            {
+                return false;
+            }
+            return true;
+        }
+
+        const float tanHalfFov = tanf(camera.fovy * DEG2RAD * 0.5f);
         const float tanHalfHorizontalFov = tanHalfFov * safeAspect;
         const float verticalPlaneRadius = radius * sqrtf(1.0f + tanHalfFov * tanHalfFov);
         const float horizontalPlaneRadius = radius * sqrtf(1.0f + tanHalfHorizontalFov * tanHalfHorizontalFov);
@@ -349,8 +364,7 @@ namespace
                 }
 
                 const Mat4& entityTransform = vFrameData[sourceIndex].m_MeshWorldTransform;
-                if (pLight->m_Light.m_Light.type != LIGHT_TYPE_DIRECTIONAL &&
-                    !IsBoundsVisible(vFrameData[sourceIndex].m_WorldBounds, aShadowCameras[slot], 1.0f))
+                if (!IsBoundsVisible(vFrameData[sourceIndex].m_WorldBounds, aShadowCameras[slot], 1.0f))
                 {
                     continue;
                 }
@@ -490,26 +504,55 @@ bool CSceneRenderer::IsMeshVisible(CMeshComponent* pMesh, const Mat4& worldTrans
 void CSceneRenderer::PrepareFrameCache(CScene& scene)
 {
     const int entityCount = static_cast<int>(scene.m_vEntities.size());
-    m_vFrameData.clear();
-    m_vFrameData.resize(static_cast<std::size_t>(entityCount));
+    std::atomic<bool> anyChanged{ false };
+    if (static_cast<int>(m_vFrameData.size()) != entityCount)
+    {
+        m_vFrameData.assign(static_cast<std::size_t>(entityCount), SSceneEntityFrameData{});
+        anyChanged.store(true, std::memory_order_relaxed);
+    }
 
     const auto prepareRange = [&](int beginIndex, int endIndex)
     {
+        bool localChanged = false;
         for (int entityIndex = beginIndex; entityIndex < endIndex; ++entityIndex)
         {
             CEntity& entity = scene.m_vEntities[entityIndex];
             SSceneEntityFrameData& frameData = m_vFrameData[entityIndex];
-            frameData.m_WorldTransform = quark::ComposeWorld(scene, entityIndex);
+            const Mat4 newWorldTransform = quark::ComposeWorld(scene, entityIndex);
+            if (std::memcmp(frameData.m_WorldTransform.m, newWorldTransform.m, sizeof(newWorldTransform.m)) != 0)
+            {
+                frameData.m_WorldTransform = newWorldTransform;
+                localChanged = true;
+            }
 
             CMeshComponent* pMesh = entity.GetMeshComponent();
-            if (!pMesh || !pMesh->m_Enabled || pMesh->m_Model.meshCount <= 0 || !pMesh->m_Model.meshes)
+            const bool hasMesh = pMesh && pMesh->m_Enabled && pMesh->m_Model.meshCount > 0 && pMesh->m_Model.meshes != nullptr;
+            if (!hasMesh)
             {
+                if (frameData.m_HasMesh)
+                {
+                    frameData.m_HasMesh = false;
+                    localChanged = true;
+                }
                 continue;
             }
 
-            frameData.m_HasMesh = true;
-            frameData.m_MeshWorldTransform = frameData.m_WorldTransform * pMesh->m_Model.transform;
-            frameData.m_WorldBounds = GetWorldBounds(pMesh, frameData.m_MeshWorldTransform);
+            const Mat4 newMeshWorldTransform = newWorldTransform * pMesh->m_Model.transform;
+            const bool meshTransformChanged =
+                !frameData.m_HasMesh ||
+                pMesh->m_BoundsDirty ||
+                std::memcmp(frameData.m_MeshWorldTransform.m, newMeshWorldTransform.m, sizeof(newMeshWorldTransform.m)) != 0;
+            if (meshTransformChanged)
+            {
+                frameData.m_HasMesh = true;
+                frameData.m_MeshWorldTransform = newMeshWorldTransform;
+                frameData.m_WorldBounds = GetWorldBounds(pMesh, newMeshWorldTransform);
+                localChanged = true;
+            }
+        }
+        if (localChanged)
+        {
+            anyChanged.store(true, std::memory_order_relaxed);
         }
     };
 
@@ -538,11 +581,19 @@ void CSceneRenderer::PrepareFrameCache(CScene& scene)
             {
                 future.get();
             }
+            if (anyChanged.load(std::memory_order_relaxed))
+            {
+                scene.BumpTransformRevision();
+            }
             return;
         }
     }
 
     prepareRange(0, entityCount);
+    if (anyChanged.load(std::memory_order_relaxed))
+    {
+        scene.BumpTransformRevision();
+    }
 }
 
 bool CSceneRenderer::IsMeshVisible(int entityIndex, const Camera3D& camera, float aspectRatio) const
@@ -581,8 +632,19 @@ void CSceneRenderer::Update(CScene& scene, CLightRegistry& lights, const Vec3& c
 {
     const auto updateStart = std::chrono::steady_clock::now();
     m_Timings = {};
-    const std::uint64_t geometrySignature = ComputeSceneGeometrySignature(scene, m_vFrameData);
-    const BoundingBox sceneBounds = ComputeSceneBounds(scene, m_vFrameData);
+    const std::uint64_t currentTransformRevision = scene.GetTransformRevision();
+    std::uint64_t geometrySignature = m_LastGeometrySignature;
+    BoundingBox sceneBounds = m_LastSceneBounds;
+    if (!m_ShadowCacheValid ||
+        currentTransformRevision != m_LastTransformRevision ||
+        m_LastGeometrySignature == 0)
+    {
+        geometrySignature = ComputeSceneGeometrySignature(scene, m_vFrameData);
+        sceneBounds = ComputeSceneBounds(scene, m_vFrameData);
+        m_LastTransformRevision = currentTransformRevision;
+        m_LastGeometrySignature = geometrySignature;
+        m_LastSceneBounds = sceneBounds;
+    }
     const Vec3 sceneCenter = {
         (sceneBounds.min.x + sceneBounds.max.x) * 0.5f,
         (sceneBounds.min.y + sceneBounds.max.y) * 0.5f,

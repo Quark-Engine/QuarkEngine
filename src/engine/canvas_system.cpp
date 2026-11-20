@@ -80,18 +80,222 @@ namespace
 
     int FindEntityIndexById(const CScene& scene, int id)
     {
-        if (id < 0)
+        return scene.FindEntityIndexById(id);
+    }
+
+    void HashCanvasBytes(std::uint64_t& hash, const void* pData, std::size_t size)
+    {
+        const auto* pBytes = static_cast<const unsigned char*>(pData);
+        for (std::size_t i = 0; i < size; ++i)
         {
-            return -1;
+            hash ^= pBytes[i];
+            hash *= 1099511628211ull;
         }
-        for (int i = 0; i < static_cast<int>(scene.m_vEntities.size()); ++i)
+    }
+
+    template <typename T>
+    void HashCanvasValue(std::uint64_t& hash, const T& value)
+    {
+        HashCanvasBytes(hash, &value, sizeof(value));
+    }
+
+    void HashCanvasString(std::uint64_t& hash, const std::string& value)
+    {
+        const std::size_t len = value.size();
+        HashCanvasValue(hash, len);
+        if (len > 0)
         {
-            if (scene.m_vEntities[i].m_Id == id)
+            HashCanvasBytes(hash, value.data(), len);
+        }
+    }
+
+    void HashCanvasSubtree(const CScene& scene, int entityIndex, std::uint64_t& hash,
+                           int hoveredEntityIndex, int pressedEntityIndex)
+    {
+        const std::vector<int>& vChildren = scene.GetChildrenIndices(entityIndex);
+        HashCanvasValue(hash, vChildren.size());
+        for (int childIndex : vChildren)
+        {
+            const CEntity& child = scene.m_vEntities[childIndex];
+            HashCanvasValue(hash, childIndex);
+            HashCanvasValue(hash, child.m_Id);
+            const bool isHovered = (childIndex == hoveredEntityIndex);
+            const bool isPressed = (childIndex == pressedEntityIndex);
+            HashCanvasValue(hash, isHovered);
+            HashCanvasValue(hash, isPressed);
+
+            if (const CUiRectTransformComponent* pRect = child.GetRectTransformComponent())
             {
-                return i;
+                HashCanvasValue(hash, pRect->m_Enabled);
+                HashCanvasValue(hash, pRect->m_Position);
+                HashCanvasValue(hash, pRect->m_AnchoredPosition);
+                HashCanvasValue(hash, pRect->m_Size);
+                HashCanvasValue(hash, pRect->m_AnchorMin);
+                HashCanvasValue(hash, pRect->m_AnchorMax);
+                HashCanvasValue(hash, pRect->m_Pivot);
+                HashCanvasValue(hash, pRect->m_Rotation2D);
+                HashCanvasValue(hash, pRect->m_Scale2D);
+                HashCanvasValue(hash, pRect->m_OffsetMin);
+                HashCanvasValue(hash, pRect->m_OffsetMax);
+                HashCanvasValue(hash, pRect->m_ClipChildren);
             }
+            if (const CPanelComponent* pPanel = child.GetPanelComponent())
+            {
+                HashCanvasValue(hash, pPanel->m_Enabled);
+                HashCanvasString(hash, pPanel->m_BackgroundImage);
+                HashCanvasValue(hash, pPanel->m_BackgroundColor);
+                HashCanvasValue(hash, pPanel->m_RuntimeTexture.id);
+            }
+            if (const CImageComponent* pImage = child.GetImageComponent())
+            {
+                HashCanvasValue(hash, pImage->m_Enabled);
+                HashCanvasString(hash, pImage->m_SourceTexture);
+                HashCanvasValue(hash, pImage->m_Color);
+                HashCanvasValue(hash, pImage->m_ImageType);
+                HashCanvasValue(hash, pImage->m_PreserveAspect);
+                HashCanvasValue(hash, pImage->m_FillCenter);
+                HashCanvasValue(hash, pImage->m_FillAmount);
+                HashCanvasValue(hash, pImage->m_aBorder);
+                HashCanvasValue(hash, pImage->m_RuntimeTexture.id);
+            }
+            if (const CTextComponent* pText = child.GetTextComponent())
+            {
+                HashCanvasValue(hash, pText->m_Enabled);
+                HashCanvasString(hash, pText->m_Text);
+                HashCanvasString(hash, pText->m_Font);
+                HashCanvasValue(hash, pText->m_FontStyle);
+                HashCanvasValue(hash, pText->m_FontSize);
+                HashCanvasValue(hash, pText->m_LineSpacing);
+                HashCanvasValue(hash, pText->m_CharacterSpacing);
+                HashCanvasValue(hash, pText->m_Color);
+                HashCanvasValue(hash, pText->m_HorizontalAlignment);
+                HashCanvasValue(hash, pText->m_VerticalAlignment);
+                HashCanvasValue(hash, pText->m_HorizontalOverflow);
+                HashCanvasValue(hash, pText->m_VerticalOverflow);
+                HashCanvasValue(hash, pText->m_BestFit);
+            }
+            if (const CButtonComponent* pButton = child.GetButtonComponent())
+            {
+                HashCanvasValue(hash, pButton->m_Enabled);
+                HashCanvasValue(hash, pButton->m_Interactable);
+                HashCanvasValue(hash, pButton->m_NormalColor);
+                HashCanvasValue(hash, pButton->m_HighlightedColor);
+                HashCanvasValue(hash, pButton->m_PressedColor);
+                HashCanvasValue(hash, pButton->m_SelectedColor);
+                HashCanvasValue(hash, pButton->m_DisabledColor);
+                HashCanvasValue(hash, pButton->m_ColorMultiplier);
+                HashCanvasValue(hash, pButton->m_Transition);
+            }
+            if (const CSliderComponent* pSlider = child.GetSliderComponent())
+            {
+                HashCanvasValue(hash, pSlider->m_Enabled);
+                HashCanvasValue(hash, pSlider->m_Interactable);
+                HashCanvasValue(hash, pSlider->m_Direction);
+                HashCanvasValue(hash, pSlider->m_MinValue);
+                HashCanvasValue(hash, pSlider->m_MaxValue);
+                HashCanvasValue(hash, pSlider->m_Value);
+                HashCanvasValue(hash, pSlider->m_BackgroundColor);
+                HashCanvasValue(hash, pSlider->m_FillColor);
+                HashCanvasValue(hash, pSlider->m_HandleColor);
+                HashCanvasValue(hash, pSlider->m_DisabledColor);
+            }
+            if (const CToggleComponent* pToggle = child.GetToggleComponent())
+            {
+                HashCanvasValue(hash, pToggle->m_Enabled);
+                HashCanvasValue(hash, pToggle->m_Interactable);
+                HashCanvasValue(hash, pToggle->m_IsOn);
+                HashCanvasString(hash, pToggle->m_Label);
+                HashCanvasValue(hash, pToggle->m_FontSize);
+                HashCanvasValue(hash, pToggle->m_BoxColor);
+                HashCanvasValue(hash, pToggle->m_CheckmarkColor);
+                HashCanvasValue(hash, pToggle->m_LabelColor);
+                HashCanvasValue(hash, pToggle->m_DisabledColor);
+            }
+            if (const CProgressBarComponent* pProgress = child.GetProgressBarComponent())
+            {
+                HashCanvasValue(hash, pProgress->m_Enabled);
+                HashCanvasValue(hash, pProgress->m_Direction);
+                HashCanvasValue(hash, pProgress->m_MinValue);
+                HashCanvasValue(hash, pProgress->m_MaxValue);
+                HashCanvasValue(hash, pProgress->m_Value);
+                HashCanvasValue(hash, pProgress->m_ShowPercentageText);
+                HashCanvasValue(hash, pProgress->m_BackgroundColor);
+                HashCanvasValue(hash, pProgress->m_FillColor);
+                HashCanvasValue(hash, pProgress->m_BorderColor);
+                HashCanvasValue(hash, pProgress->m_TextColor);
+            }
+            if (const CScrollViewComponent* pScroll = child.GetScrollViewComponent())
+            {
+                HashCanvasValue(hash, pScroll->m_Enabled);
+                HashCanvasValue(hash, pScroll->m_Horizontal);
+                HashCanvasValue(hash, pScroll->m_Vertical);
+                HashCanvasValue(hash, pScroll->m_ScrollOffset);
+                HashCanvasValue(hash, pScroll->m_ContentSize);
+                HashCanvasValue(hash, pScroll->m_ShowHorizontalScrollbar);
+                HashCanvasValue(hash, pScroll->m_ShowVerticalScrollbar);
+                HashCanvasValue(hash, pScroll->m_BackgroundColor);
+            }
+            if (const CHorizontalLayoutComponent* pHLayout = child.GetHorizontalLayoutComponent())
+            {
+                HashCanvasValue(hash, pHLayout->m_Enabled);
+                HashCanvasValue(hash, pHLayout->m_Padding);
+                HashCanvasValue(hash, pHLayout->m_Spacing);
+                HashCanvasValue(hash, pHLayout->m_ChildAlignment);
+                HashCanvasValue(hash, pHLayout->m_ReverseArrangement);
+                HashCanvasValue(hash, pHLayout->m_ChildControlWidth);
+                HashCanvasValue(hash, pHLayout->m_ChildControlHeight);
+                HashCanvasValue(hash, pHLayout->m_ChildScaleWidth);
+                HashCanvasValue(hash, pHLayout->m_ChildScaleHeight);
+                HashCanvasValue(hash, pHLayout->m_ChildForceExpandWidth);
+                HashCanvasValue(hash, pHLayout->m_ChildForceExpandHeight);
+            }
+            if (const CVerticalLayoutComponent* pVLayout = child.GetVerticalLayoutComponent())
+            {
+                HashCanvasValue(hash, pVLayout->m_Enabled);
+                HashCanvasValue(hash, pVLayout->m_Padding);
+                HashCanvasValue(hash, pVLayout->m_Spacing);
+                HashCanvasValue(hash, pVLayout->m_ChildAlignment);
+                HashCanvasValue(hash, pVLayout->m_ReverseArrangement);
+                HashCanvasValue(hash, pVLayout->m_ChildControlWidth);
+                HashCanvasValue(hash, pVLayout->m_ChildControlHeight);
+                HashCanvasValue(hash, pVLayout->m_ChildScaleWidth);
+                HashCanvasValue(hash, pVLayout->m_ChildScaleHeight);
+                HashCanvasValue(hash, pVLayout->m_ChildForceExpandWidth);
+                HashCanvasValue(hash, pVLayout->m_ChildForceExpandHeight);
+            }
+            if (const CGridLayoutComponent* pGLayout = child.GetGridLayoutComponent())
+            {
+                HashCanvasValue(hash, pGLayout->m_Enabled);
+                HashCanvasValue(hash, pGLayout->m_Padding);
+                HashCanvasValue(hash, pGLayout->m_CellSize);
+                HashCanvasValue(hash, pGLayout->m_Spacing);
+                HashCanvasValue(hash, pGLayout->m_StartCorner);
+                HashCanvasValue(hash, pGLayout->m_StartAxis);
+                HashCanvasValue(hash, pGLayout->m_ChildAlignment);
+                HashCanvasValue(hash, pGLayout->m_Constraint);
+                HashCanvasValue(hash, pGLayout->m_ConstraintCount);
+            }
+
+            HashCanvasSubtree(scene, childIndex, hash, hoveredEntityIndex, pressedEntityIndex);
         }
-        return -1;
+    }
+
+    std::uint64_t ComputeCanvasContentHash(const CScene& scene, int canvasEntityIndex,
+                                           const CCanvasComponent& canvas,
+                                           int targetWidth, int targetHeight, float scale,
+                                           int hoveredEntityIndex, int pressedEntityIndex)
+    {
+        std::uint64_t hash = 1469598103934665603ull;
+        HashCanvasValue(hash, targetWidth);
+        HashCanvasValue(hash, targetHeight);
+        HashCanvasValue(hash, scale);
+        HashCanvasValue(hash, canvas.m_Width);
+        HashCanvasValue(hash, canvas.m_Height);
+        HashCanvasValue(hash, canvas.m_ScaleFactor);
+        HashCanvasValue(hash, canvas.m_PixelPerfect);
+        HashCanvasValue(hash, canvas.m_RenderMode);
+        HashCanvasSubtree(scene, canvasEntityIndex, hash, hoveredEntityIndex, pressedEntityIndex);
+        return hash;
     }
 
     Ray ScreenToWorldRay(const quark::ui::SUiViewport& viewport, const Vec2& mouse, const Camera3D& camera)
@@ -767,18 +971,13 @@ namespace quark::ui
             }
 
             std::vector<int> vChildren;
-            const int parentId = parentEntity.m_Id;
-            for (int i = 0; i < static_cast<int>(scene.m_vEntities.size()); ++i)
+            const std::vector<int>& vDirectChildren = scene.GetChildrenIndices(parentIndex);
+            vChildren.reserve(vDirectChildren.size());
+            for (int childIndex : vDirectChildren)
             {
-                if (i == parentIndex)
+                if (scene.m_vEntities[childIndex].GetRectTransformComponent() != nullptr)
                 {
-                    continue;
-                }
-                const CEntity& candidate = scene.m_vEntities[i];
-                if ((candidate.m_ParentId == parentIndex || candidate.m_ParentId == parentId) &&
-                    candidate.GetRectTransformComponent() != nullptr)
-                {
-                    vChildren.push_back(i);
+                    vChildren.push_back(childIndex);
                 }
             }
 
@@ -1130,16 +1329,11 @@ namespace quark::ui
     void CCanvasSystem::CollectCanvasElementsRecursive(const CScene& scene, int parentIndex,
                                                       std::vector<int>& vOutIndices)
     {
-        for (int i = 0; i < static_cast<int>(scene.m_vEntities.size()); ++i)
+        const std::vector<int>& vChildren = scene.GetChildrenIndices(parentIndex);
+        for (int childIndex : vChildren)
         {
-            const CEntity& entity = scene.m_vEntities[i];
-            if (entity.m_ParentId == parentIndex ||
-                (parentIndex >= 0 && parentIndex < static_cast<int>(scene.m_vEntities.size()) &&
-                 entity.m_ParentId == scene.m_vEntities[parentIndex].m_Id))
-            {
-                vOutIndices.push_back(i);
-                CollectCanvasElementsRecursive(scene, i, vOutIndices);
-            }
+            vOutIndices.push_back(childIndex);
+            CollectCanvasElementsRecursive(scene, childIndex, vOutIndices);
         }
     }
 
@@ -2546,23 +2740,7 @@ namespace quark::ui
 
     bool CCanvasSystem::HasCanvasChildren(const CScene& scene, int canvasEntityIndex) const
     {
-        if (canvasEntityIndex < 0 ||
-            canvasEntityIndex >= static_cast<int>(scene.m_vEntities.size()))
-        {
-            return false;
-        }
-
-        const int canvasId = scene.m_vEntities[canvasEntityIndex].m_Id;
-        for (const CEntity& entity : scene.m_vEntities)
-        {
-            if (entity.m_ParentId == canvasEntityIndex ||
-                (canvasId != canvasEntityIndex && entity.m_ParentId == canvasId))
-            {
-                return true;
-            }
-        }
-
-        return false;
+        return !scene.GetChildrenIndices(canvasEntityIndex).empty();
     }
 
     void CCanvasSystem::UpdateCanvasTextures(CScene& scene)
@@ -2575,7 +2753,7 @@ namespace quark::ui
             {
                 continue;
             }
-            if (pCanvas->m_RenderMode == ECanvasRenderMode::SCREEN_SPACE_CAMERA)
+            if (pCanvas->m_RenderMode != ECanvasRenderMode::WORLD_SPACE)
             {
                 continue;
             }
@@ -2583,12 +2761,15 @@ namespace quark::ui
             if (!HasCanvasChildren(scene, entityIndex))
             {
                 pCanvas->ReleaseOwnedResources();
+                pCanvas->m_CanvasDirty = true;
+                pCanvas->m_LastRenderHash = 0;
                 continue;
             }
 
             const int texW = static_cast<int>(std::max(16.0f, pCanvas->m_Width));
             const int texH = static_cast<int>(std::max(16.0f, pCanvas->m_Height));
 
+            bool textureRecreated = false;
             if (pCanvas->m_RuntimeTexture.id == 0 ||
                 pCanvas->m_RuntimeTexture.texture.width != texW ||
                 pCanvas->m_RuntimeTexture.texture.height != texH)
@@ -2600,6 +2781,18 @@ namespace quark::ui
                 pCanvas->m_RuntimeTexture = LoadRenderTexture(texW, texH);
                 SetTextureFilter(pCanvas->m_RuntimeTexture.texture, TEXTURE_FILTER_BILINEAR);
                 pCanvas->m_QuadModelInitialized = false;
+                textureRecreated = true;
+            }
+
+            const std::uint64_t contentHash = ComputeCanvasContentHash(
+                scene, entityIndex, *pCanvas, texW, texH, 1.0f,
+                m_HoveredEntityIndex, m_PressedEntityIndex);
+            if (!textureRecreated &&
+                !pCanvas->m_CanvasDirty &&
+                pCanvas->m_QuadModelInitialized &&
+                pCanvas->m_LastRenderHash == contentHash)
+            {
+                continue;
             }
 
             BeginTextureMode(pCanvas->m_RuntimeTexture);
@@ -2615,6 +2808,9 @@ namespace quark::ui
                 pCanvas->m_RuntimeQuadModel.materials[0].maps[MATERIAL_MAP_ALBEDO].texture =
                     pCanvas->m_RuntimeTexture.texture;
             }
+
+            pCanvas->m_CanvasDirty = false;
+            pCanvas->m_LastRenderHash = contentHash;
         }
     }
 
@@ -2744,6 +2940,7 @@ namespace quark::ui
                 pCanvas->m_aScreenSpaceTextures[viewportIndex];
             const int textureWidth = std::max(1, static_cast<int>(std::round(screenW)));
             const int textureHeight = std::max(1, static_cast<int>(std::round(screenH)));
+            bool screenSpaceRecreated = false;
             if (screenSpaceTexture.id == 0 ||
                 screenSpaceTexture.texture.width != textureWidth ||
                 screenSpaceTexture.texture.height != textureHeight)
@@ -2756,6 +2953,7 @@ namespace quark::ui
                 SetTextureFilter(
                     screenSpaceTexture.texture,
                     pCanvas->m_PixelPerfect ? TEXTURE_FILTER_POINT : TEXTURE_FILTER_BILINEAR);
+                screenSpaceRecreated = true;
             }
 
             if (!IsRenderTextureValid(screenSpaceTexture))
@@ -2764,12 +2962,22 @@ namespace quark::ui
                 continue;
             }
 
-            BeginTextureMode(screenSpaceTexture);
-            ClearBackground(Color{ 0, 0, 0, 0 });
-            RenderCanvasElements(
-                scene, entityIndex, *pCanvas, canvasWidth, canvasHeight,
-                0.0f, 0.0f, scale, scale);
-            EndTextureMode();
+            const std::uint64_t screenContentHash = ComputeCanvasContentHash(
+                scene, entityIndex, *pCanvas, textureWidth, textureHeight, scale,
+                m_HoveredEntityIndex, m_PressedEntityIndex);
+            if (screenSpaceRecreated ||
+                pCanvas->m_CanvasDirty ||
+                pCanvas->m_aScreenSpaceHashes[viewportIndex] != screenContentHash)
+            {
+                BeginTextureMode(screenSpaceTexture);
+                ClearBackground(Color{ 0, 0, 0, 0 });
+                RenderCanvasElements(
+                    scene, entityIndex, *pCanvas, canvasWidth, canvasHeight,
+                    0.0f, 0.0f, scale, scale);
+                EndTextureMode();
+                pCanvas->m_aScreenSpaceHashes[viewportIndex] = screenContentHash;
+                pCanvas->m_CanvasDirty = false;
+            }
 
             EnsureQuadModel(*pCanvas);
             if (pCanvas->m_RuntimeQuadModel.materialCount <= 0 ||

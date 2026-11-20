@@ -711,6 +711,9 @@ public:
     std::array<RenderTexture2D, 3> m_aScreenSpaceTextures = {};
     Model m_RuntimeQuadModel = {};
     bool m_QuadModelInitialized = false;
+    bool m_CanvasDirty = true;
+    std::uint64_t m_LastRenderHash = 0;
+    std::array<std::uint64_t, 3> m_aScreenSpaceHashes = {};
     RendererType m_QuadBackend = RendererType::Auto;
 
     CCanvasComponent()

@@ -132,6 +132,9 @@ private:
     std::array<int, QC_MAX_LIGHTS> m_aLightViewLocations{};
     std::array<int, QC_MAX_LIGHTS> m_aLightProjectionLocations{};
     std::array<std::uint64_t, QC_MAX_LIGHTS> m_aShadowSignatures{};
+    std::uint64_t m_LastTransformRevision = 0;
+    std::uint64_t m_LastGeometrySignature = 0;
+    BoundingBox m_LastSceneBounds = { { -5.0f, -5.0f, -5.0f }, { 5.0f, 5.0f, 5.0f } };
     bool m_ShadowCacheValid = false;
     bool m_ShadowBindingsAssigned = false;
     std::vector<SSceneEntityFrameData> m_vFrameData;

@@ -33,12 +33,11 @@ namespace quark
     int IndexOfEntity(const CScene& scene, const CEntity& entity)
     {
         const std::vector<CEntity>& vEntities = scene.m_vEntities;
-        for (int i = 0; i < static_cast<int>(vEntities.size()); ++i)
+        if (!vEntities.empty() &&
+            &entity >= vEntities.data() &&
+            &entity < vEntities.data() + vEntities.size())
         {
-            if (&vEntities[i] == &entity)
-            {
-                return i;
-            }
+            return static_cast<int>(&entity - vEntities.data());
         }
         return -1;
     }
