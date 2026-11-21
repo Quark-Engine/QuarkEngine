@@ -498,6 +498,7 @@ if(BUILD_ENGINE)
                 "$<$<CONFIG:Release>:/SUBSYSTEM:WINDOWS>"
                 "$<$<CONFIG:Release>:/ENTRY:mainCRTStartup>"
                 "$<$<CONFIG:Debug>:/DEBUG:FASTLINK>"
+                "$<$<CONFIG:Debug>:/IGNORE:4099>"
             )
         else()
             target_link_options(${PROJECT_NAME} PRIVATE
