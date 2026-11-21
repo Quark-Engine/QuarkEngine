@@ -452,8 +452,36 @@ void DrawCollisionDebug(CEntity& entity, const Mat4& worldTransform, const CPref
         return;
     }
 
-    Color lineColor = GREEN;
-    Color pointColor = LIME;
+    const Color lineColor = GREEN;
+    constexpr float kWireInflation = 0.005f;
+    constexpr int kCircleSegments = 48;
+    constexpr int kArcSegments = 24;
+    constexpr float kTwoPi = 6.28318530718f;
+    constexpr float kPi = 3.14159265359f;
+
+    auto drawCircle = [&](const Vec3& center, const Vec3& axisU, const Vec3& axisV, float radius)
+    {
+        Vec3 prev = center + axisU * radius;
+        for (int i = 1; i <= kCircleSegments; ++i)
+        {
+            const float angle = (kTwoPi * static_cast<float>(i)) / static_cast<float>(kCircleSegments);
+            const Vec3 next = center + axisU * (std::cos(angle) * radius) + axisV * (std::sin(angle) * radius);
+            DrawLine3D(prev, next, lineColor);
+            prev = next;
+        }
+    };
+
+    auto drawHalfArc = [&](const Vec3& center, const Vec3& axisU, const Vec3& axisUp, float radius)
+    {
+        Vec3 prev = center + axisU * radius;
+        for (int i = 1; i <= kArcSegments; ++i)
+        {
+            const float angle = (kPi * static_cast<float>(i)) / static_cast<float>(kArcSegments);
+            const Vec3 next = center + axisU * (std::cos(angle) * radius) + axisUp * (std::sin(angle) * radius);
+            DrawLine3D(prev, next, lineColor);
+            prev = next;
+        }
+    };
 
     PushMatrix();
     MultMatrix(worldTransform);
@@ -463,28 +491,28 @@ void DrawCollisionDebug(CEntity& entity, const Mat4& worldTransform, const CPref
     {
         case COLLIDER_BOX:
         {
-            DrawCubeWires({ 0, 0, 0 },
-                          pCollision->m_Size.x,
-                          pCollision->m_Size.y,
-                          pCollision->m_Size.z,
+            DrawCubeWires({ 0.0f, 0.0f, 0.0f },
+                          pCollision->m_Size.x + kWireInflation * 2.0f,
+                          pCollision->m_Size.y + kWireInflation * 2.0f,
+                          pCollision->m_Size.z + kWireInflation * 2.0f,
                           lineColor);
             break;
         }
 
         case COLLIDER_SPHERE:
         {
-            DrawSphereWires({ 0, 0, 0 },
-                            pCollision->m_Radius,
-                            16, 16,
-                            lineColor);
+            const float r = std::max(0.001f, pCollision->m_Radius) + kWireInflation;
+            drawCircle({ 0.0f, 0.0f, 0.0f }, { 1.0f, 0.0f, 0.0f }, { 0.0f, 1.0f, 0.0f }, r);
+            drawCircle({ 0.0f, 0.0f, 0.0f }, { 1.0f, 0.0f, 0.0f }, { 0.0f, 0.0f, 1.0f }, r);
+            drawCircle({ 0.0f, 0.0f, 0.0f }, { 0.0f, 1.0f, 0.0f }, { 0.0f, 0.0f, 1.0f }, r);
             break;
         }
 
         case COLLIDER_CAPSULE:
         {
-            const float r = pCollision->m_Radius;
-            const float h = pCollision->m_Height;
-            const float cylinderH = std::max(0.0f, h - r * 2.0f);
+            const float r = std::max(0.001f, pCollision->m_Radius) + kWireInflation;
+            const float h = std::max(pCollision->m_Height, pCollision->m_Radius * 2.0f);
+            const float halfCyl = std::max(0.0f, h * 0.5f - pCollision->m_Radius);
 
             PushMatrix();
             if (pCollision->m_Direction == ECapsuleDirection::X_AXIS)
@@ -495,9 +523,26 @@ void DrawCollisionDebug(CEntity& entity, const Mat4& worldTransform, const CPref
             {
                 MultMatrix(Mat4::rotationX(90.0f * DEG2RAD));
             }
-            DrawCylinderWires({ 0, 0, 0 }, r, r, cylinderH, 16, lineColor);
-            DrawSphereWires({ 0, cylinderH * 0.5f, 0 }, r, 12, 12, lineColor);
-            DrawSphereWires({ 0, -cylinderH * 0.5f, 0 }, r, 12, 12, lineColor);
+
+            const Vec3 topCenter{ 0.0f, halfCyl, 0.0f };
+            const Vec3 bottomCenter{ 0.0f, -halfCyl, 0.0f };
+
+            drawCircle(topCenter, { 1.0f, 0.0f, 0.0f }, { 0.0f, 0.0f, 1.0f }, r);
+            drawCircle(bottomCenter, { 1.0f, 0.0f, 0.0f }, { 0.0f, 0.0f, 1.0f }, r);
+
+            drawHalfArc(topCenter, { 1.0f, 0.0f, 0.0f }, { 0.0f, 1.0f, 0.0f }, r);
+            drawHalfArc(topCenter, { 0.0f, 0.0f, 1.0f }, { 0.0f, 1.0f, 0.0f }, r);
+            drawHalfArc(bottomCenter, { 1.0f, 0.0f, 0.0f }, { 0.0f, -1.0f, 0.0f }, r);
+            drawHalfArc(bottomCenter, { 0.0f, 0.0f, 1.0f }, { 0.0f, -1.0f, 0.0f }, r);
+
+            if (halfCyl > 0.0001f)
+            {
+                DrawLine3D({ r, -halfCyl, 0.0f }, { r, halfCyl, 0.0f }, lineColor);
+                DrawLine3D({ -r, -halfCyl, 0.0f }, { -r, halfCyl, 0.0f }, lineColor);
+                DrawLine3D({ 0.0f, -halfCyl, r }, { 0.0f, halfCyl, r }, lineColor);
+                DrawLine3D({ 0.0f, -halfCyl, -r }, { 0.0f, halfCyl, -r }, lineColor);
+            }
+
             PopMatrix();
             break;
         }
@@ -506,7 +551,7 @@ void DrawCollisionDebug(CEntity& entity, const Mat4& worldTransform, const CPref
         {
             if (pMeshComponent && pMeshComponent->m_Model.meshCount > 0)
             {
-                DrawModelWires(pMeshComponent->m_Model, { 0, 0, 0 }, 1.0f, lineColor);
+                DrawModelWires(pMeshComponent->m_Model, { 0.0f, 0.0f, 0.0f }, 1.004f, lineColor);
             }
             break;
         }

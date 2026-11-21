@@ -9,6 +9,7 @@
 #include "text_mesh.h"
 #include "editor/editor_theme.h"
 #include "editor/editor_entity.h"
+#include "editor/editor_gizmo.h"
 #include "editor/editor_grid.h"
 #include "editor/editor_viewers.h"
 #include "project.h"
@@ -190,8 +191,8 @@ void CApplication::Initialize()
                              ? TEXTURE_FILTER_POINT
                              : TEXTURE_FILTER_BILINEAR);
 
+    SetConfigFlags(FLAG_WINDOW_MAXIMIZED);
     InitWindow(1280, 720, "Quark Engine", rendererType);
-    MaximizeWindow();
     m_WindowOpen = true;
     m_Camera.InitializeCursors();
 
@@ -225,6 +226,9 @@ void CApplication::Initialize()
 
     if (!m_Headless)
     {
+        BeginDrawing();
+        ClearBackground({ 24, 24, 28, 255 });
+        EndDrawing();
         m_Editor.m_Text.Init();
         QcImGuiSetup(false);
         if (!CThemeManager::Apply(m_Editor.m_Preferences.m_ThemeName))
@@ -449,7 +453,10 @@ void CApplication::UpdateFrame()
 
     if (!m_Editor.m_Scene2DMode &&
         !buildSettingsOpen && !m_Editor.m_IsPlaying && !m_Editor.m_GameViewActive &&
-        (m_Camera.m_Active || (!ImGuizmo::IsOver() && !ImGuizmo::IsUsing() && cursorOverSceneViewport)))
+        (m_Camera.m_Active || (!ImGuizmo::IsOver() && !ImGuizmo::IsUsing() &&
+                               !CGizmoController::IsCustomGizmoOver() &&
+                               !CGizmoController::IsCustomGizmoUsing() &&
+                               cursorOverSceneViewport)))
     {
         m_Camera.Update(m_Editor.m_Scene, m_Editor.m_Preferences);
     }

@@ -3,6 +3,7 @@
 #include <cmath>
 #include "imgui.h"
 #include "ImGuizmo.h"
+#include "editor/editor_gizmo.h"
 #include "editor/editor_preferences.h"
 #include "SDL3/SDL_mouse.h"
 #include "SDL3/SDL_surface.h"
@@ -129,7 +130,7 @@ CFlyCamera::~CFlyCamera()
 
 void CFlyCamera::Update(CScene& scene, CPreferences& preferences)
 {
-    if (!m_Active && ImGuizmo::IsUsing())
+    if (!m_Active && (ImGuizmo::IsUsing() || CGizmoController::IsCustomGizmoUsing()))
     {
         return;
     }
@@ -160,7 +161,7 @@ void CFlyCamera::Update(CScene& scene, CPreferences& preferences)
 
     if (orbitCamera)
     {
-        if (!m_Active && !ImGuizmo::IsOver() && !imguiBlockingCamera)
+        if (!m_Active && !ImGuizmo::IsOver() && !CGizmoController::IsCustomGizmoOver() && !imguiBlockingCamera)
         {
             if (IsMouseButtonPressed(MOUSE_BUTTON_RIGHT))
             {
@@ -202,7 +203,7 @@ void CFlyCamera::Update(CScene& scene, CPreferences& preferences)
     {
         const MouseButton cameraButton = MOUSE_BUTTON_LEFT;
         if (!m_Active && IsMouseButtonPressed(cameraButton) &&
-            !ImGuizmo::IsOver() && !imguiBlockingCamera)
+            !ImGuizmo::IsOver() && !CGizmoController::IsCustomGizmoOver() && !imguiBlockingCamera)
         {
             SetImGuiCursorOverride(true);
             SetCameraCapture(true);

@@ -48,8 +48,10 @@ namespace
 
     int s_ActiveUiHandle = -1;
     int s_ActiveUiHandleEntity = -1;
+    bool s_HoveredUiHandle = false;
     int s_ActiveColliderHandle = -1;
     int s_ActiveColliderEntity = -1;
+    bool s_HoveredColliderHandle = false;
     float s_ColliderDragStartExtent = 0.5f;
     Vec3 s_ColliderDragStartCenter = { 0.0f, 0.0f, 0.0f };
     ImVec2 s_ColliderDragStartMouse = { 0.0f, 0.0f };
@@ -220,6 +222,8 @@ namespace
             pDrawList->AddRect(ImVec2(sp.x - r, sp.y - r), ImVec2(sp.x + r, sp.y + r), IM_COL32(25, 25, 30, 255), 0.0f, 0, 1.2f);
         }
 
+        s_HoveredUiHandle = (hoveredHandle >= 0);
+
         if (viewport.m_Hovered && IsMouseButtonPressed(MOUSE_BUTTON_LEFT) && hoveredHandle >= 0)
         {
             editor.SaveState();
@@ -333,7 +337,7 @@ namespace
         }
 
         CCollisionComponent* pCollision = entity.GetCollisionComponent();
-        if (!pCollision || !pCollision->m_Enabled)
+        if (!pCollision || !pCollision->m_Enabled || !pCollision->m_Visualize)
         {
             return false;
         }
@@ -444,6 +448,8 @@ namespace
                 IM_COL32(15, 35, 20, 255), 0.0f, 0, 1.3f);
         }
 
+        s_HoveredColliderHandle = (hoveredHandle >= 0);
+
         if (viewport.m_Hovered && IsMouseButtonPressed(MOUSE_BUTTON_LEFT) && hoveredHandle >= 0)
         {
             editor.SaveState();
@@ -528,8 +534,21 @@ namespace
     }
 } // anonymous
 
+bool CGizmoController::IsCustomGizmoOver()
+{
+    return s_HoveredColliderHandle || s_HoveredUiHandle ||
+        s_ActiveColliderHandle >= 0 || s_ActiveUiHandle >= 0;
+}
+
+bool CGizmoController::IsCustomGizmoUsing()
+{
+    return s_ActiveColliderHandle >= 0 || s_ActiveUiHandle >= 0;
+}
+
 void CGizmoController::Draw(CEditor& editor, CFlyCamera& camera)
 {
+    s_HoveredColliderHandle = false;
+    s_HoveredUiHandle = false;
     SGizmoState& gizmo = editor.m_Ui.m_Gizmo;
     CViewportState& viewport = editor.m_Ui.m_Viewport;
     SVertexEditState& edit = editor.m_Ui.m_VertexEdit;

@@ -8,6 +8,8 @@ class CGizmoController
 {
 public:
     static void Draw(CEditor& editor, CFlyCamera& camera);
+    static bool IsCustomGizmoOver();
+    static bool IsCustomGizmoUsing();
 };
 
 #endif // __EDITOR_EDITOR_GIZMO_H__

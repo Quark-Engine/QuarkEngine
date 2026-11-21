@@ -177,6 +177,7 @@ void CCollisionComponent::Serialize(nlohmann::json& json) const
     json["collider_type"] = static_cast<int>(m_ColliderType);
     json["is_trigger"] = m_IsTrigger;
     json["provides_contacts"] = m_ProvidesContacts;
+    json["visualize"] = m_Visualize;
     json["material_preset"] = static_cast<int>(m_MaterialPreset);
 
     json["size"] = { m_Size.x, m_Size.y, m_Size.z };
@@ -202,6 +203,10 @@ void CCollisionComponent::Deserialize(const nlohmann::json& json)
     if (json.contains("provides_contacts"))
     {
         m_ProvidesContacts = json["provides_contacts"].get<bool>();
+    }
+    if (json.contains("visualize"))
+    {
+        m_Visualize = json["visualize"].get<bool>();
     }
     if (json.contains("material_preset"))
     {
