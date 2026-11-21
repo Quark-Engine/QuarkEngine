@@ -69,6 +69,7 @@ if(MSVC)
         "/WHOLEARCHIVE:$<TARGET_FILE:QuarkCore-Combined>"
         "/WHOLEARCHIVE:$<TARGET_FILE:QuarkCore>"
         "$<$<CONFIG:Debug>:/DEBUG:FASTLINK>"
+        "$<$<CONFIG:Debug>:/IGNORE:4099>"
     )
 elseif(APPLE)
     target_link_libraries(QuarkCoreRuntime PRIVATE
@@ -76,7 +77,7 @@ elseif(APPLE)
         "-Wl,-force_load,$<TARGET_FILE:QuarkCore>"
     )
     add_dependencies(QuarkCoreRuntime QuarkCore-Combined)
-elseif(UNIX AND CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang")
+elseif((UNIX OR MINGW) AND CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang")
     target_link_libraries(QuarkCoreRuntime PRIVATE
         "-Wl,--whole-archive"
         "$<TARGET_FILE:QuarkCore-Combined>"
@@ -193,7 +194,7 @@ endif()
 
 if(WIN32)
     target_sources(QuarkEngineRuntime PRIVATE imgui/imgui_impl_dx11.cpp)
-    target_link_libraries(QuarkEngineRuntime PRIVATE d3d11)
+    target_link_libraries(QuarkEngineRuntime PRIVATE d3d11 d3dcompiler)
 endif()
 target_include_directories(QuarkEngineRuntime PRIVATE
     ${CMAKE_SOURCE_DIR}/quark-libs/imgui/include
@@ -310,7 +311,7 @@ if(WIN32)
         ${CMAKE_SOURCE_DIR}/quark-libs/imgui/include
         ${CMAKE_SOURCE_DIR}/imgui
     )
-    target_link_libraries(imgui-direct3d11 PUBLIC imgui d3d11)
+    target_link_libraries(imgui-direct3d11 PUBLIC imgui d3d11 d3dcompiler)
     target_compile_definitions(imgui-direct3d11 PRIVATE
         IMGUI_API=__declspec\(dllimport\)
         IMGUI_IMPL_API=__declspec\(dllexport\)
@@ -601,7 +602,14 @@ if(BUILD_ENGINE)
         set(MINGW_RUNTIME_DLLS)
         if(NOT MSVC)
             get_filename_component(MINGW_RUNTIME_DIR "${CMAKE_CXX_COMPILER}" DIRECTORY)
-            foreach(MINGW_RUNTIME IN ITEMS libstdc++-6.dll libgcc_s_seh-1.dll libwinpthread-1.dll)
+            foreach(MINGW_RUNTIME IN ITEMS
+                    libstdc++-6.dll
+                    libgcc_s_seh-1.dll
+                    libwinpthread-1.dll
+                    glslang.dll
+                    libminizip-1.dll
+                    libbz2-1.dll
+                    zlib1.dll)
                 if(EXISTS "${MINGW_RUNTIME_DIR}/${MINGW_RUNTIME}")
                     list(APPEND MINGW_RUNTIME_DLLS "${MINGW_RUNTIME_DIR}/${MINGW_RUNTIME}")
                 endif()
@@ -637,14 +645,25 @@ if(BUILD_ENGINE)
                 $<TARGET_LINKER_FILE:freetype>
                 $<TARGET_FILE_DIR:${PROJECT_NAME}>
         )
-        add_custom_command(TARGET ${PROJECT_NAME} POST_BUILD
-            COMMAND ${CMAKE_COMMAND} -E copy_if_different
-                $<IF:$<CONFIG:Debug>,${CMAKE_SOURCE_DIR}/quark-libs/QuarkCore/external/Vulkan/lib/SPIRV-Toolsd.dll,${CMAKE_SOURCE_DIR}/quark-libs/QuarkCore/external/Vulkan/lib/SPIRV-Tools.dll>
-                $<TARGET_FILE_DIR:${PROJECT_NAME}>/SPIRV-Tools.dll
-            COMMAND ${CMAKE_COMMAND} -E copy_if_different
-                $<IF:$<CONFIG:Debug>,${CMAKE_SOURCE_DIR}/quark-libs/QuarkCore/external/Vulkan/lib/SPIRV-Tools-optd.dll,${CMAKE_SOURCE_DIR}/quark-libs/QuarkCore/external/Vulkan/lib/SPIRV-Tools-opt.dll>
-                $<TARGET_FILE_DIR:${PROJECT_NAME}>/SPIRV-Tools-opt.dll
-        )
+        if(MINGW)
+            # The MinGW FreeType import archives use a lib-prefixed DLL name.
+            add_custom_command(TARGET ${PROJECT_NAME} POST_BUILD
+                COMMAND ${CMAKE_COMMAND} -E copy_if_different
+                    "$<TARGET_FILE:freetype>"
+                    "$<TARGET_FILE_DIR:${PROJECT_NAME}>/$<IF:$<CONFIG:Debug>,libfreetyped.dll,libfreetype.dll>"
+                VERBATIM
+            )
+        endif()
+        if(WIN32)
+            add_custom_command(TARGET ${PROJECT_NAME} POST_BUILD
+                COMMAND ${CMAKE_COMMAND} -E copy_if_different
+                    $<TARGET_FILE:SPIRV_Tools_lib>
+                    $<TARGET_FILE_DIR:${PROJECT_NAME}>
+                COMMAND ${CMAKE_COMMAND} -E copy_if_different
+                    $<TARGET_FILE:SPIRV_Tools_opt_lib>
+                    $<TARGET_FILE_DIR:${PROJECT_NAME}>
+            )
+        endif()
         if(TARGET CURL::libcurl)
             add_custom_command(TARGET ${PROJECT_NAME} POST_BUILD
                 COMMAND ${CMAKE_COMMAND} -E copy_if_different
@@ -791,13 +810,17 @@ if(QUARK_BUILD_TESTS)
                 $<IF:$<CONFIG:Debug>,${CMAKE_SOURCE_DIR}/quark-libs/QuarkCore/external/OpenAL/lib/debug/OpenAL32.dll,${CMAKE_SOURCE_DIR}/quark-libs/QuarkCore/external/OpenAL/lib/release/OpenAL32.dll>
                 "${VULKAN_RUNTIME_DLL}"
                 $<TARGET_FILE_DIR:QuarkEngineTests>
-            COMMAND ${CMAKE_COMMAND} -E copy_if_different
-                $<IF:$<CONFIG:Debug>,${CMAKE_SOURCE_DIR}/quark-libs/QuarkCore/external/Vulkan/lib/SPIRV-Toolsd.dll,${CMAKE_SOURCE_DIR}/quark-libs/QuarkCore/external/Vulkan/lib/SPIRV-Tools.dll>
-                $<TARGET_FILE_DIR:QuarkEngineTests>/SPIRV-Tools.dll
-            COMMAND ${CMAKE_COMMAND} -E copy_if_different
-                $<IF:$<CONFIG:Debug>,${CMAKE_SOURCE_DIR}/quark-libs/QuarkCore/external/Vulkan/lib/SPIRV-Tools-optd.dll,${CMAKE_SOURCE_DIR}/quark-libs/QuarkCore/external/Vulkan/lib/SPIRV-Tools-opt.dll>
-                $<TARGET_FILE_DIR:QuarkEngineTests>/SPIRV-Tools-opt.dll
         )
+        if(WIN32)
+            add_custom_command(TARGET QuarkEngineTests POST_BUILD
+                COMMAND ${CMAKE_COMMAND} -E copy_if_different
+                    $<TARGET_FILE:SPIRV_Tools_lib>
+                    $<TARGET_FILE_DIR:QuarkEngineTests>
+                COMMAND ${CMAKE_COMMAND} -E copy_if_different
+                    $<TARGET_FILE:SPIRV_Tools_opt_lib>
+                    $<TARGET_FILE_DIR:QuarkEngineTests>
+            )
+        endif()
     elseif(UNIX)
         add_custom_command(TARGET QuarkEngineTests POST_BUILD
             COMMAND ${CMAKE_COMMAND} -E copy_if_different
