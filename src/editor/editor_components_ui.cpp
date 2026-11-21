@@ -9,6 +9,7 @@
 #include "text_mesh.h"
 #include "models.h"
 #include "entity.h"
+#include "engine/physics_world.h"
 #include "engine/transform.h"
 #include "editor/editor.h"
 #include "application_plugin_bridge.h"
@@ -62,6 +63,27 @@ void CComponentUIHelper::DrawEntityInspector(CEditor& editor, CEntity& entity, S
             }
 
             std::string tabLabel = pComp->GetTypeName();
+            if (pComp->GetType() == COMPONENT_SCRIPT)
+            {
+                const auto* pScriptComp = static_cast<const CScriptComponent*>(pComp.get());
+                if (pScriptComp && !pScriptComp->m_ScriptName.empty())
+                {
+                    std::string prettyName;
+                    prettyName.reserve(pScriptComp->m_ScriptName.size() + 8);
+                    for (size_t c = 0; c < pScriptComp->m_ScriptName.size(); ++c)
+                    {
+                        const char ch = pScriptComp->m_ScriptName[c];
+                        if (c > 0 && ch >= 'A' && ch <= 'Z' &&
+                            pScriptComp->m_ScriptName[c - 1] >= 'a' &&
+                            pScriptComp->m_ScriptName[c - 1] <= 'z')
+                        {
+                            prettyName.push_back(' ');
+                        }
+                        prettyName.push_back(ch);
+                    }
+                    tabLabel = prettyName + " (Script)";
+                }
+            }
             ImGui::PushID(static_cast<int>(i));
             bool open = ImGui::CollapsingHeader(tabLabel.c_str(), ImGuiTreeNodeFlags_DefaultOpen);
 
@@ -1711,14 +1733,87 @@ void CComponentUIHelper::DrawScriptComponent(CEditor& editor, CEntity& entity, C
     }
 
     auto& scriptEngine = quark::script::CScriptEngine::Get();
-    const auto& vAvailable = scriptEngine.GetAvailableScripts();
-    if (vAvailable.empty())
+
+    static double s_LastAutoRefreshTime = -10.0;
+    static std::unordered_map<std::string, std::filesystem::file_time_type> s_HeaderWriteTimes;
+    const double nowTime = GetTime();
+    if (scriptEngine.GetAvailableScripts().empty() || (nowTime - s_LastAutoRefreshTime) >= 0.5)
     {
+        s_LastAutoRefreshTime = nowTime;
         scriptEngine.RefreshAvailableScripts(editor.m_ProjectPath);
     }
 
+    const auto& vAvailable = scriptEngine.GetAvailableScripts();
+
+    if (!pScript->m_ScriptName.empty())
+    {
+        std::string headerPath = scriptEngine.FindScriptHeaderPath(pScript->m_ScriptName);
+        if (headerPath.empty() && !pScript->m_ScriptPath.empty())
+        {
+            headerPath = pScript->m_ScriptPath;
+        }
+        if (!headerPath.empty())
+        {
+            std::error_code ec;
+            const auto writeTime = std::filesystem::last_write_time(headerPath, ec);
+            if (!ec)
+            {
+                const auto it = s_HeaderWriteTimes.find(headerPath);
+                const bool needsSync = (it == s_HeaderWriteTimes.end() ||
+                                        it->second != writeTime ||
+                                        pScript->m_vFields.empty());
+                if (needsSync)
+                {
+                    s_HeaderWriteTimes[headerPath] = writeTime;
+                    quark::script::SParsedScriptInfo headerInfo;
+                    if (quark::script::CScriptHeaderParser::ParseHeader(headerPath, headerInfo))
+                    {
+                        pScript->SyncWithHeaderFields(headerInfo.m_vFields);
+                    }
+                }
+            }
+        }
+    }
+
+    auto formatFieldLabel = [](const std::string& rawName) -> std::string
+    {
+        std::string src = rawName;
+        if (src.size() > 2 && src[0] == 'm' && src[1] == '_')
+        {
+            src = src.substr(2);
+        }
+        std::string pretty;
+        pretty.reserve(src.size() + 8);
+        for (size_t i = 0; i < src.size(); ++i)
+        {
+            const char ch = src[i];
+            if (ch == '_')
+            {
+                if (!pretty.empty() && pretty.back() != ' ')
+                {
+                    pretty.push_back(' ');
+                }
+                continue;
+            }
+            if (i > 0 && ch >= 'A' && ch <= 'Z' &&
+                src[i - 1] >= 'a' && src[i - 1] <= 'z')
+            {
+                pretty.push_back(' ');
+            }
+            if (pretty.empty() || pretty.back() == ' ')
+            {
+                pretty.push_back(static_cast<char>(std::toupper(static_cast<unsigned char>(ch))));
+            }
+            else
+            {
+                pretty.push_back(ch);
+            }
+        }
+        return pretty.empty() ? rawName : pretty;
+    };
+
     std::vector<std::string> vScriptNames;
-    vScriptNames.push_back("None");
+    vScriptNames.push_back("None (Script)");
     int selectedIndex = 0;
 
     for (size_t i = 0; i < vAvailable.size(); ++i)
@@ -1737,269 +1832,279 @@ void CComponentUIHelper::DrawScriptComponent(CEditor& editor, CEntity& entity, C
         vScriptNamePtrs.push_back(name.c_str());
     }
 
-    ImGui::Text("Script Class");
-    ImGui::SameLine();
-    if (ImGui::SmallButton("Refresh"))
+    bool valueChanged = false;
+    const ImGuiTableFlags tableFlags =
+        ImGuiTableFlags_SizingStretchProp | ImGuiTableFlags_NoBordersInBody;
+    if (ImGui::BeginTable("##ScriptPropsTable", 2, tableFlags))
     {
-        scriptEngine.RefreshAvailableScripts(editor.m_ProjectPath);
+        ImGui::TableSetupColumn("Label", ImGuiTableColumnFlags_WidthStretch, 0.42f);
+        ImGui::TableSetupColumn("Value", ImGuiTableColumnFlags_WidthStretch, 0.58f);
+
+        auto drawRowLabel = [](const char* pLabel, bool muted = false)
+        {
+            ImGui::TableNextRow();
+            ImGui::TableSetColumnIndex(0);
+            ImGui::AlignTextToFramePadding();
+            if (muted)
+            {
+                ImGui::TextDisabled("%s", pLabel);
+            }
+            else
+            {
+                ImGui::TextUnformatted(pLabel);
+            }
+            ImGui::TableSetColumnIndex(1);
+        };
+
+        drawRowLabel("Script", true);
+        ImGui::SetNextItemWidth(-FLT_MIN);
+        int comboIndex = selectedIndex;
+        if (ImGui::Combo("##script_class", &comboIndex, vScriptNamePtrs.data(),
+                         static_cast<int>(vScriptNamePtrs.size())))
+        {
+            editor.SaveState();
+            if (comboIndex == 0)
+            {
+                pScript->m_ScriptName.clear();
+                pScript->m_ScriptPath.clear();
+                pScript->m_vFields.clear();
+            }
+            else
+            {
+                const auto& selectedInfo = vAvailable[comboIndex - 1];
+                pScript->m_ScriptName = selectedInfo.m_ClassName;
+                pScript->m_ScriptPath = selectedInfo.m_HeaderPath;
+                pScript->SyncWithHeaderFields(selectedInfo.m_vFields);
+            }
+            editor.m_SceneDirty = true;
+        }
+
         if (!pScript->m_ScriptName.empty())
         {
-            const std::string headerPath = scriptEngine.FindScriptHeaderPath(pScript->m_ScriptName);
-            if (!headerPath.empty())
+            for (size_t fIdx = 0; fIdx < pScript->m_vFields.size(); ++fIdx)
             {
-                quark::script::SParsedScriptInfo headerInfo;
-                if (quark::script::CScriptHeaderParser::ParseHeader(headerPath, headerInfo))
-                {
-                    pScript->SyncWithHeaderFields(headerInfo.m_vFields);
-                }
-            }
-        }
-    }
-    int comboIndex = selectedIndex;
-    if (ImGui::Combo("##script_class", &comboIndex, vScriptNamePtrs.data(), static_cast<int>(vScriptNamePtrs.size())))
-    {
-        editor.SaveState();
-        if (comboIndex == 0)
-        {
-            pScript->m_ScriptName.clear();
-            pScript->m_ScriptPath.clear();
-            pScript->m_vFields.clear();
-        }
-        else
-        {
-            const auto& selectedInfo = vAvailable[comboIndex - 1];
-            pScript->m_ScriptName = selectedInfo.m_ClassName;
-            pScript->m_ScriptPath = selectedInfo.m_HeaderPath;
-            pScript->SyncWithHeaderFields(selectedInfo.m_vFields);
-        }
-        editor.m_SceneDirty = true;
-    }
+                auto& field = pScript->m_vFields[fIdx];
+                ImGui::PushID(static_cast<int>(fIdx));
+                const std::string fieldLabel = formatFieldLabel(field.m_Name);
+                drawRowLabel(fieldLabel.c_str());
 
-    if (pScript->m_ScriptName.empty())
-    {
-        ImGui::TextDisabled("Select a script from the dropdown above, or create one via Assets right-click menu.");
-        return;
-    }
-
-    if (pScript->m_vFields.empty())
-    {
-        for (const auto& info : vAvailable)
-        {
-            if (info.m_ClassName == pScript->m_ScriptName)
-            {
-                if (!info.m_vFields.empty())
+                switch (field.m_Type)
                 {
-                    pScript->SyncWithHeaderFields(info.m_vFields);
-                }
-                break;
-            }
-        }
-    }
-
-    ImGui::Spacing();
-    ImGui::Separator();
-    ImGui::Text("Public Variables (%s)", pScript->m_ScriptName.c_str());
-    ImGui::Spacing();
-
-    if (pScript->m_vFields.empty())
-    {
-        ImGui::TextDisabled("No public variables found in %s", pScript->m_ScriptName.c_str());
-    }
-
-    bool valueChanged = false;
-    for (size_t fIdx = 0; fIdx < pScript->m_vFields.size(); ++fIdx)
-    {
-        auto& field = pScript->m_vFields[fIdx];
-        ImGui::PushID(static_cast<int>(fIdx));
-
-        switch (field.m_Type)
-        {
-            case quark::script::EScriptFieldType::FLOAT:
-            {
-                float val = field.m_FloatValue;
-                if (ImGui::DragFloat(field.m_Name.c_str(), &val, 0.1f))
-                {
-                    field.m_FloatValue = val;
-                    valueChanged = true;
-                }
-                break;
-            }
-            case quark::script::EScriptFieldType::INT:
-            {
-                int val = field.m_IntValue;
-                if (ImGui::DragInt(field.m_Name.c_str(), &val, 1))
-                {
-                    field.m_IntValue = val;
-                    valueChanged = true;
-                }
-                break;
-            }
-            case quark::script::EScriptFieldType::BOOL:
-            {
-                bool val = field.m_BoolValue;
-                if (ImGui::Checkbox(field.m_Name.c_str(), &val))
-                {
-                    field.m_BoolValue = val;
-                    valueChanged = true;
-                }
-                break;
-            }
-            case quark::script::EScriptFieldType::STRING:
-            {
-                char aBuf[256];
-                size_t copied = field.m_StringValue.copy(aBuf, sizeof(aBuf) - 1);
-                aBuf[copied] = '\0';
-                if (ImGui::InputText(field.m_Name.c_str(), aBuf, sizeof(aBuf)))
-                {
-                    field.m_StringValue = aBuf;
-                    valueChanged = true;
-                }
-                break;
-            }
-            case quark::script::EScriptFieldType::VEC3:
-            {
-                float aVec[3] = { field.m_Vec3Value.x, field.m_Vec3Value.y, field.m_Vec3Value.z };
-                if (ImGui::DragFloat3(field.m_Name.c_str(), aVec, 0.1f))
-                {
-                    field.m_Vec3Value = { aVec[0], aVec[1], aVec[2] };
-                    valueChanged = true;
-                }
-                break;
-            }
-            case quark::script::EScriptFieldType::COLOR:
-            {
-                float aCol[4] = {
-                    field.m_ColorValue.r / 255.0f,
-                    field.m_ColorValue.g / 255.0f,
-                    field.m_ColorValue.b / 255.0f,
-                    field.m_ColorValue.a / 255.0f
-                };
-                if (ImGui::ColorEdit4(field.m_Name.c_str(), aCol))
-                {
-                    field.m_ColorValue = {
-                        static_cast<unsigned char>(std::clamp(aCol[0] * 255.0f, 0.0f, 255.0f)),
-                        static_cast<unsigned char>(std::clamp(aCol[1] * 255.0f, 0.0f, 255.0f)),
-                        static_cast<unsigned char>(std::clamp(aCol[2] * 255.0f, 0.0f, 255.0f)),
-                        static_cast<unsigned char>(std::clamp(aCol[3] * 255.0f, 0.0f, 255.0f))
-                    };
-                    valueChanged = true;
-                }
-                break;
-            }
-            case quark::script::EScriptFieldType::ENTITY_REF:
-            {
-                std::string currentLabel = "None (Entity)";
-                if (field.m_EntityIdValue >= 0)
-                {
-                    for (const auto& candidate : editor.m_Scene.m_vEntities)
+                    case quark::script::EScriptFieldType::FLOAT:
                     {
-                        if (candidate.m_Id == field.m_EntityIdValue)
+                        ImGui::SetNextItemWidth(-FLT_MIN);
+                        float val = field.m_FloatValue;
+                        if (ImGui::DragFloat("##val", &val, 0.05f, 0.0f, 0.0f, "%g"))
                         {
-                            currentLabel = candidate.m_Name + " (#" + std::to_string(candidate.m_Id) + ")";
-                            break;
-                        }
-                    }
-                }
-                if (ImGui::BeginCombo(field.m_Name.c_str(), currentLabel.c_str()))
-                {
-                    if (ImGui::Selectable("None (Entity)", field.m_EntityIdValue < 0))
-                    {
-                        field.m_EntityIdValue = -1;
-                        valueChanged = true;
-                    }
-                    for (const auto& candidate : editor.m_Scene.m_vEntities)
-                    {
-                        const std::string itemLabel = candidate.m_Name + " (#" + std::to_string(candidate.m_Id) + ")";
-                        const bool isSelected = (field.m_EntityIdValue == candidate.m_Id);
-                        if (ImGui::Selectable(itemLabel.c_str(), isSelected))
-                        {
-                            field.m_EntityIdValue = candidate.m_Id;
+                            field.m_FloatValue = val;
                             valueChanged = true;
                         }
-                    }
-                    ImGui::EndCombo();
-                }
-                if (ImGui::BeginDragDropTarget())
-                {
-                    if (const ImGuiPayload* pPayload = ImGui::AcceptDragDropPayload("ENTITY_INDEX"))
-                    {
-                        if (pPayload->IsDelivery() && pPayload->DataSize == sizeof(int))
+                        if (ImGui::IsItemActivated())
                         {
-                            const int droppedIndex = *static_cast<const int*>(pPayload->Data);
-                            if (droppedIndex >= 0 && droppedIndex < static_cast<int>(editor.m_Scene.m_vEntities.size()))
+                            editor.SaveState();
+                        }
+                        break;
+                    }
+                    case quark::script::EScriptFieldType::INT:
+                    {
+                        ImGui::SetNextItemWidth(-FLT_MIN);
+                        int val = field.m_IntValue;
+                        if (ImGui::DragInt("##val", &val, 1))
+                        {
+                            field.m_IntValue = val;
+                            valueChanged = true;
+                        }
+                        if (ImGui::IsItemActivated())
+                        {
+                            editor.SaveState();
+                        }
+                        break;
+                    }
+                    case quark::script::EScriptFieldType::BOOL:
+                    {
+                        bool val = field.m_BoolValue;
+                        if (ImGui::Checkbox("##val", &val))
+                        {
+                            editor.SaveState();
+                            field.m_BoolValue = val;
+                            valueChanged = true;
+                        }
+                        break;
+                    }
+                    case quark::script::EScriptFieldType::STRING:
+                    {
+                        ImGui::SetNextItemWidth(-FLT_MIN);
+                        char aBuf[256];
+                        size_t copied = field.m_StringValue.copy(aBuf, sizeof(aBuf) - 1);
+                        aBuf[copied] = '\0';
+                        if (ImGui::InputText("##val", aBuf, sizeof(aBuf)))
+                        {
+                            field.m_StringValue = aBuf;
+                            valueChanged = true;
+                        }
+                        if (ImGui::IsItemActivated())
+                        {
+                            editor.SaveState();
+                        }
+                        break;
+                    }
+                    case quark::script::EScriptFieldType::VEC3:
+                    {
+                        const float spacing = ImGui::GetStyle().ItemInnerSpacing.x;
+                        const float labelW = ImGui::CalcTextSize("X").x + 4.0f;
+                        const float availW = ImGui::GetContentRegionAvail().x;
+                        const float fieldW = std::max(28.0f, (availW - (labelW + spacing) * 3.0f) / 3.0f);
+                        float* apCoords[3] = { &field.m_Vec3Value.x, &field.m_Vec3Value.y, &field.m_Vec3Value.z };
+                        const char* apAxes[3] = { "X", "Y", "Z" };
+                        for (int a = 0; a < 3; ++a)
+                        {
+                            if (a > 0)
                             {
-                                field.m_EntityIdValue = editor.m_Scene.m_vEntities[droppedIndex].m_Id;
+                                ImGui::SameLine(0.0f, spacing);
+                            }
+                            ImGui::AlignTextToFramePadding();
+                            ImGui::TextUnformatted(apAxes[a]);
+                            ImGui::SameLine(0.0f, 3.0f);
+                            ImGui::SetNextItemWidth(fieldW);
+                            ImGui::PushID(a);
+                            if (ImGui::DragFloat("##axis", apCoords[a], 0.05f, 0.0f, 0.0f, "%g"))
+                            {
+                                valueChanged = true;
+                            }
+                            if (ImGui::IsItemActivated())
+                            {
+                                editor.SaveState();
+                            }
+                            ImGui::PopID();
+                        }
+                        break;
+                    }
+                    case quark::script::EScriptFieldType::COLOR:
+                    {
+                        ImGui::SetNextItemWidth(-FLT_MIN);
+                        float aCol[4] = {
+                            field.m_ColorValue.r / 255.0f,
+                            field.m_ColorValue.g / 255.0f,
+                            field.m_ColorValue.b / 255.0f,
+                            field.m_ColorValue.a / 255.0f
+                        };
+                        if (ImGui::ColorEdit4("##val", aCol))
+                        {
+                            field.m_ColorValue = {
+                                static_cast<unsigned char>(std::clamp(aCol[0] * 255.0f, 0.0f, 255.0f)),
+                                static_cast<unsigned char>(std::clamp(aCol[1] * 255.0f, 0.0f, 255.0f)),
+                                static_cast<unsigned char>(std::clamp(aCol[2] * 255.0f, 0.0f, 255.0f)),
+                                static_cast<unsigned char>(std::clamp(aCol[3] * 255.0f, 0.0f, 255.0f))
+                            };
+                            valueChanged = true;
+                        }
+                        break;
+                    }
+                    case quark::script::EScriptFieldType::ENTITY_REF:
+                    {
+                        std::string currentLabel = "None (Entity)";
+                        if (field.m_EntityIdValue >= 0)
+                        {
+                            for (const auto& candidate : editor.m_Scene.m_vEntities)
+                            {
+                                if (candidate.m_Id == field.m_EntityIdValue)
+                                {
+                                    currentLabel = candidate.m_Name;
+                                    break;
+                                }
+                            }
+                        }
+                        ImGui::SetNextItemWidth(-FLT_MIN);
+                        if (ImGui::BeginCombo("##entity_ref", currentLabel.c_str()))
+                        {
+                            if (ImGui::Selectable("None (Entity)", field.m_EntityIdValue < 0))
+                            {
+                                editor.SaveState();
+                                field.m_EntityIdValue = -1;
+                                valueChanged = true;
+                            }
+                            for (const auto& candidate : editor.m_Scene.m_vEntities)
+                            {
+                                const std::string itemLabel = candidate.m_Name + " (#" + std::to_string(candidate.m_Id) + ")";
+                                const bool isSelected = (field.m_EntityIdValue == candidate.m_Id);
+                                if (ImGui::Selectable(itemLabel.c_str(), isSelected))
+                                {
+                                    editor.SaveState();
+                                    field.m_EntityIdValue = candidate.m_Id;
+                                    valueChanged = true;
+                                }
+                            }
+                            ImGui::EndCombo();
+                        }
+                        if (ImGui::BeginDragDropTarget())
+                        {
+                            if (const ImGuiPayload* pPayload = ImGui::AcceptDragDropPayload("ENTITY_INDEX"))
+                            {
+                                if (pPayload->IsDelivery() && pPayload->DataSize == sizeof(int))
+                                {
+                                    const int droppedIndex = *static_cast<const int*>(pPayload->Data);
+                                    if (droppedIndex >= 0 && droppedIndex < static_cast<int>(editor.m_Scene.m_vEntities.size()))
+                                    {
+                                        editor.SaveState();
+                                        field.m_EntityIdValue = editor.m_Scene.m_vEntities[droppedIndex].m_Id;
+                                        valueChanged = true;
+                                    }
+                                }
+                            }
+                            ImGui::EndDragDropTarget();
+                        }
+                        break;
+                    }
+                    case quark::script::EScriptFieldType::ASSET_REF:
+                    {
+                        char aAssetBuf[512] = {};
+                        const size_t copied = field.m_AssetPathValue.copy(aAssetBuf, sizeof(aAssetBuf) - 1);
+                        aAssetBuf[copied] = '\0';
+                        ImGui::SetNextItemWidth(std::max(40.0f, ImGui::GetContentRegionAvail().x - 32.0f));
+                        if (ImGui::InputText("##asset_ref_path", aAssetBuf, sizeof(aAssetBuf)))
+                        {
+                            field.m_AssetPathValue = aAssetBuf;
+                            valueChanged = true;
+                        }
+                        if (editor.m_Ui.m_Layout.m_FileDragging &&
+                            ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenBlockedByActiveItem) &&
+                            ImGui::IsMouseReleased(ImGuiMouseButton_Left) &&
+                            !editor.m_Ui.m_AssetBrowser.m_Drag.m_FilePath.empty())
+                        {
+                            editor.SaveState();
+                            field.m_AssetPathValue = editor.m_Ui.m_AssetBrowser.m_Drag.m_FilePath.generic_string();
+                            valueChanged = true;
+                        }
+                        ImGui::SameLine(0.0f, 4.0f);
+                        if (ImGui::Button("...##browse_asset_ref"))
+                        {
+                            const std::string browsed = BrowseForFileDialog(
+                                "Asset Files (*.prefab;*.png;*.jpg;*.wav;*.ogg;*.obj;*.glb)",
+                                "Asset Files (*.prefab;*.png;*.jpg;*.wav;*.ogg;*.obj;*.glb)\0*.prefab;*.png;*.jpg;*.wav;*.ogg;*.obj;*.glb\0All Files (*.*)\0*.*\0");
+                            if (!browsed.empty())
+                            {
+                                editor.SaveState();
+                                field.m_AssetPathValue = browsed;
                                 valueChanged = true;
                             }
                         }
-                    }
-                    ImGui::EndDragDropTarget();
-                }
-                break;
-            }
-            case quark::script::EScriptFieldType::ASSET_REF:
-            {
-                char aAssetBuf[512] = {};
-                const size_t copied = field.m_AssetPathValue.copy(aAssetBuf, sizeof(aAssetBuf) - 1);
-                aAssetBuf[copied] = '\0';
-                ImGui::SetNextItemWidth(ImGui::GetContentRegionAvail().x - 110.0f);
-                if (ImGui::InputText("##asset_ref_path", aAssetBuf, sizeof(aAssetBuf)))
-                {
-                    field.m_AssetPathValue = aAssetBuf;
-                    valueChanged = true;
-                }
-                if (editor.m_Ui.m_Layout.m_FileDragging &&
-                    ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenBlockedByActiveItem) &&
-                    ImGui::IsMouseReleased(ImGuiMouseButton_Left) &&
-                    !editor.m_Ui.m_AssetBrowser.m_Drag.m_FilePath.empty())
-                {
-                    field.m_AssetPathValue = editor.m_Ui.m_AssetBrowser.m_Drag.m_FilePath.generic_string();
-                    valueChanged = true;
-                }
-                ImGui::SameLine();
-                if (ImGui::Button("...##browse_asset_ref"))
-                {
-                    const std::string browsed = BrowseForFileDialog(
-                        "Asset Files (*.prefab;*.png;*.jpg;*.wav;*.ogg;*.obj;*.glb)",
-                        "Asset Files (*.prefab;*.png;*.jpg;*.wav;*.ogg;*.obj;*.glb)\0*.prefab;*.png;*.jpg;*.wav;*.ogg;*.obj;*.glb\0All Files (*.*)\0*.*\0");
-                    if (!browsed.empty())
-                    {
-                        field.m_AssetPathValue = browsed;
-                        valueChanged = true;
+                        break;
                     }
                 }
-                ImGui::SameLine();
-                ImGui::TextUnformatted(field.m_Name.c_str());
-                break;
+
+                ImGui::PopID();
             }
         }
 
-        ImGui::PopID();
+        ImGui::EndTable();
     }
 
     if (valueChanged)
     {
-        editor.SaveState();
         editor.m_SceneDirty = true;
         if (editor.m_IsPlaying && pScript->m_pInstance)
         {
             pScript->ApplyFieldsToInstance();
-        }
-    }
-
-    ImGui::Spacing();
-    if (ImGui::Button("Sync Fields from Header"))
-    {
-        const std::string headerPath = scriptEngine.FindScriptHeaderPath(pScript->m_ScriptName);
-        if (!headerPath.empty())
-        {
-            quark::script::SParsedScriptInfo headerInfo;
-            if (quark::script::CScriptHeaderParser::ParseHeader(headerPath, headerInfo))
-            {
-                editor.SaveState();
-                pScript->SyncWithHeaderFields(headerInfo.m_vFields);
-                editor.m_SceneDirty = true;
-            }
         }
     }
 }
@@ -4211,36 +4316,10 @@ void CComponentUIHelper::DrawRigidbodyComponent(CEditor& editor, CEntity& entity
         }
 
         const float mass = std::max(pBody->m_Mass, 0.001f);
-        Vec3 inertia = { (1.0f / 6.0f) * mass, (1.0f / 6.0f) * mass, (1.0f / 6.0f) * mass };
-        if (pCollider)
-        {
-            const Vec3 scale = pTransform ? pTransform->m_Scale : Vec3{ 1.0f, 1.0f, 1.0f };
-            if (pCollider->m_ColliderType == COLLIDER_SPHERE)
-            {
-                const float r = std::max(pCollider->m_Radius * std::max({ std::fabs(scale.x), std::fabs(scale.y), std::fabs(scale.z) }), 0.001f);
-                const float iSphere = 0.4f * mass * r * r;
-                inertia = { iSphere, iSphere, iSphere };
-            }
-            else if (pCollider->m_ColliderType == COLLIDER_CAPSULE)
-            {
-                const float r = std::max(pCollider->m_Radius * std::max(std::fabs(scale.x), std::fabs(scale.z)), 0.001f);
-                const float h = std::max(pCollider->m_Height * std::fabs(scale.y), r * 2.0f);
-                const float iy = 0.5f * mass * r * r;
-                const float ixz = (1.0f / 12.0f) * mass * (3.0f * r * r + h * h);
-                inertia = { ixz, iy, ixz };
-            }
-            else
-            {
-                const float sx = std::max(std::fabs(pCollider->m_Size.x * scale.x), 0.001f);
-                const float sy = std::max(std::fabs(pCollider->m_Size.y * scale.y), 0.001f);
-                const float sz = std::max(std::fabs(pCollider->m_Size.z * scale.z), 0.001f);
-                inertia = {
-                    (1.0f / 12.0f) * mass * (sy * sy + sz * sz),
-                    (1.0f / 12.0f) * mass * (sx * sx + sz * sz),
-                    (1.0f / 12.0f) * mass * (sx * sx + sy * sy)
-                };
-            }
-        }
+        const quark::physics::SInertiaTensorInfo inertiaInfo =
+            quark::physics::CPhysicsWorld::ComputeInertiaTensor(entity, mass);
+        Vec3 inertia = inertiaInfo.m_Diagonal;
+        const Vec3 inertiaRotation = inertiaInfo.m_RotationDeg;
         if (pBody->m_FreezeRotationX)
         {
             inertia.x = 0.0f;
@@ -4272,7 +4351,7 @@ void CComponentUIHelper::DrawRigidbodyComponent(CEditor& editor, CEntity& entity
             drawReadOnlyVec3("RbInfoInertia", inertia);
 
             drawRowLabel("Inertia Tensor Rotation", 12.0f);
-            drawReadOnlyVec3("RbInfoInertiaRot", Vec3{ 0.0f, 0.0f, 0.0f });
+            drawReadOnlyVec3("RbInfoInertiaRot", inertiaRotation);
 
             drawRowLabel("Local Center of Mass", 12.0f);
             drawReadOnlyVec3("RbInfoLocalCom", localCom);

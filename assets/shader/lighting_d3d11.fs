@@ -93,9 +93,12 @@ float shadow_factor(int index, float3 fragPosition, float3 normal, float3 lightD
     }
 
     float NdotL = saturate(dot(normal, lightDir));
+    float sinTheta = sqrt(max(1.0 - NdotL * NdotL, 0.0));
     float2 texelSize = GetShadowTexelSize(index);
+    float baseBias = max(shadowBias, 0.0005);
+    float3 shadowWorldPos = fragPosition + normal * (baseBias * 14.0 * sinTheta);
 
-    float4 lightClip = mul(lightProjections[index], mul(lightViews[index], float4(fragPosition, 1.0)));
+    float4 lightClip = mul(lightProjections[index], mul(lightViews[index], float4(shadowWorldPos, 1.0)));
     if (lightClip.w <= 0.0)
     {
         return 0.0;
@@ -111,27 +114,35 @@ float shadow_factor(int index, float3 fragPosition, float3 normal, float3 lightD
     }
 
     float currentDepth = lightClip.w;
-    float bias = currentDepth * max(shadowBias, 0.0005) * (1.0 + 2.0 * (1.0 - NdotL)) + 0.01;
+    float bias = currentDepth * baseBias * (1.0 + 3.0 * (1.0 - NdotL)) + 0.012;
     int2 mapSize = int2(round(1.0 / texelSize));
-    int2 baseTexel = int2(projected.xy * float2(mapSize));
+    float2 texelCoord = projected.xy * float2(mapSize) - 0.5;
+    int2 baseTexel = int2(floor(texelCoord));
+    float2 fracCoord = texelCoord - float2(baseTexel);
     int radius = clamp(shadowFilterQuality, 0, 2);
     int sampleWidth = radius * 2 + 1;
-    int samples = sampleWidth * sampleWidth;
+    float totalWeight = float(sampleWidth * sampleWidth);
 
     float shadow = 0.0;
     [loop]
-    for (int x = -radius; x <= radius; ++x)
+    for (int x = -radius; x <= radius + 1; ++x)
     {
+        float wx = (x == -radius) ? (1.0 - fracCoord.x) : ((x == radius + 1) ? fracCoord.x : 1.0);
         [loop]
-        for (int y = -radius; y <= radius; ++y)
+        for (int y = -radius; y <= radius + 1; ++y)
         {
+            float wy = (y == -radius) ? (1.0 - fracCoord.y) : ((y == radius + 1) ? fracCoord.y : 1.0);
             int2 texel = clamp(baseTexel + int2(x, y), int2(0, 0), mapSize - 1);
             float closestDepth = SampleShadowDepth(index, texel);
-            shadow += (currentDepth - bias > closestDepth) ? 1.0 : 0.0;
+            shadow += ((currentDepth - bias > closestDepth) ? 1.0 : 0.0) * (wx * wy);
         }
     }
 
-    return shadow / float(samples);
+    float edgeFade = smoothstep(0.0, 0.05, projected.x) *
+                     smoothstep(1.0, 0.95, projected.x) *
+                     smoothstep(0.0, 0.05, projected.y) *
+                     smoothstep(1.0, 0.95, projected.y);
+    return (shadow / totalWeight) * edgeFade;
 }
 
 float3 perturb_normal(float3 geometricNormal, float3 tangent, float2 uv)

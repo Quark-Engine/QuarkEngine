@@ -2232,6 +2232,8 @@ namespace quark::script
                 pScriptComp->m_pInstance->OnLateUpdate(scaledDelta);
             }
         }
+
+        scene.BumpTransformRevision();
     }
 
     void CScriptEngine::StopPlay(CScene& scene)

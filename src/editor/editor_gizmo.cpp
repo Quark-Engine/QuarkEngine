@@ -1083,7 +1083,43 @@ void CGizmoController::Draw(CEditor& editor, CFlyCamera& camera)
 
     float aTranslation[3] = { pTransform->m_Position.x, pTransform->m_Position.y, pTransform->m_Position.z };
 
-    const Mat4 gizmoTransform = quark::ComposeWorld(editor.m_Scene, *pEntity);
+    Mat4 gizmoTransform = quark::ComposeWorld(editor.m_Scene, *pEntity);
+    {
+        constexpr float MIN_GIZMO_AXIS_LEN = 1e-3f;
+        const Mat4 fallbackRot =
+            Mat4::rotationY(pTransform->m_Rotation.y * DEG2RAD) *
+            Mat4::rotationX(pTransform->m_Rotation.x * DEG2RAD) *
+            Mat4::rotationZ(pTransform->m_Rotation.z * DEG2RAD);
+        for (int col = 0; col < 3; ++col)
+        {
+            Vec3 axis = {
+                gizmoTransform.m[col * 4 + 0],
+                gizmoTransform.m[col * 4 + 1],
+                gizmoTransform.m[col * 4 + 2]
+            };
+            const float lenSq = axis.lengthSquared();
+            if (!std::isfinite(lenSq) || lenSq < MIN_GIZMO_AXIS_LEN * MIN_GIZMO_AXIS_LEN)
+            {
+                Vec3 fallbackAxis = {
+                    fallbackRot.m[col * 4 + 0],
+                    fallbackRot.m[col * 4 + 1],
+                    fallbackRot.m[col * 4 + 2]
+                };
+                if (fallbackAxis.lengthSquared() < 1e-6f)
+                {
+                    fallbackAxis = {
+                        col == 0 ? 1.0f : 0.0f,
+                        col == 1 ? 1.0f : 0.0f,
+                        col == 2 ? 1.0f : 0.0f
+                    };
+                }
+                fallbackAxis = fallbackAxis.normalized() * MIN_GIZMO_AXIS_LEN;
+                gizmoTransform.m[col * 4 + 0] = fallbackAxis.x;
+                gizmoTransform.m[col * 4 + 1] = fallbackAxis.y;
+                gizmoTransform.m[col * 4 + 2] = fallbackAxis.z;
+            }
+        }
+    }
     memcpy(aTransformMat4, &gizmoTransform, sizeof(aTransformMat4));
 
     ImGuizmo::Manipulate(
@@ -1105,16 +1141,54 @@ void CGizmoController::Draw(CEditor& editor, CFlyCamera& camera)
 
     if (ImGuizmo::IsUsing())
     {
-        Mat4 worldTransform = Mat4::identity();
-        memcpy(&worldTransform, aTransformMat4, sizeof(aTransformMat4));
-        quark::DecomposeLocal(
-            quark::ParentWorld(editor.m_Scene, *pEntity),
-            worldTransform,
-            *pTransform);
-        Mat4 inverseParent;
-        if (quark::TryInvertAffine(quark::ParentWorld(editor.m_Scene, *pEntity), inverseParent))
+        bool matrixFinite = true;
+        for (int k = 0; k < 16; ++k)
         {
-            pTransform->SetLocalMatrixOverride(inverseParent * worldTransform);
+            if (!std::isfinite(aTransformMat4[k]))
+            {
+                matrixFinite = false;
+                break;
+            }
+        }
+
+        if (matrixFinite)
+        {
+            Mat4 worldTransform = Mat4::identity();
+            memcpy(&worldTransform, aTransformMat4, sizeof(aTransformMat4));
+            const Mat4 parentWorld = quark::ParentWorld(editor.m_Scene, *pEntity);
+            Mat4 inverseParent = Mat4::identity();
+            const bool hasInverseParent = quark::TryInvertAffine(parentWorld, inverseParent);
+
+            if (editor.m_Ui.m_MeshEdit.m_GizmoMode == ImGuizmo::TRANSLATE)
+            {
+                const Vec3 worldPos = { worldTransform.m[12], worldTransform.m[13], worldTransform.m[14] };
+                const Vec3 localPos = hasInverseParent ? Vec3(inverseParent * worldPos) : worldPos;
+                pTransform->m_Position = localPos;
+                if (pTransform->m_HasLocalMatrixOverride)
+                {
+                    pTransform->m_LocalMatrixOverride.m[12] = localPos.x;
+                    pTransform->m_LocalMatrixOverride.m[13] = localPos.y;
+                    pTransform->m_LocalMatrixOverride.m[14] = localPos.z;
+                }
+            }
+            else
+            {
+                quark::DecomposeLocal(parentWorld, worldTransform, *pTransform);
+                constexpr float MIN_SCALE_COMPONENT = 0.001f;
+                auto clampNonZeroScale = [MIN_SCALE_COMPONENT](float s) -> float
+                {
+                    if (!std::isfinite(s) || std::fabs(s) < MIN_SCALE_COMPONENT)
+                    {
+                        return (s < 0.0f) ? -MIN_SCALE_COMPONENT : MIN_SCALE_COMPONENT;
+                    }
+                    return s;
+                };
+                pTransform->m_Scale.x = clampNonZeroScale(pTransform->m_Scale.x);
+                pTransform->m_Scale.y = clampNonZeroScale(pTransform->m_Scale.y);
+                pTransform->m_Scale.z = clampNonZeroScale(pTransform->m_Scale.z);
+                pTransform->ClearLocalMatrixOverride();
+                pTransform->SetLocalMatrixOverride(quark::ComposeLocal(*pTransform));
+            }
         }
 
         const Vec3 positionDelta = pTransform->m_Position - Vec3{ aTranslation[0], aTranslation[1], aTranslation[2] };

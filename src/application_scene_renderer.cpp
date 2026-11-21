@@ -299,6 +299,182 @@ namespace
         return hasActiveSceneLight;
     }
 
+    bool IsLargeGroundReceiver(const BoundingBox& bounds)
+    {
+        const Vec3 size = bounds.max - bounds.min;
+        const float horizontalSpan = std::max(size.x, size.z);
+        return horizontalSpan > 12.0f && size.y < 2.5f;
+    }
+
+    void ConfigureShadowCameraForLight(const CScene& scene,
+                                       const std::vector<SSceneEntityFrameData>& vFrameData,
+                                       const CLightComponent& lightComp,
+                                       const Vec3& lightPosition,
+                                       const Vec3& sceneCenter,
+                                       Camera3D& shadowCamera)
+    {
+        shadowCamera.position = lightPosition;
+        shadowCamera.projection = CAMERA_PERSPECTIVE;
+
+        const int lightType = lightComp.m_Light.m_Light.type;
+        if (lightType == LIGHT_TYPE_DIRECTIONAL || lightType == LIGHT_TYPE_SPOT)
+        {
+            shadowCamera.target = lightComp.m_Light.m_Target;
+            if ((shadowCamera.position - shadowCamera.target).length() <= 0.000001f)
+            {
+                shadowCamera.target = sceneCenter;
+                if ((shadowCamera.position - shadowCamera.target).length() <= 0.000001f)
+                {
+                    shadowCamera.target = shadowCamera.position + Vec3{ 0.0f, -1.0f, 0.0f };
+                }
+            }
+
+            const Vec3 lookDir = (shadowCamera.target - shadowCamera.position).normalized();
+            shadowCamera.up = (std::fabs(lookDir.y) > 0.98f)
+                ? Vec3{ 0.0f, 0.0f, -1.0f }
+                : Vec3{ 0.0f, 1.0f, 0.0f };
+
+            if (lightType == LIGHT_TYPE_SPOT)
+            {
+                shadowCamera.fovy = std::clamp(lightComp.m_Light.m_SpotAngle * 2.1f, 55.0f, 110.0f);
+            }
+            else
+            {
+                shadowCamera.fovy = 65.0f;
+            }
+            return;
+        }
+
+        float receiverY = FLT_MAX;
+        for (int entityIndex = 0; entityIndex < static_cast<int>(scene.m_vEntities.size()); ++entityIndex)
+        {
+            if (entityIndex >= static_cast<int>(vFrameData.size()) || !vFrameData[entityIndex].m_HasMesh)
+            {
+                continue;
+            }
+            receiverY = std::min(receiverY, vFrameData[entityIndex].m_WorldBounds.max.y);
+        }
+        if (receiverY == FLT_MAX)
+        {
+            receiverY = -0.5f;
+        }
+
+        const float lightRange = std::max(lightComp.m_Light.m_Range, 5.0f);
+        std::vector<Vec3> vFocusPoints;
+        vFocusPoints.reserve(scene.m_vEntities.size() * 16);
+
+        for (int entityIndex = 0; entityIndex < static_cast<int>(scene.m_vEntities.size()); ++entityIndex)
+        {
+            if (entityIndex >= static_cast<int>(vFrameData.size()) || !vFrameData[entityIndex].m_HasMesh)
+            {
+                continue;
+            }
+
+            const BoundingBox& bounds = vFrameData[entityIndex].m_WorldBounds;
+            if (IsLargeGroundReceiver(bounds))
+            {
+                continue;
+            }
+
+            const Vec3 center = (bounds.min + bounds.max) * 0.5f;
+            if ((center - lightPosition).length() > lightRange * 1.5f)
+            {
+                continue;
+            }
+
+            const Vec3 aCorners[8] = {
+                { bounds.min.x, bounds.min.y, bounds.min.z },
+                { bounds.max.x, bounds.min.y, bounds.min.z },
+                { bounds.min.x, bounds.max.y, bounds.min.z },
+                { bounds.max.x, bounds.max.y, bounds.min.z },
+                { bounds.min.x, bounds.min.y, bounds.max.z },
+                { bounds.max.x, bounds.min.y, bounds.max.z },
+                { bounds.min.x, bounds.max.y, bounds.max.z },
+                { bounds.max.x, bounds.max.y, bounds.max.z }
+            };
+
+            for (const Vec3& corner : aCorners)
+            {
+                vFocusPoints.push_back(corner);
+                const Vec3 ray = corner - lightPosition;
+                if (lightPosition.y > receiverY + 0.1f && ray.y < -0.05f)
+                {
+                    const float t = std::clamp((receiverY - lightPosition.y) / ray.y, 1.0f, 2.2f);
+                    vFocusPoints.push_back(lightPosition + ray * t);
+                }
+            }
+        }
+
+        if (vFocusPoints.empty())
+        {
+            shadowCamera.target = lightComp.m_Light.m_Target;
+            if ((shadowCamera.position - shadowCamera.target).length() <= 0.000001f)
+            {
+                shadowCamera.target = sceneCenter;
+                if ((shadowCamera.position - shadowCamera.target).length() <= 0.000001f)
+                {
+                    shadowCamera.target = shadowCamera.position + Vec3{ 0.0f, -1.0f, 0.0f };
+                }
+            }
+            const Vec3 lookDir = (shadowCamera.target - shadowCamera.position).normalized();
+            shadowCamera.up = (std::fabs(lookDir.y) > 0.98f)
+                ? Vec3{ 0.0f, 0.0f, -1.0f }
+                : Vec3{ 0.0f, 1.0f, 0.0f };
+            shadowCamera.fovy = 65.0f;
+            return;
+        }
+
+        Vec3 dirSum = { 0.0f, 0.0f, 0.0f };
+        Vec3 pointSum = { 0.0f, 0.0f, 0.0f };
+        int validCount = 0;
+        for (const Vec3& pt : vFocusPoints)
+        {
+            const Vec3 toPt = pt - lightPosition;
+            const float dist = toPt.length();
+            if (dist > 0.001f)
+            {
+                dirSum = dirSum + (toPt / dist);
+                pointSum = pointSum + pt;
+                ++validCount;
+            }
+        }
+
+        Vec3 forward = (validCount > 0 && dirSum.length() > 0.001f)
+            ? dirSum.normalized()
+            : Vec3{ 0.0f, -1.0f, 0.0f };
+        shadowCamera.target = (validCount > 0)
+            ? (pointSum * (1.0f / static_cast<float>(validCount)))
+            : (lightPosition + forward);
+        if ((shadowCamera.target - lightPosition).length() <= 0.001f)
+        {
+            shadowCamera.target = lightPosition + forward;
+        }
+        forward = (shadowCamera.target - lightPosition).normalized();
+
+        shadowCamera.up = (std::fabs(forward.y) > 0.98f)
+            ? Vec3{ 0.0f, 0.0f, -1.0f }
+            : Vec3{ 0.0f, 1.0f, 0.0f };
+        const Vec3 right = forward.cross(shadowCamera.up).normalized();
+        const Vec3 up = right.cross(forward).normalized();
+
+        float maxTanHalfAngle = std::tan(27.5f * DEG2RAD);
+        for (const Vec3& pt : vFocusPoints)
+        {
+            const Vec3 rel = pt - lightPosition;
+            const float z = rel.dot(forward);
+            if (z <= 0.1f)
+            {
+                continue;
+            }
+            const float tanX = std::fabs(rel.dot(right)) / z;
+            const float tanY = std::fabs(rel.dot(up)) / z;
+            maxTanHalfAngle = std::max(maxTanHalfAngle, std::max(tanX, tanY));
+        }
+
+        const float requiredFovDeg = 2.0f * std::atan(maxTanHalfAngle * 1.18f) * RAD2DEG;
+        shadowCamera.fovy = std::clamp(requiredFovDeg, 55.0f, 92.0f);
+    }
+
     void RenderSceneShadowMaps(CScene& scene, Shader shadowShader,
                                std::array<RenderTexture2D, QC_MAX_LIGHTS>& aShadowMaps,
                                std::array<Camera3D, QC_MAX_LIGHTS>& aShadowCameras,
@@ -333,16 +509,8 @@ namespace
             }
             const int lightEntityIndex = static_cast<int>(&entity - scene.m_vEntities.data());
             const Mat4& lightTransform = vFrameData[lightEntityIndex].m_WorldTransform;
-            aShadowCameras[slot].position = Vec3(lightTransform * Vec3{ 0.0f, 0.0f, 0.0f });
-            aShadowCameras[slot].target = pLight->m_Light.m_Target;
-            if ((aShadowCameras[slot].position - aShadowCameras[slot].target).length() <= 0.000001f)
-            {
-                aShadowCameras[slot].target = sceneCenter;
-                if ((aShadowCameras[slot].position - aShadowCameras[slot].target).length() <= 0.000001f)
-                {
-                    aShadowCameras[slot].target = aShadowCameras[slot].position + Vec3{ 0.0f, -1.0f, 0.0f };
-                }
-            }
+            const Vec3 lightWorldPos = Vec3(lightTransform * Vec3{ 0.0f, 0.0f, 0.0f });
+            ConfigureShadowCameraForLight(scene, vFrameData, *pLight, lightWorldPos, sceneCenter, aShadowCameras[slot]);
             aRendered[slot] = true;
 
             BeginTextureMode(aShadowMaps[slot]);
@@ -1022,6 +1190,7 @@ void CSceneRenderer::RenderSceneMeshes(CScene& scene, const Camera3D& camera, fl
 
     m_LastBatchStats.m_SubmittedCommands = static_cast<int>(m_vRenderCommands.size());
     m_LastUseTexState = -1;
+    EnableBackfaceCulling();
     bool backfaceCullingDisabled = false;
 
     BeginLightingPass();
@@ -1105,9 +1274,9 @@ void CSceneRenderer::RenderSceneMeshes(CScene& scene, const Camera3D& camera, fl
         index = batchEnd;
     }
 
-    if (backfaceCullingDisabled)
+    if (!backfaceCullingDisabled)
     {
-        EnableBackfaceCulling();
+        DisableBackfaceCulling();
     }
 
     EndLightingPass();

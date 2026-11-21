@@ -48,9 +48,17 @@ namespace quark::physics
         bool m_HasContact = false;
     };
 
+    struct SInertiaTensorInfo
+    {
+        Vec3 m_Diagonal = { 1.0f, 1.0f, 1.0f };
+        Vec3 m_RotationDeg = { 0.0f, 0.0f, 0.0f };
+    };
+
     class CPhysicsWorld
     {
     public:
+        static SInertiaTensorInfo ComputeInertiaTensor(const CEntity& entity, float mass);
+
         void Reset();
         void SyncBeforeFixedSteps(CScene& scene);
         void Step(CScene& scene, float fixedDeltaTime, std::vector<SPhysicsEvent>& vOutEvents);
@@ -75,20 +83,44 @@ namespace quark::physics
         }
 
     private:
+        struct STriangle
+        {
+            Vec3 m_V0 = { 0.0f, 0.0f, 0.0f };
+            Vec3 m_V1 = { 0.0f, 0.0f, 0.0f };
+            Vec3 m_V2 = { 0.0f, 0.0f, 0.0f };
+            Vec3 m_Normal = { 0.0f, 1.0f, 0.0f };
+            BoundingBox m_Bounds{};
+        };
+
         struct SWorldCollider
         {
             int m_EntityIndex = -1;
             int m_EntityId = -1;
             EColliderType m_Type = COLLIDER_BOX;
             bool m_IsTrigger = false;
+            bool m_Convex = false;
             Vec3 m_Center = { 0.0f, 0.0f, 0.0f };
             Vec3 m_BoxMin = { 0.0f, 0.0f, 0.0f };
             Vec3 m_BoxMax = { 0.0f, 0.0f, 0.0f };
+            Vec3 m_BoxAxisX = { 0.5f, 0.0f, 0.0f };
+            Vec3 m_BoxAxisY = { 0.0f, 0.5f, 0.0f };
+            Vec3 m_BoxAxisZ = { 0.0f, 0.0f, 0.5f };
             Vec3 m_SegmentA = { 0.0f, 0.0f, 0.0f };
             Vec3 m_SegmentB = { 0.0f, 0.0f, 0.0f };
             float m_Radius = 0.5f;
             BoundingBox m_BroadphaseBounds{};
+            std::vector<STriangle> m_vTriangles;
+            std::vector<Vec3> m_vConvexVertices;
         };
+
+        bool RaycastInternal(const CScene& scene,
+                             const Vec3& origin,
+                             const Vec3& direction,
+                             float maxDistance,
+                             SPhysicsRaycastHit& outHit,
+                             bool includeTriggers,
+                             int ignoreEntityId,
+                             bool staticOnly) const;
 
         static SWorldCollider BuildWorldCollider(const CScene& scene, int entityIndex,
                                                  const CCollisionComponent& collider);

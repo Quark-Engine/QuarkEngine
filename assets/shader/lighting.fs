@@ -50,8 +50,13 @@ float unpackDepth24(vec3 rgb)
 
 float shadow_factor(int lightIndex, vec3 worldPosition, vec3 normal, vec3 lightDir)
 {
+    float NdotL = clamp(dot(normal, lightDir), 0.0, 1.0);
+    float sinTheta = sqrt(max(1.0 - NdotL * NdotL, 0.0));
+    float baseBias = max(shadowBias, 0.0005);
+    vec3 shadowWorldPos = worldPosition + normal * (baseBias * 14.0 * sinTheta);
+
     vec4 lightSpacePosition = lightProjections[lightIndex] * lightViews[lightIndex]
-        * vec4(worldPosition, 1.0);
+        * vec4(shadowWorldPos, 1.0);
     if (lightSpacePosition.w <= 0.0) return 0.0;
 
     vec3 projected = lightSpacePosition.xyz / lightSpacePosition.w;
@@ -62,28 +67,36 @@ float shadow_factor(int lightIndex, vec3 worldPosition, vec3 normal, vec3 lightD
         return 0.0;
 
     float currentDepth = lightSpacePosition.w;
-    float NdotL = clamp(dot(normal, lightDir), 0.0, 1.0);
-    float bias = currentDepth * max(shadowBias, 0.0005) * (1.0 + 2.0 * (1.0 - NdotL)) + 0.01;
+    float bias = currentDepth * baseBias * (1.0 + 3.0 * (1.0 - NdotL)) + 0.012;
     ivec2 mapSize = textureSize(shadowMaps[lightIndex], 0);
-    ivec2 baseTexel = ivec2(projected.xy * vec2(mapSize));
+    vec2 texelCoord = projected.xy * vec2(mapSize) - vec2(0.5);
+    ivec2 baseTexel = ivec2(floor(texelCoord));
+    vec2 fracCoord = texelCoord - vec2(baseTexel);
     float shadow = 0.0;
 
     int radius = shadowFilterQuality == 0 ? 0 : shadowFilterQuality == 1 ? 1 : 2;
-    int samples = 0;
-    for (int x = -2; x <= 2; x++)
+    int sampleWidth = radius * 2 + 1;
+    float totalWeight = float(sampleWidth * sampleWidth);
+    for (int x = -2; x <= 3; x++)
     {
-        for (int y = -2; y <= 2; y++)
+        if (x < -radius || x > radius + 1) continue;
+        float wx = (x == -radius) ? (1.0 - fracCoord.x) : ((x == radius + 1) ? fracCoord.x : 1.0);
+        for (int y = -2; y <= 3; y++)
         {
-            if (abs(x) > radius || abs(y) > radius) continue;
+            if (y < -radius || y > radius + 1) continue;
+            float wy = (y == -radius) ? (1.0 - fracCoord.y) : ((y == radius + 1) ? fracCoord.y : 1.0);
             ivec2 texel = clamp(baseTexel + ivec2(x, y), ivec2(0), mapSize - 1);
             float closestDepth = unpackDepth24(texelFetch(shadowMaps[lightIndex], texel, 0).rgb);
 
-            shadow += currentDepth - bias > closestDepth ? 1.0 : 0.0;
-            samples++;
+            shadow += (currentDepth - bias > closestDepth ? 1.0 : 0.0) * (wx * wy);
         }
     }
 
-    return samples > 0 ? shadow / float(samples) : 0.0;
+    float edgeFade = smoothstep(0.0, 0.05, projected.x) *
+                     smoothstep(1.0, 0.95, projected.x) *
+                     smoothstep(0.0, 0.05, projected.y) *
+                     smoothstep(1.0, 0.95, projected.y);
+    return totalWeight > 0.0 ? (shadow / totalWeight) * edgeFade : 0.0;
 }
 
 void main()
