@@ -662,6 +662,12 @@ if(BUILD_ENGINE)
                 COMMAND ${CMAKE_COMMAND} -E copy_if_different
                     $<TARGET_FILE:SPIRV_Tools_opt_lib>
                     $<TARGET_FILE_DIR:${PROJECT_NAME}>
+                COMMAND ${CMAKE_COMMAND} -E copy_if_different
+                    $<TARGET_FILE:SPIRV_Tools_lib>
+                    "$<TARGET_FILE_DIR:${PROJECT_NAME}>/SPIRV-Tools.dll"
+                COMMAND ${CMAKE_COMMAND} -E copy_if_different
+                    $<TARGET_FILE:SPIRV_Tools_opt_lib>
+                    "$<TARGET_FILE_DIR:${PROJECT_NAME}>/SPIRV-Tools-opt.dll"
             )
         endif()
         if(TARGET CURL::libcurl)
@@ -819,6 +825,12 @@ if(QUARK_BUILD_TESTS)
                 COMMAND ${CMAKE_COMMAND} -E copy_if_different
                     $<TARGET_FILE:SPIRV_Tools_opt_lib>
                     $<TARGET_FILE_DIR:QuarkEngineTests>
+                COMMAND ${CMAKE_COMMAND} -E copy_if_different
+                    $<TARGET_FILE:SPIRV_Tools_lib>
+                    "$<TARGET_FILE_DIR:QuarkEngineTests>/SPIRV-Tools.dll"
+                COMMAND ${CMAKE_COMMAND} -E copy_if_different
+                    $<TARGET_FILE:SPIRV_Tools_opt_lib>
+                    "$<TARGET_FILE_DIR:QuarkEngineTests>/SPIRV-Tools-opt.dll"
             )
         endif()
         if(TARGET CURL::libcurl)
