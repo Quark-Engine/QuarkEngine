@@ -260,6 +260,7 @@ target_precompile_headers(QuarkEngineRuntime PRIVATE
 set_target_properties(QuarkEngineRuntime PROPERTIES
     PREFIX ""
     OUTPUT_NAME "QuarkEngine"
+    PDB_NAME "QuarkEngineRuntime"
     ARCHIVE_OUTPUT_NAME "QuarkEngineRuntime"
     WINDOWS_EXPORT_ALL_SYMBOLS ON
     RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/bin/$<CONFIG>

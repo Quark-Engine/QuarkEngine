@@ -233,3 +233,25 @@ TEST(Physics, RigidbodySerializationRoundTrip)
     CHECK(!restored.m_FreezePositionY);
     CHECK(restored.m_FreezePositionZ);
 }
+
+TEST(Physics, ThinPlatformDoesNotSinkLikeQuicksand)
+{
+    CScene scene;
+    CEntity& platform = AddBoxEntity(scene, "ThinPlatform", { 0.0f, -0.5f, 0.0f }, { 1.0f, 1.0f, 1.0f });
+    platform.GetTransformComponent()->m_Scale = { 3.855f, 0.001f, 3.844f };
+
+    CEntity& cube = AddBoxEntity(scene, "Cube", { 0.0f, 2.937f, 0.0f }, { 1.0f, 1.0f, 1.0f });
+    auto pBody = std::make_shared<CRigidbodyComponent>();
+    pBody->m_Restitution = 0.2f;
+    cube.GetComponents()->AddComponent(pBody);
+
+    quark::physics::CPhysicsWorld world;
+    std::vector<quark::physics::SPhysicsEvent> vEvents;
+    for (int step = 0; step < 300; ++step)
+    {
+        world.Step(scene, 0.02f, vEvents);
+    }
+
+    CHECK(scene.m_vEntities[1].GetRigidbodyComponent()->m_IsGrounded);
+    CHECK_NEAR(scene.m_vEntities[1].GetTransformComponent()->m_Position.y, 0.0005f, 0.01f);
+}

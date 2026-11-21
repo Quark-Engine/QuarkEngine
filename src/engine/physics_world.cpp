@@ -136,40 +136,42 @@ namespace quark::physics
                                     const Vec3& minB, const Vec3& maxB)
         {
             SContactManifold manifold;
-            const float overlapX = std::min(maxA.x, maxB.x) - std::max(minA.x, minB.x);
-            if (overlapX <= 0.0f)
-            {
-                return manifold;
-            }
-            const float overlapY = std::min(maxA.y, maxB.y) - std::max(minA.y, minB.y);
-            if (overlapY <= 0.0f)
-            {
-                return manifold;
-            }
-            const float overlapZ = std::min(maxA.z, maxB.z) - std::max(minA.z, minB.z);
-            if (overlapZ <= 0.0f)
+            if (maxA.x <= minB.x || maxB.x <= minA.x ||
+                maxA.y <= minB.y || maxB.y <= minA.y ||
+                maxA.z <= minB.z || maxB.z <= minA.z)
             {
                 return manifold;
             }
 
-            const Vec3 centerA = (minA + maxA) * 0.5f;
-            const Vec3 centerB = (minB + maxB) * 0.5f;
-            const Vec3 delta = centerB - centerA;
+            const float penPosX = maxB.x - minA.x;
+            const float penNegX = maxA.x - minB.x;
+            const float sepX = std::min(penPosX, penNegX);
+            const float signX = (penNegX <= penPosX) ? 1.0f : -1.0f;
 
-            if (overlapX <= overlapY && overlapX <= overlapZ)
+            const float penPosY = maxB.y - minA.y;
+            const float penNegY = maxA.y - minB.y;
+            const float sepY = std::min(penPosY, penNegY);
+            const float signY = (penNegY <= penPosY) ? 1.0f : -1.0f;
+
+            const float penPosZ = maxB.z - minA.z;
+            const float penNegZ = maxA.z - minB.z;
+            const float sepZ = std::min(penPosZ, penNegZ);
+            const float signZ = (penNegZ <= penPosZ) ? 1.0f : -1.0f;
+
+            if (sepX <= sepY && sepX <= sepZ)
             {
-                manifold.m_Normal = { delta.x >= 0.0f ? 1.0f : -1.0f, 0.0f, 0.0f };
-                manifold.m_Penetration = overlapX;
+                manifold.m_Normal = { signX, 0.0f, 0.0f };
+                manifold.m_Penetration = sepX;
             }
-            else if (overlapY <= overlapX && overlapY <= overlapZ)
+            else if (sepY <= sepX && sepY <= sepZ)
             {
-                manifold.m_Normal = { 0.0f, delta.y >= 0.0f ? 1.0f : -1.0f, 0.0f };
-                manifold.m_Penetration = overlapY;
+                manifold.m_Normal = { 0.0f, signY, 0.0f };
+                manifold.m_Penetration = sepY;
             }
             else
             {
-                manifold.m_Normal = { 0.0f, 0.0f, delta.z >= 0.0f ? 1.0f : -1.0f };
-                manifold.m_Penetration = overlapZ;
+                manifold.m_Normal = { 0.0f, 0.0f, signZ };
+                manifold.m_Penetration = sepZ;
             }
 
             manifold.m_Point = {
@@ -735,9 +737,9 @@ namespace quark::physics
                     pBodyB->m_IsGrounded = true;
                 }
 
-                constexpr float SLOP = 0.002f;
-                constexpr float CORRECTION_PERCENT = 0.8f;
-                const float corrMag = std::max(manifold.m_Penetration - SLOP, 0.0f) * CORRECTION_PERCENT / invMassSum;
+                constexpr float SLOP = 0.0001f;
+                const float correctionPercent = (invMassA == 0.0f || invMassB == 0.0f) ? 1.0f : 0.9f;
+                const float corrMag = std::max(manifold.m_Penetration - SLOP, 0.0f) * correctionPercent / invMassSum;
                 if (corrMag > 0.0f)
                 {
                     if (invMassA > 0.0f)
