@@ -821,6 +821,21 @@ if(QUARK_BUILD_TESTS)
                     $<TARGET_FILE_DIR:QuarkEngineTests>
             )
         endif()
+        if(TARGET CURL::libcurl)
+            add_custom_command(TARGET QuarkEngineTests POST_BUILD
+                COMMAND ${CMAKE_COMMAND} -E copy_if_different
+                    "$<TARGET_FILE:CURL::libcurl>"
+                    $<TARGET_FILE_DIR:QuarkEngineTests>
+            )
+        endif()
+        if(TARGET OpenSSL::SSL)
+            add_custom_command(TARGET QuarkEngineTests POST_BUILD
+                COMMAND ${CMAKE_COMMAND} -E copy_if_different
+                    "$<TARGET_FILE:OpenSSL::SSL>"
+                    "$<TARGET_FILE:OpenSSL::Crypto>"
+                    $<TARGET_FILE_DIR:QuarkEngineTests>
+            )
+        endif()
     elseif(UNIX)
         add_custom_command(TARGET QuarkEngineTests POST_BUILD
             COMMAND ${CMAKE_COMMAND} -E copy_if_different
