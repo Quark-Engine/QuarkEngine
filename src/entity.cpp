@@ -81,6 +81,8 @@ const char* ObjectTypeName(EObjectType type)
             return "Hemisphere";
         case OBJECT_TORUS:
             return "Torus";
+        case OBJECT_CAPSULE:
+            return "Capsule";
         default:
             return "Cube";
     }

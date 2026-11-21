@@ -52,7 +52,9 @@ namespace quark::physics
     {
     public:
         void Reset();
+        void SyncBeforeFixedSteps(CScene& scene);
         void Step(CScene& scene, float fixedDeltaTime, std::vector<SPhysicsEvent>& vOutEvents);
+        void ApplyInterpolation(CScene& scene, float alpha, float remainderTime);
 
         bool Raycast(const CScene& scene,
                      const Vec3& origin,

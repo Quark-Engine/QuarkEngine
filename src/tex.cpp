@@ -447,7 +447,7 @@ void DrawCollisionDebug(CEntity& entity, const Mat4& worldTransform, const CPref
     CCollisionComponent* pCollision = entity.GetCollisionComponent();
     CMeshComponent* pMeshComponent = entity.GetMeshComponent();
 
-    if (!pCollision || !pCollision->m_Visualize || !preferences.m_ShowColliders)
+    if (!pCollision || !pCollision->m_Enabled || !pCollision->m_Visualize)
     {
         return;
     }
@@ -482,26 +482,32 @@ void DrawCollisionDebug(CEntity& entity, const Mat4& worldTransform, const CPref
 
         case COLLIDER_CAPSULE:
         {
-            float r = pCollision->m_Radius;
-            float h = pCollision->m_Height;
+            const float r = pCollision->m_Radius;
+            const float h = pCollision->m_Height;
+            const float cylinderH = std::max(0.0f, h - r * 2.0f);
 
-            float cylinderH = std::max(0.0f, h - r * 2.0f);
-
+            PushMatrix();
+            if (pCollision->m_Direction == ECapsuleDirection::X_AXIS)
+            {
+                MultMatrix(Mat4::rotationZ(90.0f * DEG2RAD));
+            }
+            else if (pCollision->m_Direction == ECapsuleDirection::Z_AXIS)
+            {
+                MultMatrix(Mat4::rotationX(90.0f * DEG2RAD));
+            }
             DrawCylinderWires({ 0, 0, 0 }, r, r, cylinderH, 16, lineColor);
-
             DrawSphereWires({ 0, cylinderH * 0.5f, 0 }, r, 12, 12, lineColor);
             DrawSphereWires({ 0, -cylinderH * 0.5f, 0 }, r, 12, 12, lineColor);
+            PopMatrix();
             break;
         }
 
         case COLLIDER_MESH:
         {
-            if (!pMeshComponent)
+            if (pMeshComponent && pMeshComponent->m_Model.meshCount > 0)
             {
-                break;
+                DrawModelWires(pMeshComponent->m_Model, { 0, 0, 0 }, 1.0f, lineColor);
             }
-
-            DrawModelWires(pMeshComponent->m_Model, { 0, 0, 0 }, 1.0f, lineColor);
             break;
         }
     }

@@ -176,10 +176,14 @@ void CCollisionComponent::Serialize(nlohmann::json& json) const
 {
     json["collider_type"] = static_cast<int>(m_ColliderType);
     json["is_trigger"] = m_IsTrigger;
+    json["provides_contacts"] = m_ProvidesContacts;
+    json["material_preset"] = static_cast<int>(m_MaterialPreset);
 
     json["size"] = { m_Size.x, m_Size.y, m_Size.z };
     json["radius"] = m_Radius;
     json["height"] = m_Height;
+    json["direction"] = static_cast<int>(m_Direction);
+    json["convex"] = m_Convex;
 
     json["center"] = { m_Center.x, m_Center.y, m_Center.z };
 }
@@ -188,11 +192,21 @@ void CCollisionComponent::Deserialize(const nlohmann::json& json)
 {
     if (json.contains("collider_type"))
     {
-        m_ColliderType = static_cast<EColliderType>(json["collider_type"].get<int>());
+        const int typeVal = std::clamp(json["collider_type"].get<int>(), 0, static_cast<int>(COLLIDER_MESH));
+        m_ColliderType = static_cast<EColliderType>(typeVal);
     }
     if (json.contains("is_trigger"))
     {
         m_IsTrigger = json["is_trigger"];
+    }
+    if (json.contains("provides_contacts"))
+    {
+        m_ProvidesContacts = json["provides_contacts"].get<bool>();
+    }
+    if (json.contains("material_preset"))
+    {
+        const int presetVal = std::clamp(json["material_preset"].get<int>(), 0, static_cast<int>(EPhysicMaterialPreset::METAL));
+        m_MaterialPreset = static_cast<EPhysicMaterialPreset>(presetVal);
     }
 
     if (json.contains("size"))
@@ -208,6 +222,15 @@ void CCollisionComponent::Deserialize(const nlohmann::json& json)
     if (json.contains("height"))
     {
         m_Height = json["height"];
+    }
+    if (json.contains("direction"))
+    {
+        const int dirVal = std::clamp(json["direction"].get<int>(), 0, 2);
+        m_Direction = static_cast<ECapsuleDirection>(dirVal);
+    }
+    if (json.contains("convex"))
+    {
+        m_Convex = json["convex"].get<bool>();
     }
 
     if (json.contains("center"))
@@ -228,13 +251,20 @@ void CRigidbodyComponent::Serialize(nlohmann::json& json) const
 {
     json["mass"] = m_Mass;
     json["linear_drag"] = m_LinearDrag;
+    json["angular_drag"] = m_AngularDrag;
     json["friction"] = m_Friction;
     json["restitution"] = m_Restitution;
     json["use_gravity"] = m_UseGravity;
+    json["gravity_scale"] = m_GravityScale;
     json["is_kinematic"] = m_IsKinematic;
+    json["interpolate"] = static_cast<int>(m_Interpolate);
+    json["collision_detection"] = static_cast<int>(m_CollisionDetection);
     json["freeze_position_x"] = m_FreezePositionX;
     json["freeze_position_y"] = m_FreezePositionY;
     json["freeze_position_z"] = m_FreezePositionZ;
+    json["freeze_rotation_x"] = m_FreezeRotationX;
+    json["freeze_rotation_y"] = m_FreezeRotationY;
+    json["freeze_rotation_z"] = m_FreezeRotationZ;
 }
 
 void CRigidbodyComponent::Deserialize(const nlohmann::json& json)
@@ -246,6 +276,10 @@ void CRigidbodyComponent::Deserialize(const nlohmann::json& json)
     if (json.contains("linear_drag"))
     {
         m_LinearDrag = std::max(0.0f, json["linear_drag"].get<float>());
+    }
+    if (json.contains("angular_drag"))
+    {
+        m_AngularDrag = std::max(0.0f, json["angular_drag"].get<float>());
     }
     if (json.contains("friction"))
     {
@@ -259,9 +293,23 @@ void CRigidbodyComponent::Deserialize(const nlohmann::json& json)
     {
         m_UseGravity = json["use_gravity"].get<bool>();
     }
+    if (json.contains("gravity_scale"))
+    {
+        m_GravityScale = json["gravity_scale"].get<float>();
+    }
     if (json.contains("is_kinematic"))
     {
         m_IsKinematic = json["is_kinematic"].get<bool>();
+    }
+    if (json.contains("interpolate"))
+    {
+        const int mode = std::clamp(json["interpolate"].get<int>(), 0, 2);
+        m_Interpolate = static_cast<ERigidbodyInterpolate>(mode);
+    }
+    if (json.contains("collision_detection"))
+    {
+        const int mode = std::clamp(json["collision_detection"].get<int>(), 0, 3);
+        m_CollisionDetection = static_cast<ECollisionDetectionMode>(mode);
     }
     if (json.contains("freeze_position_x"))
     {
@@ -274,6 +322,18 @@ void CRigidbodyComponent::Deserialize(const nlohmann::json& json)
     if (json.contains("freeze_position_z"))
     {
         m_FreezePositionZ = json["freeze_position_z"].get<bool>();
+    }
+    if (json.contains("freeze_rotation_x"))
+    {
+        m_FreezeRotationX = json["freeze_rotation_x"].get<bool>();
+    }
+    if (json.contains("freeze_rotation_y"))
+    {
+        m_FreezeRotationY = json["freeze_rotation_y"].get<bool>();
+    }
+    if (json.contains("freeze_rotation_z"))
+    {
+        m_FreezeRotationZ = json["freeze_rotation_z"].get<bool>();
     }
     ResetRuntimeState();
 }

@@ -1112,8 +1112,7 @@ void CSceneRenderer::RenderSceneMeshes(CScene& scene, const Camera3D& camera, fl
 
     EndLightingPass();
 
-    if (drawEditorOverlays && pPreferences &&
-        (pPreferences->m_WireframeEnabled || pPreferences->m_ShowColliders))
+    if (drawEditorOverlays && pPreferences)
     {
         const Color wireframeColor = {
             static_cast<unsigned char>(pPreferences->m_WireframeRed),
@@ -1124,27 +1123,28 @@ void CSceneRenderer::RenderSceneMeshes(CScene& scene, const Camera3D& camera, fl
         for (int entityIndex = 0; entityIndex < entityCount; ++entityIndex)
         {
             CEntity& entity = scene.m_vEntities[entityIndex];
-            CMeshComponent* pMeshComp = entity.GetMeshComponent();
             CTransformComponent* pTransform = entity.GetTransformComponent();
-            CMaterialComponent* pMatComp = entity.GetMaterialComponent();
-            if (!pMeshComp || !pMeshComp->m_Enabled || !pTransform)
-            {
-                continue;
-            }
-            if (!IsMeshVisible(entityIndex, camera, aspectRatio))
+            if (!pTransform)
             {
                 continue;
             }
 
             const Mat4& worldTransform = GetCachedWorldTransform(entityIndex);
-            if (pPreferences->m_WireframeEnabled && pMatComp && pMatComp->m_OutlineColor.a > 0)
+            CMeshComponent* pMeshComp = entity.GetMeshComponent();
+            CMaterialComponent* pMatComp = entity.GetMaterialComponent();
+            if (pPreferences->m_WireframeEnabled &&
+                pMeshComp && pMeshComp->m_Enabled &&
+                pMatComp && pMatComp->m_OutlineColor.a > 0 &&
+                IsMeshVisible(entityIndex, camera, aspectRatio))
             {
                 PushMatrix();
                 MultMatrix(worldTransform);
                 DrawModelWires(pMeshComp->m_Model, { 0, 0, 0 }, 1.0f, wireframeColor);
                 PopMatrix();
             }
-            if (pPreferences->m_ShowColliders)
+
+            const CCollisionComponent* pCollision = entity.GetCollisionComponent();
+            if (pCollision && pCollision->m_Enabled && pCollision->m_Visualize)
             {
                 DrawCollisionDebug(entity, worldTransform, *pPreferences);
             }

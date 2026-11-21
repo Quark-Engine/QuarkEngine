@@ -209,13 +209,19 @@ TEST(Physics, RigidbodySerializationRoundTrip)
     CRigidbodyComponent original;
     original.m_Mass = 4.5f;
     original.m_LinearDrag = 0.25f;
+    original.m_AngularDrag = 12.5f;
     original.m_Friction = 0.7f;
     original.m_Restitution = 0.4f;
     original.m_UseGravity = false;
     original.m_IsKinematic = true;
+    original.m_Interpolate = ERigidbodyInterpolate::INTERPOLATE;
+    original.m_CollisionDetection = ECollisionDetectionMode::CONTINUOUS_DYNAMIC;
     original.m_FreezePositionX = true;
     original.m_FreezePositionY = false;
     original.m_FreezePositionZ = true;
+    original.m_FreezeRotationX = true;
+    original.m_FreezeRotationY = false;
+    original.m_FreezeRotationZ = true;
 
     nlohmann::json data;
     original.Serialize(data);
@@ -225,13 +231,19 @@ TEST(Physics, RigidbodySerializationRoundTrip)
 
     CHECK_NEAR(restored.m_Mass, 4.5f, 0.001f);
     CHECK_NEAR(restored.m_LinearDrag, 0.25f, 0.001f);
+    CHECK_NEAR(restored.m_AngularDrag, 12.5f, 0.001f);
     CHECK_NEAR(restored.m_Friction, 0.7f, 0.001f);
     CHECK_NEAR(restored.m_Restitution, 0.4f, 0.001f);
     CHECK(!restored.m_UseGravity);
     CHECK(restored.m_IsKinematic);
+    CHECK(restored.m_Interpolate == ERigidbodyInterpolate::INTERPOLATE);
+    CHECK(restored.m_CollisionDetection == ECollisionDetectionMode::CONTINUOUS_DYNAMIC);
     CHECK(restored.m_FreezePositionX);
     CHECK(!restored.m_FreezePositionY);
     CHECK(restored.m_FreezePositionZ);
+    CHECK(restored.m_FreezeRotationX);
+    CHECK(!restored.m_FreezeRotationY);
+    CHECK(restored.m_FreezeRotationZ);
 }
 
 TEST(Physics, ThinPlatformDoesNotSinkLikeQuicksand)
@@ -254,4 +266,86 @@ TEST(Physics, ThinPlatformDoesNotSinkLikeQuicksand)
 
     CHECK(scene.m_vEntities[1].GetRigidbodyComponent()->m_IsGrounded);
     CHECK_NEAR(scene.m_vEntities[1].GetTransformComponent()->m_Position.y, 0.0005f, 0.01f);
+}
+
+TEST(Physics, ContinuousCollisionPreventsTunnelingThroughThinWall)
+{
+    CScene scene;
+    AddBoxEntity(scene, "ThinWall", { 2.0f, 0.0f, 0.0f }, { 0.02f, 10.0f, 10.0f });
+
+    CEntity& bullet = AddBoxEntity(scene, "Bullet", { 0.0f, 0.0f, 0.0f }, { 0.2f, 0.2f, 0.2f });
+    auto pBody = std::make_shared<CRigidbodyComponent>();
+    pBody->m_UseGravity = false;
+    pBody->m_LinearDrag = 0.0f;
+    pBody->m_Restitution = 0.0f;
+    pBody->m_CollisionDetection = ECollisionDetectionMode::CONTINUOUS;
+    pBody->m_Velocity = { 150.0f, 0.0f, 0.0f };
+    bullet.GetComponents()->AddComponent(pBody);
+
+    quark::physics::CPhysicsWorld world;
+    std::vector<quark::physics::SPhysicsEvent> vEvents;
+    world.Step(scene, 0.02f, vEvents);
+
+    CHECK(scene.m_vEntities[1].GetTransformComponent()->m_Position.x < 2.0f);
+    CHECK(!vEvents.empty());
+}
+
+TEST(Physics, AngularDynamicsDragAndFreezeRotation)
+{
+    CScene scene;
+    CEntity& spinner = AddBoxEntity(scene, "Spinner", { 0.0f, 5.0f, 0.0f }, { 1.0f, 1.0f, 1.0f });
+    auto pBody = std::make_shared<CRigidbodyComponent>();
+    pBody->m_UseGravity = false;
+    pBody->m_AngularDrag = 2.0f;
+    pBody->m_FreezeRotationX = true;
+    pBody->m_FreezeRotationY = false;
+    pBody->m_FreezeRotationZ = true;
+    pBody->AddTorque({ 10.0f, 10.0f, 10.0f });
+    spinner.GetComponents()->AddComponent(pBody);
+
+    quark::physics::CPhysicsWorld world;
+    std::vector<quark::physics::SPhysicsEvent> vEvents;
+    world.Step(scene, 0.02f, vEvents);
+
+    const CRigidbodyComponent* pResultBody = scene.m_vEntities[0].GetRigidbodyComponent();
+    const CTransformComponent* pResultTransform = scene.m_vEntities[0].GetTransformComponent();
+    CHECK_NEAR(pResultBody->m_AngularVelocity.x, 0.0f, 0.0001f);
+    CHECK(pResultBody->m_AngularVelocity.y > 0.1f);
+    CHECK_NEAR(pResultBody->m_AngularVelocity.z, 0.0f, 0.0001f);
+    CHECK(pResultTransform->m_Rotation.y > 0.0f);
+
+    const float initialYawSpeed = pResultBody->m_AngularVelocity.y;
+    for (int i = 0; i < 20; ++i)
+    {
+        world.Step(scene, 0.02f, vEvents);
+    }
+    CHECK(scene.m_vEntities[0].GetRigidbodyComponent()->m_AngularVelocity.y < initialYawSpeed);
+}
+
+TEST(Physics, InterpolationAndExtrapolationSmoothMotion)
+{
+    CScene scene;
+    CEntity& interpEntity = AddBoxEntity(scene, "Interp", { 0.0f, 0.0f, 0.0f }, { 1.0f, 1.0f, 1.0f });
+    auto pInterpBody = std::make_shared<CRigidbodyComponent>();
+    pInterpBody->m_UseGravity = false;
+    pInterpBody->m_LinearDrag = 0.0f;
+    pInterpBody->m_Interpolate = ERigidbodyInterpolate::INTERPOLATE;
+    pInterpBody->m_Velocity = { 10.0f, 0.0f, 0.0f };
+    interpEntity.GetComponents()->AddComponent(pInterpBody);
+
+    CEntity& extrapEntity = AddBoxEntity(scene, "Extrap", { 0.0f, 5.0f, 0.0f }, { 1.0f, 1.0f, 1.0f });
+    auto pExtrapBody = std::make_shared<CRigidbodyComponent>();
+    pExtrapBody->m_UseGravity = false;
+    pExtrapBody->m_LinearDrag = 0.0f;
+    pExtrapBody->m_Interpolate = ERigidbodyInterpolate::EXTRAPOLATE;
+    pExtrapBody->m_Velocity = { 10.0f, 0.0f, 0.0f };
+    extrapEntity.GetComponents()->AddComponent(pExtrapBody);
+
+    quark::physics::CPhysicsWorld world;
+    std::vector<quark::physics::SPhysicsEvent> vEvents;
+    world.Step(scene, 0.02f, vEvents);
+
+    world.ApplyInterpolation(scene, 0.5f, 0.01f);
+    CHECK_NEAR(scene.m_vEntities[0].GetTransformComponent()->m_Position.x, 0.1f, 0.001f);
+    CHECK_NEAR(scene.m_vEntities[1].GetTransformComponent()->m_Position.x, 0.3f, 0.001f);
 }

@@ -465,6 +465,95 @@ namespace quark::physics
                 pBody->m_FreezePositionZ ? 0.0f : v.z
             };
         }
+
+        Vec3 FilterFrozenRotationAxes(const Vec3& v, const CRigidbodyComponent* pBody)
+        {
+            if (!pBody)
+            {
+                return v;
+            }
+            return {
+                pBody->m_FreezeRotationX ? 0.0f : v.x,
+                pBody->m_FreezeRotationY ? 0.0f : v.y,
+                pBody->m_FreezeRotationZ ? 0.0f : v.z
+            };
+        }
+
+        Vec3 ComputeInverseInertia(const CEntity& entity, const CRigidbodyComponent* pBody)
+        {
+            if (!pBody || !pBody->m_Enabled || pBody->m_IsKinematic)
+            {
+                return { 0.0f, 0.0f, 0.0f };
+            }
+
+            const float mass = std::max(pBody->m_Mass, 0.001f);
+            Vec3 inertia = { (1.0f / 6.0f) * mass, (1.0f / 6.0f) * mass, (1.0f / 6.0f) * mass };
+            const CCollisionComponent* pCollider = entity.GetCollisionComponent();
+            const CTransformComponent* pTransform = entity.GetTransformComponent();
+            if (pCollider)
+            {
+                const Vec3 scale = pTransform ? pTransform->m_Scale : Vec3{ 1.0f, 1.0f, 1.0f };
+                if (pCollider->m_ColliderType == COLLIDER_SPHERE)
+                {
+                    const float r = std::max(pCollider->m_Radius * std::max({ std::fabs(scale.x), std::fabs(scale.y), std::fabs(scale.z) }), 0.001f);
+                    const float iSphere = 0.4f * mass * r * r;
+                    inertia = { iSphere, iSphere, iSphere };
+                }
+                else if (pCollider->m_ColliderType == COLLIDER_CAPSULE)
+                {
+                    const float r = std::max(pCollider->m_Radius * std::max(std::fabs(scale.x), std::fabs(scale.z)), 0.001f);
+                    const float h = std::max(pCollider->m_Height * std::fabs(scale.y), r * 2.0f);
+                    const float iy = 0.5f * mass * r * r;
+                    const float ixz = (1.0f / 12.0f) * mass * (3.0f * r * r + h * h);
+                    inertia = { ixz, iy, ixz };
+                }
+                else
+                {
+                    const float sx = std::max(std::fabs(pCollider->m_Size.x * scale.x), 0.001f);
+                    const float sy = std::max(std::fabs(pCollider->m_Size.y * scale.y), 0.001f);
+                    const float sz = std::max(std::fabs(pCollider->m_Size.z * scale.z), 0.001f);
+                    inertia = {
+                        (1.0f / 12.0f) * mass * (sy * sy + sz * sz),
+                        (1.0f / 12.0f) * mass * (sx * sx + sz * sz),
+                        (1.0f / 12.0f) * mass * (sx * sx + sy * sy)
+                    };
+                }
+            }
+
+            return {
+                (pBody->m_FreezeRotationX || inertia.x <= PHYSICS_EPSILON) ? 0.0f : (1.0f / inertia.x),
+                (pBody->m_FreezeRotationY || inertia.y <= PHYSICS_EPSILON) ? 0.0f : (1.0f / inertia.y),
+                (pBody->m_FreezeRotationZ || inertia.z <= PHYSICS_EPSILON) ? 0.0f : (1.0f / inertia.z)
+            };
+        }
+
+        Vec3 ComponentWiseMul(const Vec3& a, const Vec3& b)
+        {
+            return { a.x * b.x, a.y * b.y, a.z * b.z };
+        }
+
+        float ComputeMinColliderExtent(const CEntity& entity)
+        {
+            const CCollisionComponent* pCollider = entity.GetCollisionComponent();
+            const CTransformComponent* pTransform = entity.GetTransformComponent();
+            if (!pCollider)
+            {
+                return 0.5f;
+            }
+            const Vec3 scale = pTransform ? pTransform->m_Scale : Vec3{ 1.0f, 1.0f, 1.0f };
+            if (pCollider->m_ColliderType == COLLIDER_SPHERE)
+            {
+                return std::max(pCollider->m_Radius * std::max({ std::fabs(scale.x), std::fabs(scale.y), std::fabs(scale.z) }), 0.02f);
+            }
+            if (pCollider->m_ColliderType == COLLIDER_CAPSULE)
+            {
+                return std::max(pCollider->m_Radius * std::max(std::fabs(scale.x), std::fabs(scale.z)), 0.02f);
+            }
+            const float hx = std::fabs(pCollider->m_Size.x * scale.x) * 0.5f;
+            const float hy = std::fabs(pCollider->m_Size.y * scale.y) * 0.5f;
+            const float hz = std::fabs(pCollider->m_Size.z * scale.z) * 0.5f;
+            return std::max(std::min({ hx, hy, hz }), 0.02f);
+        }
     } // anonymous
 
     void CPhysicsWorld::Reset()
@@ -496,6 +585,7 @@ namespace quark::physics
 
         if (collider.m_ColliderType == COLLIDER_SPHERE)
         {
+            wc.m_Type = COLLIDER_SPHERE;
             const float maxScale = std::max({ scaleX, scaleY, scaleZ });
             wc.m_Radius = std::max(collider.m_Radius * maxScale, 0.001f);
             const Vec3 rVec = { wc.m_Radius, wc.m_Radius, wc.m_Radius };
@@ -503,16 +593,38 @@ namespace quark::physics
         }
         else if (collider.m_ColliderType == COLLIDER_CAPSULE)
         {
-            const float radialScale = std::max(scaleX, scaleZ);
+            float radialScale = std::max(scaleX, scaleZ);
+            float heightScale = scaleY;
+            Vec3 axisDir = { 0.0f, 1.0f, 0.0f };
+            if (collider.m_Direction == ECapsuleDirection::X_AXIS)
+            {
+                radialScale = std::max(scaleY, scaleZ);
+                heightScale = scaleX;
+                axisDir = { 1.0f, 0.0f, 0.0f };
+            }
+            else if (collider.m_Direction == ECapsuleDirection::Z_AXIS)
+            {
+                radialScale = std::max(scaleX, scaleY);
+                heightScale = scaleZ;
+                axisDir = { 0.0f, 0.0f, 1.0f };
+            }
+
             wc.m_Radius = std::max(collider.m_Radius * radialScale, 0.001f);
-            const float scaledHeight = std::max(collider.m_Height * scaleY, wc.m_Radius * 2.0f);
+            const float scaledHeight = std::max(collider.m_Height * heightScale, wc.m_Radius * 2.0f);
             const float halfSeg = std::max(0.0f, scaledHeight * 0.5f - wc.m_Radius);
-            wc.m_SegmentA = { wc.m_Center.x, wc.m_Center.y - halfSeg, wc.m_Center.z };
-            wc.m_SegmentB = { wc.m_Center.x, wc.m_Center.y + halfSeg, wc.m_Center.z };
-            wc.m_BroadphaseBounds = {
-                { wc.m_Center.x - wc.m_Radius, wc.m_SegmentA.y - wc.m_Radius, wc.m_Center.z - wc.m_Radius },
-                { wc.m_Center.x + wc.m_Radius, wc.m_SegmentB.y + wc.m_Radius, wc.m_Center.z + wc.m_Radius }
+            wc.m_SegmentA = wc.m_Center - axisDir * halfSeg;
+            wc.m_SegmentB = wc.m_Center + axisDir * halfSeg;
+            const Vec3 minSeg = {
+                std::min(wc.m_SegmentA.x, wc.m_SegmentB.x) - wc.m_Radius,
+                std::min(wc.m_SegmentA.y, wc.m_SegmentB.y) - wc.m_Radius,
+                std::min(wc.m_SegmentA.z, wc.m_SegmentB.z) - wc.m_Radius
             };
+            const Vec3 maxSeg = {
+                std::max(wc.m_SegmentA.x, wc.m_SegmentB.x) + wc.m_Radius,
+                std::max(wc.m_SegmentA.y, wc.m_SegmentB.y) + wc.m_Radius,
+                std::max(wc.m_SegmentA.z, wc.m_SegmentB.z) + wc.m_Radius
+            };
+            wc.m_BroadphaseBounds = { minSeg, maxSeg };
         }
         else
         {
@@ -592,6 +704,98 @@ namespace quark::physics
         return {};
     }
 
+    void CPhysicsWorld::SyncBeforeFixedSteps(CScene& scene)
+    {
+        for (CEntity& entity : scene.m_vEntities)
+        {
+            CRigidbodyComponent* pBody = entity.GetRigidbodyComponent();
+            CTransformComponent* pTransform = entity.GetTransformComponent();
+            if (!pBody || !pBody->m_Enabled || !pTransform)
+            {
+                continue;
+            }
+
+            if (!pBody->m_HasInterpolationState)
+            {
+                pBody->m_PrevPosition = pTransform->m_Position;
+                pBody->m_PrevRotation = pTransform->m_Rotation;
+                pBody->m_PhysicsPosition = pTransform->m_Position;
+                pBody->m_PhysicsRotation = pTransform->m_Rotation;
+                pBody->m_LastRenderedPosition = pTransform->m_Position;
+                pBody->m_LastRenderedRotation = pTransform->m_Rotation;
+                pBody->m_HasInterpolationState = true;
+                continue;
+            }
+
+            const bool posTeleported = (pTransform->m_Position - pBody->m_LastRenderedPosition).lengthSquared() > 1e-8f;
+            const bool rotTeleported = (pTransform->m_Rotation - pBody->m_LastRenderedRotation).lengthSquared() > 1e-8f;
+            if (posTeleported)
+            {
+                pBody->m_PhysicsPosition = pTransform->m_Position;
+                pBody->m_PrevPosition = pTransform->m_Position;
+            }
+            else
+            {
+                pTransform->m_Position = pBody->m_PhysicsPosition;
+            }
+
+            if (rotTeleported)
+            {
+                pBody->m_PhysicsRotation = pTransform->m_Rotation;
+                pBody->m_PrevRotation = pTransform->m_Rotation;
+            }
+            else
+            {
+                pTransform->m_Rotation = pBody->m_PhysicsRotation;
+            }
+        }
+    }
+
+    void CPhysicsWorld::ApplyInterpolation(CScene& scene, float alpha, float remainderTime)
+    {
+        const float clampedAlpha = std::clamp(alpha, 0.0f, 1.0f);
+        bool anyVisualChanged = false;
+
+        for (CEntity& entity : scene.m_vEntities)
+        {
+            CRigidbodyComponent* pBody = entity.GetRigidbodyComponent();
+            CTransformComponent* pTransform = entity.GetTransformComponent();
+            if (!pBody || !pBody->m_Enabled || !pTransform || !pBody->m_HasInterpolationState)
+            {
+                continue;
+            }
+
+            if (pBody->m_Interpolate == ERigidbodyInterpolate::INTERPOLATE)
+            {
+                pTransform->m_Position = pBody->m_PrevPosition + (pBody->m_PhysicsPosition - pBody->m_PrevPosition) * clampedAlpha;
+                pTransform->m_Rotation = pBody->m_PrevRotation + (pBody->m_PhysicsRotation - pBody->m_PrevRotation) * clampedAlpha;
+                pTransform->ClearLocalMatrixOverride();
+                anyVisualChanged = true;
+            }
+            else if (pBody->m_Interpolate == ERigidbodyInterpolate::EXTRAPOLATE && !pBody->m_IsKinematic && !pBody->m_IsSleeping)
+            {
+                const float dt = std::max(0.0f, remainderTime);
+                pTransform->m_Position = pBody->m_PhysicsPosition + pBody->m_Velocity * dt;
+                pTransform->m_Rotation = pBody->m_PhysicsRotation + pBody->m_AngularVelocity * (RAD2DEG * dt);
+                pTransform->ClearLocalMatrixOverride();
+                anyVisualChanged = true;
+            }
+            else
+            {
+                pTransform->m_Position = pBody->m_PhysicsPosition;
+                pTransform->m_Rotation = pBody->m_PhysicsRotation;
+            }
+
+            pBody->m_LastRenderedPosition = pTransform->m_Position;
+            pBody->m_LastRenderedRotation = pTransform->m_Rotation;
+        }
+
+        if (anyVisualChanged)
+        {
+            scene.BumpTransformRevision();
+        }
+    }
+
     void CPhysicsWorld::Step(CScene& scene, float fixedDeltaTime, std::vector<SPhysicsEvent>& vOutEvents)
     {
         vOutEvents.clear();
@@ -603,6 +807,7 @@ namespace quark::physics
         const int entityCount = static_cast<int>(scene.m_vEntities.size());
         bool anyTransformMoved = false;
 
+        int substeps = 1;
         for (int i = 0; i < entityCount; ++i)
         {
             CEntity& entity = scene.m_vEntities[static_cast<size_t>(i)];
@@ -613,209 +818,351 @@ namespace quark::physics
                 continue;
             }
 
+            pBody->m_PrevPosition = pTransform->m_Position;
+            pBody->m_PrevRotation = pTransform->m_Rotation;
+            pBody->m_HasInterpolationState = true;
             pBody->m_IsGrounded = false;
-            if (pBody->m_IsKinematic)
+
+            if (!pBody->m_IsKinematic && pBody->m_CollisionDetection != ECollisionDetectionMode::DISCRETE)
             {
-                pBody->m_AccumulatedForce = { 0.0f, 0.0f, 0.0f };
-                continue;
-            }
-
-            const float invMass = pBody->GetInverseMass();
-            Vec3 accel = pBody->m_AccumulatedForce * invMass;
-            if (pBody->m_UseGravity)
-            {
-                accel = accel + m_Gravity;
-            }
-
-            pBody->m_Velocity = pBody->m_Velocity + accel * fixedDeltaTime;
-
-            if (pBody->m_LinearDrag > 0.0f)
-            {
-                const float damping = std::exp(-pBody->m_LinearDrag * fixedDeltaTime);
-                pBody->m_Velocity = pBody->m_Velocity * damping;
-            }
-
-            pBody->m_Velocity = FilterFrozenAxes(pBody->m_Velocity, pBody);
-            pBody->m_AccumulatedForce = { 0.0f, 0.0f, 0.0f };
-
-            const Vec3 displacement = pBody->m_Velocity * fixedDeltaTime;
-            if (displacement.lengthSquared() > 1e-12f)
-            {
-                ApplyWorldDeltaToEntity(scene, i, displacement);
-                anyTransformMoved = true;
+                const float invMass = pBody->GetInverseMass();
+                Vec3 estAccel = pBody->m_AccumulatedForce * invMass;
+                if (pBody->m_UseGravity)
+                {
+                    estAccel = estAccel + m_Gravity * pBody->m_GravityScale;
+                }
+                const Vec3 estVel = pBody->m_Velocity + estAccel * fixedDeltaTime;
+                const float travelDist = estVel.length() * fixedDeltaTime;
+                const float minExtent = ComputeMinColliderExtent(entity);
+                const float maxStepDist = minExtent * 0.4f;
+                if (travelDist > maxStepDist)
+                {
+                    const int needed = static_cast<int>(std::ceil(travelDist / maxStepDist));
+                    substeps = std::max(substeps, std::clamp(needed, 2, 64));
+                }
             }
         }
 
-        m_vWorldColliders.clear();
-        m_vWorldColliders.reserve(static_cast<size_t>(entityCount));
-        for (int i = 0; i < entityCount; ++i)
+        const float subDt = fixedDeltaTime / static_cast<float>(substeps);
+        std::unordered_set<std::uint64_t> stepCollisions;
+        std::unordered_set<std::uint64_t> stepTriggers;
+        std::unordered_map<std::uint64_t, SPhysicsEvent> stepCollisionEventData;
+        std::unordered_map<std::uint64_t, SPhysicsEvent> stepTriggerEventData;
+
+        for (int sub = 0; sub < substeps; ++sub)
         {
-            const CEntity& entity = scene.m_vEntities[static_cast<size_t>(i)];
-            const CCollisionComponent* pCollider = entity.GetCollisionComponent();
-            if (!pCollider || !pCollider->m_Enabled || !entity.GetTransformComponent())
+            for (int i = 0; i < entityCount; ++i)
             {
-                continue;
+                CEntity& entity = scene.m_vEntities[static_cast<size_t>(i)];
+                CRigidbodyComponent* pBody = entity.GetRigidbodyComponent();
+                CTransformComponent* pTransform = entity.GetTransformComponent();
+                if (!pBody || !pBody->m_Enabled || !pTransform)
+                {
+                    continue;
+                }
+
+                if (pBody->m_IsKinematic)
+                {
+                    pBody->m_AccumulatedForce = { 0.0f, 0.0f, 0.0f };
+                    pBody->m_AccumulatedTorque = { 0.0f, 0.0f, 0.0f };
+                    continue;
+                }
+
+                const float invMass = pBody->GetInverseMass();
+                const Vec3 invInertia = ComputeInverseInertia(entity, pBody);
+
+                Vec3 accel = pBody->m_AccumulatedForce * invMass;
+                if (pBody->m_UseGravity)
+                {
+                    accel = accel + m_Gravity * pBody->m_GravityScale;
+                }
+                pBody->m_Velocity = pBody->m_Velocity + accel * subDt;
+
+                if (pBody->m_LinearDrag > 0.0f)
+                {
+                    const float damping = std::exp(-pBody->m_LinearDrag * subDt);
+                    pBody->m_Velocity = pBody->m_Velocity * damping;
+                }
+                pBody->m_Velocity = FilterFrozenAxes(pBody->m_Velocity, pBody);
+
+                const Vec3 angularAccel = ComponentWiseMul(pBody->m_AccumulatedTorque, invInertia);
+                pBody->m_AngularVelocity = pBody->m_AngularVelocity + angularAccel * subDt;
+                if (pBody->m_AngularDrag > 0.0f)
+                {
+                    const float angularDamping = std::exp(-pBody->m_AngularDrag * subDt);
+                    pBody->m_AngularVelocity = pBody->m_AngularVelocity * angularDamping;
+                }
+                pBody->m_AngularVelocity = FilterFrozenRotationAxes(pBody->m_AngularVelocity, pBody);
+
+                if (sub == substeps - 1)
+                {
+                    pBody->m_AccumulatedForce = { 0.0f, 0.0f, 0.0f };
+                    pBody->m_AccumulatedTorque = { 0.0f, 0.0f, 0.0f };
+                }
+
+                Vec3 displacement = pBody->m_Velocity * subDt;
+                const float dispLenSq = displacement.lengthSquared();
+                if (dispLenSq > 1e-12f)
+                {
+                    if (pBody->m_CollisionDetection != ECollisionDetectionMode::DISCRETE)
+                    {
+                        const float dispLen = std::sqrt(dispLenSq);
+                        const float minExtent = ComputeMinColliderExtent(entity);
+                        if (dispLen > minExtent * 0.4f)
+                        {
+                            const Vec3 dir = displacement * (1.0f / dispLen);
+                            const Vec3 rayOrigin = Vec3(quark::ComposeWorld(scene, i) * Vec3{ 0.0f, 0.0f, 0.0f });
+                            SPhysicsRaycastHit sweepHit;
+                            if (Raycast(scene, rayOrigin, dir, dispLen + minExtent, sweepHit, false, entity.m_Id))
+                            {
+                                const float safeDist = std::max(0.0f, sweepHit.m_Distance - minExtent * 0.85f);
+                                if (safeDist < dispLen)
+                                {
+                                    displacement = dir * safeDist;
+                                }
+                            }
+                        }
+                    }
+
+                    ApplyWorldDeltaToEntity(scene, i, displacement);
+                    anyTransformMoved = true;
+                }
+
+                const Vec3 rotDeltaDeg = pBody->m_AngularVelocity * (RAD2DEG * subDt);
+                if (rotDeltaDeg.lengthSquared() > 1e-10f)
+                {
+                    pTransform->ClearLocalMatrixOverride();
+                    pTransform->m_Rotation = pTransform->m_Rotation + rotDeltaDeg;
+                    anyTransformMoved = true;
+                }
             }
-            m_vWorldColliders.push_back(BuildWorldCollider(scene, i, *pCollider));
-        }
 
-        std::unordered_set<std::uint64_t> currentCollisions;
-        std::unordered_set<std::uint64_t> currentTriggers;
-
-        const size_t colliderCount = m_vWorldColliders.size();
-        for (size_t i = 0; i < colliderCount; ++i)
-        {
-            for (size_t j = i + 1; j < colliderCount; ++j)
+            m_vWorldColliders.clear();
+            m_vWorldColliders.reserve(static_cast<size_t>(entityCount));
+            for (int i = 0; i < entityCount; ++i)
             {
-                SWorldCollider& colA = m_vWorldColliders[i];
-                SWorldCollider& colB = m_vWorldColliders[j];
-
-                if (!OverlapsAabb(colA.m_BroadphaseBounds, colB.m_BroadphaseBounds))
+                const CEntity& entity = scene.m_vEntities[static_cast<size_t>(i)];
+                const CCollisionComponent* pCollider = entity.GetCollisionComponent();
+                if (!pCollider || !pCollider->m_Enabled || !entity.GetTransformComponent())
                 {
                     continue;
                 }
+                m_vWorldColliders.push_back(BuildWorldCollider(scene, i, *pCollider));
+            }
 
-                CEntity& entityA = scene.m_vEntities[static_cast<size_t>(colA.m_EntityIndex)];
-                CEntity& entityB = scene.m_vEntities[static_cast<size_t>(colB.m_EntityIndex)];
-                CRigidbodyComponent* pBodyA = entityA.GetRigidbodyComponent();
-                CRigidbodyComponent* pBodyB = entityB.GetRigidbodyComponent();
-
-                const bool isTriggerPair = colA.m_IsTrigger || colB.m_IsTrigger;
-                const bool hasAnyBody = (pBodyA && pBodyA->m_Enabled) || (pBodyB && pBodyB->m_Enabled);
-                if (!hasAnyBody && !isTriggerPair)
+            const size_t colliderCount = m_vWorldColliders.size();
+            for (size_t i = 0; i < colliderCount; ++i)
+            {
+                for (size_t j = i + 1; j < colliderCount; ++j)
                 {
-                    continue;
-                }
+                    SWorldCollider& colA = m_vWorldColliders[i];
+                    SWorldCollider& colB = m_vWorldColliders[j];
 
-                const SContactManifold manifold = TestColliders(colA, colB);
-                if (!manifold.m_HasContact)
-                {
-                    continue;
-                }
+                    if (!OverlapsAabb(colA.m_BroadphaseBounds, colB.m_BroadphaseBounds))
+                    {
+                        continue;
+                    }
 
-                const std::uint64_t pairKey = MakePairKey(colA.m_EntityId, colB.m_EntityId);
-                if (isTriggerPair)
-                {
-                    currentTriggers.insert(pairKey);
-                    const bool wasActive = m_PreviousTriggers.count(pairKey) > 0;
-                    vOutEvents.push_back({
-                        wasActive ? EPhysicsEventType::TRIGGER_STAY : EPhysicsEventType::TRIGGER_ENTER,
-                        colA.m_EntityId,
-                        colB.m_EntityId,
-                        manifold.m_Point,
-                        manifold.m_Normal,
-                        manifold.m_Penetration
-                    });
-                    continue;
-                }
+                    CEntity& entityA = scene.m_vEntities[static_cast<size_t>(colA.m_EntityIndex)];
+                    CEntity& entityB = scene.m_vEntities[static_cast<size_t>(colB.m_EntityIndex)];
+                    CRigidbodyComponent* pBodyA = entityA.GetRigidbodyComponent();
+                    CRigidbodyComponent* pBodyB = entityB.GetRigidbodyComponent();
 
-                currentCollisions.insert(pairKey);
-                const bool wasActive = m_PreviousCollisions.count(pairKey) > 0;
-                vOutEvents.push_back({
-                    wasActive ? EPhysicsEventType::COLLISION_STAY : EPhysicsEventType::COLLISION_ENTER,
-                    colA.m_EntityId,
-                    colB.m_EntityId,
-                    manifold.m_Point,
-                    manifold.m_Normal,
-                    manifold.m_Penetration
-                });
+                    const bool isTriggerPair = colA.m_IsTrigger || colB.m_IsTrigger;
+                    const bool hasAnyBody = (pBodyA && pBodyA->m_Enabled) || (pBodyB && pBodyB->m_Enabled);
+                    if (!hasAnyBody && !isTriggerPair)
+                    {
+                        continue;
+                    }
 
-                const float invMassA = pBodyA ? pBodyA->GetInverseMass() : 0.0f;
-                const float invMassB = pBodyB ? pBodyB->GetInverseMass() : 0.0f;
-                const float invMassSum = invMassA + invMassB;
-                if (invMassSum <= PHYSICS_EPSILON)
-                {
-                    continue;
-                }
+                    const SContactManifold manifold = TestColliders(colA, colB);
+                    if (!manifold.m_HasContact)
+                    {
+                        continue;
+                    }
 
-                if (pBodyA && manifold.m_Normal.y < -0.5f)
-                {
-                    pBodyA->m_IsGrounded = true;
-                }
-                if (pBodyB && manifold.m_Normal.y > 0.5f)
-                {
-                    pBodyB->m_IsGrounded = true;
-                }
+                    const std::uint64_t pairKey = MakePairKey(colA.m_EntityId, colB.m_EntityId);
+                    if (isTriggerPair)
+                    {
+                        stepTriggers.insert(pairKey);
+                        stepTriggerEventData[pairKey] = {
+                            EPhysicsEventType::TRIGGER_ENTER,
+                            colA.m_EntityId,
+                            colB.m_EntityId,
+                            manifold.m_Point,
+                            manifold.m_Normal,
+                            manifold.m_Penetration
+                        };
+                        continue;
+                    }
 
-                constexpr float SLOP = 0.0001f;
-                const float correctionPercent = (invMassA == 0.0f || invMassB == 0.0f) ? 1.0f : 0.9f;
-                const float corrMag = std::max(manifold.m_Penetration - SLOP, 0.0f) * correctionPercent / invMassSum;
-                if (corrMag > 0.0f)
-                {
+                    const CCollisionComponent* pColCompA = entityA.GetCollisionComponent();
+                    const CCollisionComponent* pColCompB = entityB.GetCollisionComponent();
+                    const bool providesContacts =
+                        (!pColCompA || pColCompA->m_ProvidesContacts) &&
+                        (!pColCompB || pColCompB->m_ProvidesContacts);
+                    if (providesContacts)
+                    {
+                        stepCollisions.insert(pairKey);
+                        stepCollisionEventData[pairKey] = {
+                            EPhysicsEventType::COLLISION_ENTER,
+                            colA.m_EntityId,
+                            colB.m_EntityId,
+                            manifold.m_Point,
+                            manifold.m_Normal,
+                            manifold.m_Penetration
+                        };
+                    }
+
+                    const float invMassA = pBodyA ? pBodyA->GetInverseMass() : 0.0f;
+                    const float invMassB = pBodyB ? pBodyB->GetInverseMass() : 0.0f;
+                    const float invMassSum = invMassA + invMassB;
+                    if (invMassSum <= PHYSICS_EPSILON)
+                    {
+                        continue;
+                    }
+
+                    if (pBodyA && manifold.m_Normal.y < -0.5f)
+                    {
+                        pBodyA->m_IsGrounded = true;
+                    }
+                    if (pBodyB && manifold.m_Normal.y > 0.5f)
+                    {
+                        pBodyB->m_IsGrounded = true;
+                    }
+
+                    constexpr float SLOP = 0.0001f;
+                    const float correctionPercent = (invMassA == 0.0f || invMassB == 0.0f) ? 1.0f : 0.9f;
+                    const float corrMag = std::max(manifold.m_Penetration - SLOP, 0.0f) * correctionPercent / invMassSum;
+                    if (corrMag > 0.0f)
+                    {
+                        if (invMassA > 0.0f)
+                        {
+                            const Vec3 deltaA = FilterFrozenAxes(manifold.m_Normal * (-corrMag * invMassA), pBodyA);
+                            ApplyWorldDeltaToEntity(scene, colA.m_EntityIndex, deltaA);
+                            colA = BuildWorldCollider(scene, colA.m_EntityIndex, *entityA.GetCollisionComponent());
+                            anyTransformMoved = true;
+                        }
+                        if (invMassB > 0.0f)
+                        {
+                            const Vec3 deltaB = FilterFrozenAxes(manifold.m_Normal * (corrMag * invMassB), pBodyB);
+                            ApplyWorldDeltaToEntity(scene, colB.m_EntityIndex, deltaB);
+                            colB = BuildWorldCollider(scene, colB.m_EntityIndex, *entityB.GetCollisionComponent());
+                            anyTransformMoved = true;
+                        }
+                    }
+
+                    const Vec3 rA = manifold.m_Point - colA.m_Center;
+                    const Vec3 rB = manifold.m_Point - colB.m_Center;
+                    const Vec3 invInertiaA = ComputeInverseInertia(entityA, pBodyA);
+                    const Vec3 invInertiaB = ComputeInverseInertia(entityB, pBodyB);
+
+                    const Vec3 velA = pBodyA ? (pBodyA->m_Velocity + pBodyA->m_AngularVelocity.cross(rA)) : Vec3{ 0.0f, 0.0f, 0.0f };
+                    const Vec3 velB = pBodyB ? (pBodyB->m_Velocity + pBodyB->m_AngularVelocity.cross(rB)) : Vec3{ 0.0f, 0.0f, 0.0f };
+                    const Vec3 relVel = velB - velA;
+                    const float velAlongNormal = relVel.dot(manifold.m_Normal);
+                    if (velAlongNormal > 0.0f)
+                    {
+                        continue;
+                    }
+
+                    const Vec3 rAxN = rA.cross(manifold.m_Normal);
+                    const Vec3 rBxN = rB.cross(manifold.m_Normal);
+                    const float angularDenomA = ComponentWiseMul(invInertiaA, rAxN).cross(rA).dot(manifold.m_Normal);
+                    const float angularDenomB = ComponentWiseMul(invInertiaB, rBxN).cross(rB).dot(manifold.m_Normal);
+                    const float effectiveInvMass = invMassSum + angularDenomA + angularDenomB;
+                    if (effectiveInvMass <= PHYSICS_EPSILON)
+                    {
+                        continue;
+                    }
+
+                    const float baseRestA = pBodyA ? pBodyA->m_Restitution : 0.0f;
+                    const float baseRestB = pBodyB ? pBodyB->m_Restitution : 0.0f;
+                    const float restA = pColCompA ? pColCompA->GetEffectiveRestitution(baseRestA) : baseRestA;
+                    const float restB = pColCompB ? pColCompB->GetEffectiveRestitution(baseRestB) : baseRestB;
+                    float restitution = std::max(restA, restB);
+                    if (std::fabs(velAlongNormal) < 0.5f)
+                    {
+                        restitution = 0.0f;
+                    }
+
+                    const float impulseMag = -(1.0f + restitution) * velAlongNormal / effectiveInvMass;
+                    const Vec3 impulse = manifold.m_Normal * impulseMag;
+
                     if (invMassA > 0.0f)
                     {
-                        const Vec3 deltaA = FilterFrozenAxes(manifold.m_Normal * (-corrMag * invMassA), pBodyA);
-                        ApplyWorldDeltaToEntity(scene, colA.m_EntityIndex, deltaA);
-                        colA = BuildWorldCollider(scene, colA.m_EntityIndex, *entityA.GetCollisionComponent());
-                        anyTransformMoved = true;
+                        pBodyA->m_Velocity = FilterFrozenAxes(pBodyA->m_Velocity - impulse * invMassA, pBodyA);
+                        const Vec3 angDeltaA = ComponentWiseMul(invInertiaA, rA.cross(impulse * -1.0f));
+                        pBodyA->m_AngularVelocity = FilterFrozenRotationAxes(pBodyA->m_AngularVelocity + angDeltaA, pBodyA);
                     }
                     if (invMassB > 0.0f)
                     {
-                        const Vec3 deltaB = FilterFrozenAxes(manifold.m_Normal * (corrMag * invMassB), pBodyB);
-                        ApplyWorldDeltaToEntity(scene, colB.m_EntityIndex, deltaB);
-                        colB = BuildWorldCollider(scene, colB.m_EntityIndex, *entityB.GetCollisionComponent());
-                        anyTransformMoved = true;
+                        pBodyB->m_Velocity = FilterFrozenAxes(pBodyB->m_Velocity + impulse * invMassB, pBodyB);
+                        const Vec3 angDeltaB = ComponentWiseMul(invInertiaB, rB.cross(impulse));
+                        pBodyB->m_AngularVelocity = FilterFrozenRotationAxes(pBodyB->m_AngularVelocity + angDeltaB, pBodyB);
                     }
-                }
 
-                const Vec3 velA = pBodyA ? pBodyA->m_Velocity : Vec3{ 0.0f, 0.0f, 0.0f };
-                const Vec3 velB = pBodyB ? pBodyB->m_Velocity : Vec3{ 0.0f, 0.0f, 0.0f };
-                const Vec3 relVel = velB - velA;
-                const float velAlongNormal = relVel.dot(manifold.m_Normal);
-                if (velAlongNormal > 0.0f)
-                {
-                    continue;
-                }
-
-                const float restA = pBodyA ? pBodyA->m_Restitution : 0.0f;
-                const float restB = pBodyB ? pBodyB->m_Restitution : 0.0f;
-                float restitution = std::max(restA, restB);
-                if (std::fabs(velAlongNormal) < 0.5f)
-                {
-                    restitution = 0.0f;
-                }
-
-                const float impulseMag = -(1.0f + restitution) * velAlongNormal / invMassSum;
-                const Vec3 impulse = manifold.m_Normal * impulseMag;
-
-                if (invMassA > 0.0f)
-                {
-                    pBodyA->m_Velocity = FilterFrozenAxes(pBodyA->m_Velocity - impulse * invMassA, pBodyA);
-                }
-                if (invMassB > 0.0f)
-                {
-                    pBodyB->m_Velocity = FilterFrozenAxes(pBodyB->m_Velocity + impulse * invMassB, pBodyB);
-                }
-
-                const Vec3 postRelVel = (pBodyB ? pBodyB->m_Velocity : Vec3{ 0.0f, 0.0f, 0.0f }) -
-                                        (pBodyA ? pBodyA->m_Velocity : Vec3{ 0.0f, 0.0f, 0.0f });
-                Vec3 tangent = postRelVel - manifold.m_Normal * postRelVel.dot(manifold.m_Normal);
-                const float tangentLenSq = tangent.lengthSquared();
-                if (tangentLenSq > PHYSICS_EPSILON)
-                {
-                    tangent = tangent * (1.0f / std::sqrt(tangentLenSq));
-                    const float jt = -postRelVel.dot(tangent) / invMassSum;
-                    const float fricA = pBodyA ? pBodyA->m_Friction : 0.5f;
-                    const float fricB = pBodyB ? pBodyB->m_Friction : 0.5f;
-                    const float mu = std::sqrt(std::max(0.0f, fricA * fricB));
-                    const float clampedJt = std::clamp(jt, -impulseMag * mu, impulseMag * mu);
-                    const Vec3 frictionImpulse = tangent * clampedJt;
-
-                    if (invMassA > 0.0f)
+                    const Vec3 postVelA = pBodyA ? (pBodyA->m_Velocity + pBodyA->m_AngularVelocity.cross(rA)) : Vec3{ 0.0f, 0.0f, 0.0f };
+                    const Vec3 postVelB = pBodyB ? (pBodyB->m_Velocity + pBodyB->m_AngularVelocity.cross(rB)) : Vec3{ 0.0f, 0.0f, 0.0f };
+                    const Vec3 postRelVel = postVelB - postVelA;
+                    Vec3 tangent = postRelVel - manifold.m_Normal * postRelVel.dot(manifold.m_Normal);
+                    const float tangentLenSq = tangent.lengthSquared();
+                    if (tangentLenSq > PHYSICS_EPSILON)
                     {
-                        pBodyA->m_Velocity = FilterFrozenAxes(pBodyA->m_Velocity - frictionImpulse * invMassA, pBodyA);
-                    }
-                    if (invMassB > 0.0f)
-                    {
-                        pBodyB->m_Velocity = FilterFrozenAxes(pBodyB->m_Velocity + frictionImpulse * invMassB, pBodyB);
+                        tangent = tangent * (1.0f / std::sqrt(tangentLenSq));
+                        const Vec3 rAxT = rA.cross(tangent);
+                        const Vec3 rBxT = rB.cross(tangent);
+                        const float tangDenom = invMassSum +
+                            ComponentWiseMul(invInertiaA, rAxT).cross(rA).dot(tangent) +
+                            ComponentWiseMul(invInertiaB, rBxT).cross(rB).dot(tangent);
+                        if (tangDenom > PHYSICS_EPSILON)
+                        {
+                            const float jt = -postRelVel.dot(tangent) / tangDenom;
+                            const float baseFricA = pBodyA ? pBodyA->m_Friction : 0.5f;
+                            const float baseFricB = pBodyB ? pBodyB->m_Friction : 0.5f;
+                            const float fricA = pColCompA ? pColCompA->GetEffectiveFriction(baseFricA) : baseFricA;
+                            const float fricB = pColCompB ? pColCompB->GetEffectiveFriction(baseFricB) : baseFricB;
+                            const float mu = std::sqrt(std::max(0.0f, fricA * fricB));
+                            const float clampedJt = std::clamp(jt, -impulseMag * mu, impulseMag * mu);
+                            const Vec3 frictionImpulse = tangent * clampedJt;
+
+                            if (invMassA > 0.0f)
+                            {
+                                pBodyA->m_Velocity = FilterFrozenAxes(pBodyA->m_Velocity - frictionImpulse * invMassA, pBodyA);
+                                const Vec3 angFricA = ComponentWiseMul(invInertiaA, rA.cross(frictionImpulse * -1.0f));
+                                pBodyA->m_AngularVelocity = FilterFrozenRotationAxes(pBodyA->m_AngularVelocity + angFricA, pBodyA);
+                            }
+                            if (invMassB > 0.0f)
+                            {
+                                pBodyB->m_Velocity = FilterFrozenAxes(pBodyB->m_Velocity + frictionImpulse * invMassB, pBodyB);
+                                const Vec3 angFricB = ComponentWiseMul(invInertiaB, rB.cross(frictionImpulse));
+                                pBodyB->m_AngularVelocity = FilterFrozenRotationAxes(pBodyB->m_AngularVelocity + angFricB, pBodyB);
+                            }
+                        }
                     }
                 }
             }
         }
 
+        for (const auto& [pairKey, evData] : stepCollisionEventData)
+        {
+            SPhysicsEvent ev = evData;
+            ev.m_Type = (m_PreviousCollisions.count(pairKey) > 0)
+                ? EPhysicsEventType::COLLISION_STAY
+                : EPhysicsEventType::COLLISION_ENTER;
+            vOutEvents.push_back(ev);
+        }
+        for (const auto& [pairKey, evData] : stepTriggerEventData)
+        {
+            SPhysicsEvent ev = evData;
+            ev.m_Type = (m_PreviousTriggers.count(pairKey) > 0)
+                ? EPhysicsEventType::TRIGGER_STAY
+                : EPhysicsEventType::TRIGGER_ENTER;
+            vOutEvents.push_back(ev);
+        }
         for (std::uint64_t prevKey : m_PreviousCollisions)
         {
-            if (currentCollisions.count(prevKey) == 0)
+            if (stepCollisions.count(prevKey) == 0)
             {
                 int idA = -1;
                 int idB = -1;
@@ -825,7 +1172,7 @@ namespace quark::physics
         }
         for (std::uint64_t prevKey : m_PreviousTriggers)
         {
-            if (currentTriggers.count(prevKey) == 0)
+            if (stepTriggers.count(prevKey) == 0)
             {
                 int idA = -1;
                 int idB = -1;
@@ -834,12 +1181,49 @@ namespace quark::physics
             }
         }
 
-        m_PreviousCollisions = std::move(currentCollisions);
-        m_PreviousTriggers = std::move(currentTriggers);
+        m_PreviousCollisions = std::move(stepCollisions);
+        m_PreviousTriggers = std::move(stepTriggers);
 
         if (anyTransformMoved)
         {
             scene.BumpTransformRevision();
+        }
+
+        for (int i = 0; i < entityCount; ++i)
+        {
+            CEntity& entity = scene.m_vEntities[static_cast<size_t>(i)];
+            CRigidbodyComponent* pBody = entity.GetRigidbodyComponent();
+            const CTransformComponent* pTransform = entity.GetTransformComponent();
+            if (!pBody || !pBody->m_Enabled || !pTransform)
+            {
+                continue;
+            }
+            pBody->m_PhysicsPosition = pTransform->m_Position;
+            pBody->m_PhysicsRotation = pTransform->m_Rotation;
+            pBody->m_LastRenderedPosition = pTransform->m_Position;
+            pBody->m_LastRenderedRotation = pTransform->m_Rotation;
+
+            if (pBody->m_IsKinematic)
+            {
+                continue;
+            }
+            const float speedSq = pBody->m_Velocity.lengthSquared();
+            const float angSpeedSq = pBody->m_AngularVelocity.lengthSquared();
+            if (pBody->m_IsGrounded && speedSq < 0.0025f && angSpeedSq < 0.0025f)
+            {
+                pBody->m_SleepTimer += fixedDeltaTime;
+                if (pBody->m_SleepTimer >= 0.5f)
+                {
+                    pBody->m_IsSleeping = true;
+                    pBody->m_Velocity = { 0.0f, 0.0f, 0.0f };
+                    pBody->m_AngularVelocity = { 0.0f, 0.0f, 0.0f };
+                }
+            }
+            else
+            {
+                pBody->m_SleepTimer = 0.0f;
+                pBody->m_IsSleeping = false;
+            }
         }
     }
 

@@ -17,6 +17,7 @@ public:
     static void DrawLightComponent(CEditor& editor, CEntity& entity, CLightComponent* pLight, Shader shader);
     static void DrawMaterialComponent(CEditor& editor, CEntity& entity, CMaterialComponent* pMaterial);
     static void DrawCollisionComponent(CEditor& editor, CEntity& entity, CCollisionComponent* pCollision);
+    static void DrawRigidbodyComponent(CEditor& editor, CEntity& entity, CRigidbodyComponent* pBody);
     static void Draw3dTextComponent(CEditor& editor, CEntity& entity, CText3DComponent* pText);
     static void DrawUiRectTransformComponent(CEditor& editor, CUiRectTransformComponent* pRectTransform);
     static void DrawCanvasComponent(CEditor& editor, CEntity& entity, CCanvasComponent* pCanvas);

@@ -9,6 +9,7 @@
 #include "text_mesh.h"
 #include "models.h"
 #include "entity.h"
+#include "engine/transform.h"
 #include "editor/editor.h"
 #include "application_plugin_bridge.h"
 #include "language_manager.h"
@@ -97,83 +98,8 @@ void CComponentUIHelper::DrawEntityInspector(CEditor& editor, CEntity& entity, S
                         DrawCollisionComponent(editor, entity, static_cast<CCollisionComponent*>(pComp.get()));
                         break;
                     case COMPONENT_RIGIDBODY:
-                    {
-                        auto* pBody = static_cast<CRigidbodyComponent*>(pComp.get());
-                        float mass = pBody->m_Mass;
-                        if (ImGui::DragFloat("Mass", &mass, 0.1f, 0.001f, 10000.0f, "%.3f"))
-                        {
-                            pBody->m_Mass = std::max(0.001f, mass);
-                        }
-                        if (ImGui::IsItemActivated())
-                        {
-                            editor.SaveState();
-                        }
-
-                        float drag = pBody->m_LinearDrag;
-                        if (ImGui::DragFloat("Linear Drag", &drag, 0.01f, 0.0f, 100.0f, "%.3f"))
-                        {
-                            pBody->m_LinearDrag = std::max(0.0f, drag);
-                        }
-                        if (ImGui::IsItemActivated())
-                        {
-                            editor.SaveState();
-                        }
-
-                        float friction = pBody->m_Friction;
-                        if (ImGui::SliderFloat("Friction", &friction, 0.0f, 1.0f, "%.2f"))
-                        {
-                            pBody->m_Friction = friction;
-                        }
-                        if (ImGui::IsItemActivated())
-                        {
-                            editor.SaveState();
-                        }
-
-                        float restitution = pBody->m_Restitution;
-                        if (ImGui::SliderFloat("Restitution", &restitution, 0.0f, 1.0f, "%.2f"))
-                        {
-                            pBody->m_Restitution = restitution;
-                        }
-                        if (ImGui::IsItemActivated())
-                        {
-                            editor.SaveState();
-                        }
-
-                        if (ImGui::Checkbox("Use Gravity", &pBody->m_UseGravity))
-                        {
-                            editor.SaveState();
-                        }
-                        if (ImGui::Checkbox("Is Kinematic", &pBody->m_IsKinematic))
-                        {
-                            editor.SaveState();
-                        }
-
-                        ImGui::TextDisabled("Freeze Position");
-                        ImGui::SameLine();
-                        if (ImGui::Checkbox("X##FreezeX", &pBody->m_FreezePositionX))
-                        {
-                            editor.SaveState();
-                        }
-                        ImGui::SameLine();
-                        if (ImGui::Checkbox("Y##FreezeY", &pBody->m_FreezePositionY))
-                        {
-                            editor.SaveState();
-                        }
-                        ImGui::SameLine();
-                        if (ImGui::Checkbox("Z##FreezeZ", &pBody->m_FreezePositionZ))
-                        {
-                            editor.SaveState();
-                        }
-
-                        if (editor.m_IsPlaying)
-                        {
-                            ImGui::Separator();
-                            ImGui::Text("Velocity: (%.2f, %.2f, %.2f)",
-                                        pBody->m_Velocity.x, pBody->m_Velocity.y, pBody->m_Velocity.z);
-                            ImGui::Text("Grounded: %s", pBody->m_IsGrounded ? "Yes" : "No");
-                        }
+                        DrawRigidbodyComponent(editor, entity, static_cast<CRigidbodyComponent*>(pComp.get()));
                         break;
-                    }
                     case COMPONENT_CAMERA:
                     {
                         auto* pCamera = static_cast<CCameraComponent*>(pComp.get());
@@ -729,7 +655,8 @@ void CComponentUIHelper::DrawMeshComponent(CEditor& editor, CEntity& entity, CMe
         lang.Word("cone"),
         lang.Word("cylinder"),
         lang.Word("hemisphere"),
-        lang.Word("torus")
+        lang.Word("torus"),
+        "Capsule"
     };
 
     int currentObjectTypeIndex = static_cast<int>(pMesh->m_Type);
@@ -1321,108 +1248,331 @@ void CComponentUIHelper::DrawCollisionComponent(CEditor& editor, CEntity& entity
         return;
     }
 
-    ImGui::Text("%s", lang.Word("collision_properties"));
-    ImGui::Spacing();
-
     bool changed = false;
 
-    const char* apColliderTypes[] = {
-        lang.Word("cube"),
-        lang.Word("sphere"),
-        lang.Word("capsule"),
-        lang.Word("mesh")
+    const auto beginColliderTable = [](const char* pTableId) -> bool
+    {
+        if (!ImGui::BeginTable(pTableId, 2, ImGuiTableFlags_SizingStretchProp | ImGuiTableFlags_NoBordersInBody))
+        {
+            return false;
+        }
+        ImGui::TableSetupColumn("Label", ImGuiTableColumnFlags_WidthStretch, 0.42f);
+        ImGui::TableSetupColumn("Control", ImGuiTableColumnFlags_WidthStretch, 0.58f);
+        return true;
     };
 
-    int colliderType = static_cast<int>(pCollision->m_ColliderType);
-
-    if (ImGui::Combo(lang.Word("collider_type"), &colliderType, apColliderTypes, IM_ARRAYSIZE(apColliderTypes)))
+    const auto drawRowLabel = [](const char* pLabel, float indent = 0.0f)
     {
-        editor.SaveState();
-
-        pCollision->m_ColliderType = static_cast<EColliderType>(colliderType);
-        pCollision->m_Dirty = true;
-        changed = true;
-    }
-
-    if (ImGui::Checkbox(lang.Word("visualize"), &pCollision->m_Visualize))
-    {
-        editor.SaveState();
-        changed = true;
-    }
-
-    if (ImGui::DragFloat3(lang.Word("center"), (float*)&pCollision->m_Center, 0.1f))
-    {
-        editor.SaveState();
-
-        pCollision->m_Dirty = true;
-        changed = true;
-    }
-
-    ImGui::Spacing();
-
-    switch (pCollision->m_ColliderType)
-    {
-        case COLLIDER_BOX:
+        ImGui::TableNextRow();
+        ImGui::TableNextColumn();
+        if (indent > 0.0f)
         {
-            if (ImGui::DragFloat3(lang.Word("size"), (float*)&pCollision->m_Size, 0.1f, 0.01f, 1000.0f))
-            {
-                editor.SaveState();
+            ImGui::Indent(indent);
+        }
+        ImGui::AlignTextToFramePadding();
+        ImGui::TextUnformatted(pLabel);
+        if (indent > 0.0f)
+        {
+            ImGui::Unindent(indent);
+        }
+        ImGui::TableNextColumn();
+    };
 
-                pCollision->m_Dirty = true;
-                changed = true;
-            }
+    const auto drawVec3Field = [&](const char* pIdPrefix, Vec3& vec, float speed, float minVal, float maxVal) -> bool
+    {
+        const float avail = ImGui::GetContentRegionAvail().x;
+        const float spacing = ImGui::GetStyle().ItemInnerSpacing.x;
+        const float labelW = ImGui::CalcTextSize("X").x + spacing;
+        const float fieldW = std::max(28.0f, (avail - labelW * 3.0f - spacing * 2.0f) / 3.0f);
 
-            break;
+        bool modified = false;
+
+        ImGui::AlignTextToFramePadding();
+        ImGui::TextUnformatted("X");
+        ImGui::SameLine(0.0f, spacing);
+        ImGui::SetNextItemWidth(fieldW);
+        if (ImGui::DragFloat((std::string("##") + pIdPrefix + "_X").c_str(), &vec.x, speed, minVal, maxVal, "%g"))
+        {
+            modified = true;
+        }
+        if (ImGui::IsItemActivated())
+        {
+            editor.SaveState();
         }
 
-        case COLLIDER_SPHERE:
+        ImGui::SameLine(0.0f, spacing);
+        ImGui::TextUnformatted("Y");
+        ImGui::SameLine(0.0f, spacing);
+        ImGui::SetNextItemWidth(fieldW);
+        if (ImGui::DragFloat((std::string("##") + pIdPrefix + "_Y").c_str(), &vec.y, speed, minVal, maxVal, "%g"))
         {
-            if (ImGui::DragFloat(lang.Word("radius"), (float*)&pCollision->m_Radius, 0.1f, 0.01f, 1000.0f))
-            {
-                editor.SaveState();
-
-                pCollision->m_Dirty = true;
-                changed = true;
-            }
-
-            break;
+            modified = true;
+        }
+        if (ImGui::IsItemActivated())
+        {
+            editor.SaveState();
         }
 
-        case COLLIDER_CAPSULE:
+        ImGui::SameLine(0.0f, spacing);
+        ImGui::TextUnformatted("Z");
+        ImGui::SameLine(0.0f, spacing);
+        ImGui::SetNextItemWidth(fieldW);
+        if (ImGui::DragFloat((std::string("##") + pIdPrefix + "_Z").c_str(), &vec.z, speed, minVal, maxVal, "%g"))
         {
-            if (ImGui::DragFloat(lang.Word("radius"), (float*)&pCollision->m_Radius, 0.1f, 0.01f, 1000.0f))
-            {
-                editor.SaveState();
-
-                pCollision->m_Dirty = true;
-                changed = true;
-            }
-
-            if (ImGui::DragFloat(lang.Word("height"), (float*)&pCollision->m_Height, 0.1f, 0.1f, 1000.0f))
-            {
-                editor.SaveState();
-
-                pCollision->m_Dirty = true;
-                changed = true;
-            }
-
-            break;
+            modified = true;
         }
-    }
+        if (ImGui::IsItemActivated())
+        {
+            editor.SaveState();
+        }
 
-    ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.8f, 0.2f, 0.2f, 1.0f));
-    ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImVec4(1.0f, 0.3f, 0.3f, 1.0f));
-    if (ImGui::Button(lang.Word("reset"), ImVec2(-1, 0)))
+        return modified;
+    };
+
+    const auto drawMaterialRow = [&]()
     {
-        pCollision->m_Size = Vec3(1.0f, 1.0f, 1.0f);
-        pCollision->m_Radius = 0.5f;
-        pCollision->m_Height = 2.0f;
-        pCollision->m_Center = Vec3(0.0f, 0.0f, 0.0f);
+        drawRowLabel("Material");
+        ImGui::SetNextItemWidth(-FLT_MIN);
+        const char* apMaterialPresets[] = {
+            "None (Physic Material)",
+            "Default",
+            "Bouncy",
+            "Ice",
+            "Rubber",
+            "Metal"
+        };
+        int preset = static_cast<int>(pCollision->m_MaterialPreset);
+        if (ImGui::Combo("##ColMaterial", &preset, apMaterialPresets, IM_ARRAYSIZE(apMaterialPresets)))
+        {
+            editor.SaveState();
+            pCollision->m_MaterialPreset = static_cast<EPhysicMaterialPreset>(preset);
+            changed = true;
+        }
+    };
+
+    if (beginColliderTable("##ColliderHeaderTable"))
+    {
+        drawRowLabel("Type");
+        ImGui::SetNextItemWidth(-FLT_MIN);
+        const char* apColliderTypes[] = {
+            "Box Collider",
+            "Sphere Collider",
+            "Capsule Collider",
+            "Mesh Collider"
+        };
+        int colliderType = static_cast<int>(pCollision->m_ColliderType);
+        if (ImGui::Combo("##ColType", &colliderType, apColliderTypes, IM_ARRAYSIZE(apColliderTypes)))
+        {
+            editor.SaveState();
+            pCollision->m_ColliderType = static_cast<EColliderType>(colliderType);
+            pCollision->m_Dirty = true;
+            changed = true;
+        }
+
+        drawRowLabel("Visualize");
+        if (ImGui::Checkbox("##ColVisualize", &pCollision->m_Visualize))
+        {
+            editor.SaveState();
+            changed = true;
+        }
+
+        switch (pCollision->m_ColliderType)
+        {
+            case COLLIDER_BOX:
+            {
+                drawRowLabel("Is Trigger");
+                if (ImGui::Checkbox("##ColIsTrigger", &pCollision->m_IsTrigger))
+                {
+                    editor.SaveState();
+                    changed = true;
+                }
+
+                drawRowLabel("Provides Contacts");
+                if (ImGui::Checkbox("##ColProvidesContacts", &pCollision->m_ProvidesContacts))
+                {
+                    editor.SaveState();
+                    changed = true;
+                }
+
+                drawMaterialRow();
+
+                drawRowLabel("Center");
+                if (drawVec3Field("ColBoxCenter", pCollision->m_Center, 0.05f, -10000.0f, 10000.0f))
+                {
+                    pCollision->m_Dirty = true;
+                    changed = true;
+                }
+
+                drawRowLabel("Size");
+                if (drawVec3Field("ColBoxSize", pCollision->m_Size, 0.05f, 0.001f, 10000.0f))
+                {
+                    pCollision->m_Size.x = std::max(0.001f, pCollision->m_Size.x);
+                    pCollision->m_Size.y = std::max(0.001f, pCollision->m_Size.y);
+                    pCollision->m_Size.z = std::max(0.001f, pCollision->m_Size.z);
+                    pCollision->m_Dirty = true;
+                    changed = true;
+                }
+                break;
+            }
+
+            case COLLIDER_SPHERE:
+            {
+                drawRowLabel("Is Trigger");
+                if (ImGui::Checkbox("##ColIsTrigger", &pCollision->m_IsTrigger))
+                {
+                    editor.SaveState();
+                    changed = true;
+                }
+
+                drawRowLabel("Provides Contacts");
+                if (ImGui::Checkbox("##ColProvidesContacts", &pCollision->m_ProvidesContacts))
+                {
+                    editor.SaveState();
+                    changed = true;
+                }
+
+                drawMaterialRow();
+
+                drawRowLabel("Center");
+                if (drawVec3Field("ColSphereCenter", pCollision->m_Center, 0.05f, -10000.0f, 10000.0f))
+                {
+                    pCollision->m_Dirty = true;
+                    changed = true;
+                }
+
+                drawRowLabel("Radius");
+                ImGui::SetNextItemWidth(-FLT_MIN);
+                float radius = pCollision->m_Radius;
+                if (ImGui::DragFloat("##ColSphereRadius", &radius, 0.02f, 0.001f, 10000.0f, "%g"))
+                {
+                    pCollision->m_Radius = std::max(0.001f, radius);
+                    pCollision->m_Dirty = true;
+                    changed = true;
+                }
+                if (ImGui::IsItemActivated())
+                {
+                    editor.SaveState();
+                }
+                break;
+            }
+
+            case COLLIDER_CAPSULE:
+            {
+                drawRowLabel("Is Trigger");
+                if (ImGui::Checkbox("##ColIsTrigger", &pCollision->m_IsTrigger))
+                {
+                    editor.SaveState();
+                    changed = true;
+                }
+
+                drawRowLabel("Provides Contacts");
+                if (ImGui::Checkbox("##ColProvidesContacts", &pCollision->m_ProvidesContacts))
+                {
+                    editor.SaveState();
+                    changed = true;
+                }
+
+                drawMaterialRow();
+
+                drawRowLabel("Center");
+                if (drawVec3Field("ColCapCenter", pCollision->m_Center, 0.05f, -10000.0f, 10000.0f))
+                {
+                    pCollision->m_Dirty = true;
+                    changed = true;
+                }
+
+                drawRowLabel("Radius");
+                ImGui::SetNextItemWidth(-FLT_MIN);
+                float radius = pCollision->m_Radius;
+                if (ImGui::DragFloat("##ColCapRadius", &radius, 0.02f, 0.001f, 10000.0f, "%g"))
+                {
+                    pCollision->m_Radius = std::max(0.001f, radius);
+                    pCollision->m_Dirty = true;
+                    changed = true;
+                }
+                if (ImGui::IsItemActivated())
+                {
+                    editor.SaveState();
+                }
+
+                drawRowLabel("Height");
+                ImGui::SetNextItemWidth(-FLT_MIN);
+                float height = pCollision->m_Height;
+                if (ImGui::DragFloat("##ColCapHeight", &height, 0.05f, 0.01f, 10000.0f, "%g"))
+                {
+                    pCollision->m_Height = std::max(0.01f, height);
+                    pCollision->m_Dirty = true;
+                    changed = true;
+                }
+                if (ImGui::IsItemActivated())
+                {
+                    editor.SaveState();
+                }
+
+                drawRowLabel("Direction");
+                ImGui::SetNextItemWidth(-FLT_MIN);
+                const char* apDirections[] = { "X-Axis", "Y-Axis", "Z-Axis" };
+                int direction = static_cast<int>(pCollision->m_Direction);
+                if (ImGui::Combo("##ColCapDir", &direction, apDirections, IM_ARRAYSIZE(apDirections)))
+                {
+                    editor.SaveState();
+                    pCollision->m_Direction = static_cast<ECapsuleDirection>(direction);
+                    pCollision->m_Dirty = true;
+                    changed = true;
+                }
+                break;
+            }
+
+            case COLLIDER_MESH:
+            {
+                drawRowLabel("Convex");
+                if (ImGui::Checkbox("##ColMeshConvex", &pCollision->m_Convex))
+                {
+                    editor.SaveState();
+                    changed = true;
+                }
+
+                drawRowLabel("Is Trigger");
+                if (ImGui::Checkbox("##ColIsTrigger", &pCollision->m_IsTrigger))
+                {
+                    editor.SaveState();
+                    changed = true;
+                }
+
+                drawRowLabel("Provides Contacts");
+                if (ImGui::Checkbox("##ColProvidesContacts", &pCollision->m_ProvidesContacts))
+                {
+                    editor.SaveState();
+                    changed = true;
+                }
+
+                drawMaterialRow();
+
+                drawRowLabel("Mesh");
+                const CMeshComponent* pMeshComp = entity.GetMeshComponent();
+                std::string meshLabel = "None (Mesh)";
+                if (pMeshComp)
+                {
+                    meshLabel = pMeshComp->m_AssetName.empty()
+                        ? ObjectTypeName(pMeshComp->m_Type)
+                        : pMeshComp->m_AssetName;
+                }
+                ImGui::BeginDisabled(true);
+                ImGui::SetNextItemWidth(-FLT_MIN);
+                char aMeshBuf[256] = {};
+                std::snprintf(aMeshBuf, sizeof(aMeshBuf), "%s", meshLabel.c_str());
+                ImGui::InputText("##ColMeshRef", aMeshBuf, sizeof(aMeshBuf), ImGuiInputTextFlags_ReadOnly);
+                ImGui::EndDisabled();
+                break;
+            }
+        }
+
+        ImGui::EndTable();
     }
-    ImGui::PopStyleColor(2);
 
     if (changed)
     {
+        editor.m_SceneDirty = true;
         CEntityTextureService::MarkEntityBoundsDirty(&entity);
     }
 }
@@ -2663,6 +2813,8 @@ void CComponentUIHelper::DrawButtonComponent(
     }
 }
 
+
+
 void CComponentUIHelper::DrawUiTextComponent(CEditor& editor, CTextComponent* pText)
 {
     if (!pText)
@@ -2989,6 +3141,8 @@ void CComponentUIHelper::DrawUiTextComponent(CEditor& editor, CTextComponent* pT
         editor.m_SceneDirty = true;
     }
 }
+
+
 
 void CComponentUIHelper::DrawUiComponent(CEditor& editor, CEntity& entity, CUiComponent* pUi)
 {
@@ -3360,6 +3514,8 @@ void CComponentUIHelper::DrawSliderComponent(CEditor& editor, CSliderComponent* 
     }
 }
 
+
+
 void CComponentUIHelper::DrawToggleComponent(CEditor& editor, CToggleComponent* pToggle)
 {
     if (!pToggle)
@@ -3428,6 +3584,8 @@ void CComponentUIHelper::DrawToggleComponent(CEditor& editor, CToggleComponent* 
         editor.m_SceneDirty = true;
     }
 }
+
+
 
 void CComponentUIHelper::DrawProgressBarComponent(CEditor& editor, CProgressBarComponent* pProgressBar)
 {
@@ -3502,6 +3660,8 @@ void CComponentUIHelper::DrawProgressBarComponent(CEditor& editor, CProgressBarC
         editor.m_SceneDirty = true;
     }
 }
+
+
 
 void CComponentUIHelper::DrawScrollViewComponent(CEditor& editor, CScrollViewComponent* pScrollView)
 {
@@ -3578,6 +3738,8 @@ void CComponentUIHelper::DrawScrollViewComponent(CEditor& editor, CScrollViewCom
         editor.m_SceneDirty = true;
     }
 }
+
+
 
 void CComponentUIHelper::DrawHorizontalLayoutComponent(CEditor& editor, CHorizontalLayoutComponent* pLayout)
 {
@@ -3657,6 +3819,8 @@ void CComponentUIHelper::DrawHorizontalLayoutComponent(CEditor& editor, CHorizon
     }
 }
 
+
+
 void CComponentUIHelper::DrawVerticalLayoutComponent(CEditor& editor, CVerticalLayoutComponent* pLayout)
 {
     if (!pLayout)
@@ -3735,6 +3899,8 @@ void CComponentUIHelper::DrawVerticalLayoutComponent(CEditor& editor, CVerticalL
     }
 }
 
+
+
 void CComponentUIHelper::DrawGridLayoutComponent(CEditor& editor, CGridLayoutComponent* pLayout)
 {
     if (!pLayout)
@@ -3807,6 +3973,321 @@ void CComponentUIHelper::DrawGridLayoutComponent(CEditor& editor, CGridLayoutCom
         {
             editor.SaveState();
         }
+    }
+
+    if (changed)
+    {
+        editor.m_SceneDirty = true;
+    }
+}
+
+void CComponentUIHelper::DrawRigidbodyComponent(CEditor& editor, CEntity& entity, CRigidbodyComponent* pBody)
+{
+    if (!pBody)
+    {
+        return;
+    }
+
+    bool changed = false;
+
+    const auto beginPropertyTable = [](const char* pTableId) -> bool
+    {
+        if (!ImGui::BeginTable(pTableId, 2, ImGuiTableFlags_SizingStretchProp | ImGuiTableFlags_NoBordersInBody))
+        {
+            return false;
+        }
+        ImGui::TableSetupColumn("Label", ImGuiTableColumnFlags_WidthStretch, 0.42f);
+        ImGui::TableSetupColumn("Control", ImGuiTableColumnFlags_WidthStretch, 0.58f);
+        return true;
+    };
+
+    const auto drawRowLabel = [](const char* pLabel, float indent = 0.0f)
+    {
+        ImGui::TableNextRow();
+        ImGui::TableNextColumn();
+        if (indent > 0.0f)
+        {
+            ImGui::Indent(indent);
+        }
+        ImGui::AlignTextToFramePadding();
+        ImGui::TextUnformatted(pLabel);
+        if (indent > 0.0f)
+        {
+            ImGui::Unindent(indent);
+        }
+        ImGui::TableNextColumn();
+    };
+
+    const auto drawReadOnlyVec3 = [](const char* pIdPrefix, const Vec3& v)
+    {
+        const float avail = ImGui::GetContentRegionAvail().x;
+        const float spacing = ImGui::GetStyle().ItemInnerSpacing.x;
+        const float labelW = ImGui::CalcTextSize("X").x + spacing;
+        const float fieldW = std::max(28.0f, (avail - labelW * 3.0f - spacing * 2.0f) / 3.0f);
+
+        float x = v.x;
+        float y = v.y;
+        float z = v.z;
+
+        ImGui::AlignTextToFramePadding();
+        ImGui::TextUnformatted("X");
+        ImGui::SameLine(0.0f, spacing);
+        ImGui::SetNextItemWidth(fieldW);
+        ImGui::InputFloat((std::string("##") + pIdPrefix + "_X").c_str(), &x, 0.0f, 0.0f, "%g", ImGuiInputTextFlags_ReadOnly);
+
+        ImGui::SameLine(0.0f, spacing);
+        ImGui::TextUnformatted("Y");
+        ImGui::SameLine(0.0f, spacing);
+        ImGui::SetNextItemWidth(fieldW);
+        ImGui::InputFloat((std::string("##") + pIdPrefix + "_Y").c_str(), &y, 0.0f, 0.0f, "%g", ImGuiInputTextFlags_ReadOnly);
+
+        ImGui::SameLine(0.0f, spacing);
+        ImGui::TextUnformatted("Z");
+        ImGui::SameLine(0.0f, spacing);
+        ImGui::SetNextItemWidth(fieldW);
+        ImGui::InputFloat((std::string("##") + pIdPrefix + "_Z").c_str(), &z, 0.0f, 0.0f, "%g", ImGuiInputTextFlags_ReadOnly);
+    };
+
+    if (beginPropertyTable("##RigidbodyMainTable"))
+    {
+        drawRowLabel("Mass");
+        ImGui::SetNextItemWidth(-FLT_MIN);
+        float mass = pBody->m_Mass;
+        if (ImGui::DragFloat("##RbMass", &mass, 0.1f, 0.001f, 100000.0f, "%g"))
+        {
+            pBody->m_Mass = std::max(0.001f, mass);
+            changed = true;
+        }
+        if (ImGui::IsItemActivated())
+        {
+            editor.SaveState();
+        }
+
+        drawRowLabel("Drag");
+        ImGui::SetNextItemWidth(-FLT_MIN);
+        float drag = pBody->m_LinearDrag;
+        if (ImGui::DragFloat("##RbDrag", &drag, 0.01f, 0.0f, 10000.0f, "%g"))
+        {
+            pBody->m_LinearDrag = std::max(0.0f, drag);
+            changed = true;
+        }
+        if (ImGui::IsItemActivated())
+        {
+            editor.SaveState();
+        }
+
+        drawRowLabel("Angular Drag");
+        ImGui::SetNextItemWidth(-FLT_MIN);
+        float angularDrag = pBody->m_AngularDrag;
+        if (ImGui::DragFloat("##RbAngularDrag", &angularDrag, 0.05f, 0.0f, 10000.0f, "%g"))
+        {
+            pBody->m_AngularDrag = std::max(0.0f, angularDrag);
+            changed = true;
+        }
+        if (ImGui::IsItemActivated())
+        {
+            editor.SaveState();
+        }
+
+        drawRowLabel("Use Gravity");
+        if (ImGui::Checkbox("##RbUseGravity", &pBody->m_UseGravity))
+        {
+            editor.SaveState();
+            changed = true;
+        }
+
+        if (pBody->m_UseGravity)
+        {
+            drawRowLabel("Gravity Scale");
+            ImGui::SetNextItemWidth(-FLT_MIN);
+            float gravScale = pBody->m_GravityScale;
+            if (ImGui::DragFloat("##RbGravityScale", &gravScale, 0.05f, -100.0f, 100.0f, "%g"))
+            {
+                pBody->m_GravityScale = gravScale;
+                changed = true;
+            }
+            if (ImGui::IsItemActivated())
+            {
+                editor.SaveState();
+            }
+        }
+
+        drawRowLabel("Is Kinematic");
+        if (ImGui::Checkbox("##RbIsKinematic", &pBody->m_IsKinematic))
+        {
+            editor.SaveState();
+            changed = true;
+        }
+
+        drawRowLabel("Interpolate");
+        ImGui::SetNextItemWidth(-FLT_MIN);
+        const char* apInterpolateModes[] = { "None", "Interpolate", "Extrapolate" };
+        int interpolateMode = static_cast<int>(pBody->m_Interpolate);
+        if (ImGui::Combo("##RbInterpolate", &interpolateMode, apInterpolateModes, IM_ARRAYSIZE(apInterpolateModes)))
+        {
+            editor.SaveState();
+            pBody->m_Interpolate = static_cast<ERigidbodyInterpolate>(interpolateMode);
+            changed = true;
+        }
+
+        drawRowLabel("Collision Detection");
+        ImGui::SetNextItemWidth(-FLT_MIN);
+        const char* apCollisionModes[] = {
+            "Discrete",
+            "Continuous",
+            "Continuous Dynamic",
+            "Continuous Speculative"
+        };
+        int collisionMode = static_cast<int>(pBody->m_CollisionDetection);
+        if (ImGui::Combo("##RbCollisionDetection", &collisionMode, apCollisionModes, IM_ARRAYSIZE(apCollisionModes)))
+        {
+            editor.SaveState();
+            pBody->m_CollisionDetection = static_cast<ECollisionDetectionMode>(collisionMode);
+            changed = true;
+        }
+
+        ImGui::EndTable();
+    }
+
+    if (ImGui::TreeNodeEx("Constraints##RbConstraints", ImGuiTreeNodeFlags_SpanAvailWidth | ImGuiTreeNodeFlags_DefaultOpen))
+    {
+        if (beginPropertyTable("##RigidbodyConstraintsTable"))
+        {
+            drawRowLabel("Freeze Position", 12.0f);
+            if (ImGui::Checkbox("X##RbFreezePosX", &pBody->m_FreezePositionX))
+            {
+                editor.SaveState();
+                changed = true;
+            }
+            ImGui::SameLine();
+            if (ImGui::Checkbox("Y##RbFreezePosY", &pBody->m_FreezePositionY))
+            {
+                editor.SaveState();
+                changed = true;
+            }
+            ImGui::SameLine();
+            if (ImGui::Checkbox("Z##RbFreezePosZ", &pBody->m_FreezePositionZ))
+            {
+                editor.SaveState();
+                changed = true;
+            }
+
+            drawRowLabel("Freeze Rotation", 12.0f);
+            if (ImGui::Checkbox("X##RbFreezeRotX", &pBody->m_FreezeRotationX))
+            {
+                editor.SaveState();
+                changed = true;
+            }
+            ImGui::SameLine();
+            if (ImGui::Checkbox("Y##RbFreezeRotY", &pBody->m_FreezeRotationY))
+            {
+                editor.SaveState();
+                changed = true;
+            }
+            ImGui::SameLine();
+            if (ImGui::Checkbox("Z##RbFreezeRotZ", &pBody->m_FreezeRotationZ))
+            {
+                editor.SaveState();
+                changed = true;
+            }
+
+            ImGui::EndTable();
+        }
+        ImGui::TreePop();
+    }
+
+    if (ImGui::TreeNodeEx("Info##RbInfo", ImGuiTreeNodeFlags_SpanAvailWidth | ImGuiTreeNodeFlags_DefaultOpen))
+    {
+        const CCollisionComponent* pCollider = entity.GetCollisionComponent();
+        const CTransformComponent* pTransform = entity.GetTransformComponent();
+
+        const Vec3 localCom = pCollider ? pCollider->m_Center : Vec3{ 0.0f, 0.0f, 0.0f };
+        Vec3 worldCom = pTransform ? (pTransform->m_Position + localCom) : localCom;
+        const int entityIndex = editor.m_Scene.FindEntityIndexById(entity.m_Id);
+        if (entityIndex >= 0)
+        {
+            const Mat4 world = quark::ComposeWorld(editor.m_Scene, entityIndex);
+            worldCom = Vec3(world * localCom);
+        }
+
+        const float mass = std::max(pBody->m_Mass, 0.001f);
+        Vec3 inertia = { (1.0f / 6.0f) * mass, (1.0f / 6.0f) * mass, (1.0f / 6.0f) * mass };
+        if (pCollider)
+        {
+            const Vec3 scale = pTransform ? pTransform->m_Scale : Vec3{ 1.0f, 1.0f, 1.0f };
+            if (pCollider->m_ColliderType == COLLIDER_SPHERE)
+            {
+                const float r = std::max(pCollider->m_Radius * std::max({ std::fabs(scale.x), std::fabs(scale.y), std::fabs(scale.z) }), 0.001f);
+                const float iSphere = 0.4f * mass * r * r;
+                inertia = { iSphere, iSphere, iSphere };
+            }
+            else if (pCollider->m_ColliderType == COLLIDER_CAPSULE)
+            {
+                const float r = std::max(pCollider->m_Radius * std::max(std::fabs(scale.x), std::fabs(scale.z)), 0.001f);
+                const float h = std::max(pCollider->m_Height * std::fabs(scale.y), r * 2.0f);
+                const float iy = 0.5f * mass * r * r;
+                const float ixz = (1.0f / 12.0f) * mass * (3.0f * r * r + h * h);
+                inertia = { ixz, iy, ixz };
+            }
+            else
+            {
+                const float sx = std::max(std::fabs(pCollider->m_Size.x * scale.x), 0.001f);
+                const float sy = std::max(std::fabs(pCollider->m_Size.y * scale.y), 0.001f);
+                const float sz = std::max(std::fabs(pCollider->m_Size.z * scale.z), 0.001f);
+                inertia = {
+                    (1.0f / 12.0f) * mass * (sy * sy + sz * sz),
+                    (1.0f / 12.0f) * mass * (sx * sx + sz * sz),
+                    (1.0f / 12.0f) * mass * (sx * sx + sy * sy)
+                };
+            }
+        }
+        if (pBody->m_FreezeRotationX)
+        {
+            inertia.x = 0.0f;
+        }
+        if (pBody->m_FreezeRotationY)
+        {
+            inertia.y = 0.0f;
+        }
+        if (pBody->m_FreezeRotationZ)
+        {
+            inertia.z = 0.0f;
+        }
+
+        ImGui::BeginDisabled(true);
+        if (beginPropertyTable("##RigidbodyInfoTable"))
+        {
+            drawRowLabel("Speed", 12.0f);
+            ImGui::SetNextItemWidth(-FLT_MIN);
+            float speed = pBody->m_Velocity.length();
+            ImGui::InputFloat("##RbInfoSpeed", &speed, 0.0f, 0.0f, "%g", ImGuiInputTextFlags_ReadOnly);
+
+            drawRowLabel("Velocity", 12.0f);
+            drawReadOnlyVec3("RbInfoVel", pBody->m_Velocity);
+
+            drawRowLabel("Angular Velocity", 12.0f);
+            drawReadOnlyVec3("RbInfoAngVel", pBody->m_AngularVelocity);
+
+            drawRowLabel("Inertia Tensor", 12.0f);
+            drawReadOnlyVec3("RbInfoInertia", inertia);
+
+            drawRowLabel("Inertia Tensor Rotation", 12.0f);
+            drawReadOnlyVec3("RbInfoInertiaRot", Vec3{ 0.0f, 0.0f, 0.0f });
+
+            drawRowLabel("Local Center of Mass", 12.0f);
+            drawReadOnlyVec3("RbInfoLocalCom", localCom);
+
+            drawRowLabel("World Center of Mass", 12.0f);
+            drawReadOnlyVec3("RbInfoWorldCom", worldCom);
+
+            drawRowLabel("Sleep State", 12.0f);
+            ImGui::AlignTextToFramePadding();
+            ImGui::TextUnformatted(pBody->m_IsSleeping ? "Sleeping" : "Awake");
+
+            ImGui::EndTable();
+        }
+        ImGui::EndDisabled();
+        ImGui::TreePop();
     }
 
     if (changed)

@@ -377,6 +377,100 @@ void CAssetLibrary::SetTaskPool(CTaskPool& taskPool)
 {
     m_pTaskPool = &taskPool;
 }
+
+namespace
+{
+    Mesh GenerateCapsuleMesh(float radius, float totalHeight, int segments)
+    {
+        const int slices = std::clamp(segments, 6, 64);
+        const int hemiRings = std::max(3, slices / 2);
+        const float r = std::max(radius, 0.01f);
+        const float halfCyl = std::max(0.0f, totalHeight * 0.5f - r);
+        constexpr float PI_VAL = 3.14159265358979323846f;
+
+        std::vector<float> vVertices;
+        std::vector<float> vNormals;
+        std::vector<float> vTexcoords;
+        std::vector<unsigned short> vIndices;
+
+        const int totalRings = hemiRings * 2 + 1;
+        const int stride = slices + 1;
+
+        const auto pushRing = [&](float y, float ringRadius, float ny, float nRad, float vCoord)
+        {
+            for (int s = 0; s <= slices; ++s)
+            {
+                const float u = static_cast<float>(s) / static_cast<float>(slices);
+                const float phi = u * 2.0f * PI_VAL;
+                const float cosP = std::cos(phi);
+                const float sinP = std::sin(phi);
+
+                vVertices.push_back(ringRadius * cosP);
+                vVertices.push_back(y);
+                vVertices.push_back(ringRadius * sinP);
+
+                vNormals.push_back(nRad * cosP);
+                vNormals.push_back(ny);
+                vNormals.push_back(nRad * sinP);
+
+                vTexcoords.push_back(u);
+                vTexcoords.push_back(vCoord);
+            }
+        };
+
+        for (int ring = 0; ring <= hemiRings; ++ring)
+        {
+            const float frac = static_cast<float>(ring) / static_cast<float>(hemiRings);
+            const float theta = frac * (PI_VAL * 0.5f);
+            const float sinT = std::sin(theta);
+            const float cosT = std::cos(theta);
+            pushRing(halfCyl + r * cosT, r * sinT, cosT, sinT, frac * 0.35f);
+        }
+
+        for (int ring = 0; ring <= hemiRings; ++ring)
+        {
+            const float frac = static_cast<float>(ring) / static_cast<float>(hemiRings);
+            const float theta = (PI_VAL * 0.5f) + frac * (PI_VAL * 0.5f);
+            const float sinT = std::sin(theta);
+            const float cosT = std::cos(theta);
+            pushRing(-halfCyl + r * cosT, r * sinT, cosT, sinT, 0.65f + frac * 0.35f);
+        }
+
+        for (int ring = 0; ring < totalRings; ++ring)
+        {
+            for (int s = 0; s < slices; ++s)
+            {
+                const unsigned short i0 = static_cast<unsigned short>(ring * stride + s);
+                const unsigned short i1 = static_cast<unsigned short>(i0 + 1);
+                const unsigned short i2 = static_cast<unsigned short>((ring + 1) * stride + s);
+                const unsigned short i3 = static_cast<unsigned short>(i2 + 1);
+
+                vIndices.push_back(i0);
+                vIndices.push_back(i1);
+                vIndices.push_back(i2);
+
+                vIndices.push_back(i1);
+                vIndices.push_back(i3);
+                vIndices.push_back(i2);
+            }
+        }
+
+        Mesh mesh{};
+        mesh.vertexCount = static_cast<int>(vVertices.size() / 3);
+        mesh.triangleCount = static_cast<int>(vIndices.size() / 3);
+        mesh.vertices = new float[vVertices.size()];
+        mesh.normals = new float[vNormals.size()];
+        mesh.texcoords = new float[vTexcoords.size()];
+        mesh.indices = new unsigned short[vIndices.size()];
+        std::copy(vVertices.begin(), vVertices.end(), mesh.vertices);
+        std::copy(vNormals.begin(), vNormals.end(), mesh.normals);
+        std::copy(vTexcoords.begin(), vTexcoords.end(), mesh.texcoords);
+        std::copy(vIndices.begin(), vIndices.end(), mesh.indices);
+        UploadMesh(&mesh, false);
+        return mesh;
+    }
+} // anonymous
+
 void CAssetLibrary::RegisterProceduralAssets()
 {
     CModelAsset cubeAsset;
@@ -438,6 +532,16 @@ void CAssetLibrary::RegisterProceduralAssets()
         return LoadModelFromMesh(GenMeshTorus(1.0f, 1.0f, seg, seg));
     };
     m_vModels.push_back(std::move(torusAsset));
+
+    CModelAsset capsuleAsset;
+    capsuleAsset.m_Name = "Capsule";
+    capsuleAsset.m_Type = OBJECT_CAPSULE;
+    capsuleAsset.m_IsProcedural = true;
+    capsuleAsset.pfnGenerator = [](int seg)
+    {
+        return LoadModelFromMesh(GenerateCapsuleMesh(0.5f, 2.0f, seg));
+    };
+    m_vModels.push_back(std::move(capsuleAsset));
 
     CModelAsset textAsset;
     textAsset.m_Name = "3D Text";

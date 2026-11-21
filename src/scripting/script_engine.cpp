@@ -2138,6 +2138,7 @@ namespace quark::script
         s_ScriptAccumulatedTime += static_cast<double>(scaledDelta);
 
         const float fixedStep = std::max(0.001f, s_ScriptFixedDeltaTime);
+        m_PhysicsWorld.SyncBeforeFixedSteps(scene);
         m_FixedAccumulator += scaledDelta;
         int fixedIterations = 0;
         constexpr int MAX_FIXED_STEPS_PER_FRAME = 8;
@@ -2210,6 +2211,9 @@ namespace quark::script
                 dispatchToEntity(ev.m_EntityB, ev.m_EntityA, ev, ev.m_Normal);
             }
         }
+
+        const float interpAlpha = std::clamp(m_FixedAccumulator / fixedStep, 0.0f, 1.0f);
+        m_PhysicsWorld.ApplyInterpolation(scene, interpAlpha, m_FixedAccumulator);
 
         for (size_t i = 0; i < scene.m_vEntities.size(); ++i)
         {

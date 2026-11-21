@@ -23,7 +23,9 @@
 #include <utility>
 
 #ifdef _WIN32
+#ifndef NOMINMAX
 #define NOMINMAX
+#endif
 #define WIN32_LEAN_AND_MEAN
 #define NOGDI
 #define NOUSER
@@ -41,7 +43,6 @@ namespace fs = std::filesystem;
 
 namespace
 {
-
     constexpr float ICON_SIZE = 64.0f;
 
     std::string Lowercase(std::string value)

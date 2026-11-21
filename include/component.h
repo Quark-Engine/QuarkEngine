@@ -31,7 +31,8 @@ enum EObjectType
     OBJECT_CONE = 2,
     OBJECT_CYLINDER = 3,
     OBJECT_HEMISPHERE = 4,
-    OBJECT_TORUS = 5
+    OBJECT_TORUS = 5,
+    OBJECT_CAPSULE = 6
 };
 
 enum ETextureSource
@@ -186,6 +187,23 @@ enum EColliderType
     COLLIDER_SPHERE,
     COLLIDER_CAPSULE,
     COLLIDER_MESH
+};
+
+enum class ECapsuleDirection : int
+{
+    X_AXIS = 0,
+    Y_AXIS = 1,
+    Z_AXIS = 2
+};
+
+enum class EPhysicMaterialPreset : int
+{
+    NONE = 0,
+    DEFAULT = 1,
+    BOUNCY = 2,
+    ICE = 3,
+    RUBBER = 4,
+    METAL = 5
 };
 
 class IComponent
@@ -597,14 +615,17 @@ public:
     EColliderType m_ColliderType = COLLIDER_BOX;
 
     bool m_IsTrigger = false;
+    bool m_ProvidesContacts = true;
     bool m_Visualize = true;
+    EPhysicMaterialPreset m_MaterialPreset = EPhysicMaterialPreset::NONE;
 
-    // box
     Vec3 m_Size = { 1, 1, 1 };
 
-    // sphere/capsule
     float m_Radius = 0.5f;
     float m_Height = 2.0f;
+    ECapsuleDirection m_Direction = ECapsuleDirection::Y_AXIS;
+
+    bool m_Convex = false;
 
     Vec3 m_Center = { 0, 0, 0 };
 
@@ -626,9 +647,64 @@ public:
         return "Collision";
     }
 
+    float GetEffectiveFriction(float fallback) const
+    {
+        switch (m_MaterialPreset)
+        {
+            case EPhysicMaterialPreset::DEFAULT:
+                return 0.5f;
+            case EPhysicMaterialPreset::BOUNCY:
+                return 0.2f;
+            case EPhysicMaterialPreset::ICE:
+                return 0.04f;
+            case EPhysicMaterialPreset::RUBBER:
+                return 0.9f;
+            case EPhysicMaterialPreset::METAL:
+                return 0.35f;
+            case EPhysicMaterialPreset::NONE:
+            default:
+                return fallback;
+        }
+    }
+
+    float GetEffectiveRestitution(float fallback) const
+    {
+        switch (m_MaterialPreset)
+        {
+            case EPhysicMaterialPreset::DEFAULT:
+                return 0.1f;
+            case EPhysicMaterialPreset::BOUNCY:
+                return 0.85f;
+            case EPhysicMaterialPreset::ICE:
+                return 0.05f;
+            case EPhysicMaterialPreset::RUBBER:
+                return 0.65f;
+            case EPhysicMaterialPreset::METAL:
+                return 0.25f;
+            case EPhysicMaterialPreset::NONE:
+            default:
+                return fallback;
+        }
+    }
+
     void Serialize(nlohmann::json& json) const override;
     void Deserialize(const nlohmann::json& json) override;
     void OnEntityTransformChanged() override;
+};
+
+enum class ERigidbodyInterpolate : int
+{
+    NONE = 0,
+    INTERPOLATE = 1,
+    EXTRAPOLATE = 2
+};
+
+enum class ECollisionDetectionMode : int
+{
+    DISCRETE = 0,
+    CONTINUOUS = 1,
+    CONTINUOUS_DYNAMIC = 2,
+    CONTINUOUS_SPECULATIVE = 3
 };
 
 class CRigidbodyComponent : public IComponent
@@ -636,17 +712,36 @@ class CRigidbodyComponent : public IComponent
 public:
     float m_Mass = 1.0f;
     float m_LinearDrag = 0.05f;
+    float m_AngularDrag = 0.05f;
     float m_Friction = 0.5f;
     float m_Restitution = 0.2f;
     bool m_UseGravity = true;
+    float m_GravityScale = 1.0f;
     bool m_IsKinematic = false;
+    ERigidbodyInterpolate m_Interpolate = ERigidbodyInterpolate::NONE;
+    ECollisionDetectionMode m_CollisionDetection = ECollisionDetectionMode::DISCRETE;
     bool m_FreezePositionX = false;
     bool m_FreezePositionY = false;
     bool m_FreezePositionZ = false;
+    bool m_FreezeRotationX = false;
+    bool m_FreezeRotationY = false;
+    bool m_FreezeRotationZ = false;
 
     Vec3 m_Velocity = { 0.0f, 0.0f, 0.0f };
+    Vec3 m_AngularVelocity = { 0.0f, 0.0f, 0.0f };
     Vec3 m_AccumulatedForce = { 0.0f, 0.0f, 0.0f };
+    Vec3 m_AccumulatedTorque = { 0.0f, 0.0f, 0.0f };
     bool m_IsGrounded = false;
+    bool m_IsSleeping = false;
+    float m_SleepTimer = 0.0f;
+
+    Vec3 m_PrevPosition = { 0.0f, 0.0f, 0.0f };
+    Vec3 m_PrevRotation = { 0.0f, 0.0f, 0.0f };
+    Vec3 m_PhysicsPosition = { 0.0f, 0.0f, 0.0f };
+    Vec3 m_PhysicsRotation = { 0.0f, 0.0f, 0.0f };
+    Vec3 m_LastRenderedPosition = { 0.0f, 0.0f, 0.0f };
+    Vec3 m_LastRenderedRotation = { 0.0f, 0.0f, 0.0f };
+    bool m_HasInterpolationState = false;
 
     CRigidbodyComponent()
     {
@@ -672,12 +767,19 @@ public:
         return 1.0f / (m_Mass > 0.001f ? m_Mass : 0.001f);
     }
 
+    void WakeUp()
+    {
+        m_IsSleeping = false;
+        m_SleepTimer = 0.0f;
+    }
+
     void AddForce(const Vec3& force)
     {
         if (!m_Enabled || m_IsKinematic)
         {
             return;
         }
+        WakeUp();
         m_AccumulatedForce = m_AccumulatedForce + force;
     }
 
@@ -687,20 +789,43 @@ public:
         {
             return;
         }
+        WakeUp();
         const float invMass = GetInverseMass();
         m_Velocity = m_Velocity + impulse * invMass;
     }
 
     void SetVelocity(const Vec3& velocity)
     {
+        WakeUp();
         m_Velocity = velocity;
+    }
+
+    void AddTorque(const Vec3& torque)
+    {
+        if (!m_Enabled || m_IsKinematic)
+        {
+            return;
+        }
+        WakeUp();
+        m_AccumulatedTorque = m_AccumulatedTorque + torque;
+    }
+
+    void SetAngularVelocity(const Vec3& angularVelocity)
+    {
+        WakeUp();
+        m_AngularVelocity = angularVelocity;
     }
 
     void ResetRuntimeState()
     {
         m_Velocity = { 0.0f, 0.0f, 0.0f };
+        m_AngularVelocity = { 0.0f, 0.0f, 0.0f };
         m_AccumulatedForce = { 0.0f, 0.0f, 0.0f };
+        m_AccumulatedTorque = { 0.0f, 0.0f, 0.0f };
         m_IsGrounded = false;
+        m_IsSleeping = false;
+        m_SleepTimer = 0.0f;
+        m_HasInterpolationState = false;
     }
 
     void Serialize(nlohmann::json& json) const override;
