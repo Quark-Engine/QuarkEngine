@@ -550,16 +550,19 @@ void CEditor::HandleInput()
 
     ImGuiIO& io = ImGui::GetIO();
     const bool keyboardAvailable = !io.WantTextInput;
+    const bool ctrlDown = IsKeyDown(KEY_LEFT_CONTROL) || IsKeyDown(KEY_RIGHT_CONTROL);
+    const bool cameraCapturing = IsCursorHidden() || IsMouseButtonDown(MOUSE_BUTTON_RIGHT);
+    const bool gizmoHotkeyAllowed = keyboardAvailable && !ctrlDown && !cameraCapturing;
 
-    if (keyboardAvailable && IsKeyPressed(KEY_P))
+    if (gizmoHotkeyAllowed && IsKeyPressed(KEY_P))
     {
         m_Ui.m_MeshEdit.m_GizmoMode = ImGuizmo::TRANSLATE;
     }
-    if (keyboardAvailable && IsKeyPressed(KEY_R))
+    if (gizmoHotkeyAllowed && IsKeyPressed(KEY_R))
     {
         m_Ui.m_MeshEdit.m_GizmoMode = ImGuizmo::ROTATE;
     }
-    if (keyboardAvailable && IsKeyPressed(KEY_S))
+    if (gizmoHotkeyAllowed && IsKeyPressed(KEY_S))
     {
         m_Ui.m_MeshEdit.m_GizmoMode = ImGuizmo::SCALE;
     }

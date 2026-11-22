@@ -388,10 +388,11 @@ void CApplication::UpdateFrame()
     }
     m_LastSelectedEntity = m_Editor.m_Scene.m_Selected;
 
-    const bool activeViewportHovered = m_Editor.m_GameViewActive
-        ? m_Editor.m_Ui.m_GameViewport.m_Hovered
-        : m_Editor.m_Ui.m_Viewport.m_Hovered;
-    quark::script::CScriptEngine::Get().SetViewportHovered(activeViewportHovered);
+    const bool gameViewportInteractive =
+        (m_Editor.m_GameViewActive ||
+         (m_Editor.m_Ui.m_GameViewport.m_Visible && m_Editor.m_Ui.m_GameViewport.m_Hovered)) &&
+        !m_Camera.m_Active;
+    quark::script::CScriptEngine::Get().SetViewportHovered(gameViewportInteractive);
 
     if (m_Editor.m_IsPlaying)
     {
@@ -454,7 +455,7 @@ void CApplication::UpdateFrame()
     }
 
     if (!m_Editor.m_Scene2DMode &&
-        !buildSettingsOpen && !m_Editor.m_IsPlaying && !m_Editor.m_GameViewActive &&
+        !buildSettingsOpen && !m_Editor.m_GameViewActive && !m_GameCursorCaptured &&
         (m_Camera.m_Active || (!ImGuizmo::IsOver() && !ImGuizmo::IsUsing() &&
                                !CGizmoController::IsCustomGizmoOver() &&
                                !CGizmoController::IsCustomGizmoUsing() &&
@@ -792,30 +793,31 @@ void CApplication::RenderFrame()
     const bool buildSettingsOpen = m_Editor.m_BuildSettingsModalOpen;
     if (m_Editor.m_IsPlaying)
     {
-        const CViewportState& activeViewport = m_Editor.m_GameViewActive
-            ? m_Editor.m_Ui.m_GameViewport
-            : m_Editor.m_Ui.m_Viewport;
+        const CViewportState& gameViewport = m_Editor.m_Ui.m_GameViewport;
         const ImVec2 mousePos = ImGui::GetIO().MousePos;
         const bool anyPopupOpen = ImGui::IsPopupOpen(
             nullptr, ImGuiPopupFlags_AnyPopupId | ImGuiPopupFlags_AnyPopupLevel);
-        const bool mouseOverActiveViewport =
-            activeViewport.m_Hovered &&
+        const bool mouseOverGameViewport =
+            gameViewport.m_Visible &&
+            gameViewport.m_Hovered &&
             !anyPopupOpen &&
             !ImGui::IsAnyItemHovered() &&
-            mousePos.x >= activeViewport.m_WindowPos.x &&
-            mousePos.x <= activeViewport.m_WindowPos.x + activeViewport.m_WindowSize.x &&
-            mousePos.y >= activeViewport.m_WindowPos.y &&
-            mousePos.y <= activeViewport.m_WindowPos.y + activeViewport.m_WindowSize.y;
+            mousePos.x >= gameViewport.m_WindowPos.x &&
+            mousePos.x <= gameViewport.m_WindowPos.x + gameViewport.m_WindowSize.x &&
+            mousePos.y >= gameViewport.m_WindowPos.y &&
+            mousePos.y <= gameViewport.m_WindowPos.y + gameViewport.m_WindowSize.y;
 
         const bool hasSceneUi = quark::gui::SceneHasActiveUiWidgets(m_Editor.m_Scene);
-        if (IsKeyPressed(KEY_ESCAPE) && quark::script::CScriptEngine::Get().IsCursorLocked())
+        if ((!gameViewport.m_Visible || m_Camera.m_Active || IsKeyPressed(KEY_ESCAPE)) &&
+            quark::script::CScriptEngine::Get().IsCursorLocked())
         {
             quark::script::CScriptEngine::Get().SetCursorLocked(false);
         }
         else if (!hasSceneUi &&
+                 !m_Camera.m_Active &&
                  !quark::gui::CGuiSystem::Get().WantsMouseCapture() &&
                  !quark::script::CScriptEngine::Get().IsCursorLocked() &&
-                 mouseOverActiveViewport && IsMouseButtonPressed(MOUSE_BUTTON_LEFT))
+                 mouseOverGameViewport && IsMouseButtonPressed(MOUSE_BUTTON_LEFT))
         {
             quark::script::CScriptEngine::Get().SetCursorLocked(true);
         }
@@ -831,7 +833,7 @@ void CApplication::RenderFrame()
         m_GameCursorCaptured = false;
     }
 
-    if (m_Camera.m_Active && (m_Editor.m_IsPlaying || m_Editor.m_GameViewActive))
+    if (m_Camera.m_Active && (m_Editor.m_GameViewActive || m_GameCursorCaptured))
     {
         m_Camera.ReleaseCapture();
     }

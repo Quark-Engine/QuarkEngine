@@ -783,18 +783,34 @@ namespace quark::script
     {
         g_InputCallbacks.pfnIsKeyDown = [](int key) -> bool
         {
+            if (!CScriptEngine::Get().IsCursorLocked() && !CScriptEngine::Get().IsViewportHovered())
+            {
+                return false;
+            }
             return ::IsKeyDown(static_cast<KeyboardKey>(key));
         };
         g_InputCallbacks.pfnIsKeyPressed = [](int key) -> bool
         {
+            if (!CScriptEngine::Get().IsCursorLocked() && !CScriptEngine::Get().IsViewportHovered())
+            {
+                return false;
+            }
             return ::IsKeyPressed(static_cast<KeyboardKey>(key));
         };
         g_InputCallbacks.pfnIsKeyReleased = [](int key) -> bool
         {
+            if (!CScriptEngine::Get().IsCursorLocked() && !CScriptEngine::Get().IsViewportHovered())
+            {
+                return false;
+            }
             return ::IsKeyReleased(static_cast<KeyboardKey>(key));
         };
         g_InputCallbacks.pfnIsKeyUp = [](int key) -> bool
         {
+            if (!CScriptEngine::Get().IsCursorLocked() && !CScriptEngine::Get().IsViewportHovered())
+            {
+                return true;
+            }
             return ::IsKeyUp(static_cast<KeyboardKey>(key));
         };
         g_InputCallbacks.pfnIsMouseButtonDown = [](int button) -> bool
