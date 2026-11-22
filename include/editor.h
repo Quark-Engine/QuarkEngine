@@ -183,6 +183,7 @@ private:
     void StartHistoryRestore(bool undo);
     void DrawMainMenuBar(SPluginContext* pCtx, ImGuiID dockspaceId,
                          CFlyCamera& camera);
+    void DrawTopToolbar(CFlyCamera& camera);
     void DrawHierarchyPanel(SPluginContext* pCtx);
     void DrawInspectorPanel(Shader shader, SPluginContext* pCtx);
     void DrawScenePanel(CFlyCamera& camera, SPluginContext* pCtx);

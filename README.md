@@ -1,6 +1,6 @@
 # Quark Engine
 
-A light-weight engine in C++ and QuarkCore.
+A Unity-like engine in C++ and QuarkCore.
 
 ## Features
 

@@ -185,16 +185,17 @@ void CEditor::DrawUi(Shader shader, CFlyCamera& camera, SPluginContext* pPluginC
 
     const ImGuiID dockspaceId = ImGui::GetID("MainDockSpace");
 
+    ImGui::BeginDisabled(IsHistoryRestorePending());
+    DrawMainMenuBar(pPluginCtx, dockspaceId, camera);
+    DrawTopToolbar(camera);
+    CStatusBar::Draw(*this);
+    ImGui::EndDisabled();
+
     ImGui::DockSpaceOverViewport(dockspaceId, ImGui::GetMainViewport(), m_Ui.m_Layout.m_DockspaceFlags);
 
     CEditorLayout::EnsureInitialized(*this, dockspaceId);
 
     ImGui::BeginDisabled(IsHistoryRestorePending());
-    DrawMainMenuBar(pPluginCtx, dockspaceId, camera);
-    ImGui::EndDisabled();
-
-    ImGui::BeginDisabled(IsHistoryRestorePending());
-    CStatusBar::Draw(*this);
 
     if (m_Preferences.m_ShowHierarchy)
     {
@@ -616,6 +617,206 @@ void CEditor::DrawMainMenuBar(SPluginContext* pPluginCtx, ImGuiID dockspaceId,
 
         ImGui::EndMainMenuBar();
     }
+}
+
+void CEditor::DrawTopToolbar(CFlyCamera& camera)
+{
+    ImGuiViewport* pViewport = ImGui::GetMainViewport();
+    if (pViewport == nullptr)
+    {
+        return;
+    }
+
+    constexpr float TOOLBAR_HEIGHT = 34.0f;
+    const ImGuiWindowFlags flags =
+        ImGuiWindowFlags_NoDocking |
+        ImGuiWindowFlags_NoTitleBar |
+        ImGuiWindowFlags_NoResize |
+        ImGuiWindowFlags_NoMove |
+        ImGuiWindowFlags_NoScrollbar |
+        ImGuiWindowFlags_NoScrollWithMouse |
+        ImGuiWindowFlags_NoSavedSettings |
+        ImGuiWindowFlags_NoBringToFrontOnFocus;
+
+    ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(10.0f, 5.0f));
+    ImGui::PushStyleVar(ImGuiStyleVar_ItemSpacing, ImVec2(3.0f, 0.0f));
+    if (ImGui::BeginViewportSideBar("##main_toolbar", pViewport, ImGuiDir_Up, TOOLBAR_HEIGHT, flags))
+    {
+        const ImVec2 toolButtonSize(30.0f, 24.0f);
+        const ImVec4 activeBg(0.20f, 0.47f, 0.72f, 1.0f);
+        const ImVec4 activeHovered(0.25f, 0.54f, 0.80f, 1.0f);
+        const ImVec4 activePressed(0.16f, 0.39f, 0.60f, 1.0f);
+
+        auto drawGizmoButton = [&](const char* pId, const char* pTooltip, ImGuizmo::OPERATION op, int iconKind)
+        {
+            const bool active = (m_Ui.m_MeshEdit.m_GizmoMode == op);
+            if (active)
+            {
+                ImGui::PushStyleColor(ImGuiCol_Button, activeBg);
+                ImGui::PushStyleColor(ImGuiCol_ButtonHovered, activeHovered);
+                ImGui::PushStyleColor(ImGuiCol_ButtonActive, activePressed);
+            }
+            if (ImGui::Button(pId, toolButtonSize))
+            {
+                m_Ui.m_MeshEdit.m_GizmoMode = op;
+            }
+            if (active)
+            {
+                ImGui::PopStyleColor(3);
+            }
+
+            const ImVec2 pMin = ImGui::GetItemRectMin();
+            const ImVec2 pMax = ImGui::GetItemRectMax();
+            const float cx = std::floor((pMin.x + pMax.x) * 0.5f);
+            const float cy = std::floor((pMin.y + pMax.y) * 0.5f);
+            const ImVec2 center(cx + 0.5f, cy + 0.5f);
+            ImDrawList* pDraw = ImGui::GetWindowDrawList();
+            const ImU32 iconCol = ImGui::GetColorU32(ImGuiCol_Text);
+
+            auto addCwTriangle = [&](const ImVec2& a, const ImVec2& b, const ImVec2& c)
+            {
+                const float cross = (b.x - a.x) * (c.y - a.y) - (b.y - a.y) * (c.x - a.x);
+                if (cross < 0.0f)
+                {
+                    pDraw->AddTriangleFilled(a, c, b, iconCol);
+                }
+                else
+                {
+                    pDraw->AddTriangleFilled(a, b, c, iconCol);
+                }
+            };
+
+            if (iconKind == 0)
+            {
+                pDraw->AddRectFilled(ImVec2(cx - 5.0f, cy - 1.0f), ImVec2(cx + 5.0f, cy + 1.0f), iconCol);
+                pDraw->AddRectFilled(ImVec2(cx - 1.0f, cy - 5.0f), ImVec2(cx + 1.0f, cy + 5.0f), iconCol);
+                addCwTriangle(ImVec2(cx + 8.0f, cy), ImVec2(cx + 4.5f, cy - 3.0f), ImVec2(cx + 4.5f, cy + 3.0f));
+                addCwTriangle(ImVec2(cx - 8.0f, cy), ImVec2(cx - 4.5f, cy - 3.0f), ImVec2(cx - 4.5f, cy + 3.0f));
+                addCwTriangle(ImVec2(cx, cy - 8.0f), ImVec2(cx - 3.0f, cy - 4.5f), ImVec2(cx + 3.0f, cy - 4.5f));
+                addCwTriangle(ImVec2(cx, cy + 8.0f), ImVec2(cx - 3.0f, cy + 4.5f), ImVec2(cx + 3.0f, cy + 4.5f));
+            }
+            else if (iconKind == 1)
+            {
+                constexpr float PI_F = 3.14159265f;
+                const float r = 5.8f;
+
+                pDraw->PathClear();
+                pDraw->PathArcTo(center, r, -PI_F * 0.85f, -PI_F * 0.12f, 12);
+                pDraw->PathStroke(iconCol, 0, 1.5f);
+                const float a1 = -PI_F * 0.12f;
+                const ImVec2 tip1(center.x + std::cos(a1) * r, center.y + std::sin(a1) * r);
+                addCwTriangle(ImVec2(tip1.x + 1.0f, tip1.y + 1.2f),
+                              ImVec2(tip1.x - 3.2f, tip1.y - 0.4f),
+                              ImVec2(tip1.x + 0.4f, tip1.y - 3.2f));
+
+                pDraw->PathClear();
+                pDraw->PathArcTo(center, r, PI_F * 0.15f, PI_F * 0.88f, 12);
+                pDraw->PathStroke(iconCol, 0, 1.5f);
+                const float a2 = PI_F * 0.88f;
+                const ImVec2 tip2(center.x + std::cos(a2) * r, center.y + std::sin(a2) * r);
+                addCwTriangle(ImVec2(tip2.x - 1.0f, tip2.y - 1.2f),
+                              ImVec2(tip2.x + 3.2f, tip2.y + 0.4f),
+                              ImVec2(tip2.x - 0.4f, tip2.y + 3.2f));
+            }
+            else
+            {
+                pDraw->AddRectFilled(ImVec2(cx - 6.0f, cy + 2.0f), ImVec2(cx - 2.0f, cy + 6.0f), iconCol);
+                pDraw->AddLine(ImVec2(cx - 3.0f, cy + 3.0f), ImVec2(cx + 3.5f, cy - 3.5f), iconCol, 1.6f);
+                addCwTriangle(ImVec2(cx + 6.0f, cy - 6.0f),
+                              ImVec2(cx + 1.0f, cy - 5.5f),
+                              ImVec2(cx + 5.5f, cy - 1.0f));
+            }
+
+            if (ImGui::IsItemHovered())
+            {
+                ImGui::SetTooltip("%s", pTooltip);
+            }
+        };
+
+        drawGizmoButton("##gizmo_translate", lang.Word("position"), ImGuizmo::TRANSLATE, 0);
+        ImGui::SameLine();
+        drawGizmoButton("##gizmo_rotate", lang.Word("rotation"), ImGuizmo::ROTATE, 1);
+        ImGui::SameLine();
+        drawGizmoButton("##gizmo_scale", lang.Word("scale"), ImGuizmo::SCALE, 2);
+
+        const float playBtnWidth = 38.0f;
+        const bool showRestore = !m_IsPlaying && m_PlayModeSnapshot.has_value();
+        const float restoreWidth = showRestore ? (ImGui::CalcTextSize(lang.Word("restore")).x + 16.0f) : 0.0f;
+        const float centerGroupWidth = playBtnWidth + (showRestore ? (restoreWidth + 6.0f) : 0.0f);
+        const float centerX = (ImGui::GetWindowWidth() - centerGroupWidth) * 0.5f;
+        if (centerX > ImGui::GetCursorPosX() + 12.0f)
+        {
+            ImGui::SameLine();
+            ImGui::SetCursorPosX(centerX);
+        }
+        else
+        {
+            ImGui::SameLine(0.0f, 16.0f);
+        }
+
+        if (m_IsPlaying)
+        {
+            ImGui::PushStyleColor(ImGuiCol_Button, activeBg);
+            ImGui::PushStyleColor(ImGuiCol_ButtonHovered, activeHovered);
+            ImGui::PushStyleColor(ImGuiCol_ButtonActive, activePressed);
+            if (ImGui::Button("##toolbar_stop", ImVec2(playBtnWidth, 24.0f)))
+            {
+                camera.ReleaseCapture();
+                SetScene2DMode(camera, false);
+                StopPlayMode();
+            }
+            ImGui::PopStyleColor(3);
+
+            const ImVec2 pMin = ImGui::GetItemRectMin();
+            const ImVec2 pMax = ImGui::GetItemRectMax();
+            const ImVec2 c((pMin.x + pMax.x) * 0.5f, (pMin.y + pMax.y) * 0.5f);
+            ImGui::GetWindowDrawList()->AddRectFilled(
+                ImVec2(c.x - 5.0f, c.y - 5.0f),
+                ImVec2(c.x + 5.0f, c.y + 5.0f),
+                ImGui::GetColorU32(ImGuiCol_Text));
+            if (ImGui::IsItemHovered())
+            {
+                ImGui::SetTooltip("%s", lang.Word("stop"));
+            }
+        }
+        else
+        {
+            if (ImGui::Button("##toolbar_play", ImVec2(playBtnWidth, 24.0f)))
+            {
+                if (camera.m_Active)
+                {
+                    camera.ReleaseCapture();
+                }
+                SetScene2DMode(camera, false);
+                BeginPlayMode();
+            }
+
+            const ImVec2 pMin = ImGui::GetItemRectMin();
+            const ImVec2 pMax = ImGui::GetItemRectMax();
+            const ImVec2 c((pMin.x + pMax.x) * 0.5f, (pMin.y + pMax.y) * 0.5f);
+            ImGui::GetWindowDrawList()->AddTriangleFilled(
+                ImVec2(c.x - 4.0f, c.y - 6.0f),
+                ImVec2(c.x - 4.0f, c.y + 6.0f),
+                ImVec2(c.x + 6.0f, c.y),
+                ImGui::GetColorU32(ImGuiCol_Text));
+            if (ImGui::IsItemHovered())
+            {
+                ImGui::SetTooltip("%s", lang.Word("play"));
+            }
+        }
+
+        if (showRestore)
+        {
+            ImGui::SameLine(0.0f, 6.0f);
+            if (ImGui::Button(lang.Word("restore"), ImVec2(restoreWidth, 24.0f)))
+            {
+                camera.ReleaseCapture();
+                StopPlayMode();
+            }
+        }
+    }
+    ImGui::End();
+    ImGui::PopStyleVar(2);
 }
 
 void CEditor::DrawHierarchyPanel(SPluginContext* pPluginCtx)
@@ -1151,28 +1352,9 @@ void CEditor::DrawInspectorPanel(Shader shader, SPluginContext* pPluginCtx)
     ImGui::Begin(lang.Word("inspector"), &m_Preferences.m_ShowInspector);
     m_pPluginManager->DrawUiRegion(UI_INSPECTOR, *pPluginCtx);
 
-    ImGui::Text("%s", lang.Word("mode"));
-    ImGui::SameLine();
-    if (ImGui::Button("P"))
-    {
-        m_Ui.m_MeshEdit.m_GizmoMode = ImGuizmo::TRANSLATE;
-    }
-    ImGui::SameLine();
-    if (ImGui::Button("R"))
-    {
-        m_Ui.m_MeshEdit.m_GizmoMode = ImGuizmo::ROTATE;
-    }
-    ImGui::SameLine();
-    if (ImGui::Button("S"))
-    {
-        m_Ui.m_MeshEdit.m_GizmoMode = ImGuizmo::SCALE;
-    }
-
     CEntity* pEntity = m_Scene.GetSelected();
     if (pEntity)
     {
-        ImGui::Separator();
-        ImGui::Spacing();
 
         int prefabRootIndex = -1;
         int cursorIndex = m_Scene.m_Selected;
@@ -1362,33 +1544,6 @@ void CEditor::DrawScenePanel(CFlyCamera& camera, SPluginContext* pPluginCtx)
             {
                 ImGui::PopStyleColor(3);
             }
-            ImGui::SameLine();
-        }
-        if (m_IsPlaying)
-        {
-            if (ImGui::Button(lang.Word("stop"), ImVec2(0.0f, 24.0f)))
-            {
-                camera.ReleaseCapture();
-                SetScene2DMode(camera, false);
-                StopPlayMode();
-            }
-        }
-        else if (m_PlayModeSnapshot.has_value())
-        {
-            if (ImGui::Button(lang.Word("restore"), ImVec2(0.0f, 24.0f)))
-            {
-                camera.ReleaseCapture();
-                StopPlayMode();
-            }
-        }
-        else if (ImGui::Button(lang.Word("play"), ImVec2(0.0f, 24.0f)))
-        {
-            if (camera.m_Active)
-            {
-                camera.ReleaseCapture();
-            }
-            SetScene2DMode(camera, false);
-            BeginPlayMode();
         }
 
         DrawSceneViewport(viewport, camera, true);
