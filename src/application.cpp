@@ -716,6 +716,10 @@ void CApplication::RenderFrame()
                 sceneGuiInteractive);
         }
         EndTextureMode();
+        if (!m_Editor.m_Scene2DMode)
+        {
+            m_SceneRenderer.ApplyBloom(m_Editor.m_Ui.m_Viewport.m_RenderTexture, &m_Editor.m_Preferences);
+        }
     }
 
     CViewportState& gameViewport = m_Editor.m_Ui.m_GameViewport;
@@ -776,6 +780,10 @@ void CApplication::RenderFrame()
             quark::ui::CCanvasSystem::Get().UpdateInteraction(m_Editor.m_Scene, gameViewport, gameCamera, gameGuiInteractive);
         }
         EndTextureMode();
+        if (m_Editor.m_GameCameraAvailable)
+        {
+            m_SceneRenderer.ApplyBloom(gameViewport.m_RenderTexture, &m_Editor.m_Preferences);
+        }
         m_FrameTimings.m_Main3dPassMs += ElapsedMilliseconds(game3dStart);
     }
 
@@ -965,8 +973,20 @@ void CApplication::Run()
 
     constexpr auto USAGE_SAMPLE_INTERVAL = std::chrono::milliseconds(100);
     auto lastUsageSample = std::chrono::steady_clock::now();
-    while (!WindowShouldClose())
+    while (true)
     {
+        if (WindowShouldClose())
+        {
+            if (!m_Editor.m_ForceExit && m_Editor.m_Preferences.m_ConfirmExit && m_Editor.m_SceneDirty)
+            {
+                CancelWindowClose();
+                m_Editor.m_Ui.m_Modal.m_ShowExitConfirmation = true;
+            }
+            else
+            {
+                break;
+            }
+        }
         m_Editor.m_CpuTaskPool.SetMainThreadTask("Update editor and scene");
         const auto updateFrameStart = std::chrono::steady_clock::now();
         const auto frameStart = CTaskPool::CurrentThreadCpuTime();

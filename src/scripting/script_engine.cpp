@@ -2577,7 +2577,7 @@ namespace quark::script
 
         s_ScriptTimeScale = 1.0f;
         s_ScriptDeltaTime = 0.0166667f;
-        s_ScriptFixedDeltaTime = 0.02f;
+        s_ScriptFixedDeltaTime = m_ConfiguredFixedTimestep;
         s_ScriptAccumulatedTime = 0.0;
         s_DiscardMouseDeltaFrames = 2;
         s_EntityWrappers.clear();
@@ -3414,6 +3414,13 @@ namespace quark::script
         scene.BumpTransformRevision();
         LogMessage(EScriptLogLevel::INFO, "Loaded scene: " + m_ActiveScenePath);
         return true;
+    }
+
+    void CScriptEngine::SetPhysicsSettings(const Vec3& gravity, float fixedTimestep)
+    {
+        m_PhysicsWorld.SetGravity(gravity);
+        m_ConfiguredFixedTimestep = std::clamp(fixedTimestep, 0.002f, 0.1f);
+        s_ScriptFixedDeltaTime = m_ConfiguredFixedTimestep;
     }
 
     void CScriptEngine::MarkDontDestroyOnLoad(int entityId)

@@ -164,7 +164,7 @@ extern "C"
             }
             const std::string entryName = entry.path().filename().string();
             if (entryName == "scenes.pak" || entryName == "settings.pak" ||
-                entryName == "shaders.pak")
+                entryName == "shaders.pak" || entryName == "fonts.pak")
             {
                 continue;
             }
@@ -184,12 +184,18 @@ extern "C"
 
         const fs::path settingsPath = projectPath / "__settings";
         const fs::path shaderPath = projectPath / "__shaders";
+        const fs::path fontsPath = projectPath / "__fonts";
         if (!quark::CScenePackage::Extract(dataPath / "settings.pak", settingsPath) ||
             !quark::CScenePackage::Extract(dataPath / "shaders.pak", shaderPath))
         {
             std::cerr << "Could not load packaged runtime settings or shaders\n";
             fs::remove_all(projectPath, error);
             return 1;
+        }
+        if (fs::is_regular_file(dataPath / "fonts.pak", error) &&
+            quark::CScenePackage::Extract(dataPath / "fonts.pak", fontsPath))
+        {
+            quark::gui::SetGuiFontSearchDirectory(fontsPath.string());
         }
 
         nlohmann::json runtimeSettings;
@@ -256,7 +262,67 @@ extern "C"
             rendererType = RendererType::D3D11;
         }
 #endif
-        InitWindow(1280, 720, dataPath.parent_path().filename().string().c_str(), rendererType);
+        std::string windowTitle = dataPath.parent_path().filename().string();
+        int windowWidth = 1280;
+        int windowHeight = 720;
+        bool fullscreen = false;
+        bool resizableWindow = true;
+        Vec3 physicsGravity = { 0.0f, -9.81f, 0.0f };
+        float physicsFixedTimestep = 0.02f;
+        if (runtimeSettings.contains("project_settings") && runtimeSettings["project_settings"].is_object())
+        {
+            const nlohmann::json& proj = runtimeSettings["project_settings"];
+            if (proj.contains("product_name") && proj["product_name"].is_string())
+            {
+                const std::string product = proj["product_name"].get<std::string>();
+                if (!product.empty())
+                {
+                    windowTitle = product;
+                }
+            }
+            if (proj.contains("window_width") && proj["window_width"].is_number_integer())
+            {
+                windowWidth = std::clamp(proj["window_width"].get<int>(), 320, 7680);
+            }
+            if (proj.contains("window_height") && proj["window_height"].is_number_integer())
+            {
+                windowHeight = std::clamp(proj["window_height"].get<int>(), 240, 4320);
+            }
+            if (proj.contains("fullscreen") && proj["fullscreen"].is_boolean())
+            {
+                fullscreen = proj["fullscreen"].get<bool>();
+            }
+            if (proj.contains("resizable_window") && proj["resizable_window"].is_boolean())
+            {
+                resizableWindow = proj["resizable_window"].get<bool>();
+            }
+            if (proj.contains("physics_gravity") && proj["physics_gravity"].is_array() &&
+                proj["physics_gravity"].size() == 3)
+            {
+                physicsGravity.x = proj["physics_gravity"][0].get<float>();
+                physicsGravity.y = proj["physics_gravity"][1].get<float>();
+                physicsGravity.z = proj["physics_gravity"][2].get<float>();
+            }
+            if (proj.contains("physics_fixed_timestep") && proj["physics_fixed_timestep"].is_number())
+            {
+                physicsFixedTimestep = std::clamp(proj["physics_fixed_timestep"].get<float>(), 0.002f, 0.1f);
+            }
+        }
+        unsigned int configFlags = 0u;
+        if (resizableWindow)
+        {
+            configFlags |= FLAG_WINDOW_RESIZABLE;
+        }
+        if (fullscreen)
+        {
+            configFlags |= FLAG_FULLSCREEN_MODE;
+        }
+        if (configFlags != 0u)
+        {
+            SetConfigFlags(configFlags);
+        }
+        InitWindow(windowWidth, windowHeight, windowTitle.c_str(), rendererType);
+        SetWindowResizable(resizableWindow);
         SetExitKey(KEY_NULL);
 #ifdef _WIN32
         HICON pGameIcon = nullptr;
@@ -371,6 +437,7 @@ extern "C"
             quark::script::CScriptEngine::Get().LoadScriptDll(foundDllPath.string());
         }
 
+        quark::script::CScriptEngine::Get().SetPhysicsSettings(physicsGravity, physicsFixedTimestep);
         quark::script::CScriptEngine::Get().StartPlay(
             scene,
             projectPath.string(),
@@ -384,6 +451,8 @@ extern "C"
                     !quark::gui::SceneHasActiveUiWidgets(loadedScene));
             });
         quark::script::CScriptEngine::Get().SetCursorLocked(!quark::gui::SceneHasActiveUiWidgets(scene));
+
+        RenderTexture2D runtimeTarget{};
 
         while (!WindowShouldClose())
         {
@@ -408,22 +477,68 @@ extern "C"
             BeginDrawing();
             renderer.Update(scene, lights, camera.position, preferences.m_ShadowsEnabled,
                             preferences.m_ShadowBias, preferences.m_ShadowFilterQuality);
-            ClearBackground({ static_cast<unsigned char>(preferences.m_BackgroundRed),
-                              static_cast<unsigned char>(preferences.m_BackgroundGreen),
-                              static_cast<unsigned char>(preferences.m_BackgroundBlue), 255 });
             quark::ui::CCanvasSystem::Get().UpdateCanvasTextures(scene);
-            BeginMode3D(camera);
-            const float runtimeHeight = static_cast<float>(GetScreenHeight());
-            const float runtimeAspect = runtimeHeight > 0.0f
-                ? static_cast<float>(GetScreenWidth()) / runtimeHeight
-                : 1.0f;
-            renderer.RenderSceneMeshes(scene, camera, runtimeAspect, &preferences, false);
-            quark::ui::CCanvasSystem::Get().RenderWorldSpaceCanvases(scene, camera);
-            EndMode3D();
+
+            const int screenWidth = std::max(1, GetScreenWidth());
+            const int screenHeight = std::max(1, GetScreenHeight());
+            const float runtimeAspect = static_cast<float>(screenWidth) / static_cast<float>(screenHeight);
+            const Color clearColor = {
+                static_cast<unsigned char>(preferences.m_BackgroundRed),
+                static_cast<unsigned char>(preferences.m_BackgroundGreen),
+                static_cast<unsigned char>(preferences.m_BackgroundBlue),
+                255
+            };
+            const bool useBloom = preferences.m_BloomStrength > 0.001f;
+            if (useBloom)
+            {
+                if (runtimeTarget.id == 0 ||
+                    runtimeTarget.texture.width != screenWidth ||
+                    runtimeTarget.texture.height != screenHeight)
+                {
+                    if (runtimeTarget.id != 0)
+                    {
+                        UnloadRenderTexture(runtimeTarget);
+                    }
+                    runtimeTarget = LoadRenderTexture(screenWidth, screenHeight);
+                }
+            }
+
+            if (useBloom && runtimeTarget.id != 0 && IsRenderTextureValid(runtimeTarget))
+            {
+                BeginTextureMode(runtimeTarget);
+                ClearBackground(clearColor);
+                BeginMode3D(camera);
+                renderer.RenderSceneMeshes(scene, camera, runtimeAspect, &preferences, false);
+                quark::ui::CCanvasSystem::Get().RenderWorldSpaceCanvases(scene, camera);
+                EndMode3D();
+                EndTextureMode();
+
+                renderer.ApplyBloom(runtimeTarget, &preferences);
+
+                ClearBackground(BLACK);
+                DrawTexturePro(
+                    runtimeTarget.texture,
+                    Rectangle{ 0.0f, static_cast<float>(runtimeTarget.texture.height),
+                               static_cast<float>(runtimeTarget.texture.width),
+                               -static_cast<float>(runtimeTarget.texture.height) },
+                    Rectangle{ 0.0f, 0.0f, static_cast<float>(screenWidth), static_cast<float>(screenHeight) },
+                    Vec2{ 0.0f, 0.0f },
+                    0.0f,
+                    WHITE);
+            }
+            else
+            {
+                ClearBackground(clearColor);
+                BeginMode3D(camera);
+                renderer.RenderSceneMeshes(scene, camera, runtimeAspect, &preferences, false);
+                quark::ui::CCanvasSystem::Get().RenderWorldSpaceCanvases(scene, camera);
+                EndMode3D();
+            }
+
             quark::gui::RenderSceneGui(scene, GetMousePosition(), true);
             {
                 quark::ui::SUiViewport runtimeViewport({ 0.0f, 0.0f },
-                    { static_cast<float>(GetScreenWidth()), static_cast<float>(GetScreenHeight()) });
+                    { static_cast<float>(screenWidth), static_cast<float>(screenHeight) });
                 quark::ui::CCanvasSystem::Get().RenderScreenSpaceCanvases(
                     scene, runtimeViewport, GetMousePosition(), true, camera,
                     EUiCanvasViewport::RUNTIME);
@@ -434,6 +549,11 @@ extern "C"
 
         quark::script::CScriptEngine::Get().StopPlay(scene);
 
+        if (runtimeTarget.id != 0)
+        {
+            UnloadRenderTexture(runtimeTarget);
+            runtimeTarget = RenderTexture2D{};
+        }
         renderer.Unload();
         scene.ReleaseResources();
         assets.Unload();

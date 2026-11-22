@@ -19,6 +19,23 @@ struct SProjectBuildSettings
     std::string m_StartScene = "scene.json";
     std::string m_IconPath;
     EProjectBuildProfile m_Profile = EProjectBuildProfile::RELEASE;
+    std::string m_ProductName;
+    std::string m_CompanyName = "DefaultCompany";
+    std::string m_Version = "1.0.0";
+    int m_WindowWidth = 1280;
+    int m_WindowHeight = 720;
+    bool m_Fullscreen = false;
+    bool m_ResizableWindow = true;
+    Vec3 m_Gravity = { 0.0f, -9.81f, 0.0f };
+    float m_FixedTimestep = 0.02f;
+    bool m_SkyboxEnabled = true;
+    bool m_ToneMappingEnabled = true;
+    float m_Exposure = 1.05f;
+    float m_BloomStrength = 0.25f;
+    bool m_ShadowsEnabled = true;
+    float m_ShadowBias = 0.005f;
+    int m_ShadowFilterQuality = 2;
+    bool m_VsyncEnabled = false;
 };
 
 class CProjectService

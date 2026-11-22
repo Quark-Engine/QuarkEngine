@@ -641,12 +641,20 @@ void CSceneRenderer::Initialize(int shadowMapSize, bool shadowsEnabled,
     const std::string skyboxFragment = m_VulkanBackend
         ? "skybox_vulkan.fs"
         : (d3d11Backend ? "skybox_d3d11.fs" : "skybox.fs");
+    const std::string bloomVertex = m_VulkanBackend
+        ? "bloom_vulkan.vs"
+        : (d3d11Backend ? "bloom_d3d11.vs" : "bloom.vs");
+    const std::string bloomFragment = m_VulkanBackend
+        ? "bloom_vulkan.fs"
+        : (d3d11Backend ? "bloom_d3d11.fs" : "bloom.fs");
     m_LightingShader = LoadShader((shaderRoot / lightingVertex).string().c_str(),
                                   (shaderRoot / lightingFragment).string().c_str());
     m_ShadowShader = LoadShader((shaderRoot / shadowVertex).string().c_str(),
                                 (shaderRoot / shadowFragment).string().c_str());
     m_SkyboxShader = LoadShader((shaderRoot / skyboxVertex).string().c_str(),
                                 (shaderRoot / skyboxFragment).string().c_str());
+    m_BloomShader = LoadShader((shaderRoot / bloomVertex).string().c_str(),
+                               (shaderRoot / bloomFragment).string().c_str());
     m_LightingShader.locs[SHADER_LOC_VECTOR_VIEW] = GetShaderLocation(m_LightingShader, "viewPos");
     m_GlobalParamsLoc = m_VulkanBackend
         ? GetShaderLocation(m_LightingShader, "lights[3].type")
@@ -657,10 +665,12 @@ void CSceneRenderer::Initialize(int shadowMapSize, bool shadowsEnabled,
     m_PostParamsLoc = GetShaderLocation(m_LightingShader, "postParams");
     m_SkyboxSunDirLoc = m_SkyboxShader.id != 0 ? GetShaderLocation(m_SkyboxShader, "sunDir") : -1;
     m_SkyboxPostParamsLoc = m_SkyboxShader.id != 0 ? GetShaderLocation(m_SkyboxShader, "postParams") : -1;
+    m_BloomParamsLoc = m_BloomShader.id != 0 ? GetShaderLocation(m_BloomShader, "bloomParams") : -1;
 
     if (m_SkyboxShader.id != 0)
     {
         m_SkyboxMesh = GenMeshSphere(1.0f, 24, 16);
+        UploadMesh(&m_SkyboxMesh, false);
         m_SkyboxMaterial = LoadMaterialDefault();
         m_SkyboxMaterial.shader = &m_SkyboxShader;
         m_SkyboxReady = true;
@@ -1080,7 +1090,9 @@ void CSceneRenderer::RenderSkybox(const Camera3D& camera, const CPreferences* pP
         Mat4::scale(SKYBOX_RADIUS, SKYBOX_RADIUS, SKYBOX_RADIUS);
 
     DisableBackfaceCulling();
+    BeginShaderMode(m_SkyboxShader);
     DrawMesh(m_SkyboxMesh, m_SkyboxMaterial, skyTransform);
+    EndShaderMode();
     EnableBackfaceCulling();
 }
 
@@ -1447,10 +1459,152 @@ void CSceneRenderer::RenderSceneMeshes(CScene& scene, const Camera3D& camera, fl
     }
 }
 
+void CSceneRenderer::ApplyBloom(RenderTexture2D& target, const CPreferences* pPreferences)
+{
+    if (!pPreferences || pPreferences->m_BloomStrength <= 0.001f ||
+        m_BloomShader.id == 0 || (!m_VulkanBackend && m_BloomParamsLoc < 0) ||
+        target.id == 0 || !IsRenderTextureValid(target))
+    {
+        return;
+    }
+
+    const int width = target.texture.width;
+    const int height = target.texture.height;
+    if (width <= 0 || height <= 0)
+    {
+        return;
+    }
+
+    const int halfWidth = std::max(1, width / 2);
+    const int halfHeight = std::max(1, height / 2);
+
+    SBloomTargetSet* pSet = nullptr;
+    for (SBloomTargetSet& candidate : m_aBloomSets)
+    {
+        if (candidate.m_Width == width && candidate.m_Height == height &&
+            candidate.m_Composite.id != 0)
+        {
+            pSet = &candidate;
+            break;
+        }
+    }
+
+    if (!pSet)
+    {
+        pSet = &m_aBloomSets[0];
+        for (SBloomTargetSet& candidate : m_aBloomSets)
+        {
+            if (candidate.m_Composite.id == 0)
+            {
+                pSet = &candidate;
+                break;
+            }
+            if (candidate.m_LastUsedFrame < pSet->m_LastUsedFrame)
+            {
+                pSet = &candidate;
+            }
+        }
+
+        if (pSet->m_HalfA.id != 0)
+        {
+            UnloadRenderTexture(pSet->m_HalfA);
+        }
+        if (pSet->m_HalfB.id != 0)
+        {
+            UnloadRenderTexture(pSet->m_HalfB);
+        }
+        if (pSet->m_Composite.id != 0)
+        {
+            UnloadRenderTexture(pSet->m_Composite);
+        }
+
+        pSet->m_HalfA = LoadRenderTexture(halfWidth, halfHeight);
+        pSet->m_HalfB = LoadRenderTexture(halfWidth, halfHeight);
+        pSet->m_Composite = LoadRenderTexture(width, height);
+        pSet->m_Width = width;
+        pSet->m_Height = height;
+    }
+
+    if (pSet->m_HalfA.id == 0 || pSet->m_HalfB.id == 0 || pSet->m_Composite.id == 0 ||
+        !IsRenderTextureValid(pSet->m_HalfA) ||
+        !IsRenderTextureValid(pSet->m_HalfB) ||
+        !IsRenderTextureValid(pSet->m_Composite))
+    {
+        return;
+    }
+
+    pSet->m_LastUsedFrame = ++m_BloomUseCounter;
+
+    constexpr float BLOOM_THRESHOLD = 0.72f;
+    const Rectangle fullSource = {
+        0.0f,
+        static_cast<float>(height),
+        static_cast<float>(width),
+        -static_cast<float>(height)
+    };
+    const Rectangle halfSource = {
+        0.0f,
+        static_cast<float>(halfHeight),
+        static_cast<float>(halfWidth),
+        -static_cast<float>(halfHeight)
+    };
+    const Rectangle fullDest = { 0.0f, 0.0f, static_cast<float>(width), static_cast<float>(height) };
+    const Rectangle halfDest = { 0.0f, 0.0f, static_cast<float>(halfWidth), static_cast<float>(halfHeight) };
+
+    const Vec4 extractParams = {
+        1.0f / static_cast<float>(width),
+        1.0f / static_cast<float>(height),
+        BLOOM_THRESHOLD,
+        0.0f
+    };
+    BeginTextureMode(pSet->m_HalfA);
+    ClearBackground(BLACK);
+    BeginShaderMode(m_BloomShader);
+    if (m_BloomParamsLoc >= 0)
+    {
+        SetShaderValue(m_BloomShader, m_BloomParamsLoc, extractParams);
+    }
+    DrawTexturePro(target.texture, fullSource, halfDest, Vec2{ 0.0f, 0.0f }, 0.0f, Color{ 255, 255, 255, 128 });
+    EndShaderMode();
+    EndTextureMode();
+
+    const Vec4 blurParams = {
+        1.0f / static_cast<float>(halfWidth),
+        1.0f / static_cast<float>(halfHeight),
+        BLOOM_THRESHOLD,
+        1.0f
+    };
+    BeginTextureMode(pSet->m_HalfB);
+    ClearBackground(BLACK);
+    BeginShaderMode(m_BloomShader);
+    if (m_BloomParamsLoc >= 0)
+    {
+        SetShaderValue(m_BloomShader, m_BloomParamsLoc, blurParams);
+    }
+    DrawTexturePro(pSet->m_HalfA.texture, halfSource, halfDest, Vec2{ 0.0f, 0.0f }, 0.0f, WHITE);
+    EndShaderMode();
+    EndTextureMode();
+
+    const float bloomScale = std::clamp(pPreferences->m_BloomStrength, 0.0f, 1.0f);
+    const unsigned char tintByte = static_cast<unsigned char>(std::lround(bloomScale * 255.0f));
+    const Color bloomTint = { tintByte, tintByte, tintByte, 255 };
+
+    BeginTextureMode(pSet->m_Composite);
+    ClearBackground(BLACK);
+    DrawTexturePro(target.texture, fullSource, fullDest, Vec2{ 0.0f, 0.0f }, 0.0f, WHITE);
+    BeginBlendMode(BLEND_ADDITIVE);
+    DrawTexturePro(pSet->m_HalfB.texture, halfSource, fullDest, Vec2{ 0.0f, 0.0f }, 0.0f, bloomTint);
+    EndBlendMode();
+    EndTextureMode();
+
+    std::swap(target, pSet->m_Composite);
+}
+
 void CSceneRenderer::Unload()
 {
     UnloadShaders();
     UnloadShadowMaps();
+    UnloadBloomTargets();
 }
 
 void CSceneRenderer::UnloadShaders()
@@ -1482,6 +1636,13 @@ void CSceneRenderer::UnloadShaders()
         UnloadShader(m_SkyboxShader);
         m_SkyboxShader = Shader{};
     }
+
+    if (m_BloomShader.id != 0)
+    {
+        UnloadShader(m_BloomShader);
+        m_BloomShader = Shader{};
+        m_BloomParamsLoc = -1;
+    }
 }
 
 void CSceneRenderer::UnloadShadowMaps()
@@ -1493,5 +1654,30 @@ void CSceneRenderer::UnloadShadowMaps()
             UnloadRenderTexture(shadowMap);
             shadowMap = RenderTexture2D{};
         }
+    }
+}
+
+void CSceneRenderer::UnloadBloomTargets()
+{
+    for (SBloomTargetSet& targetSet : m_aBloomSets)
+    {
+        if (targetSet.m_HalfA.id != 0)
+        {
+            UnloadRenderTexture(targetSet.m_HalfA);
+            targetSet.m_HalfA = RenderTexture2D{};
+        }
+        if (targetSet.m_HalfB.id != 0)
+        {
+            UnloadRenderTexture(targetSet.m_HalfB);
+            targetSet.m_HalfB = RenderTexture2D{};
+        }
+        if (targetSet.m_Composite.id != 0)
+        {
+            UnloadRenderTexture(targetSet.m_Composite);
+            targetSet.m_Composite = RenderTexture2D{};
+        }
+        targetSet.m_Width = 0;
+        targetSet.m_Height = 0;
+        targetSet.m_LastUsedFrame = 0;
     }
 }

@@ -173,6 +173,9 @@ bool CEditor::BeginPlayMode()
     m_GameViewActive = true;
     m_ShowGameView = true;
     m_SelectGameTab = true;
+    CProjectService::LoadBuildSettings(m_ProjectPath, m_BuildSettings);
+    quark::script::CScriptEngine::Get().SetPhysicsSettings(
+        m_BuildSettings.m_Gravity, m_BuildSettings.m_FixedTimestep);
     const std::string activeScenePath = m_ActiveScenePath.empty()
         ? CProjectService::GetActiveScenePath(m_ProjectPath)
         : m_ActiveScenePath.string();

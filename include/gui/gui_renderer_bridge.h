@@ -12,6 +12,7 @@ namespace quark
 
         void EnsureGuiBackendInstalled();
         void ShutdownGuiBackend();
+        void SetGuiFontSearchDirectory(const std::string& directory);
         void SetGuiScissorCamera2D(const Camera2D* pCamera);
 
         SGuiInputState GatherGuiInputState(Vec2 mousePosInViewport);

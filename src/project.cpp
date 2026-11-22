@@ -276,6 +276,23 @@ bool CProjectService::LoadBuildSettings(const std::string& projectPath,
                                 ResolveSceneJsonPath(rootPath), rootPath)
                                 .generic_string();
     settings.m_IconPath.clear();
+    settings.m_ProductName = rootPath.filename().string();
+    settings.m_CompanyName = "DefaultCompany";
+    settings.m_Version = "1.0.0";
+    settings.m_WindowWidth = 1280;
+    settings.m_WindowHeight = 720;
+    settings.m_Fullscreen = false;
+    settings.m_ResizableWindow = true;
+    settings.m_Gravity = { 0.0f, -9.81f, 0.0f };
+    settings.m_FixedTimestep = 0.02f;
+    settings.m_SkyboxEnabled = true;
+    settings.m_ToneMappingEnabled = true;
+    settings.m_Exposure = 1.05f;
+    settings.m_BloomStrength = 0.25f;
+    settings.m_ShadowsEnabled = true;
+    settings.m_ShadowBias = 0.005f;
+    settings.m_ShadowFilterQuality = 2;
+    settings.m_VsyncEnabled = false;
     std::string profile = "Release";
     if (manifest.contains("build_start_scene") && manifest["build_start_scene"].is_string())
     {
@@ -288,6 +305,81 @@ bool CProjectService::LoadBuildSettings(const std::string& projectPath,
     if (manifest.contains("build_profile") && manifest["build_profile"].is_string())
     {
         profile = manifest["build_profile"].get<std::string>();
+    }
+    if (manifest.contains("product_name") && manifest["product_name"].is_string())
+    {
+        const std::string product = manifest["product_name"].get<std::string>();
+        if (!product.empty())
+        {
+            settings.m_ProductName = product;
+        }
+    }
+    if (manifest.contains("company_name") && manifest["company_name"].is_string())
+    {
+        settings.m_CompanyName = manifest["company_name"].get<std::string>();
+    }
+    if (manifest.contains("product_version") && manifest["product_version"].is_string())
+    {
+        settings.m_Version = manifest["product_version"].get<std::string>();
+    }
+    if (manifest.contains("window_width") && manifest["window_width"].is_number_integer())
+    {
+        settings.m_WindowWidth = std::clamp(manifest["window_width"].get<int>(), 320, 7680);
+    }
+    if (manifest.contains("window_height") && manifest["window_height"].is_number_integer())
+    {
+        settings.m_WindowHeight = std::clamp(manifest["window_height"].get<int>(), 240, 4320);
+    }
+    if (manifest.contains("fullscreen") && manifest["fullscreen"].is_boolean())
+    {
+        settings.m_Fullscreen = manifest["fullscreen"].get<bool>();
+    }
+    if (manifest.contains("resizable_window") && manifest["resizable_window"].is_boolean())
+    {
+        settings.m_ResizableWindow = manifest["resizable_window"].get<bool>();
+    }
+    if (manifest.contains("physics_gravity") && manifest["physics_gravity"].is_array() &&
+        manifest["physics_gravity"].size() == 3)
+    {
+        settings.m_Gravity.x = manifest["physics_gravity"][0].get<float>();
+        settings.m_Gravity.y = manifest["physics_gravity"][1].get<float>();
+        settings.m_Gravity.z = manifest["physics_gravity"][2].get<float>();
+    }
+    if (manifest.contains("physics_fixed_timestep") && manifest["physics_fixed_timestep"].is_number())
+    {
+        settings.m_FixedTimestep = std::clamp(manifest["physics_fixed_timestep"].get<float>(), 0.002f, 0.1f);
+    }
+    if (manifest.contains("graphics_skybox_enabled") && manifest["graphics_skybox_enabled"].is_boolean())
+    {
+        settings.m_SkyboxEnabled = manifest["graphics_skybox_enabled"].get<bool>();
+    }
+    if (manifest.contains("graphics_tone_mapping_enabled") && manifest["graphics_tone_mapping_enabled"].is_boolean())
+    {
+        settings.m_ToneMappingEnabled = manifest["graphics_tone_mapping_enabled"].get<bool>();
+    }
+    if (manifest.contains("graphics_exposure") && manifest["graphics_exposure"].is_number())
+    {
+        settings.m_Exposure = std::clamp(manifest["graphics_exposure"].get<float>(), 0.2f, 3.0f);
+    }
+    if (manifest.contains("graphics_bloom_strength") && manifest["graphics_bloom_strength"].is_number())
+    {
+        settings.m_BloomStrength = std::clamp(manifest["graphics_bloom_strength"].get<float>(), 0.0f, 1.5f);
+    }
+    if (manifest.contains("graphics_shadows_enabled") && manifest["graphics_shadows_enabled"].is_boolean())
+    {
+        settings.m_ShadowsEnabled = manifest["graphics_shadows_enabled"].get<bool>();
+    }
+    if (manifest.contains("graphics_shadow_bias") && manifest["graphics_shadow_bias"].is_number())
+    {
+        settings.m_ShadowBias = std::clamp(manifest["graphics_shadow_bias"].get<float>(), 0.0001f, 0.05f);
+    }
+    if (manifest.contains("graphics_shadow_filter_quality") && manifest["graphics_shadow_filter_quality"].is_number_integer())
+    {
+        settings.m_ShadowFilterQuality = std::clamp(manifest["graphics_shadow_filter_quality"].get<int>(), 0, 2);
+    }
+    if (manifest.contains("graphics_vsync_enabled") && manifest["graphics_vsync_enabled"].is_boolean())
+    {
+        settings.m_VsyncEnabled = manifest["graphics_vsync_enabled"].get<bool>();
     }
     settings.m_Profile = profile == "Debug"
         ? EProjectBuildProfile::DEBUG
@@ -351,6 +443,25 @@ bool CProjectService::SaveBuildSettings(const std::string& projectPath,
     manifest["build_profile"] = settings.m_Profile == EProjectBuildProfile::DEBUG
         ? "Debug"
         : "Release";
+    manifest["product_name"] = settings.m_ProductName.empty()
+        ? rootPath.filename().string()
+        : settings.m_ProductName;
+    manifest["company_name"] = settings.m_CompanyName;
+    manifest["product_version"] = settings.m_Version;
+    manifest["window_width"] = std::clamp(settings.m_WindowWidth, 320, 7680);
+    manifest["window_height"] = std::clamp(settings.m_WindowHeight, 240, 4320);
+    manifest["fullscreen"] = settings.m_Fullscreen;
+    manifest["resizable_window"] = settings.m_ResizableWindow;
+    manifest["physics_gravity"] = { settings.m_Gravity.x, settings.m_Gravity.y, settings.m_Gravity.z };
+    manifest["physics_fixed_timestep"] = std::clamp(settings.m_FixedTimestep, 0.002f, 0.1f);
+    manifest["graphics_skybox_enabled"] = settings.m_SkyboxEnabled;
+    manifest["graphics_tone_mapping_enabled"] = settings.m_ToneMappingEnabled;
+    manifest["graphics_exposure"] = std::clamp(settings.m_Exposure, 0.2f, 3.0f);
+    manifest["graphics_bloom_strength"] = std::clamp(settings.m_BloomStrength, 0.0f, 1.5f);
+    manifest["graphics_shadows_enabled"] = settings.m_ShadowsEnabled;
+    manifest["graphics_shadow_bias"] = std::clamp(settings.m_ShadowBias, 0.0001f, 0.05f);
+    manifest["graphics_shadow_filter_quality"] = std::clamp(settings.m_ShadowFilterQuality, 0, 2);
+    manifest["graphics_vsync_enabled"] = settings.m_VsyncEnabled;
 
     std::ofstream manifestFile(ProjectManifestPathForRoot(rootPath), std::ios::trunc);
     if (!manifestFile.is_open())

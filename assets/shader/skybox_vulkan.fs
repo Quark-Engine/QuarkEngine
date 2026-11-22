@@ -1,10 +1,5 @@
 #version 450
 
-layout(set = 0, binding = 4) uniform SkyboxBlock {
-    vec4 sunDir;
-    vec4 postParams;
-};
-
 layout(location = 0) in vec3 fragDir;
 layout(location = 0) out vec4 finalColor;
 
@@ -21,7 +16,7 @@ vec3 ACESFilm(vec3 x)
 void main()
 {
     vec3 dir = normalize(fragDir);
-    vec3 sun = normalize(length(sunDir.xyz) > 0.001 ? sunDir.xyz : vec3(0.4, 0.75, 0.5));
+    vec3 sun = normalize(vec3(0.4, 0.75, 0.5));
 
     float y = dir.y;
     vec3 zenithColor  = vec3(0.09, 0.21, 0.44);
@@ -47,23 +42,7 @@ void main()
     vec3 sunColor = vec3(1.0, 0.93, 0.82);
     skyColor += sunColor * (mieGlow + sunDisc) * horizonMask;
 
-    float exposure = postParams.x > 0.001 ? postParams.x : 1.05;
-    float useToneMap = postParams.y;
-    float bloomStrength = max(postParams.z, 0.0);
-
-    vec3 color = skyColor * exposure;
-    vec3 bloomExcess = max(color - vec3(1.0), vec3(0.0));
-    color += bloomExcess * bloomStrength * 0.35;
-
-    if (useToneMap > 0.5)
-    {
-        color = ACESFilm(color);
-    }
-    else
-    {
-        color = clamp(color, 0.0, 1.0);
-    }
-
+    vec3 color = ACESFilm(skyColor * 1.05);
     color = pow(color, vec3(1.0 / 2.2));
     finalColor = vec4(color, 1.0);
 }

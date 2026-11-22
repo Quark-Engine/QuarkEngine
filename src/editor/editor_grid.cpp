@@ -238,21 +238,32 @@ void CInfiniteGrid::Draw(const Camera3D& camera, int viewportWidth, int viewport
 
             if (minX <= maxX && minZ <= maxZ)
             {
+                const float cameraHeight = std::fabs(camera.position.y);
                 float step = spacing;
-                for (int i = 0; i < 24; ++i)
+                constexpr float HEIGHT_PER_LOD = 28.0f;
+                for (int i = 0; i < 16; ++i)
                 {
-                    if ((maxX - minX) / step + (maxZ - minZ) / step <= static_cast<float>(MAX_LINES_PER_AXIS * 2))
+                    if (cameraHeight <= step * HEIGHT_PER_LOD)
                     {
                         break;
                     }
                     step *= 2.0f;
                 }
-                s_Cache.m_MinX = minX;
-                s_Cache.m_MaxX = maxX;
-                s_Cache.m_MinZ = minZ;
-                s_Cache.m_MaxZ = maxZ;
-                s_Cache.m_Step = step;
-                s_Cache.m_HasBounds = true;
+
+                const float halfSpan = step * static_cast<float>(MAX_LINES_PER_AXIS / 2);
+                const float clampedMinX = std::fmax(minX, centerX - halfSpan);
+                const float clampedMaxX = std::fmin(maxX, centerX + halfSpan);
+                const float clampedMinZ = std::fmax(minZ, centerZ - halfSpan);
+                const float clampedMaxZ = std::fmin(maxZ, centerZ + halfSpan);
+                if (clampedMinX <= clampedMaxX && clampedMinZ <= clampedMaxZ)
+                {
+                    s_Cache.m_MinX = clampedMinX;
+                    s_Cache.m_MaxX = clampedMaxX;
+                    s_Cache.m_MinZ = clampedMinZ;
+                    s_Cache.m_MaxZ = clampedMaxZ;
+                    s_Cache.m_Step = step;
+                    s_Cache.m_HasBounds = true;
+                }
             }
         }
     }

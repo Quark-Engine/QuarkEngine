@@ -143,6 +143,8 @@ namespace quark::script
             return m_PhysicsWorld;
         }
 
+        void SetPhysicsSettings(const Vec3& gravity, float fixedTimestep);
+
     private:
         CScriptEngine();
         ~CScriptEngine();
@@ -163,6 +165,7 @@ namespace quark::script
         std::string m_ActiveScenePath;
         std::string m_ActiveSceneName;
         float m_FixedAccumulator = 0.0f;
+        float m_ConfiguredFixedTimestep = 0.02f;
         bool m_IsPlaying = false;
         bool m_InUpdatePlay = false;
         bool m_ViewportHovered = true;

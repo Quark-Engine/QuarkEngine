@@ -197,13 +197,15 @@ namespace
     {
         const std::vector<std::string> vShaderNames = {
             "lighting.vs", "lighting.fs", "shadow_depth.vs", "shadow_depth.fs",
-            "skybox.vs", "skybox.fs",
+            "skybox.vs", "skybox.fs", "bloom.vs", "bloom.fs",
             "lighting_vulkan.vs", "lighting_vulkan.fs",
             "shadow_depth_vulkan.vs", "shadow_depth_vulkan.fs",
             "skybox_vulkan.vs", "skybox_vulkan.fs",
+            "bloom_vulkan.vs", "bloom_vulkan.fs",
             "lighting_d3d11.vs", "lighting_d3d11.fs",
             "shadow_depth_d3d11.vs", "shadow_depth_d3d11.fs",
-            "skybox_d3d11.vs", "skybox_d3d11.fs"
+            "skybox_d3d11.vs", "skybox_d3d11.fs",
+            "bloom_d3d11.vs", "bloom_d3d11.fs"
         };
         std::vector<std::pair<std::string, std::string>> vShaderEntries;
         const fs::path shaderDirectory = executableDirectory / "assets" / "shader";
@@ -221,6 +223,45 @@ namespace
         }
         return quark::CScenePackage::WriteFiles(dataPath / "shaders.pak",
                                                 vShaderEntries, errorMessage);
+    }
+
+    bool PackageRuntimeFonts(const fs::path& dataPath,
+                             const fs::path& executableDirectory,
+                             std::string& errorMessage)
+    {
+        const fs::path fontDirectory = executableDirectory / "assets" / "font";
+        std::error_code ec;
+        std::vector<std::pair<std::string, std::string>> vFontEntries;
+        if (fs::is_directory(fontDirectory, ec) && !ec)
+        {
+            for (const fs::directory_entry& entry : fs::directory_iterator(fontDirectory, ec))
+            {
+                if (ec || !entry.is_regular_file(ec))
+                {
+                    continue;
+                }
+                std::string ext = entry.path().extension().string();
+                std::transform(ext.begin(), ext.end(), ext.begin(),
+                               [](unsigned char c)
+                               {
+                                   return static_cast<char>(std::tolower(c));
+                               });
+                if (ext != ".ttf" && ext != ".otf")
+                {
+                    continue;
+                }
+                std::ifstream fontFile(entry.path(), std::ios::binary);
+                if (!fontFile)
+                {
+                    continue;
+                }
+                const std::string fontData{ std::istreambuf_iterator<char>{ fontFile },
+                                            std::istreambuf_iterator<char>{} };
+                vFontEntries.emplace_back(entry.path().filename().string(), fontData);
+            }
+        }
+        return quark::CScenePackage::WriteFiles(dataPath / "fonts.pak",
+                                                vFontEntries, errorMessage);
     }
 
     bool BuildRuntimeProject(const fs::path& buildRoot,
@@ -247,22 +288,103 @@ namespace
                                                                                         fs::remove_all(generatedProject, cleanupError);
                                                                                     });
 
-        if (!buildSettings.m_IconPath.empty())
         {
-            std::error_code iconError;
-            fs::copy_file(projectRoot / buildSettings.m_IconPath,
-                          generatedProject / "game.ico", fs::copy_options::overwrite_existing, iconError);
-            if (iconError)
+            const auto escapeRcString = [](const std::string& input) -> std::string
             {
-                errorMessage = "Failed to prepare the game icon: " + iconError.message();
-                return false;
+                std::string out;
+                out.reserve(input.size());
+                for (char c : input)
+                {
+                    if (c == '"' || c == '\\')
+                    {
+                        out.push_back('\\');
+                    }
+                    if (c != '\r' && c != '\n')
+                    {
+                        out.push_back(c);
+                    }
+                }
+                return out;
+            };
+
+            int aVerNums[4] = { 1, 0, 0, 0 };
+            {
+                int idx = 0;
+                int cur = 0;
+                bool hasDigit = false;
+                for (char c : buildSettings.m_Version)
+                {
+                    if (c >= '0' && c <= '9')
+                    {
+                        cur = cur * 10 + (c - '0');
+                        hasDigit = true;
+                    }
+                    else if (c == '.' && idx < 3)
+                    {
+                        aVerNums[idx++] = hasDigit ? cur : 0;
+                        cur = 0;
+                        hasDigit = false;
+                    }
+                }
+                if (hasDigit && idx < 4)
+                {
+                    aVerNums[idx] = cur;
+                }
             }
-            std::ofstream iconResource(generatedProject / "game_icon.rc",
-                                       std::ios::binary | std::ios::trunc);
-            iconResource << "IDI_ICON1 ICON \"game.ico\"\n";
-            if (!iconResource)
+
+            const std::string productLabel = escapeRcString(
+                buildSettings.m_ProductName.empty() ? gameName : buildSettings.m_ProductName);
+            const std::string companyLabel = escapeRcString(
+                buildSettings.m_CompanyName.empty() ? "DefaultCompany" : buildSettings.m_CompanyName);
+            const std::string versionLabel = escapeRcString(
+                buildSettings.m_Version.empty() ? "1.0.0" : buildSettings.m_Version);
+            const std::string exeFileName = escapeRcString(gameName + ".exe");
+
+            std::ofstream rcFile(generatedProject / "game_icon.rc",
+                                 std::ios::binary | std::ios::trunc);
+            if (!buildSettings.m_IconPath.empty())
             {
-                errorMessage = "Failed to generate the game icon resource";
+                std::error_code iconError;
+                fs::copy_file(projectRoot / buildSettings.m_IconPath,
+                              generatedProject / "game.ico", fs::copy_options::overwrite_existing, iconError);
+                if (iconError)
+                {
+                    errorMessage = "Failed to prepare the game icon: " + iconError.message();
+                    return false;
+                }
+                rcFile << "IDI_ICON1 ICON \"game.ico\"\n";
+            }
+            rcFile << "#include <winver.h>\n"
+                   << "VS_VERSION_INFO VERSIONINFO\n"
+                   << " FILEVERSION " << aVerNums[0] << "," << aVerNums[1] << "," << aVerNums[2] << "," << aVerNums[3] << "\n"
+                   << " PRODUCTVERSION " << aVerNums[0] << "," << aVerNums[1] << "," << aVerNums[2] << "," << aVerNums[3] << "\n"
+                   << " FILEFLAGSMASK 0x3fL\n"
+                   << " FILEFLAGS 0x0L\n"
+                   << " FILEOS VOS_NT_WINDOWS32\n"
+                   << " FILETYPE VFT_APP\n"
+                   << " FILESUBTYPE VFT2_UNKNOWN\n"
+                   << "BEGIN\n"
+                   << "    BLOCK \"StringFileInfo\"\n"
+                   << "    BEGIN\n"
+                   << "        BLOCK \"040904b0\"\n"
+                   << "        BEGIN\n"
+                   << "            VALUE \"CompanyName\", \"" << companyLabel << "\\0\"\n"
+                   << "            VALUE \"FileDescription\", \"" << productLabel << "\\0\"\n"
+                   << "            VALUE \"FileVersion\", \"" << versionLabel << "\\0\"\n"
+                   << "            VALUE \"InternalName\", \"" << productLabel << "\\0\"\n"
+                   << "            VALUE \"OriginalFilename\", \"" << exeFileName << "\\0\"\n"
+                   << "            VALUE \"ProductName\", \"" << productLabel << "\\0\"\n"
+                   << "            VALUE \"ProductVersion\", \"" << versionLabel << "\\0\"\n"
+                   << "        END\n"
+                   << "    END\n"
+                   << "    BLOCK \"VarFileInfo\"\n"
+                   << "    BEGIN\n"
+                   << "        VALUE \"Translation\", 0x0409, 1200\n"
+                   << "    END\n"
+                   << "END\n";
+            if (!rcFile)
+            {
+                errorMessage = "Failed to generate the Windows version/icon resource";
                 return false;
             }
         }
@@ -437,18 +559,6 @@ int main()
         }
 #endif
 
-        {
-            std::error_code fontEc;
-            const fs::path srcFont = executableDirectory / "assets" / "font" / "Rubik-Regular.ttf";
-            if (fs::is_regular_file(srcFont, fontEc))
-            {
-                const fs::path dstFontDir = buildRoot / "assets" / "font";
-                fs::create_directories(dstFontDir, fontEc);
-                fs::copy_file(srcFont, dstFontDir / "Rubik-Regular.ttf",
-                              fs::copy_options::overwrite_existing, fontEc);
-            }
-        }
-
         const bool isReleaseProfile = (buildSettings.m_Profile == EProjectBuildProfile::RELEASE);
         std::string scriptBuildError;
         quark::script::CScriptEngine::Get().BuildScriptDll(
@@ -617,7 +727,10 @@ bool CRuntimeBuilder::Build(const std::string& projectPath, const std::string& s
     {
         progressCallback("Preparing game build...");
     }
-    const std::string gameName = MakeSafeName(projectRoot.filename().string());
+    const std::string rawProductName = buildSettings.m_ProductName.empty()
+        ? projectRoot.filename().string()
+        : buildSettings.m_ProductName;
+    const std::string gameName = MakeSafeName(rawProductName);
     const std::vector<std::string> vSceneFiles = CProjectService::GetSceneFiles(projectRoot.string());
     if (std::find(vSceneFiles.begin(), vSceneFiles.end(), buildSettings.m_StartScene) ==
         vSceneFiles.end())
@@ -670,7 +783,7 @@ bool CRuntimeBuilder::Build(const std::string& projectPath, const std::string& s
             }
             const std::string resourceName = entry.path().filename().string();
             if (resourceName == "scenes.pak" || resourceName == "settings.pak" ||
-                resourceName == "shaders.pak")
+                resourceName == "shaders.pak" || resourceName == "fonts.pak")
             {
                 errorMessage = "Project resources cannot use reserved package name: " + resourceName;
                 return false;
@@ -712,22 +825,33 @@ bool CRuntimeBuilder::Build(const std::string& projectPath, const std::string& s
         { "renderer_backend", preferences.m_RendererBackend },
         { "msaa_samples", preferences.m_MsaaSamples },
         { "texture_filter", preferences.m_TextureFilter },
-        { "vsync_enabled", preferences.m_VsyncEnabled },
+        { "vsync_enabled", buildSettings.m_VsyncEnabled },
         { "limit_fps", preferences.m_LimitFps },
         { "target_fps", preferences.m_TargetFps },
         { "background_red", preferences.m_BackgroundRed },
         { "background_green", preferences.m_BackgroundGreen },
         { "background_blue", preferences.m_BackgroundBlue },
-        { "shadows_enabled", preferences.m_ShadowsEnabled },
+        { "shadows_enabled", buildSettings.m_ShadowsEnabled },
         { "shadow_map_size", preferences.m_ShadowMapSize },
-        { "shadow_bias", preferences.m_ShadowBias },
-        { "shadow_filter_quality", preferences.m_ShadowFilterQuality },
-        { "skybox_enabled", preferences.m_SkyboxEnabled },
-        { "tone_mapping_enabled", preferences.m_ToneMappingEnabled },
-        { "exposure", preferences.m_Exposure },
-        { "bloom_strength", preferences.m_BloomStrength }
+        { "shadow_bias", std::clamp(buildSettings.m_ShadowBias, 0.0001f, 0.05f) },
+        { "shadow_filter_quality", std::clamp(buildSettings.m_ShadowFilterQuality, 0, 2) },
+        { "skybox_enabled", buildSettings.m_SkyboxEnabled },
+        { "tone_mapping_enabled", buildSettings.m_ToneMappingEnabled },
+        { "exposure", std::clamp(buildSettings.m_Exposure, 0.2f, 3.0f) },
+        { "bloom_strength", std::clamp(buildSettings.m_BloomStrength, 0.0f, 1.5f) }
     };
     runtimeConfig["start_scene"] = buildSettings.m_StartScene;
+    runtimeConfig["project_settings"] = {
+        { "product_name", rawProductName },
+        { "company_name", buildSettings.m_CompanyName },
+        { "version", buildSettings.m_Version },
+        { "window_width", std::clamp(buildSettings.m_WindowWidth, 320, 7680) },
+        { "window_height", std::clamp(buildSettings.m_WindowHeight, 240, 4320) },
+        { "fullscreen", buildSettings.m_Fullscreen },
+        { "resizable_window", buildSettings.m_ResizableWindow },
+        { "physics_gravity", { buildSettings.m_Gravity.x, buildSettings.m_Gravity.y, buildSettings.m_Gravity.z } },
+        { "physics_fixed_timestep", std::clamp(buildSettings.m_FixedTimestep, 0.002f, 0.1f) }
+    };
     std::vector<std::pair<std::string, std::string>> vSettingsEntries = {
         { "settings.json", runtimeConfig.dump(4) }
     };
@@ -749,6 +873,10 @@ bool CRuntimeBuilder::Build(const std::string& projectPath, const std::string& s
         return false;
     }
     if (!PackageRuntimeShaders(dataPath, GetExecutableDirectory(), errorMessage))
+    {
+        return false;
+    }
+    if (!PackageRuntimeFonts(dataPath, GetExecutableDirectory(), errorMessage))
     {
         return false;
     }
@@ -778,11 +906,14 @@ bool CRuntimeBuilder::BuildAndRun(const std::string& projectPath,
     {
         return false;
     }
+    const std::string rawProductName = buildSettings.m_ProductName.empty()
+        ? fs::path(projectPath).filename().string()
+        : buildSettings.m_ProductName;
 #ifdef _WIN32
-    const fs::path executablePath = fs::path(outputPath) / (MakeSafeName(fs::path(projectPath).filename().string()) + ".exe");
+    const fs::path executablePath = fs::path(outputPath) / (MakeSafeName(rawProductName) + ".exe");
 #else
     const fs::path executablePath = fs::path(outputPath) /
-        MakeSafeName(fs::path(projectPath).filename().string());
+        MakeSafeName(rawProductName);
 #endif
     if (progressCallback)
     {

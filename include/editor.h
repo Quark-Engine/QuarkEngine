@@ -153,6 +153,11 @@ public:
     bool m_ShowBuildSettings = false;
     bool m_BuildSettingsModalOpen = false;
     std::string m_BuildSettingsError;
+    std::vector<std::string> m_vBuildSettingsSceneFiles;
+    bool m_ShowProjectSettings = false;
+    bool m_ForceExit = false;
+    int m_ProjectSettingsTab = 0;
+    std::string m_ProjectSettingsError;
     bool m_ShowBuildConsole = false;
     bool m_BuildInProgress = false;
     std::mutex m_BuildConsoleMutex;
@@ -188,6 +193,7 @@ private:
     void DrawPreferencesUi(CFlyCamera& camera, SPluginContext* pPluginCtx);
     void DrawConfirmationModals();
     void DrawBuildSettingsModal();
+    void DrawProjectSettingsModal();
     void DrawBuildConsole();
     void DrawConsoleWindow();
     void DrawProfilerWindow();

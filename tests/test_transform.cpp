@@ -149,7 +149,7 @@ TEST(ComposeWorld, two_node_cycle_terminates_with_a_finite_matrix)
     CScene sceneUnderTest;
     PushEntity(sceneUnderTest, { 1.0f, 0.0f, 0.0f }, { 0.0f, 0.0f, 0.0f }, { 2.0f, 2.0f, 2.0f }, -1);
     PushEntity(sceneUnderTest, { 0.0f, 1.0f, 0.0f }, { 0.0f, 0.0f, 0.0f }, { 2.0f, 2.0f, 2.0f }, 1);
-    sceneUnderTest.m_vEntities[0].m_ParentId = 1; // 0 -> 1 -> 0
+    sceneUnderTest.m_vEntities[0].m_ParentId = 1;
 
     const Mat4 result = quark::ComposeWorld(sceneUnderTest, 1);
     for (int i = 0; i < 16; ++i)

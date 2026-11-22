@@ -874,7 +874,8 @@ void DrawAssetsUi(CEditor& editor)
     const fs::path projectRoot = fs::path(editor.m_ProjectPath);
     const fs::path assetsRoot = projectRoot / "resources";
 
-    if (ImGui::SmallButton("Create v"))
+    const std::string createButtonLabel = std::string(lang.Word("create")) + " v";
+    if (ImGui::SmallButton(createButtonLabel.c_str()))
     {
         ImGui::OpenPopup("AssetBrowserCreatePopup");
     }
@@ -894,7 +895,7 @@ void DrawAssetsUi(CEditor& editor)
             create.m_aNewItemName[0] = '\0';
             create.m_Open = true;
         }
-        if (ImGui::MenuItem("Material"))
+        if (ImGui::MenuItem(lang.Word("material")))
         {
             fs::path matPath = editor.m_CurrentAssetPath / "NewMaterial.mtl";
             int suffix = 1;
@@ -908,7 +909,7 @@ void DrawAssetsUi(CEditor& editor)
             editor.m_Assets.RequestRefresh(editor.m_ProjectPath);
             browser.m_AssetListCacheDirty = true;
         }
-        if (ImGui::MenuItem("Scene"))
+        if (ImGui::MenuItem(lang.Word("scene")))
         {
             fs::path scenePath = editor.m_CurrentAssetPath / "NewScene.json";
             int suffix = 1;
@@ -933,7 +934,7 @@ void DrawAssetsUi(CEditor& editor)
     }
 
     ImGui::SameLine(0.0f, 12.0f);
-    if (ImGui::SmallButton(browser.m_ListViewMode ? "View: List" : "View: Grid"))
+    if (ImGui::SmallButton(browser.m_ListViewMode ? lang.Word("view_list") : lang.Word("view_grid")))
     {
         browser.m_ListViewMode = !browser.m_ListViewMode;
     }
@@ -1167,7 +1168,7 @@ void DrawAssetsUi(CEditor& editor)
             pDraw->AddText(
                 ImVec2(starPos.x + iconSz + 5.0f, favMin.y + (favMax.y - favMin.y - ImGui::GetTextLineHeight()) * 0.5f),
                 ImGui::GetColorU32(ImGuiCol_Text),
-                "Favorites");
+                lang.Word("favorites"));
         }
         if (favOpen)
         {
@@ -1177,12 +1178,12 @@ void DrawAssetsUi(CEditor& editor)
                 int m_FilterId;
             };
             const SFavItem aFavItems[] = {
-                { "All GUI", 1 },
-                { "All Materials", 2 },
-                { "All Models", 3 },
-                { "All Prefabs", 4 },
-                { "All Scripts", 5 },
-                { "All Scenes", 6 }
+                { lang.Word("all_gui"), 1 },
+                { lang.Word("all_materials"), 2 },
+                { lang.Word("all_models"), 3 },
+                { lang.Word("all_prefabs"), 4 },
+                { lang.Word("all_scripts"), 5 },
+                { lang.Word("all_scenes"), 6 }
             };
             for (const SFavItem& fav : aFavItems)
             {
@@ -1224,9 +1225,15 @@ void DrawAssetsUi(CEditor& editor)
     if (browser.m_FavoriteFilter > 0)
     {
         const char* apFavTitles[] = {
-            "Assets", "All GUI", "All Materials", "All Models", "All Prefabs", "All Scripts", "All Scenes"
+            lang.Word("assets"),
+            lang.Word("all_gui"),
+            lang.Word("all_materials"),
+            lang.Word("all_models"),
+            lang.Word("all_prefabs"),
+            lang.Word("all_scripts"),
+            lang.Word("all_scenes")
         };
-        if (ImGui::SmallButton("Favorites"))
+        if (ImGui::SmallButton(lang.Word("favorites")))
         {
             browser.m_FavoriteFilter = 0;
             browser.m_AssetListCacheDirty = true;
@@ -1380,7 +1387,8 @@ void DrawAssetsUi(CEditor& editor)
                 create.m_Open = true;
             }
 
-            if (ImGui::MenuItem("New Scene##empty_new_scene"))
+            const std::string emptyNewSceneLabel = std::string(lang.Word("new_scene")) + "##empty_new_scene";
+            if (ImGui::MenuItem(emptyNewSceneLabel.c_str()))
             {
                 create.m_CreatingFolder = false;
                 create.m_CreatingScript = false;
@@ -1583,7 +1591,7 @@ void DrawAssetsUi(CEditor& editor)
                 {
                     if (entry.m_IsScene)
                     {
-                        if (ImGui::MenuItem("Open Scene"))
+                        if (ImGui::MenuItem(lang.Word("open_scene")))
                         {
                             editor.OpenScene(entryFullPath);
                         }
@@ -1659,7 +1667,8 @@ void DrawAssetsUi(CEditor& editor)
                         create.m_Open = true;
                     }
 
-                    if (ImGui::MenuItem("New Scene##item_new_scene"))
+                    const std::string itemNewSceneLabel = std::string(lang.Word("new_scene")) + "##item_new_scene";
+                    if (ImGui::MenuItem(itemNewSceneLabel.c_str()))
                     {
                         create.m_CreatingFolder = false;
                         create.m_CreatingScript = false;
@@ -2189,7 +2198,8 @@ void DrawAssetsUi(CEditor& editor)
                 create.m_Open = true;
             }
 
-            if (ImGui::MenuItem("New Scene##bg_new_scene"))
+            const std::string bgNewSceneLabel = std::string(lang.Word("new_scene")) + "##bg_new_scene";
+            if (ImGui::MenuItem(bgNewSceneLabel.c_str()))
             {
                 create.m_CreatingFolder = false;
                 create.m_CreatingScript = false;
@@ -2265,7 +2275,7 @@ void DrawAssetsUi(CEditor& editor)
     if (ImGui::BeginPopupModal(popupName.c_str(), nullptr, ImGuiWindowFlags_AlwaysAutoResize))
     {
         const char* pModalTitle = create.m_CreatingScene
-            ? "New Scene"
+            ? lang.Word("new_scene")
             : (create.m_CreatingScript
                 ? lang.Word("new_script")
                 : (create.m_CreatingFolder ? lang.Word("new_folder") : lang.Word("new_file")));

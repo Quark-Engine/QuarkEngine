@@ -80,6 +80,8 @@ public:
     void RenderSceneMeshes(CScene& scene, const Camera3D& camera, float aspectRatio,
                            const CPreferences* pPreferences, bool drawEditorOverlays);
 
+    void ApplyBloom(RenderTexture2D& target, const CPreferences* pPreferences);
+
     bool IsMeshVisible(CMeshComponent* pMesh, const Mat4& worldTransform,
                        const Camera3D& camera, float aspectRatio) const;
     bool IsMeshVisible(int entityIndex, const Camera3D& camera, float aspectRatio) const;
@@ -112,8 +114,19 @@ public:
     void Unload();
 
 private:
+    struct SBloomTargetSet
+    {
+        RenderTexture2D m_HalfA{};
+        RenderTexture2D m_HalfB{};
+        RenderTexture2D m_Composite{};
+        int m_Width = 0;
+        int m_Height = 0;
+        std::uint64_t m_LastUsedFrame = 0;
+    };
+
     void UnloadShaders();
     void UnloadShadowMaps();
+    void UnloadBloomTargets();
     void RenderSkybox(const Camera3D& camera, const CPreferences* pPreferences);
     void WriteVulkanGlobals(CScene& scene, bool shadowsEnabled,
                             float shadowBias, int shadowFilterQuality);
@@ -121,6 +134,7 @@ private:
     Shader m_LightingShader{};
     Shader m_ShadowShader{};
     Shader m_SkyboxShader{};
+    Shader m_BloomShader{};
     Mesh m_SkyboxMesh{};
     Material m_SkyboxMaterial{};
     bool m_SkyboxReady = false;
@@ -134,6 +148,9 @@ private:
     int m_PostParamsLoc = -1;
     int m_SkyboxSunDirLoc = -1;
     int m_SkyboxPostParamsLoc = -1;
+    int m_BloomParamsLoc = -1;
+    std::array<SBloomTargetSet, 2> m_aBloomSets{};
+    std::uint64_t m_BloomUseCounter = 0;
     int m_UseTexLoc = -1;
     int m_LastUseTexState = -1;
     int m_AmbientLoc = -1;

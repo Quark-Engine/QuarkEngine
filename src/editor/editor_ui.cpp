@@ -242,6 +242,7 @@ void CEditor::DrawUi(Shader shader, CFlyCamera& camera, SPluginContext* pPluginC
     DrawPreferencesUi(camera, pPluginCtx);
     DrawConfirmationModals();
     DrawBuildSettingsModal();
+    DrawProjectSettingsModal();
     DrawBuildConsole();
     DrawConsoleWindow();
     DrawProfilerWindow();
@@ -269,7 +270,7 @@ void CEditor::DrawMainMenuBar(SPluginContext* pPluginCtx, ImGuiID dockspaceId,
         {
             m_pPluginManager->DrawUiRegion(UI_MENU_FILE, *pPluginCtx);
 
-            if (ImGui::MenuItem("New Scene..."))
+            if (ImGui::MenuItem(lang.Word("new_scene_ellipsis")))
             {
                 camera.ReleaseCapture();
                 const std::string selectedFile = CSceneFileService::BrowseSceneSavePath("new_scene.json");
@@ -279,7 +280,7 @@ void CEditor::DrawMainMenuBar(SPluginContext* pPluginCtx, ImGuiID dockspaceId,
                 }
             }
 
-            if (ImGui::BeginMenu("Open Scene"))
+            if (ImGui::BeginMenu(lang.Word("open_scene")))
             {
                 const std::vector<std::string> vSceneFiles = CProjectService::GetSceneFiles(m_ProjectPath);
                 std::error_code activeEc;
@@ -304,7 +305,7 @@ void CEditor::DrawMainMenuBar(SPluginContext* pPluginCtx, ImGuiID dockspaceId,
                     ImGui::Separator();
                 }
 
-                if (ImGui::MenuItem("Browse..."))
+                if (ImGui::MenuItem(lang.Word("browse_ellipsis")))
                 {
                     camera.ReleaseCapture();
                     const std::string selectedFile = CDesktopIntegration::OpenFileDialog(
@@ -330,24 +331,25 @@ void CEditor::DrawMainMenuBar(SPluginContext* pPluginCtx, ImGuiID dockspaceId,
                 CSceneFileService::SaveAs(*this);
             }
             ImGui::Separator();
-            if (ImGui::MenuItem("Build Settings..."))
+            if (ImGui::MenuItem(lang.Word("build_settings_ellipsis")))
             {
                 m_BuildSettingsError.clear();
                 if (!CProjectService::LoadBuildSettings(m_ProjectPath, m_BuildSettings))
                 {
-                    m_BuildSettingsError = "Could not load project build settings";
+                    m_BuildSettingsError = lang.Word("build_settings_load_error");
                 }
+                m_vBuildSettingsSceneFiles = CProjectService::GetSceneFiles(m_ProjectPath);
                 camera.ReleaseCapture();
                 m_ShowBuildSettings = true;
                 m_BuildSettingsModalOpen = true;
             }
             ImGui::BeginDisabled(m_BuildInProgress);
-            if (ImGui::MenuItem("Build"))
+            if (ImGui::MenuItem(lang.Word("build")))
             {
                 camera.ReleaseCapture();
                 StartBuild(false);
             }
-            if (ImGui::MenuItem("Build & Run"))
+            if (ImGui::MenuItem(lang.Word("build_and_run")))
             {
                 camera.ReleaseCapture();
                 StartBuild(true);
@@ -362,6 +364,7 @@ void CEditor::DrawMainMenuBar(SPluginContext* pPluginCtx, ImGuiID dockspaceId,
                 }
                 else
                 {
+                    m_ForceExit = true;
                     RequestWindowClose();
                 }
             }
@@ -407,6 +410,16 @@ void CEditor::DrawMainMenuBar(SPluginContext* pPluginCtx, ImGuiID dockspaceId,
             }
 
             ImGui::Separator();
+            if (ImGui::MenuItem(lang.Word("project_settings_ellipsis")))
+            {
+                m_ProjectSettingsError.clear();
+                if (!CProjectService::LoadBuildSettings(m_ProjectPath, m_BuildSettings))
+                {
+                    m_ProjectSettingsError = lang.Word("project_settings_load_error");
+                }
+                camera.ReleaseCapture();
+                m_ShowProjectSettings = true;
+            }
             if (ImGui::MenuItem(lang.Word("preferences")))
             {
                 camera.ReleaseCapture();
@@ -426,10 +439,10 @@ void CEditor::DrawMainMenuBar(SPluginContext* pPluginCtx, ImGuiID dockspaceId,
             ImGui::MenuItem(lang.Word("inspector"), nullptr, &m_Preferences.m_ShowInspector);
             ImGui::MenuItem(lang.Word("assets"), nullptr, &m_Preferences.m_ShowAssets);
             ImGui::MenuItem(lang.Word("scene"), nullptr, &m_Preferences.m_ShowScene);
-            ImGui::MenuItem("Game", nullptr, &m_ShowGameView);
-            ImGui::MenuItem("Console", nullptr, &m_ShowConsole);
-            ImGui::MenuItem("Profiler", nullptr, &m_ShowProfiler);
-            ImGui::MenuItem("Build Console", nullptr, &m_ShowBuildConsole);
+            ImGui::MenuItem(lang.Word("game"), nullptr, &m_ShowGameView);
+            ImGui::MenuItem(lang.Word("console"), nullptr, &m_ShowConsole);
+            ImGui::MenuItem(lang.Word("profiler"), nullptr, &m_ShowProfiler);
+            ImGui::MenuItem(lang.Word("build_console"), nullptr, &m_ShowBuildConsole);
             ImGui::EndMenu();
         }
 
@@ -465,7 +478,7 @@ void CEditor::DrawMainMenuBar(SPluginContext* pPluginCtx, ImGuiID dockspaceId,
                 DispatchPluginEvent(PLUGIN_EVENT_ENTITY_CREATED, entityIndex);
                 m_Scene.SelectEntity(entityIndex, false);
             }
-            if (ImGui::MenuItem("Camera"))
+            if (ImGui::MenuItem(lang.Word("camera")))
             {
                 SaveState();
                 CEntity created = CEntityFactory::Camera(m_Scene, -1);
@@ -475,9 +488,9 @@ void CEditor::DrawMainMenuBar(SPluginContext* pPluginCtx, ImGuiID dockspaceId,
                 m_Scene.SelectEntity(entityIndex, false);
             }
             ImGui::Separator();
-            if (ImGui::BeginMenu("UI"))
+            if (ImGui::BeginMenu(lang.Word("ui")))
             {
-                if (ImGui::MenuItem("Canvas"))
+                if (ImGui::MenuItem(lang.Word("canvas")))
                 {
                     SaveState();
                     CEntity entity = CEntityFactory::Canvas(m_Scene, ECanvasRenderMode::WORLD_SPACE, -1);
@@ -486,7 +499,7 @@ void CEditor::DrawMainMenuBar(SPluginContext* pPluginCtx, ImGuiID dockspaceId,
                     DispatchPluginEvent(PLUGIN_EVENT_ENTITY_CREATED, entityIndex);
                     m_Scene.SelectEntity(entityIndex, false);
                 }
-                if (ImGui::MenuItem("Panel"))
+                if (ImGui::MenuItem(lang.Word("panel")))
                 {
                     SaveState();
                     const int parentId = GetOrCreateCanvasForUi(m_Scene.m_Selected);
@@ -496,7 +509,7 @@ void CEditor::DrawMainMenuBar(SPluginContext* pPluginCtx, ImGuiID dockspaceId,
                     DispatchPluginEvent(PLUGIN_EVENT_ENTITY_CREATED, entityIndex);
                     m_Scene.SelectEntity(entityIndex, false);
                 }
-                if (ImGui::MenuItem("Button"))
+                if (ImGui::MenuItem(lang.Word("button")))
                 {
                     SaveState();
                     const int parentId = GetOrCreateCanvasForUi(m_Scene.m_Selected);
@@ -506,7 +519,7 @@ void CEditor::DrawMainMenuBar(SPluginContext* pPluginCtx, ImGuiID dockspaceId,
                     DispatchPluginEvent(PLUGIN_EVENT_ENTITY_CREATED, entityIndex);
                     m_Scene.SelectEntity(entityIndex, false);
                 }
-                if (ImGui::MenuItem("Text"))
+                if (ImGui::MenuItem(lang.Word("text")))
                 {
                     SaveState();
                     const int parentId = GetOrCreateCanvasForUi(m_Scene.m_Selected);
@@ -516,7 +529,7 @@ void CEditor::DrawMainMenuBar(SPluginContext* pPluginCtx, ImGuiID dockspaceId,
                     DispatchPluginEvent(PLUGIN_EVENT_ENTITY_CREATED, entityIndex);
                     m_Scene.SelectEntity(entityIndex, false);
                 }
-                if (ImGui::MenuItem("Image"))
+                if (ImGui::MenuItem(lang.Word("image")))
                 {
                     SaveState();
                     const int parentId = GetOrCreateCanvasForUi(m_Scene.m_Selected);
@@ -526,7 +539,7 @@ void CEditor::DrawMainMenuBar(SPluginContext* pPluginCtx, ImGuiID dockspaceId,
                     DispatchPluginEvent(PLUGIN_EVENT_ENTITY_CREATED, entityIndex);
                     m_Scene.SelectEntity(entityIndex, false);
                 }
-                if (ImGui::MenuItem("Slider"))
+                if (ImGui::MenuItem(lang.Word("slider")))
                 {
                     SaveState();
                     const int parentId = GetOrCreateCanvasForUi(m_Scene.m_Selected);
@@ -536,7 +549,7 @@ void CEditor::DrawMainMenuBar(SPluginContext* pPluginCtx, ImGuiID dockspaceId,
                     DispatchPluginEvent(PLUGIN_EVENT_ENTITY_CREATED, entityIndex);
                     m_Scene.SelectEntity(entityIndex, false);
                 }
-                if (ImGui::MenuItem("Toggle"))
+                if (ImGui::MenuItem(lang.Word("toggle")))
                 {
                     SaveState();
                     const int parentId = GetOrCreateCanvasForUi(m_Scene.m_Selected);
@@ -546,7 +559,7 @@ void CEditor::DrawMainMenuBar(SPluginContext* pPluginCtx, ImGuiID dockspaceId,
                     DispatchPluginEvent(PLUGIN_EVENT_ENTITY_CREATED, entityIndex);
                     m_Scene.SelectEntity(entityIndex, false);
                 }
-                if (ImGui::MenuItem("Progress Bar"))
+                if (ImGui::MenuItem(lang.Word("progress_bar")))
                 {
                     SaveState();
                     const int parentId = GetOrCreateCanvasForUi(m_Scene.m_Selected);
@@ -556,7 +569,7 @@ void CEditor::DrawMainMenuBar(SPluginContext* pPluginCtx, ImGuiID dockspaceId,
                     DispatchPluginEvent(PLUGIN_EVENT_ENTITY_CREATED, entityIndex);
                     m_Scene.SelectEntity(entityIndex, false);
                 }
-                if (ImGui::MenuItem("Scroll View"))
+                if (ImGui::MenuItem(lang.Word("scroll_view")))
                 {
                     SaveState();
                     const int parentId = GetOrCreateCanvasForUi(m_Scene.m_Selected);
@@ -577,11 +590,11 @@ void CEditor::DrawMainMenuBar(SPluginContext* pPluginCtx, ImGuiID dockspaceId,
                     DispatchPluginEvent(PLUGIN_EVENT_ENTITY_CREATED, entityIndex);
                     m_Scene.SelectEntity(entityIndex, false);
                 };
-                if (ImGui::MenuItem("Inputfield"))
+                if (ImGui::MenuItem(lang.Word("input_field")))
                 {
                     createUiEntity(EGuiWidgetType::INPUT_FIELD);
                 }
-                if (ImGui::MenuItem("Combo"))
+                if (ImGui::MenuItem(lang.Word("combo")))
                 {
                     createUiEntity(EGuiWidgetType::COMBO);
                 }
@@ -816,7 +829,7 @@ void CEditor::HierarchyDrawCreateMenu(int parentIndex)
             DispatchPluginEvent(PLUGIN_EVENT_ENTITY_CREATED, entityIndex);
             m_Scene.SelectEntity(entityIndex, false);
         }
-        if (ImGui::MenuItem("Camera"))
+        if (ImGui::MenuItem(lang.Word("camera")))
         {
             SaveState();
             CEntity entity = CEntityFactory::Camera(m_Scene, parentIndex);
@@ -826,9 +839,9 @@ void CEditor::HierarchyDrawCreateMenu(int parentIndex)
             m_Scene.SelectEntity(entityIndex, false);
         }
         ImGui::Separator();
-        if (ImGui::BeginMenu("UI"))
+        if (ImGui::BeginMenu(lang.Word("ui")))
         {
-            if (ImGui::MenuItem("Canvas"))
+            if (ImGui::MenuItem(lang.Word("canvas")))
             {
                 SaveState();
                 CEntity entity = CEntityFactory::Canvas(m_Scene, ECanvasRenderMode::WORLD_SPACE, parentIndex);
@@ -837,7 +850,7 @@ void CEditor::HierarchyDrawCreateMenu(int parentIndex)
                 DispatchPluginEvent(PLUGIN_EVENT_ENTITY_CREATED, entityIndex);
                 m_Scene.SelectEntity(entityIndex, false);
             }
-            if (ImGui::MenuItem("Panel"))
+            if (ImGui::MenuItem(lang.Word("panel")))
             {
                 SaveState();
                 const int parentId = GetOrCreateCanvasForUi(parentIndex);
@@ -847,7 +860,7 @@ void CEditor::HierarchyDrawCreateMenu(int parentIndex)
                 DispatchPluginEvent(PLUGIN_EVENT_ENTITY_CREATED, entityIndex);
                 m_Scene.SelectEntity(entityIndex, false);
             }
-            if (ImGui::MenuItem("Button"))
+            if (ImGui::MenuItem(lang.Word("button")))
             {
                 SaveState();
                 const int parentId = GetOrCreateCanvasForUi(parentIndex);
@@ -857,7 +870,7 @@ void CEditor::HierarchyDrawCreateMenu(int parentIndex)
                 DispatchPluginEvent(PLUGIN_EVENT_ENTITY_CREATED, entityIndex);
                 m_Scene.SelectEntity(entityIndex, false);
             }
-            if (ImGui::MenuItem("Text"))
+            if (ImGui::MenuItem(lang.Word("text")))
             {
                 SaveState();
                 const int parentId = GetOrCreateCanvasForUi(parentIndex);
@@ -867,7 +880,7 @@ void CEditor::HierarchyDrawCreateMenu(int parentIndex)
                 DispatchPluginEvent(PLUGIN_EVENT_ENTITY_CREATED, entityIndex);
                 m_Scene.SelectEntity(entityIndex, false);
             }
-            if (ImGui::MenuItem("Image"))
+            if (ImGui::MenuItem(lang.Word("image")))
             {
                 SaveState();
                 const int parentId = GetOrCreateCanvasForUi(parentIndex);
@@ -877,7 +890,7 @@ void CEditor::HierarchyDrawCreateMenu(int parentIndex)
                 DispatchPluginEvent(PLUGIN_EVENT_ENTITY_CREATED, entityIndex);
                 m_Scene.SelectEntity(entityIndex, false);
             }
-            if (ImGui::MenuItem("Slider"))
+            if (ImGui::MenuItem(lang.Word("slider")))
             {
                 SaveState();
                 const int parentId = GetOrCreateCanvasForUi(parentIndex);
@@ -887,7 +900,7 @@ void CEditor::HierarchyDrawCreateMenu(int parentIndex)
                 DispatchPluginEvent(PLUGIN_EVENT_ENTITY_CREATED, entityIndex);
                 m_Scene.SelectEntity(entityIndex, false);
             }
-            if (ImGui::MenuItem("Toggle"))
+            if (ImGui::MenuItem(lang.Word("toggle")))
             {
                 SaveState();
                 const int parentId = GetOrCreateCanvasForUi(parentIndex);
@@ -897,7 +910,7 @@ void CEditor::HierarchyDrawCreateMenu(int parentIndex)
                 DispatchPluginEvent(PLUGIN_EVENT_ENTITY_CREATED, entityIndex);
                 m_Scene.SelectEntity(entityIndex, false);
             }
-            if (ImGui::MenuItem("Progress Bar"))
+            if (ImGui::MenuItem(lang.Word("progress_bar")))
             {
                 SaveState();
                 const int parentId = GetOrCreateCanvasForUi(parentIndex);
@@ -907,7 +920,7 @@ void CEditor::HierarchyDrawCreateMenu(int parentIndex)
                 DispatchPluginEvent(PLUGIN_EVENT_ENTITY_CREATED, entityIndex);
                 m_Scene.SelectEntity(entityIndex, false);
             }
-            if (ImGui::MenuItem("Scroll View"))
+            if (ImGui::MenuItem(lang.Word("scroll_view")))
             {
                 SaveState();
                 const int parentId = GetOrCreateCanvasForUi(parentIndex);
@@ -928,11 +941,11 @@ void CEditor::HierarchyDrawCreateMenu(int parentIndex)
                 DispatchPluginEvent(PLUGIN_EVENT_ENTITY_CREATED, entityIndex);
                 m_Scene.SelectEntity(entityIndex, false);
             };
-            if (ImGui::MenuItem("Inputfield"))
+            if (ImGui::MenuItem(lang.Word("input_field")))
             {
                 createUiEntity(EGuiWidgetType::INPUT_FIELD);
             }
-            if (ImGui::MenuItem("Combo"))
+            if (ImGui::MenuItem(lang.Word("combo")))
             {
                 createUiEntity(EGuiWidgetType::COMBO);
             }
@@ -1180,7 +1193,7 @@ void CEditor::DrawInspectorPanel(Shader shader, SPluginContext* pPluginCtx)
             const std::filesystem::path prefabFilePath(prefabRoot.m_PrefabPath);
             ImGui::TextColored(ImVec4(0.45f, 0.78f, 1.0f, 1.0f), "Prefab: %s",
                                prefabFilePath.filename().string().c_str());
-            if (ImGui::Button("Apply"))
+            if (ImGui::Button(lang.Word("apply")))
             {
                 if (CEntityFactory::SavePrefabToFile(m_Scene, prefabRootIndex, prefabFilePath))
                 {
@@ -1193,7 +1206,7 @@ void CEditor::DrawInspectorPanel(Shader shader, SPluginContext* pPluginCtx)
                 }
             }
             ImGui::SameLine();
-            if (ImGui::Button("Revert"))
+            if (ImGui::Button(lang.Word("revert")))
             {
                 SaveState();
                 if (CEntityFactory::RevertPrefabInstance(m_Scene, m_Assets, prefabRootIndex, m_ComponentFactories))
@@ -1205,7 +1218,7 @@ void CEditor::DrawInspectorPanel(Shader shader, SPluginContext* pPluginCtx)
                 }
             }
             ImGui::SameLine();
-            if (ImGui::Button("Unpack"))
+            if (ImGui::Button(lang.Word("unpack")))
             {
                 SaveState();
                 prefabRoot.m_PrefabPath.clear();
@@ -1288,9 +1301,9 @@ void CEditor::DrawInspectorPanel(Shader shader, SPluginContext* pPluginCtx)
         }
         if (ImGui::BeginPopup("AddTagPopup"))
         {
-            ImGui::TextUnformatted("Add Tag");
+            ImGui::TextUnformatted(lang.Word("add_tag"));
             ImGui::InputText("##tag_name", inspector.m_aTagBuffer, IM_ARRAYSIZE(inspector.m_aTagBuffer));
-            if (ImGui::Button("Add") && inspector.m_aTagBuffer[0] != '\0')
+            if (ImGui::Button(lang.Word("add")) && inspector.m_aTagBuffer[0] != '\0')
             {
                 const std::string newTag(inspector.m_aTagBuffer);
                 if (std::find(pEntity->m_vTags.begin(), pEntity->m_vTags.end(), newTag) == pEntity->m_vTags.end())
@@ -1302,7 +1315,7 @@ void CEditor::DrawInspectorPanel(Shader shader, SPluginContext* pPluginCtx)
                 ImGui::CloseCurrentPopup();
             }
             ImGui::SameLine();
-            if (ImGui::Button("Cancel"))
+            if (ImGui::Button(lang.Word("cancel")))
             {
                 inspector.m_aTagBuffer[0] = '\0';
                 ImGui::CloseCurrentPopup();
@@ -1353,7 +1366,7 @@ void CEditor::DrawScenePanel(CFlyCamera& camera, SPluginContext* pPluginCtx)
         }
         if (m_IsPlaying)
         {
-            if (ImGui::Button("Stop", ImVec2(48.0f, 24.0f)))
+            if (ImGui::Button(lang.Word("stop"), ImVec2(0.0f, 24.0f)))
             {
                 camera.ReleaseCapture();
                 SetScene2DMode(camera, false);
@@ -1362,13 +1375,13 @@ void CEditor::DrawScenePanel(CFlyCamera& camera, SPluginContext* pPluginCtx)
         }
         else if (m_PlayModeSnapshot.has_value())
         {
-            if (ImGui::Button("Restore", ImVec2(64.0f, 24.0f)))
+            if (ImGui::Button(lang.Word("restore"), ImVec2(0.0f, 24.0f)))
             {
                 camera.ReleaseCapture();
                 StopPlayMode();
             }
         }
-        else if (ImGui::Button("Play", ImVec2(48.0f, 24.0f)))
+        else if (ImGui::Button(lang.Word("play"), ImVec2(0.0f, 24.0f)))
         {
             if (camera.m_Active)
             {
@@ -1434,7 +1447,7 @@ void CEditor::DrawGamePanel(CFlyCamera& camera)
     ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(0, 0));
     const ImGuiWindowFlags gameWindowFlags =
         m_Ui.m_GameViewport.m_Hovered ? ImGuiWindowFlags_NoMove : ImGuiWindowFlags_None;
-    const bool isOpen = ImGui::Begin("Game", &m_ShowGameView, gameWindowFlags);
+    const bool isOpen = ImGui::Begin(lang.Word("game"), &m_ShowGameView, gameWindowFlags);
     m_SelectGameTab = false;
     if (isOpen)
     {
@@ -1954,12 +1967,12 @@ bool CEditor::DrawPreferencesRenderingTab(CFlyCamera& camera)
     changed |= ImGui::SliderFloat(lang.Word("camera_fov"), &m_Preferences.m_CameraFov, 20.0f, 120.0f, "%.0f deg");
     changed |= ImGui::SliderFloat(lang.Word("shadow_bias"), &m_Preferences.m_ShadowBias, 0.0001f, 0.05f, "%.4f");
 
-    const char* apShadowFilterNames[] = { lang.Word("hard"), lang.Word("samples_9"), lang.Word("samples_25") };
+    const char* apShadowFilterNames[] = { lang.Word("bilinear_2x2"), lang.Word("poisson_8tap"), lang.Word("poisson_16tap") };
     changed |= ImGui::Combo(lang.Word("shadow_filtering"), &m_Preferences.m_ShadowFilterQuality, apShadowFilterNames, 3);
-    changed |= ImGui::Checkbox("Procedural Skybox", &m_Preferences.m_SkyboxEnabled);
-    changed |= ImGui::Checkbox("ACES Tone Mapping", &m_Preferences.m_ToneMappingEnabled);
-    changed |= ImGui::SliderFloat("Exposure", &m_Preferences.m_Exposure, 0.2f, 3.0f, "%.2f");
-    changed |= ImGui::SliderFloat("Bloom Strength", &m_Preferences.m_BloomStrength, 0.0f, 1.5f, "%.2f");
+    changed |= ImGui::Checkbox(lang.Word("procedural_skybox"), &m_Preferences.m_SkyboxEnabled);
+    changed |= ImGui::Checkbox(lang.Word("aces_tone_mapping"), &m_Preferences.m_ToneMappingEnabled);
+    changed |= ImGui::SliderFloat(lang.Word("exposure"), &m_Preferences.m_Exposure, 0.2f, 3.0f, "%.2f");
+    changed |= ImGui::SliderFloat(lang.Word("bloom_strength"), &m_Preferences.m_BloomStrength, 0.0f, 1.5f, "%.2f");
     changed |= ImGui::SliderInt(lang.Word("undo_history_limit"), &m_Preferences.m_UndoHistoryLimit, 10, 500);
     camera.m_Cam.fovy = m_Preferences.m_CameraFov;
 
@@ -2225,15 +2238,15 @@ void CEditor::DrawConfirmationModals()
         ImGui::TextUnformatted(lang.Word("unsaved_scene_message"));
         if (ImGui::Button(lang.Word("save_and_exit")))
         {
-            CProjectService::Save(m_ProjectPath, m_Scene);
-            DispatchPluginEvent(PLUGIN_EVENT_SCENE_SAVED);
-            m_SceneDirty = false;
+            SaveActiveScene();
+            m_ForceExit = true;
             RequestWindowClose();
             ImGui::CloseCurrentPopup();
         }
         ImGui::SameLine();
         if (ImGui::Button(lang.Word("exit_without_saving")))
         {
+            m_ForceExit = true;
             RequestWindowClose();
             ImGui::CloseCurrentPopup();
         }
@@ -2248,24 +2261,24 @@ void CEditor::DrawConfirmationModals()
 
 void CEditor::DrawBuildSettingsModal()
 {
+    const std::string modalId = std::string(lang.Word("build_settings")) + "###BuildSettingsModal";
     if (m_ShowBuildSettings)
     {
-        ImGui::OpenPopup("Build Settings");
+        ImGui::OpenPopup(modalId.c_str());
         m_ShowBuildSettings = false;
     }
 
-    if (!ImGui::BeginPopupModal("Build Settings", nullptr,
+    if (!ImGui::BeginPopupModal(modalId.c_str(), nullptr,
                                 ImGuiWindowFlags_AlwaysAutoResize))
     {
         return;
     }
 
-    const std::vector<std::string> vSceneFiles = CProjectService::GetSceneFiles(m_ProjectPath);
-    ImGui::TextUnformatted("Start Scene");
+    ImGui::TextUnformatted(lang.Word("start_scene"));
     const char* pSelectedScene = m_BuildSettings.m_StartScene.c_str();
     if (ImGui::BeginCombo("##build_start_scene", pSelectedScene))
     {
-        for (const std::string& sceneFile : vSceneFiles)
+        for (const std::string& sceneFile : m_vBuildSettingsSceneFiles)
         {
             const bool selected = sceneFile == m_BuildSettings.m_StartScene;
             if (ImGui::Selectable(sceneFile.c_str(), selected))
@@ -2281,7 +2294,7 @@ void CEditor::DrawBuildSettingsModal()
     }
 
     ImGui::Spacing();
-    ImGui::TextUnformatted("Build Profile");
+    ImGui::TextUnformatted(lang.Word("build_profile"));
     const char* pProfileName = m_BuildSettings.m_Profile == EProjectBuildProfile::DEBUG
         ? "Debug"
         : "Release";
@@ -2298,52 +2311,6 @@ void CEditor::DrawBuildSettingsModal()
         ImGui::EndCombo();
     }
 
-    ImGui::Spacing();
-    ImGui::TextUnformatted("Game Icon (.ico)");
-    ImGui::SameLine();
-    if (m_BuildSettings.m_IconPath.empty())
-    {
-        ImGui::TextDisabled("None");
-    }
-    else
-    {
-        ImGui::TextDisabled("%s", m_BuildSettings.m_IconPath.c_str());
-    }
-    if (ImGui::Button("Choose Icon..."))
-    {
-        static constexpr char s_aIconFilter[] =
-            "ICO Files\0*.ico\0All Files\0*.*\0\0";
-        const std::string selectedIcon = CDesktopIntegration::OpenFileDialog(
-            "ICO Files", s_aIconFilter);
-        if (!selectedIcon.empty())
-        {
-            const std::filesystem::path projectRoot = CProjectService::ResolveRoot(m_ProjectPath);
-            const std::filesystem::path iconDestination = projectRoot / "game_icon.ico";
-            std::error_code error;
-            if (std::filesystem::absolute(selectedIcon).lexically_normal() !=
-                std::filesystem::absolute(iconDestination).lexically_normal())
-            {
-                std::filesystem::copy_file(selectedIcon, iconDestination,
-                                           std::filesystem::copy_options::overwrite_existing, error);
-            }
-            if (error)
-            {
-                m_BuildSettingsError = "Could not copy the game icon: " + error.message();
-            }
-            else
-            {
-                m_BuildSettings.m_IconPath = "game_icon.ico";
-                m_BuildSettingsError.clear();
-            }
-        }
-    }
-    ImGui::SameLine();
-    if (ImGui::Button("Clear Icon"))
-    {
-        m_BuildSettings.m_IconPath.clear();
-        m_BuildSettingsError.clear();
-    }
-
     if (!m_BuildSettingsError.empty())
     {
         ImGui::Spacing();
@@ -2353,25 +2320,215 @@ void CEditor::DrawBuildSettingsModal()
     ImGui::Spacing();
     ImGui::Separator();
     ImGui::Spacing();
-    if (ImGui::Button("Save", ImVec2(100, 0)))
+    if (ImGui::Button(lang.Word("save"), ImVec2(100, 0)))
     {
         if (CProjectService::SaveBuildSettings(m_ProjectPath, m_BuildSettings))
         {
             m_BuildSettingsError.clear();
-            SetStatusMessage("Project build settings saved");
+            SetStatusMessage(lang.Word("build_settings_saved"));
             m_BuildSettingsModalOpen = false;
             ImGui::CloseCurrentPopup();
         }
         else
         {
-            m_BuildSettingsError = "Could not save project build settings";
+            m_BuildSettingsError = lang.Word("build_settings_save_error");
         }
     }
     ImGui::SameLine();
-    if (ImGui::Button("Cancel", ImVec2(100, 0)))
+    if (ImGui::Button(lang.Word("cancel"), ImVec2(100, 0)))
     {
         m_BuildSettingsError.clear();
         m_BuildSettingsModalOpen = false;
+        ImGui::CloseCurrentPopup();
+    }
+    ImGui::EndPopup();
+}
+
+void CEditor::DrawProjectSettingsModal()
+{
+    const std::string modalId = std::string(lang.Word("project_settings")) + "###ProjectSettingsModal";
+    if (m_ShowProjectSettings)
+    {
+        ImGui::OpenPopup(modalId.c_str());
+        m_ShowProjectSettings = false;
+    }
+
+    ImGui::SetNextWindowSize(ImVec2(640.0f, 440.0f), ImGuiCond_FirstUseEver);
+    if (!ImGui::BeginPopupModal(modalId.c_str(), nullptr))
+    {
+        return;
+    }
+
+    const float footerHeight = ImGui::GetFrameHeightWithSpacing() + 14.0f;
+    ImGui::BeginChild("##project_settings_body", ImVec2(0.0f, -footerHeight), false);
+
+    ImGui::BeginChild("##project_settings_categories", ImVec2(145.0f, 0.0f), true);
+    const char* apCategories[] = {
+        lang.Word("player"),
+        lang.Word("graphics"),
+        lang.Word("physics")
+    };
+    for (int i = 0; i < 3; ++i)
+    {
+        if (ImGui::Selectable(apCategories[i], m_ProjectSettingsTab == i))
+        {
+            m_ProjectSettingsTab = i;
+        }
+    }
+    ImGui::EndChild();
+
+    ImGui::SameLine();
+
+    ImGui::BeginChild("##project_settings_content", ImVec2(0.0f, 0.0f), true);
+    if (m_ProjectSettingsTab == 0)
+    {
+        ImGui::TextUnformatted(lang.Word("player_settings"));
+        ImGui::Separator();
+        ImGui::Spacing();
+
+        char aProductBuf[128] = {};
+        std::snprintf(aProductBuf, sizeof(aProductBuf), "%s", m_BuildSettings.m_ProductName.c_str());
+        if (ImGui::InputText(lang.Word("product_name_exe"), aProductBuf, sizeof(aProductBuf)))
+        {
+            m_BuildSettings.m_ProductName = aProductBuf;
+        }
+
+        char aCompanyBuf[128] = {};
+        std::snprintf(aCompanyBuf, sizeof(aCompanyBuf), "%s", m_BuildSettings.m_CompanyName.c_str());
+        if (ImGui::InputText(lang.Word("company_name"), aCompanyBuf, sizeof(aCompanyBuf)))
+        {
+            m_BuildSettings.m_CompanyName = aCompanyBuf;
+        }
+
+        char aVersionBuf[64] = {};
+        std::snprintf(aVersionBuf, sizeof(aVersionBuf), "%s", m_BuildSettings.m_Version.c_str());
+        if (ImGui::InputText(lang.Word("version"), aVersionBuf, sizeof(aVersionBuf)))
+        {
+            m_BuildSettings.m_Version = aVersionBuf;
+        }
+
+        ImGui::Spacing();
+        ImGui::Separator();
+        ImGui::TextUnformatted(lang.Word("application_icon"));
+        ImGui::Spacing();
+
+        ImGui::TextUnformatted(lang.Word("default_icon_ico"));
+        ImGui::SameLine();
+        if (m_BuildSettings.m_IconPath.empty())
+        {
+            ImGui::TextDisabled("%s", lang.Word("none"));
+        }
+        else
+        {
+            ImGui::TextDisabled("%s", m_BuildSettings.m_IconPath.c_str());
+        }
+
+        if (ImGui::Button(lang.Word("choose_icon")))
+        {
+            static constexpr char s_aIconFilter[] = "ICO Files\0*.ico\0All Files\0*.*\0\0";
+            const std::string selectedIcon = CDesktopIntegration::OpenFileDialog("ICO Files", s_aIconFilter);
+            if (!selectedIcon.empty())
+            {
+                const std::filesystem::path projectRoot = CProjectService::ResolveRoot(m_ProjectPath);
+                const std::filesystem::path iconDestination = projectRoot / "game_icon.ico";
+                std::error_code error;
+                if (std::filesystem::absolute(selectedIcon).lexically_normal() !=
+                    std::filesystem::absolute(iconDestination).lexically_normal())
+                {
+                    std::filesystem::copy_file(selectedIcon, iconDestination,
+                                               std::filesystem::copy_options::overwrite_existing, error);
+                }
+                if (error)
+                {
+                    m_ProjectSettingsError = "Could not copy the game icon: " + error.message();
+                }
+                else
+                {
+                    m_BuildSettings.m_IconPath = "game_icon.ico";
+                    m_ProjectSettingsError.clear();
+                }
+            }
+        }
+        ImGui::SameLine();
+        if (ImGui::Button(lang.Word("clear_icon")))
+        {
+            m_BuildSettings.m_IconPath.clear();
+            m_ProjectSettingsError.clear();
+        }
+
+        ImGui::Spacing();
+        ImGui::Separator();
+        ImGui::TextUnformatted(lang.Word("resolution_and_presentation"));
+        ImGui::Spacing();
+
+        ImGui::InputInt(lang.Word("default_screen_width"), &m_BuildSettings.m_WindowWidth, 16, 128);
+        ImGui::InputInt(lang.Word("default_screen_height"), &m_BuildSettings.m_WindowHeight, 16, 128);
+        m_BuildSettings.m_WindowWidth = std::clamp(m_BuildSettings.m_WindowWidth, 320, 7680);
+        m_BuildSettings.m_WindowHeight = std::clamp(m_BuildSettings.m_WindowHeight, 240, 4320);
+        ImGui::Checkbox(lang.Word("fullscreen_mode"), &m_BuildSettings.m_Fullscreen);
+        ImGui::Checkbox(lang.Word("resizable_window"), &m_BuildSettings.m_ResizableWindow);
+    }
+    else if (m_ProjectSettingsTab == 1)
+    {
+        ImGui::TextUnformatted(lang.Word("graphics_and_rendering_build"));
+        ImGui::Separator();
+        ImGui::Spacing();
+
+        ImGui::Checkbox(lang.Word("procedural_skybox"), &m_BuildSettings.m_SkyboxEnabled);
+        ImGui::Checkbox(lang.Word("aces_tone_mapping"), &m_BuildSettings.m_ToneMappingEnabled);
+        ImGui::SliderFloat(lang.Word("exposure"), &m_BuildSettings.m_Exposure, 0.2f, 3.0f, "%.2f");
+        ImGui::SliderFloat(lang.Word("bloom_strength"), &m_BuildSettings.m_BloomStrength, 0.0f, 1.5f, "%.2f");
+        ImGui::Spacing();
+        ImGui::Checkbox(lang.Word("enable_shadows"), &m_BuildSettings.m_ShadowsEnabled);
+        ImGui::SliderFloat(lang.Word("shadow_bias"), &m_BuildSettings.m_ShadowBias, 0.0001f, 0.05f, "%.4f");
+        const char* apFilterNames[] = { lang.Word("bilinear_2x2"), lang.Word("poisson_8tap"), lang.Word("poisson_16tap") };
+        ImGui::Combo(lang.Word("shadow_filtering"), &m_BuildSettings.m_ShadowFilterQuality, apFilterNames, 3);
+        ImGui::Checkbox(lang.Word("vsync"), &m_BuildSettings.m_VsyncEnabled);
+    }
+    else if (m_ProjectSettingsTab == 2)
+    {
+        ImGui::TextUnformatted(lang.Word("physics"));
+        ImGui::Separator();
+        ImGui::Spacing();
+
+        float aGravity[3] = { m_BuildSettings.m_Gravity.x, m_BuildSettings.m_Gravity.y, m_BuildSettings.m_Gravity.z };
+        if (ImGui::DragFloat3(lang.Word("gravity"), aGravity, 0.1f, -100.0f, 100.0f, "%.2f"))
+        {
+            m_BuildSettings.m_Gravity = { aGravity[0], aGravity[1], aGravity[2] };
+        }
+        ImGui::SliderFloat(lang.Word("fixed_timestep"), &m_BuildSettings.m_FixedTimestep, 0.005f, 0.05f, "%.4f s");
+    }
+
+    if (!m_ProjectSettingsError.empty())
+    {
+        ImGui::Spacing();
+        ImGui::TextColored(ImVec4(1.0f, 0.35f, 0.35f, 1.0f), "%s", m_ProjectSettingsError.c_str());
+    }
+
+    ImGui::EndChild();
+    ImGui::EndChild();
+
+    ImGui::Separator();
+    ImGui::Spacing();
+    if (ImGui::Button(lang.Word("save"), ImVec2(100.0f, 0.0f)))
+    {
+        if (CProjectService::SaveBuildSettings(m_ProjectPath, m_BuildSettings))
+        {
+            quark::script::CScriptEngine::Get().SetPhysicsSettings(
+                m_BuildSettings.m_Gravity, m_BuildSettings.m_FixedTimestep);
+            m_ProjectSettingsError.clear();
+            SetStatusMessage(lang.Word("project_settings_saved"));
+            ImGui::CloseCurrentPopup();
+        }
+        else
+        {
+            m_ProjectSettingsError = lang.Word("project_settings_save_error");
+        }
+    }
+    ImGui::SameLine();
+    if (ImGui::Button(lang.Word("close"), ImVec2(100.0f, 0.0f)))
+    {
+        m_ProjectSettingsError.clear();
         ImGui::CloseCurrentPopup();
     }
     ImGui::EndPopup();
@@ -2477,18 +2634,18 @@ void CEditor::DrawBuildConsole()
         return;
     }
 
-    if (ImGui::Begin("Build Console", &m_ShowBuildConsole))
+    if (ImGui::Begin(lang.Word("build_console"), &m_ShowBuildConsole))
     {
         if (m_BuildInProgress)
         {
-            ImGui::TextUnformatted("Build in progress...");
+            ImGui::TextUnformatted(lang.Word("build_in_progress"));
         }
         else
         {
-            ImGui::TextUnformatted("Build finished");
+            ImGui::TextUnformatted(lang.Word("build_finished"));
         }
         ImGui::SameLine();
-        if (ImGui::SmallButton("Clear"))
+        if (ImGui::SmallButton(lang.Word("clear")))
         {
             std::lock_guard<std::mutex> lock(m_BuildConsoleMutex);
             m_vBuildConsoleLines.clear();
@@ -2530,7 +2687,7 @@ void CEditor::DrawConsoleWindow()
         return;
     }
 
-    if (ImGui::Begin("Console", &m_ShowConsole))
+    if (ImGui::Begin(lang.Word("console"), &m_ShowConsole))
     {
         auto& scriptEngine = quark::script::CScriptEngine::Get();
         const std::vector<quark::script::SScriptLogEntry> vLogs = scriptEngine.GetLogs();
@@ -2554,27 +2711,27 @@ void CEditor::DrawConsoleWindow()
             }
         }
 
-        if (ImGui::SmallButton("Clear"))
+        if (ImGui::SmallButton(lang.Word("clear")))
         {
             scriptEngine.ClearLogs();
         }
         ImGui::SameLine(0.0f, 12.0f);
         ImGui::PushID("console_info");
-        ImGui::Checkbox(TextFormat("Info (%d)", infoCount), &m_ConsoleShowInfo);
+        ImGui::Checkbox(TextFormat("%s (%d)", lang.Word("info"), infoCount), &m_ConsoleShowInfo);
         ImGui::PopID();
         ImGui::SameLine(0.0f, 12.0f);
         ImGui::PushID("console_warn");
-        ImGui::Checkbox(TextFormat("Warnings (%d)", warnCount), &m_ConsoleShowWarn);
+        ImGui::Checkbox(TextFormat("%s (%d)", lang.Word("warnings"), warnCount), &m_ConsoleShowWarn);
         ImGui::PopID();
         ImGui::SameLine(0.0f, 12.0f);
         ImGui::PushID("console_err");
-        ImGui::Checkbox(TextFormat("Errors (%d)", errorCount), &m_ConsoleShowError);
+        ImGui::Checkbox(TextFormat("%s (%d)", lang.Word("errors"), errorCount), &m_ConsoleShowError);
         ImGui::PopID();
         ImGui::SameLine(0.0f, 12.0f);
-        ImGui::Checkbox("Auto-scroll", &m_ConsoleAutoScroll);
+        ImGui::Checkbox(lang.Word("auto_scroll"), &m_ConsoleAutoScroll);
         ImGui::SameLine(0.0f, 12.0f);
         ImGui::SetNextItemWidth(200.0f);
-        ImGui::InputTextWithHint("##console_search", "Filter logs...", m_aConsoleSearch, sizeof(m_aConsoleSearch));
+        ImGui::InputTextWithHint("##console_search", lang.Word("filter_logs"), m_aConsoleSearch, sizeof(m_aConsoleSearch));
 
         ImGui::Separator();
         ImGui::BeginChild("##console_scroll_region", ImVec2(0.0f, 0.0f), false,
@@ -2650,11 +2807,12 @@ void CEditor::DrawProfilerWindow()
         return;
     }
 
-    if (ImGui::Begin("Profiler", &m_ShowProfiler))
+    if (ImGui::Begin(lang.Word("profiler"), &m_ShowProfiler))
     {
-        ImGui::Text("FPS: %.1f   |   Frame Time: %.2f ms",
-                    m_LastProfilerStats.m_Fps, m_LastProfilerStats.m_FrameTimeMs);
-        ImGui::Text("Draw Calls: %d   |   Triangles: %d   |   Entities: %d (Visible Meshes: %d, Lights: %d)",
+        ImGui::Text("FPS: %.1f   |   %s: %.2f ms",
+                    m_LastProfilerStats.m_Fps, lang.Word("frame_time_ms"), m_LastProfilerStats.m_FrameTimeMs);
+        ImGui::Text("%s: %d   |   Triangles: %d   |   Entities: %d (Meshes: %d, Lights: %d)",
+                    lang.Word("draw_calls"),
                     m_LastProfilerStats.m_DrawCalls,
                     m_LastProfilerStats.m_TriangleCount,
                     m_LastProfilerStats.m_EntityCount,
@@ -2662,32 +2820,32 @@ void CEditor::DrawProfilerWindow()
                     m_LastProfilerStats.m_ActiveLightCount);
 
         ImGui::Spacing();
-        ImGui::PlotLines("FPS History",
+        ImGui::PlotLines(lang.Word("fps_history"),
                          m_aProfilerFpsHistory.data(),
                          static_cast<int>(m_aProfilerFpsHistory.size()),
                          m_ProfilerHistoryCursor,
                          TextFormat("%.1f FPS", m_LastProfilerStats.m_Fps),
                          0.0f, 240.0f, ImVec2(0.0f, 65.0f));
-        ImGui::PlotLines("Frame Time (ms)",
+        ImGui::PlotLines(lang.Word("frame_time_ms"),
                          m_aProfilerFrameTimeHistory.data(),
                          static_cast<int>(m_aProfilerFrameTimeHistory.size()),
                          m_ProfilerHistoryCursor,
                          TextFormat("%.2f ms", m_LastProfilerStats.m_FrameTimeMs),
                          0.0f, 50.0f, ImVec2(0.0f, 65.0f));
-        ImGui::PlotLines("Draw Calls",
+        ImGui::PlotLines(lang.Word("draw_calls"),
                          m_aProfilerDrawCallHistory.data(),
                          static_cast<int>(m_aProfilerDrawCallHistory.size()),
                          m_ProfilerHistoryCursor,
-                         TextFormat("%d calls", m_LastProfilerStats.m_DrawCalls),
+                         TextFormat("%d", m_LastProfilerStats.m_DrawCalls),
                          0.0f, 500.0f, ImVec2(0.0f, 55.0f));
 
         ImGui::Spacing();
         ImGui::Separator();
-        ImGui::TextUnformatted("CPU Stage Timings (ms)");
+        ImGui::TextUnformatted(lang.Word("cpu_stage_timings"));
         if (ImGui::BeginTable("ProfilerTimingsTable", 2, ImGuiTableFlags_Borders | ImGuiTableFlags_RowBg))
         {
-            ImGui::TableSetupColumn("Stage");
-            ImGui::TableSetupColumn("Time (ms)");
+            ImGui::TableSetupColumn(lang.Word("stage"));
+            ImGui::TableSetupColumn(lang.Word("time_ms"));
             ImGui::TableHeadersRow();
 
             auto addTimingRow = [](const char* pName, float ms)
@@ -2699,15 +2857,15 @@ void CEditor::DrawProfilerWindow()
                 ImGui::Text("%.3f ms", ms);
             };
 
-            addTimingRow("Update Frame (Scene & Scripts)", m_LastProfilerStats.m_UpdateFrameMs);
-            addTimingRow("Scene Renderer Update", m_LastProfilerStats.m_SceneRendererUpdateMs);
-            addTimingRow("Shadow Pass", m_LastProfilerStats.m_ShadowPassMs);
-            addTimingRow("Main 3D Pass", m_LastProfilerStats.m_Main3dPassMs);
-            addTimingRow("ImGui Editor Pass", m_LastProfilerStats.m_ImguiEditorMs);
-            addTimingRow("  - Hierarchy Panel", m_UiTimings.m_HierarchyMs);
-            addTimingRow("  - Inspector Panel", m_UiTimings.m_InspectorMs);
-            addTimingRow("  - Scene / Game Viewport", m_UiTimings.m_ScenePanelMs);
-            addTimingRow("  - Asset Browser", m_UiTimings.m_AssetsMs);
+            addTimingRow(lang.Word("stage_update_frame"), m_LastProfilerStats.m_UpdateFrameMs);
+            addTimingRow(lang.Word("stage_scene_renderer_update"), m_LastProfilerStats.m_SceneRendererUpdateMs);
+            addTimingRow(lang.Word("stage_shadow_pass"), m_LastProfilerStats.m_ShadowPassMs);
+            addTimingRow(lang.Word("stage_main_3d_pass"), m_LastProfilerStats.m_Main3dPassMs);
+            addTimingRow(lang.Word("stage_imgui_editor_pass"), m_LastProfilerStats.m_ImguiEditorMs);
+            addTimingRow(lang.Word("stage_hierarchy_panel"), m_UiTimings.m_HierarchyMs);
+            addTimingRow(lang.Word("stage_inspector_panel"), m_UiTimings.m_InspectorMs);
+            addTimingRow(lang.Word("stage_scene_game_viewport"), m_UiTimings.m_ScenePanelMs);
+            addTimingRow(lang.Word("stage_asset_browser"), m_UiTimings.m_AssetsMs);
             ImGui::EndTable();
         }
 

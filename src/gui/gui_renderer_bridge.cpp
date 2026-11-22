@@ -77,6 +77,8 @@ namespace quark
                 return out;
             }
 
+            static std::string s_RuntimeFontDirectory;
+
             void EnsureGuiFontLoaded()
             {
                 if (s_GuiFontAttempted || !IsWindowReady())
@@ -85,22 +87,25 @@ namespace quark
                 }
                 s_GuiFontAttempted = true;
 
-                const char* aCandidatePaths[] = {
-                    "assets/font/Rubik-Regular.ttf",
-                    "resources/Rubik-Regular.ttf",
-                    "font/Rubik-Regular.ttf",
-                    "../assets/font/Rubik-Regular.ttf",
-                    "../../assets/font/Rubik-Regular.ttf",
-                    "../../../assets/font/Rubik-Regular.ttf"
-                };
+                std::vector<std::string> vCandidatePaths;
+                if (!s_RuntimeFontDirectory.empty())
+                {
+                    vCandidatePaths.push_back((std::filesystem::path(s_RuntimeFontDirectory) / "Rubik-Regular.ttf").string());
+                }
+                vCandidatePaths.push_back("assets/font/Rubik-Regular.ttf");
+                vCandidatePaths.push_back("resources/Rubik-Regular.ttf");
+                vCandidatePaths.push_back("font/Rubik-Regular.ttf");
+                vCandidatePaths.push_back("../assets/font/Rubik-Regular.ttf");
+                vCandidatePaths.push_back("../../assets/font/Rubik-Regular.ttf");
+                vCandidatePaths.push_back("../../../assets/font/Rubik-Regular.ttf");
 
                 std::string foundPath;
                 std::error_code ec;
-                for (const char* pRel : aCandidatePaths)
+                for (const std::string& candidate : vCandidatePaths)
                 {
-                    if (std::filesystem::exists(pRel, ec) && !ec)
+                    if (std::filesystem::exists(candidate, ec) && !ec)
                     {
-                        foundPath = pRel;
+                        foundPath = candidate;
                         break;
                     }
                 }
@@ -133,6 +138,20 @@ namespace quark
                 if (std::filesystem::exists(requestedFont, ec) && !ec)
                 {
                     return requestedFont;
+                }
+
+                if (!s_RuntimeFontDirectory.empty())
+                {
+                    const std::filesystem::path runtimeCandidate = std::filesystem::path(s_RuntimeFontDirectory) / requestedFont;
+                    if (std::filesystem::exists(runtimeCandidate, ec) && !ec)
+                    {
+                        return runtimeCandidate.string();
+                    }
+                    const std::filesystem::path runtimeTtfCandidate = std::filesystem::path(s_RuntimeFontDirectory) / (requestedFont + ".ttf");
+                    if (std::filesystem::exists(runtimeTtfCandidate, ec) && !ec)
+                    {
+                        return runtimeTtfCandidate.string();
+                    }
                 }
 
                 const char* aSearchPrefixes[] = {
@@ -578,6 +597,12 @@ namespace quark
             s_GuiFontLoaded = false;
             s_GuiFontAttempted = false;
             s_pGuiScissorCamera2D = nullptr;
+        }
+
+        void SetGuiFontSearchDirectory(const std::string& directory)
+        {
+            s_RuntimeFontDirectory = directory;
+            s_GuiFontAttempted = false;
         }
 
         void SetGuiScissorCamera2D(const Camera2D* pCamera)
