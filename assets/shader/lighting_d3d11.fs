@@ -46,6 +46,7 @@ cbuffer LightingParams : register(b0)
     int useInstancing;
     int instanceBase;
     int2 _padInst;
+    float4 postParams;
 };
 
 struct PSInput
@@ -59,6 +60,34 @@ struct PSInput
 };
 
 #define SHADOW_DEPTH_RANGE 1000.0
+
+static const float2 POISSON_DISK[16] =
+{
+    float2(-0.94201624, -0.39906216), float2( 0.94558609, -0.76890725),
+    float2(-0.09418410, -0.92938870), float2( 0.34495938,  0.29387760),
+    float2(-0.91588581,  0.45771432), float2(-0.81544232, -0.87912464),
+    float2(-0.38277543,  0.27676845), float2( 0.97484398,  0.75648379),
+    float2( 0.44323325, -0.97511554), float2( 0.53742981, -0.47373420),
+    float2(-0.26496911, -0.41893023), float2( 0.79197514,  0.19090188),
+    float2(-0.24188840,  0.99706507), float2(-0.81409955,  0.91437590),
+    float2( 0.19984126,  0.78641367), float2( 0.14383161, -0.14100790)
+};
+
+float3 ACESFilm(float3 x)
+{
+    const float a = 2.51;
+    const float b = 0.03;
+    const float c = 2.43;
+    const float d = 0.59;
+    const float e = 0.14;
+    return saturate((x * (a * x + b)) / (x * (c * x + d) + e));
+}
+
+float InterleavedGradientNoise(float2 screenPos)
+{
+    float3 magic = float3(0.06711056, 0.00583715, 52.9829189);
+    return frac(magic.z * frac(dot(screenPos, magic.xy)));
+}
 
 float UnpackDepth24(float3 rgb)
 {
@@ -85,7 +114,26 @@ float2 GetShadowTexelSize(int index)
     return 1.0 / max(float2(float(w), float(h)), float2(1.0, 1.0));
 }
 
-float shadow_factor(int index, float3 fragPosition, float3 normal, float3 lightDir)
+float SampleShadowBilinear(int index, float2 uv, int2 mapSize, float currentDepth, float bias)
+{
+    float2 texelCoord = uv * float2(mapSize) - 0.5;
+    int2 baseTexel = int2(floor(texelCoord));
+    float2 f = texelCoord - float2(baseTexel);
+
+    int2 t00 = clamp(baseTexel + int2(0, 0), int2(0, 0), mapSize - 1);
+    int2 t10 = clamp(baseTexel + int2(1, 0), int2(0, 0), mapSize - 1);
+    int2 t01 = clamp(baseTexel + int2(0, 1), int2(0, 0), mapSize - 1);
+    int2 t11 = clamp(baseTexel + int2(1, 1), int2(0, 0), mapSize - 1);
+
+    float s00 = (currentDepth - bias > SampleShadowDepth(index, t00)) ? 1.0 : 0.0;
+    float s10 = (currentDepth - bias > SampleShadowDepth(index, t10)) ? 1.0 : 0.0;
+    float s01 = (currentDepth - bias > SampleShadowDepth(index, t01)) ? 1.0 : 0.0;
+    float s11 = (currentDepth - bias > SampleShadowDepth(index, t11)) ? 1.0 : 0.0;
+
+    return lerp(lerp(s00, s10, f.x), lerp(s01, s11, f.x), f.y);
+}
+
+float shadow_factor(int index, float3 fragPosition, float3 normal, float3 lightDir, float2 screenPos)
 {
     if (shadowsEnabled == 0)
     {
@@ -118,37 +166,39 @@ float shadow_factor(int index, float3 fragPosition, float3 normal, float3 lightD
     float currentDepth = lightClip.w;
     float slopeFactor = 1.0 - NdotL;
     float baseDepthBias = currentDepth * baseBias * (1.2 + 3.5 * slopeFactor) + 0.012;
-    float tapSlopeBias = currentDepth * baseBias * (1.0 + 3.0 * slopeFactor) + 0.006;
+    float tapSlopeBias = currentDepth * baseBias * (0.9 + 2.5 * slopeFactor) + 0.005;
     int2 mapSize = int2(round(1.0 / texelSize));
-    float2 texelCoord = projected.xy * float2(mapSize) - 0.5;
-    int2 baseTexel = int2(floor(texelCoord));
-    float2 fracCoord = texelCoord - float2(baseTexel);
-    int radius = clamp(shadowFilterQuality, 0, 2);
-    int sampleWidth = radius * 2 + 1;
-    float totalWeight = float(sampleWidth * sampleWidth);
 
     float shadow = 0.0;
-    [loop]
-    for (int x = -radius; x <= radius + 1; ++x)
+    if (shadowFilterQuality <= 0)
     {
-        float wx = (x == -radius) ? (1.0 - fracCoord.x) : ((x == radius + 1) ? fracCoord.x : 1.0);
+        shadow = SampleShadowBilinear(index, projected.xy, mapSize, currentDepth, baseDepthBias);
+    }
+    else
+    {
+        int tapCount = (shadowFilterQuality == 1) ? 8 : 16;
+        float spreadTexels = (shadowFilterQuality == 1) ? 1.65 : 2.75;
+        float angle = InterleavedGradientNoise(screenPos) * 6.2831853;
+        float s = sin(angle);
+        float c = cos(angle);
+
         [loop]
-        for (int y = -radius; y <= radius + 1; ++y)
+        for (int t = 0; t < tapCount; ++t)
         {
-            float wy = (y == -radius) ? (1.0 - fracCoord.y) : ((y == radius + 1) ? fracCoord.y : 1.0);
-            int2 texel = clamp(baseTexel + int2(x, y), int2(0, 0), mapSize - 1);
-            float closestDepth = SampleShadowDepth(index, texel);
-            float tapDist = abs(float(x) - fracCoord.x) + abs(float(y) - fracCoord.y);
-            float bias = baseDepthBias + tapSlopeBias * tapDist;
-            shadow += ((currentDepth - bias > closestDepth) ? 1.0 : 0.0) * (wx * wy);
+            float2 d = POISSON_DISK[t];
+            float2 offset = float2(c * d.x - s * d.y, s * d.x + c * d.y) * spreadTexels;
+            float tapBias = baseDepthBias + tapSlopeBias * length(offset);
+            shadow += SampleShadowBilinear(index, projected.xy + offset * texelSize,
+                                           mapSize, currentDepth, tapBias);
         }
+        shadow /= float(tapCount);
     }
 
     float edgeFade = smoothstep(0.0, 0.05, projected.x) *
                      smoothstep(1.0, 0.95, projected.x) *
                      smoothstep(0.0, 0.05, projected.y) *
                      smoothstep(1.0, 0.95, projected.y);
-    return (shadow / totalWeight) * edgeFade;
+    return shadow * edgeFade;
 }
 
 float3 perturb_normal(float3 geometricNormal, float3 tangent, float2 uv)
@@ -236,7 +286,7 @@ float4 main(PSInput input) : SV_TARGET
 
             float directLight = max(dot(normal, lightDir), 0.0);
             float shadow = (shadowsEnabled == 1 && directLight > 0.0001)
-                ? shadow_factor(i, input.fragPosition, normal, lightDir)
+                ? shadow_factor(i, input.fragPosition, normalize(input.fragNormal), lightDir, input.position.xy)
                 : 0.0;
             float wrappedLight = clamp((dot(normal, lightDir) + 0.50) / 1.50, 0.0, 1.0);
             float directTerm = directLight * (1.0 - shadow);
@@ -254,14 +304,34 @@ float4 main(PSInput input) : SV_TARGET
         }
     }
 
-    float3 color = texelColor.rgb * input.fragColor.rgb * (ambient.rgb + lightAccum) + specularSum;
-    color += emissionColor * max(emissionPower, 0.0);
-    float4 result = float4(color, texelColor.a * input.fragColor.a);
-    result = pow(max(result, float4(0.0, 0.0, 0.0, 0.0)), float4(1.0 / 2.2, 1.0 / 2.2, 1.0 / 2.2, 1.0 / 2.2));
+    float hemiFactor = normal.y * 0.5 + 0.5;
+    float3 skyAmbient = lerp(float3(0.035, 0.035, 0.04), float3(0.075, 0.095, 0.13), hemiFactor);
+    float3 envAmbient = max(ambient.rgb, skyAmbient * (postParams.w > 0.5 ? 1.0 : 0.45));
 
-    if (result.a < 0.01)
+    float3 color = texelColor.rgb * input.fragColor.rgb * (envAmbient + lightAccum) + specularSum;
+    color += emissionColor * max(emissionPower, 0.0);
+
+    float exposure = postParams.x > 0.001 ? postParams.x : 1.05;
+    float useToneMap = postParams.x > 0.001 ? postParams.y : 1.0;
+    float bloomStrength = postParams.x > 0.001 ? max(postParams.z, 0.0) : 0.25;
+
+    color *= exposure;
+    float3 bloomExcess = max(color - float3(1.0, 1.0, 1.0), float3(0.0, 0.0, 0.0));
+    color += bloomExcess * bloomStrength * 0.45;
+
+    if (useToneMap > 0.5)
+    {
+        color = ACESFilm(color);
+    }
+    else
+    {
+        color = saturate(color);
+    }
+
+    float outAlpha = texelColor.a * input.fragColor.a;
+    if (outAlpha < 0.01)
     {
         discard;
     }
-    return result;
+    return float4(pow(color, float3(1.0 / 2.2, 1.0 / 2.2, 1.0 / 2.2)), outAlpha);
 }

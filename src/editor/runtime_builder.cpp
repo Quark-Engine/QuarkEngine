@@ -197,10 +197,13 @@ namespace
     {
         const std::vector<std::string> vShaderNames = {
             "lighting.vs", "lighting.fs", "shadow_depth.vs", "shadow_depth.fs",
+            "skybox.vs", "skybox.fs",
             "lighting_vulkan.vs", "lighting_vulkan.fs",
             "shadow_depth_vulkan.vs", "shadow_depth_vulkan.fs",
+            "skybox_vulkan.vs", "skybox_vulkan.fs",
             "lighting_d3d11.vs", "lighting_d3d11.fs",
-            "shadow_depth_d3d11.vs", "shadow_depth_d3d11.fs"
+            "shadow_depth_d3d11.vs", "shadow_depth_d3d11.fs",
+            "skybox_d3d11.vs", "skybox_d3d11.fs"
         };
         std::vector<std::pair<std::string, std::string>> vShaderEntries;
         const fs::path shaderDirectory = executableDirectory / "assets" / "shader";
@@ -330,6 +333,18 @@ int main()
                         RUNTIME_OUTPUT_DIRECTORY "${GAME_OUTPUT_DIR}/$<0:>"
                     )
 
+                    if(MSVC)
+                        target_compile_options(QuarkGame PRIVATE $<$<CONFIG:Release>:/O2 /Ob2 /Oi /Ot /GL /DNDEBUG>)
+                        target_link_options(QuarkGame PRIVATE $<$<CONFIG:Release>:/LTCG /OPT:REF /OPT:ICF /DEBUG:NONE>)
+                    else()
+                        target_compile_options(QuarkGame PRIVATE $<$<CONFIG:Release>:-O3 -flto -fvisibility=hidden -fno-ident -DNDEBUG>)
+                        if(APPLE)
+                            target_link_options(QuarkGame PRIVATE $<$<CONFIG:Release>:-flto -Wl,-x>)
+                        else()
+                            target_link_options(QuarkGame PRIVATE $<$<CONFIG:Release>:-flto -s -Wl,--strip-all>)
+                        endif()
+                    endif()
+
                     if(APPLE)
                         set_target_properties(QuarkGame PROPERTIES
                             BUILD_RPATH "@loader_path"
@@ -434,8 +449,10 @@ int main()
             }
         }
 
+        const bool isReleaseProfile = (buildSettings.m_Profile == EProjectBuildProfile::RELEASE);
         std::string scriptBuildError;
-        quark::script::CScriptEngine::Get().BuildScriptDll(projectRoot.string(), gameName, scriptBuildError, progressCallback);
+        quark::script::CScriptEngine::Get().BuildScriptDll(
+            projectRoot.string(), gameName, scriptBuildError, progressCallback, isReleaseProfile);
 
         const std::string libExt =
 #if defined(_WIN32)
@@ -482,11 +499,23 @@ int main()
         {
             if (fs::is_regular_file(srcDll))
             {
-                fs::copy_file(srcDll, buildRoot / ("GameScripts" + libExt),
-                              fs::copy_options::overwrite_existing, error);
                 fs::copy_file(srcDll, buildRoot / (gameName + libExt),
                               fs::copy_options::overwrite_existing, error);
                 break;
+            }
+        }
+
+        std::error_code cleanupEc;
+        for (const fs::directory_entry& outEntry : fs::directory_iterator(buildRoot, cleanupEc))
+        {
+            if (cleanupEc || !outEntry.is_regular_file(cleanupEc))
+            {
+                continue;
+            }
+            const std::string ext = outEntry.path().extension().string();
+            if (ext == ".pdb" || ext == ".ilk" || ext == ".lib" || ext == ".exp" || ext == ".obj")
+            {
+                fs::remove(outEntry.path(), cleanupEc);
             }
         }
 
@@ -507,6 +536,67 @@ int main()
         }
         errorMessage = "Failed to launch the built game";
         return false;
+    }
+
+    bool IsExcludedScriptOrBuildFile(const fs::path& filePath)
+    {
+        std::string ext = filePath.extension().string();
+        std::transform(ext.begin(), ext.end(), ext.begin(),
+                       [](unsigned char c)
+                       {
+                           return static_cast<char>(std::tolower(c));
+                       });
+        if (ext == ".cpp" || ext == ".hpp" || ext == ".h" || ext == ".c" ||
+            ext == ".cc" || ext == ".cxx" || ext == ".hxx" || ext == ".inl" ||
+            ext == ".ipp" || ext == ".pdb" || ext == ".lib" || ext == ".exp" ||
+            ext == ".obj" || ext == ".ilk" || ext == ".idb" || ext == ".cmake")
+        {
+            return true;
+        }
+        const std::string fileName = filePath.filename().string();
+        return fileName == "CMakeLists.txt";
+    }
+
+    bool CopyFilteredDirectory(const fs::path& srcDir, const fs::path& dstDir, std::error_code& error)
+    {
+        fs::create_directories(dstDir, error);
+        if (error)
+        {
+            return false;
+        }
+        for (const fs::directory_entry& entry : fs::directory_iterator(srcDir, error))
+        {
+            if (error)
+            {
+                return false;
+            }
+            const fs::path entryPath = entry.path();
+            const std::string name = entryPath.filename().string();
+            if (name == ".script_build" || name == "cmake-build")
+            {
+                continue;
+            }
+            if (entry.is_directory(error))
+            {
+                if (!CopyFilteredDirectory(entryPath, dstDir / name, error))
+                {
+                    return false;
+                }
+            }
+            else if (entry.is_regular_file(error))
+            {
+                if (IsExcludedScriptOrBuildFile(entryPath))
+                {
+                    continue;
+                }
+                fs::copy_file(entryPath, dstDir / name, fs::copy_options::overwrite_existing, error);
+                if (error)
+                {
+                    return false;
+                }
+            }
+        }
+        return true;
     }
 
 } // anonymous
@@ -585,11 +675,21 @@ bool CRuntimeBuilder::Build(const std::string& projectPath, const std::string& s
                 errorMessage = "Project resources cannot use reserved package name: " + resourceName;
                 return false;
             }
-            fs::copy(entry.path(), dataPath / entry.path().filename(),
-                     fs::copy_options::recursive | fs::copy_options::overwrite_existing, error);
-            if (error)
+            if (entry.is_directory(error))
             {
-                break;
+                if (!CopyFilteredDirectory(entry.path(), dataPath / entry.path().filename(), error))
+                {
+                    break;
+                }
+            }
+            else if (entry.is_regular_file(error) && !IsExcludedScriptOrBuildFile(entry.path()))
+            {
+                fs::copy_file(entry.path(), dataPath / entry.path().filename(),
+                              fs::copy_options::overwrite_existing, error);
+                if (error)
+                {
+                    break;
+                }
             }
         }
     }
@@ -621,7 +721,11 @@ bool CRuntimeBuilder::Build(const std::string& projectPath, const std::string& s
         { "shadows_enabled", preferences.m_ShadowsEnabled },
         { "shadow_map_size", preferences.m_ShadowMapSize },
         { "shadow_bias", preferences.m_ShadowBias },
-        { "shadow_filter_quality", preferences.m_ShadowFilterQuality }
+        { "shadow_filter_quality", preferences.m_ShadowFilterQuality },
+        { "skybox_enabled", preferences.m_SkyboxEnabled },
+        { "tone_mapping_enabled", preferences.m_ToneMappingEnabled },
+        { "exposure", preferences.m_Exposure },
+        { "bloom_strength", preferences.m_BloomStrength }
     };
     runtimeConfig["start_scene"] = buildSettings.m_StartScene;
     std::vector<std::pair<std::string, std::string>> vSettingsEntries = {

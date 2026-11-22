@@ -1,6 +1,7 @@
 #include "application_scene_renderer.h"
 
 #include "component.h"
+#include "editor/editor_preferences.h"
 #include "lighting.h"
 #include "models.h"
 #include "scene.h"
@@ -634,10 +635,18 @@ void CSceneRenderer::Initialize(int shadowMapSize, bool shadowsEnabled,
     const std::string shadowFragment = m_VulkanBackend
         ? "shadow_depth_vulkan.fs"
         : (d3d11Backend ? "shadow_depth_d3d11.fs" : "shadow_depth.fs");
+    const std::string skyboxVertex = m_VulkanBackend
+        ? "skybox_vulkan.vs"
+        : (d3d11Backend ? "skybox_d3d11.vs" : "skybox.vs");
+    const std::string skyboxFragment = m_VulkanBackend
+        ? "skybox_vulkan.fs"
+        : (d3d11Backend ? "skybox_d3d11.fs" : "skybox.fs");
     m_LightingShader = LoadShader((shaderRoot / lightingVertex).string().c_str(),
                                   (shaderRoot / lightingFragment).string().c_str());
     m_ShadowShader = LoadShader((shaderRoot / shadowVertex).string().c_str(),
                                 (shaderRoot / shadowFragment).string().c_str());
+    m_SkyboxShader = LoadShader((shaderRoot / skyboxVertex).string().c_str(),
+                                (shaderRoot / skyboxFragment).string().c_str());
     m_LightingShader.locs[SHADER_LOC_VECTOR_VIEW] = GetShaderLocation(m_LightingShader, "viewPos");
     m_GlobalParamsLoc = m_VulkanBackend
         ? GetShaderLocation(m_LightingShader, "lights[3].type")
@@ -645,10 +654,26 @@ void CSceneRenderer::Initialize(int shadowMapSize, bool shadowsEnabled,
     m_ShadowsEnabledLoc = GetShaderLocation(m_LightingShader, "shadowsEnabled");
     m_ShadowBiasLoc = GetShaderLocation(m_LightingShader, "shadowBias");
     m_ShadowFilterLoc = GetShaderLocation(m_LightingShader, "shadowFilterQuality");
+    m_PostParamsLoc = GetShaderLocation(m_LightingShader, "postParams");
+    m_SkyboxSunDirLoc = m_SkyboxShader.id != 0 ? GetShaderLocation(m_SkyboxShader, "sunDir") : -1;
+    m_SkyboxPostParamsLoc = m_SkyboxShader.id != 0 ? GetShaderLocation(m_SkyboxShader, "postParams") : -1;
+
+    if (m_SkyboxShader.id != 0)
+    {
+        m_SkyboxMesh = GenMeshSphere(1.0f, 24, 16);
+        m_SkyboxMaterial = LoadMaterialDefault();
+        m_SkyboxMaterial.shader = &m_SkyboxShader;
+        m_SkyboxReady = true;
+    }
+
     const int shadowsEnabledValue = shadowsEnabled ? 1 : 0;
     SetShaderValue(m_LightingShader, m_ShadowsEnabledLoc, &shadowsEnabledValue, SHADER_UNIFORM_INT);
     SetShaderValue(m_LightingShader, m_ShadowBiasLoc, shadowBias);
     SetShaderValue(m_LightingShader, m_ShadowFilterLoc, shadowFilterQuality);
+    if (m_PostParamsLoc >= 0)
+    {
+        SetShaderValue(m_LightingShader, m_PostParamsLoc, Vec4{ 1.05f, 1.0f, 0.25f, 1.0f });
+    }
 
     for (int i = 0; i < QC_MAX_LIGHTS; ++i)
     {
@@ -1015,11 +1040,96 @@ void CSceneRenderer::SetUseTexture(bool useTexture)
     SetShaderValue(m_LightingShader, m_UseTexLoc, &use, SHADER_UNIFORM_INT);
 }
 
+void CSceneRenderer::RenderSkybox(const Camera3D& camera, const CPreferences* pPreferences)
+{
+    if (!m_SkyboxReady || m_SkyboxShader.id == 0 || camera.projection != CAMERA_PERSPECTIVE)
+    {
+        return;
+    }
+
+    const bool skyboxEnabled = pPreferences ? pPreferences->m_SkyboxEnabled : true;
+    if (!skyboxEnabled)
+    {
+        return;
+    }
+
+    const float exposure = pPreferences ? pPreferences->m_Exposure : 1.05f;
+    const float toneMapEnabled = (pPreferences && !pPreferences->m_ToneMappingEnabled) ? 0.0f : 1.0f;
+    const float bloomStrength = pPreferences ? pPreferences->m_BloomStrength : 0.25f;
+    const Vec4 postParams{ exposure, toneMapEnabled, bloomStrength, 1.0f };
+
+    if (m_SkyboxSunDirLoc >= 0)
+    {
+        if (m_VulkanBackend || GetCurrentBackend() == RendererType::D3D11)
+        {
+            SetShaderValue(m_SkyboxShader, m_SkyboxSunDirLoc,
+                           Vec4{ m_SunDirection.x, m_SunDirection.y, m_SunDirection.z, 0.0f });
+        }
+        else
+        {
+            SetShaderValue(m_SkyboxShader, m_SkyboxSunDirLoc, m_SunDirection);
+        }
+    }
+    if (m_SkyboxPostParamsLoc >= 0)
+    {
+        SetShaderValue(m_SkyboxShader, m_SkyboxPostParamsLoc, postParams);
+    }
+
+    constexpr float SKYBOX_RADIUS = 450.0f;
+    const Mat4 skyTransform = Mat4::translation(camera.position.x, camera.position.y, camera.position.z) *
+        Mat4::scale(SKYBOX_RADIUS, SKYBOX_RADIUS, SKYBOX_RADIUS);
+
+    DisableBackfaceCulling();
+    DrawMesh(m_SkyboxMesh, m_SkyboxMaterial, skyTransform);
+    EnableBackfaceCulling();
+}
+
 void CSceneRenderer::RenderSceneMeshes(CScene& scene, const Camera3D& camera, float aspectRatio,
                                        const CPreferences* pPreferences, bool drawEditorOverlays)
 {
     m_vRenderCommands.clear();
     m_LastBatchStats = {};
+
+    Vec3 sunDir = { 0.4f, 0.75f, 0.5f };
+    for (const CEntity& entity : scene.m_vEntities)
+    {
+        const CLightComponent* pLight = entity.GetLightComponent();
+        if (pLight && pLight->m_Enabled && pLight->m_Light.m_Light.type == LIGHT_TYPE_DIRECTIONAL)
+        {
+            const Vec3 dir = pLight->m_Light.m_Position - pLight->m_Light.m_Target;
+            if (dir.length() > 0.0001f)
+            {
+                sunDir = dir.normalized();
+                break;
+            }
+        }
+    }
+    m_SunDirection = sunDir;
+
+    const float exposure = pPreferences ? pPreferences->m_Exposure : 1.05f;
+    const bool toneMapEnabled = pPreferences ? pPreferences->m_ToneMappingEnabled : true;
+    const float bloomStrength = pPreferences ? pPreferences->m_BloomStrength : 0.25f;
+    const bool skyboxEnabled = pPreferences ? pPreferences->m_SkyboxEnabled : true;
+    if (m_PostParamsLoc >= 0)
+    {
+        SetShaderValue(m_LightingShader, m_PostParamsLoc,
+                       Vec4{ exposure, toneMapEnabled ? 1.0f : 0.0f, bloomStrength, skyboxEnabled ? 1.0f : 0.0f });
+    }
+    if (m_VulkanBackend)
+    {
+        const float packedExposure = toneMapEnabled ? exposure : -exposure;
+        if (m_LightingShader.locs[SHADER_LOC_VECTOR_VIEW] >= 0)
+        {
+            SetShaderValue(m_LightingShader, m_LightingShader.locs[SHADER_LOC_VECTOR_VIEW],
+                           Vec4{ camera.position.x, camera.position.y, camera.position.z, packedExposure });
+        }
+        if (m_AmbientLoc >= 0)
+        {
+            SetShaderValue(m_LightingShader, m_AmbientLoc, Vec4{ 0.025f, 0.025f, 0.025f, bloomStrength });
+        }
+    }
+
+    RenderSkybox(camera, pPreferences);
 
     const int entityCount = static_cast<int>(scene.m_vEntities.size());
     for (int entityIndex = 0; entityIndex < entityCount; ++entityIndex)
@@ -1355,6 +1465,22 @@ void CSceneRenderer::UnloadShaders()
     {
         UnloadShader(m_ShadowShader);
         m_ShadowShader = Shader{};
+    }
+
+    if (m_SkyboxReady)
+    {
+        UnloadMesh(m_SkyboxMesh);
+        m_SkyboxMesh = Mesh{};
+        m_SkyboxMaterial.shader = nullptr;
+        UnloadMaterial(m_SkyboxMaterial);
+        m_SkyboxMaterial = Material{};
+        m_SkyboxReady = false;
+    }
+
+    if (m_SkyboxShader.id != 0)
+    {
+        UnloadShader(m_SkyboxShader);
+        m_SkyboxShader = Shader{};
     }
 }
 

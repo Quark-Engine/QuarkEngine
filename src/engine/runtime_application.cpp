@@ -368,10 +368,6 @@ extern "C"
 
         if (!foundDllPath.empty())
         {
-            std::error_code copyEc;
-            fs::copy_file(foundDllPath, projectPath / ("GameScripts" + libExt), fs::copy_options::overwrite_existing, copyEc);
-            fs::copy_file(foundDllPath, projectPath / (gameName + libExt), fs::copy_options::overwrite_existing, copyEc);
-
             quark::script::CScriptEngine::Get().LoadScriptDll(foundDllPath.string());
         }
 

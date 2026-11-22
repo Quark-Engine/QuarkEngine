@@ -114,17 +114,26 @@ public:
 private:
     void UnloadShaders();
     void UnloadShadowMaps();
+    void RenderSkybox(const Camera3D& camera, const CPreferences* pPreferences);
     void WriteVulkanGlobals(CScene& scene, bool shadowsEnabled,
                             float shadowBias, int shadowFilterQuality);
 
     Shader m_LightingShader{};
     Shader m_ShadowShader{};
+    Shader m_SkyboxShader{};
+    Mesh m_SkyboxMesh{};
+    Material m_SkyboxMaterial{};
+    bool m_SkyboxReady = false;
+    Vec3 m_SunDirection = { 0.4f, 0.75f, 0.5f };
 
     bool m_VulkanBackend = false;
     int m_GlobalParamsLoc = -1;
     int m_ShadowsEnabledLoc = -1;
     int m_ShadowBiasLoc = -1;
     int m_ShadowFilterLoc = -1;
+    int m_PostParamsLoc = -1;
+    int m_SkyboxSunDirLoc = -1;
+    int m_SkyboxPostParamsLoc = -1;
     int m_UseTexLoc = -1;
     int m_LastUseTexState = -1;
     int m_AmbientLoc = -1;

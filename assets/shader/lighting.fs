@@ -40,12 +40,59 @@ uniform float emissionPower;
 uniform int shadowsEnabled;
 uniform float shadowBias;
 uniform int shadowFilterQuality;
+uniform vec4 postParams;
 
 #define SHADOW_DEPTH_RANGE 1000.0
+
+const vec2 POISSON_DISK[16] = vec2[16](
+    vec2(-0.94201624, -0.39906216), vec2( 0.94558609, -0.76890725),
+    vec2(-0.09418410, -0.92938870), vec2( 0.34495938,  0.29387760),
+    vec2(-0.91588581,  0.45771432), vec2(-0.81544232, -0.87912464),
+    vec2(-0.38277543,  0.27676845), vec2( 0.97484398,  0.75648379),
+    vec2( 0.44323325, -0.97511554), vec2( 0.53742981, -0.47373420),
+    vec2(-0.26496911, -0.41893023), vec2( 0.79197514,  0.19090188),
+    vec2(-0.24188840,  0.99706507), vec2(-0.81409955,  0.91437590),
+    vec2( 0.19984126,  0.78641367), vec2( 0.14383161, -0.14100790)
+);
+
+vec3 ACESFilm(vec3 x)
+{
+    const float a = 2.51;
+    const float b = 0.03;
+    const float c = 2.43;
+    const float d = 0.59;
+    const float e = 0.14;
+    return clamp((x * (a * x + b)) / (x * (c * x + d) + e), 0.0, 1.0);
+}
+
+float InterleavedGradientNoise(vec2 screenPos)
+{
+    vec3 magic = vec3(0.06711056, 0.00583715, 52.9829189);
+    return fract(magic.z * fract(dot(screenPos, magic.xy)));
+}
 
 float unpackDepth24(vec3 rgb)
 {
     return dot(rgb, vec3(1.0, 1.0 / 255.0, 1.0 / 65025.0)) * SHADOW_DEPTH_RANGE;
+}
+
+float sampleShadowBilinear(int lightIndex, vec2 uv, ivec2 mapSize, float currentDepth, float bias)
+{
+    vec2 texelCoord = uv * vec2(mapSize) - vec2(0.5);
+    ivec2 baseTexel = ivec2(floor(texelCoord));
+    vec2 f = texelCoord - vec2(baseTexel);
+
+    ivec2 t00 = clamp(baseTexel + ivec2(0, 0), ivec2(0), mapSize - 1);
+    ivec2 t10 = clamp(baseTexel + ivec2(1, 0), ivec2(0), mapSize - 1);
+    ivec2 t01 = clamp(baseTexel + ivec2(0, 1), ivec2(0), mapSize - 1);
+    ivec2 t11 = clamp(baseTexel + ivec2(1, 1), ivec2(0), mapSize - 1);
+
+    float s00 = currentDepth - bias > unpackDepth24(texelFetch(shadowMaps[lightIndex], t00, 0).rgb) ? 1.0 : 0.0;
+    float s10 = currentDepth - bias > unpackDepth24(texelFetch(shadowMaps[lightIndex], t10, 0).rgb) ? 1.0 : 0.0;
+    float s01 = currentDepth - bias > unpackDepth24(texelFetch(shadowMaps[lightIndex], t01, 0).rgb) ? 1.0 : 0.0;
+    float s11 = currentDepth - bias > unpackDepth24(texelFetch(shadowMaps[lightIndex], t11, 0).rgb) ? 1.0 : 0.0;
+
+    return mix(mix(s00, s10, f.x), mix(s01, s11, f.x), f.y);
 }
 
 float shadow_factor(int lightIndex, vec3 worldPosition, vec3 normal, vec3 lightDir)
@@ -68,38 +115,40 @@ float shadow_factor(int lightIndex, vec3 worldPosition, vec3 normal, vec3 lightD
     float currentDepth = lightSpacePosition.w;
     float slopeFactor = 1.0 - NdotL;
     float baseDepthBias = currentDepth * baseBias * (1.2 + 3.5 * slopeFactor) + 0.012;
-    float tapSlopeBias = currentDepth * baseBias * (1.0 + 3.0 * slopeFactor) + 0.006;
+    float tapSlopeBias = currentDepth * baseBias * (0.9 + 2.5 * slopeFactor) + 0.005;
     ivec2 mapSize = textureSize(shadowMaps[lightIndex], 0);
-    vec2 texelCoord = projected.xy * vec2(mapSize) - vec2(0.5);
-    ivec2 baseTexel = ivec2(floor(texelCoord));
-    vec2 fracCoord = texelCoord - vec2(baseTexel);
+    vec2 texelSize = 1.0 / max(vec2(mapSize), vec2(1.0));
+
     float shadow = 0.0;
-
-    int radius = shadowFilterQuality == 0 ? 0 : shadowFilterQuality == 1 ? 1 : 2;
-    int sampleWidth = radius * 2 + 1;
-    float totalWeight = float(sampleWidth * sampleWidth);
-    for (int x = -2; x <= 3; x++)
+    if (shadowFilterQuality <= 0)
     {
-        if (x < -radius || x > radius + 1) continue;
-        float wx = (x == -radius) ? (1.0 - fracCoord.x) : ((x == radius + 1) ? fracCoord.x : 1.0);
-        for (int y = -2; y <= 3; y++)
-        {
-            if (y < -radius || y > radius + 1) continue;
-            float wy = (y == -radius) ? (1.0 - fracCoord.y) : ((y == radius + 1) ? fracCoord.y : 1.0);
-            ivec2 texel = clamp(baseTexel + ivec2(x, y), ivec2(0), mapSize - 1);
-            float closestDepth = unpackDepth24(texelFetch(shadowMaps[lightIndex], texel, 0).rgb);
-            float tapDist = abs(float(x) - fracCoord.x) + abs(float(y) - fracCoord.y);
-            float bias = baseDepthBias + tapSlopeBias * tapDist;
+        shadow = sampleShadowBilinear(lightIndex, projected.xy, mapSize, currentDepth, baseDepthBias);
+    }
+    else
+    {
+        int tapCount = (shadowFilterQuality == 1) ? 8 : 16;
+        float spreadTexels = (shadowFilterQuality == 1) ? 1.65 : 2.75;
+        float angle = InterleavedGradientNoise(gl_FragCoord.xy) * 6.2831853;
+        float s = sin(angle);
+        float c = cos(angle);
+        mat2 rot = mat2(c, -s, s, c);
 
-            shadow += (currentDepth - bias > closestDepth ? 1.0 : 0.0) * (wx * wy);
+        for (int t = 0; t < 16; ++t)
+        {
+            if (t >= tapCount) break;
+            vec2 offset = (rot * POISSON_DISK[t]) * spreadTexels;
+            float tapBias = baseDepthBias + tapSlopeBias * length(offset);
+            shadow += sampleShadowBilinear(lightIndex, projected.xy + offset * texelSize,
+                                           mapSize, currentDepth, tapBias);
         }
+        shadow /= float(tapCount);
     }
 
     float edgeFade = smoothstep(0.0, 0.05, projected.x) *
                      smoothstep(1.0, 0.95, projected.x) *
                      smoothstep(0.0, 0.05, projected.y) *
                      smoothstep(1.0, 0.95, projected.y);
-    return totalWeight > 0.0 ? (shadow / totalWeight) * edgeFade : 0.0;
+    return shadow * edgeFade;
 }
 
 void main()
@@ -197,11 +246,31 @@ void main()
         }
     }
 
-    vec3 color = texelColor.rgb * tint.rgb * (ambient.rgb + lightAccum) + specular;
+    float hemiFactor = normal.y * 0.5 + 0.5;
+    vec3 skyAmbient = mix(vec3(0.035, 0.035, 0.04), vec3(0.075, 0.095, 0.13), hemiFactor);
+    vec3 envAmbient = max(ambient.rgb, skyAmbient * (postParams.w > 0.5 ? 1.0 : 0.45));
+
+    vec3 color = texelColor.rgb * tint.rgb * (envAmbient + lightAccum) + specular;
     color += emissionColor * emissionPower;
 
-    finalColor = vec4(color, texelColor.a * tint.a);
-    finalColor = pow(finalColor, vec4(1.0 / 2.2));
+    float exposure = postParams.x > 0.001 ? postParams.x : 1.05;
+    float useToneMap = postParams.x > 0.001 ? postParams.y : 1.0;
+    float bloomStrength = postParams.x > 0.001 ? max(postParams.z, 0.0) : 0.25;
 
-    if (finalColor.a < 0.1) discard;
+    color *= exposure;
+    vec3 bloomExcess = max(color - vec3(1.0), vec3(0.0));
+    color += bloomExcess * bloomStrength * 0.45;
+
+    if (useToneMap > 0.5)
+    {
+        color = ACESFilm(color);
+    }
+    else
+    {
+        color = clamp(color, 0.0, 1.0);
+    }
+
+    float outAlpha = texelColor.a * tint.a;
+    if (outAlpha < 0.1) discard;
+    finalColor = vec4(pow(color, vec3(1.0 / 2.2)), outAlpha);
 }

@@ -167,6 +167,22 @@ static void ReadPreferences(CPreferences& preferences, const Json& data)
     {
         preferences.m_ShadowFilterQuality = (*pPreferences)["shadow_filter_quality"].get<int>();
     }
+    if (pPreferences->contains("skybox_enabled"))
+    {
+        preferences.m_SkyboxEnabled = (*pPreferences)["skybox_enabled"].get<bool>();
+    }
+    if (pPreferences->contains("tone_mapping_enabled"))
+    {
+        preferences.m_ToneMappingEnabled = (*pPreferences)["tone_mapping_enabled"].get<bool>();
+    }
+    if (pPreferences->contains("exposure"))
+    {
+        preferences.m_Exposure = (*pPreferences)["exposure"].get<float>();
+    }
+    if (pPreferences->contains("bloom_strength"))
+    {
+        preferences.m_BloomStrength = (*pPreferences)["bloom_strength"].get<float>();
+    }
     if (pPreferences->contains("undo_history_limit"))
     {
         preferences.m_UndoHistoryLimit = (*pPreferences)["undo_history_limit"].get<int>();
@@ -280,6 +296,8 @@ static void ReadPreferences(CPreferences& preferences, const Json& data)
     preferences.m_BackgroundBlue = std::clamp(preferences.m_BackgroundBlue, 0, 255);
     preferences.m_ShadowBias = std::clamp(preferences.m_ShadowBias, 0.0001f, 0.05f);
     preferences.m_ShadowFilterQuality = std::clamp(preferences.m_ShadowFilterQuality, 0, 2);
+    preferences.m_Exposure = std::clamp(preferences.m_Exposure, 0.2f, 3.0f);
+    preferences.m_BloomStrength = std::clamp(preferences.m_BloomStrength, 0.0f, 1.5f);
     preferences.m_UndoHistoryLimit = std::clamp(preferences.m_UndoHistoryLimit, 10, 500);
     preferences.m_AssetPreviewSize = std::clamp(preferences.m_AssetPreviewSize, 32, 128);
     preferences.m_AssetFilter = std::clamp(preferences.m_AssetFilter, 0, 4);
@@ -338,6 +356,10 @@ void CPreferences::Save() const
             { "shadow_map_size", m_ShadowMapSize },
             { "shadow_bias", m_ShadowBias },
             { "shadow_filter_quality", m_ShadowFilterQuality },
+            { "skybox_enabled", m_SkyboxEnabled },
+            { "tone_mapping_enabled", m_ToneMappingEnabled },
+            { "exposure", m_Exposure },
+            { "bloom_strength", m_BloomStrength },
             { "undo_history_limit", m_UndoHistoryLimit },
             { "vsync_enabled", m_VsyncEnabled },
             { "interface_scale", m_InterfaceScale },

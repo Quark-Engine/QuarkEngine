@@ -51,6 +51,10 @@ public:
     int m_ShadowMapSize = 1024;
     float m_ShadowBias = 0.004f;
     int m_ShadowFilterQuality = 1;
+    bool m_SkyboxEnabled = true;
+    bool m_ToneMappingEnabled = true;
+    float m_Exposure = 1.05f;
+    float m_BloomStrength = 0.25f;
     int m_UndoHistoryLimit = 100;
     bool m_VsyncEnabled = true;
     float m_InterfaceScale = 1.0f;

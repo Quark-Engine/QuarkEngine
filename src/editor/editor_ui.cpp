@@ -1956,6 +1956,10 @@ bool CEditor::DrawPreferencesRenderingTab(CFlyCamera& camera)
 
     const char* apShadowFilterNames[] = { lang.Word("hard"), lang.Word("samples_9"), lang.Word("samples_25") };
     changed |= ImGui::Combo(lang.Word("shadow_filtering"), &m_Preferences.m_ShadowFilterQuality, apShadowFilterNames, 3);
+    changed |= ImGui::Checkbox("Procedural Skybox", &m_Preferences.m_SkyboxEnabled);
+    changed |= ImGui::Checkbox("ACES Tone Mapping", &m_Preferences.m_ToneMappingEnabled);
+    changed |= ImGui::SliderFloat("Exposure", &m_Preferences.m_Exposure, 0.2f, 3.0f, "%.2f");
+    changed |= ImGui::SliderFloat("Bloom Strength", &m_Preferences.m_BloomStrength, 0.0f, 1.5f, "%.2f");
     changed |= ImGui::SliderInt(lang.Word("undo_history_limit"), &m_Preferences.m_UndoHistoryLimit, 10, 500);
     camera.m_Cam.fovy = m_Preferences.m_CameraFov;
 

@@ -2104,7 +2104,8 @@ namespace quark::script
 
     bool CScriptEngine::BuildScriptDll(const std::string& projectPath, const std::string& gameName,
                                        std::string& errorMessage,
-                                       const FProgressCallback& progressCallback)
+                                       const FProgressCallback& progressCallback,
+                                       bool releaseBuild)
     {
         const fs::path projectRoot(projectPath);
         std::error_code ec;
@@ -2270,7 +2271,29 @@ namespace quark::script
         cmakeOut << "    LIBRARY_OUTPUT_DIRECTORY_RELWITHDEBINFO " << QuotePath(projectRoot) << "\n";
         cmakeOut << ")\n\n";
 
-        cmakeOut << "target_compile_definitions(" << targetName << " PRIVATE QUARK_SCRIPT_BUILD_DLL)\n\n";
+        cmakeOut << "target_compile_definitions(" << targetName << " PRIVATE QUARK_SCRIPT_BUILD_DLL)\n";
+        if (releaseBuild)
+        {
+            cmakeOut << "if(MSVC)\n";
+#if defined(_DEBUG) || defined(DEBUG)
+            cmakeOut << "    string(REPLACE \"/RTC1\" \"\" CMAKE_CXX_FLAGS_DEBUG \"${CMAKE_CXX_FLAGS_DEBUG}\")\n";
+            cmakeOut << "    string(REPLACE \"/Od\" \"\" CMAKE_CXX_FLAGS_DEBUG \"${CMAKE_CXX_FLAGS_DEBUG}\")\n";
+            cmakeOut << "    target_compile_options(" << targetName << " PRIVATE /O2 /Ob2 /Oi /Ot)\n";
+            cmakeOut << "    target_link_options(" << targetName << " PRIVATE /OPT:REF /OPT:ICF /DEBUG:NONE)\n";
+#else
+            cmakeOut << "    target_compile_options(" << targetName << " PRIVATE /O2 /Ob2 /Oi /Ot /GL /DNDEBUG)\n";
+            cmakeOut << "    target_link_options(" << targetName << " PRIVATE /LTCG /OPT:REF /OPT:ICF /DEBUG:NONE)\n";
+#endif
+            cmakeOut << "else()\n";
+            cmakeOut << "    target_compile_options(" << targetName << " PRIVATE -O3 -flto -fvisibility=hidden -fno-ident -DNDEBUG)\n";
+            cmakeOut << "    if(APPLE)\n";
+            cmakeOut << "        target_link_options(" << targetName << " PRIVATE -flto -Wl,-x)\n";
+            cmakeOut << "    else()\n";
+            cmakeOut << "        target_link_options(" << targetName << " PRIVATE -flto -s -Wl,--strip-all)\n";
+            cmakeOut << "    endif()\n";
+            cmakeOut << "endif()\n";
+        }
+        cmakeOut << "\n";
 
         cmakeOut << "target_include_directories(" << targetName << " PRIVATE\n";
         cmakeOut << "    " << QuotePath(engineSourceDir / "include") << "\n";
@@ -2540,7 +2563,11 @@ namespace quark::script
             return;
         }
 
-        RefreshAvailableScripts(projectPath);
+        const bool hasPreloadedDll = (pExternalDll && pExternalDll->IsOpen()) || m_Dll.IsOpen();
+        if (!hasPreloadedDll)
+        {
+            RefreshAvailableScripts(projectPath);
+        }
 
         std::string gameName = fs::path(projectPath).filename().string();
         if (gameName.empty())

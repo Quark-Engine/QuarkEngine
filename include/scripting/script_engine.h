@@ -53,7 +53,8 @@ namespace quark::script
 
         bool BuildScriptDll(const std::string& projectPath, const std::string& gameName,
                             std::string& errorMessage,
-                            const FProgressCallback& progressCallback = nullptr);
+                            const FProgressCallback& progressCallback = nullptr,
+                            bool releaseBuild = false);
 
         bool LoadScriptDll(const std::string& dllPath);
         void UnloadScriptDll();
