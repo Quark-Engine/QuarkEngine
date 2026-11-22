@@ -180,6 +180,21 @@ namespace quark::script
 
         int GetId() const;
         std::string GetName() const;
+        void SetName(const std::string& name);
+        bool HasTag(const std::string& tag) const;
+        void AddTag(const std::string& tag);
+
+        Color GetMaterialColor() const;
+        void SetMaterialColor(const Color& color);
+
+        Color GetLightColor() const;
+        void SetLightColor(const Color& color);
+        float GetLightIntensity() const;
+        void SetLightIntensity(float intensity);
+        float GetLightRange() const;
+        void SetLightRange(float range);
+        bool IsLightEnabled() const;
+        void SetLightEnabled(bool enabled);
 
         CTransformComponent* GetTransformComponent();
         CMeshComponent* GetMeshComponent();
@@ -734,6 +749,25 @@ namespace quark::script
         }
     };
 
+    enum class EScriptPrimitiveType
+    {
+        CUBE = 0,
+        SPHERE = 1,
+        CONE = 2,
+        CYLINDER = 3,
+        TORUS = 4,
+        HEMISPHERE = 5,
+        CAPSULE = 6
+    };
+
+    enum class EScriptLightType
+    {
+        DIRECTIONAL = 0,
+        POINT = 1,
+        SPOT = 2,
+        AREA = 3
+    };
+
     struct SSceneCallbacks
     {
         CScriptEntity* (*pfnFindEntityByName)(const char* pName) = nullptr;
@@ -741,6 +775,8 @@ namespace quark::script
         int (*pfnFindEntitiesWithTag)(const char* pTag, CScriptEntity** ppOutEntities, int maxCount) = nullptr;
         CScriptEntity* (*pfnInstantiateEntity)(CScriptEntity* pSourceEntity) = nullptr;
         CScriptEntity* (*pfnInstantiatePrefab)(const char* pPrefabPath) = nullptr;
+        CScriptEntity* (*pfnCreateEntity)(const char* pName, Vec3 position) = nullptr;
+        CScriptEntity* (*pfnCreatePrimitive)(int primitiveType, const char* pName, Vec3 position, Vec3 scale) = nullptr;
         void (*pfnDestroyEntity)(CScriptEntity* pEntity) = nullptr;
         void (*pfnDestroyEntityById)(int entityId) = nullptr;
         bool (*pfnLoadScene)(const char* pScenePath) = nullptr;
@@ -793,6 +829,28 @@ namespace quark::script
             return vResults;
         }
 
+        static CScriptEntity* CreateEntity(const std::string& name = "Entity",
+                                           const Vec3& position = { 0.0f, 0.0f, 0.0f })
+        {
+            if (g_SceneCallbacks.pfnCreateEntity)
+            {
+                return g_SceneCallbacks.pfnCreateEntity(name.c_str(), position);
+            }
+            return nullptr;
+        }
+
+        static CScriptEntity* CreatePrimitive(EScriptPrimitiveType type,
+                                              const std::string& name = "",
+                                              const Vec3& position = { 0.0f, 0.0f, 0.0f },
+                                              const Vec3& scale = { 1.0f, 1.0f, 1.0f })
+        {
+            if (g_SceneCallbacks.pfnCreatePrimitive)
+            {
+                return g_SceneCallbacks.pfnCreatePrimitive(static_cast<int>(type), name.c_str(), position, scale);
+            }
+            return nullptr;
+        }
+
         static CScriptEntity* Instantiate(CScriptEntity* pEntity)
         {
             if (g_SceneCallbacks.pfnInstantiateEntity && pEntity)
@@ -800,6 +858,20 @@ namespace quark::script
                 return g_SceneCallbacks.pfnInstantiateEntity(pEntity);
             }
             return nullptr;
+        }
+
+        static CScriptEntity* Instantiate(CScriptEntity* pEntity,
+                                          const Vec3& position,
+                                          const Vec3& rotation = { 0.0f, 0.0f, 0.0f })
+        {
+            CScriptEntity* pSpawned = Instantiate(pEntity);
+            if (pSpawned)
+            {
+                SScriptTransform tr = pSpawned->GetTransform();
+                tr.position = position;
+                tr.rotation = rotation;
+            }
+            return pSpawned;
         }
 
         static CScriptEntity* Instantiate(const std::string& prefabPath)
@@ -811,9 +883,30 @@ namespace quark::script
             return nullptr;
         }
 
+        static CScriptEntity* Instantiate(const std::string& prefabPath,
+                                          const Vec3& position,
+                                          const Vec3& rotation = { 0.0f, 0.0f, 0.0f })
+        {
+            CScriptEntity* pSpawned = Instantiate(prefabPath);
+            if (pSpawned)
+            {
+                SScriptTransform tr = pSpawned->GetTransform();
+                tr.position = position;
+                tr.rotation = rotation;
+            }
+            return pSpawned;
+        }
+
         static CScriptEntity* Instantiate(const SAssetRef& prefabAsset)
         {
             return Instantiate(prefabAsset.m_Path);
+        }
+
+        static CScriptEntity* Instantiate(const SAssetRef& prefabAsset,
+                                          const Vec3& position,
+                                          const Vec3& rotation = { 0.0f, 0.0f, 0.0f })
+        {
+            return Instantiate(prefabAsset.m_Path, position, rotation);
         }
 
         static void Destroy(CScriptEntity* pEntity)
@@ -847,11 +940,25 @@ namespace quark::script
         bool (*pfnRaycast)(Vec3 origin, Vec3 direction, float maxDistance,
                            bool includeTriggers, int ignoreEntityId,
                            SRaycastHit* pOutHit) = nullptr;
+        int (*pfnRaycastAll)(Vec3 origin, Vec3 direction, float maxDistance,
+                             bool includeTriggers, int ignoreEntityId,
+                             SRaycastHit* pOutHits, int maxHits) = nullptr;
+        int (*pfnOverlapSphere)(Vec3 center, float radius,
+                                bool includeTriggers, int ignoreEntityId,
+                                CScriptEntity** ppOutEntities, int maxCount) = nullptr;
+        int (*pfnOverlapBox)(Vec3 center, Vec3 halfExtents,
+                             bool includeTriggers, int ignoreEntityId,
+                             CScriptEntity** ppOutEntities, int maxCount) = nullptr;
         void (*pfnAddForce)(CScriptEntity* pEntity, Vec3 force) = nullptr;
         void (*pfnAddImpulse)(CScriptEntity* pEntity, Vec3 impulse) = nullptr;
+        void (*pfnAddTorque)(CScriptEntity* pEntity, Vec3 torque) = nullptr;
         void (*pfnSetVelocity)(CScriptEntity* pEntity, Vec3 velocity) = nullptr;
         Vec3 (*pfnGetVelocity)(CScriptEntity* pEntity) = nullptr;
+        void (*pfnSetAngularVelocity)(CScriptEntity* pEntity, Vec3 angularVelocity) = nullptr;
+        Vec3 (*pfnGetAngularVelocity)(CScriptEntity* pEntity) = nullptr;
         bool (*pfnIsGrounded)(CScriptEntity* pEntity) = nullptr;
+        void (*pfnSetTrigger)(CScriptEntity* pEntity, bool isTrigger) = nullptr;
+        bool (*pfnIsTrigger)(CScriptEntity* pEntity) = nullptr;
         void (*pfnSetGravity)(Vec3 gravity) = nullptr;
         Vec3 (*pfnGetGravity)() = nullptr;
     };
@@ -877,6 +984,95 @@ namespace quark::script
             return false;
         }
 
+        static bool Raycast(const Vec3& origin,
+                            const Vec3& direction,
+                            float maxDistance = 1000.0f,
+                            bool includeTriggers = false,
+                            int ignoreEntityId = -1)
+        {
+            SRaycastHit hit{};
+            return Raycast(origin, direction, maxDistance, hit, includeTriggers, ignoreEntityId);
+        }
+
+        static std::vector<SRaycastHit> RaycastAll(const Vec3& origin,
+                                                   const Vec3& direction,
+                                                   float maxDistance = 1000.0f,
+                                                   bool includeTriggers = false,
+                                                   int ignoreEntityId = -1)
+        {
+            std::vector<SRaycastHit> vHits;
+            if (!g_PhysicsCallbacks.pfnRaycastAll)
+            {
+                return vHits;
+            }
+            const int count = g_PhysicsCallbacks.pfnRaycastAll(
+                origin, direction, maxDistance, includeTriggers, ignoreEntityId, nullptr, 0);
+            if (count <= 0)
+            {
+                return vHits;
+            }
+            vHits.resize(static_cast<size_t>(count));
+            const int written = g_PhysicsCallbacks.pfnRaycastAll(
+                origin, direction, maxDistance, includeTriggers, ignoreEntityId, vHits.data(), count);
+            if (written < count)
+            {
+                vHits.resize(static_cast<size_t>(std::max(0, written)));
+            }
+            return vHits;
+        }
+
+        static std::vector<CScriptEntity*> OverlapSphere(const Vec3& center,
+                                                         float radius,
+                                                         bool includeTriggers = false,
+                                                         int ignoreEntityId = -1)
+        {
+            std::vector<CScriptEntity*> vEntities;
+            if (!g_PhysicsCallbacks.pfnOverlapSphere)
+            {
+                return vEntities;
+            }
+            const int count = g_PhysicsCallbacks.pfnOverlapSphere(
+                center, radius, includeTriggers, ignoreEntityId, nullptr, 0);
+            if (count <= 0)
+            {
+                return vEntities;
+            }
+            vEntities.resize(static_cast<size_t>(count), nullptr);
+            const int written = g_PhysicsCallbacks.pfnOverlapSphere(
+                center, radius, includeTriggers, ignoreEntityId, vEntities.data(), count);
+            if (written < count)
+            {
+                vEntities.resize(static_cast<size_t>(std::max(0, written)));
+            }
+            return vEntities;
+        }
+
+        static std::vector<CScriptEntity*> OverlapBox(const Vec3& center,
+                                                      const Vec3& halfExtents,
+                                                      bool includeTriggers = false,
+                                                      int ignoreEntityId = -1)
+        {
+            std::vector<CScriptEntity*> vEntities;
+            if (!g_PhysicsCallbacks.pfnOverlapBox)
+            {
+                return vEntities;
+            }
+            const int count = g_PhysicsCallbacks.pfnOverlapBox(
+                center, halfExtents, includeTriggers, ignoreEntityId, nullptr, 0);
+            if (count <= 0)
+            {
+                return vEntities;
+            }
+            vEntities.resize(static_cast<size_t>(count), nullptr);
+            const int written = g_PhysicsCallbacks.pfnOverlapBox(
+                center, halfExtents, includeTriggers, ignoreEntityId, vEntities.data(), count);
+            if (written < count)
+            {
+                vEntities.resize(static_cast<size_t>(std::max(0, written)));
+            }
+            return vEntities;
+        }
+
         static void AddForce(CScriptEntity* pEntity, const Vec3& force)
         {
             if (g_PhysicsCallbacks.pfnAddForce && pEntity)
@@ -890,6 +1086,14 @@ namespace quark::script
             if (g_PhysicsCallbacks.pfnAddImpulse && pEntity)
             {
                 g_PhysicsCallbacks.pfnAddImpulse(pEntity, impulse);
+            }
+        }
+
+        static void AddTorque(CScriptEntity* pEntity, const Vec3& torque)
+        {
+            if (g_PhysicsCallbacks.pfnAddTorque && pEntity)
+            {
+                g_PhysicsCallbacks.pfnAddTorque(pEntity, torque);
             }
         }
 
@@ -910,11 +1114,45 @@ namespace quark::script
             return { 0.0f, 0.0f, 0.0f };
         }
 
+        static void SetAngularVelocity(CScriptEntity* pEntity, const Vec3& angularVelocity)
+        {
+            if (g_PhysicsCallbacks.pfnSetAngularVelocity && pEntity)
+            {
+                g_PhysicsCallbacks.pfnSetAngularVelocity(pEntity, angularVelocity);
+            }
+        }
+
+        static Vec3 GetAngularVelocity(CScriptEntity* pEntity)
+        {
+            if (g_PhysicsCallbacks.pfnGetAngularVelocity && pEntity)
+            {
+                return g_PhysicsCallbacks.pfnGetAngularVelocity(pEntity);
+            }
+            return { 0.0f, 0.0f, 0.0f };
+        }
+
         static bool IsGrounded(CScriptEntity* pEntity)
         {
             if (g_PhysicsCallbacks.pfnIsGrounded && pEntity)
             {
                 return g_PhysicsCallbacks.pfnIsGrounded(pEntity);
+            }
+            return false;
+        }
+
+        static void SetTrigger(CScriptEntity* pEntity, bool isTrigger)
+        {
+            if (g_PhysicsCallbacks.pfnSetTrigger && pEntity)
+            {
+                g_PhysicsCallbacks.pfnSetTrigger(pEntity, isTrigger);
+            }
+        }
+
+        static bool IsTrigger(CScriptEntity* pEntity)
+        {
+            if (g_PhysicsCallbacks.pfnIsTrigger && pEntity)
+            {
+                return g_PhysicsCallbacks.pfnIsTrigger(pEntity);
             }
             return false;
         }
@@ -934,6 +1172,193 @@ namespace quark::script
                 return g_PhysicsCallbacks.pfnGetGravity();
             }
             return { 0.0f, -9.81f, 0.0f };
+        }
+    };
+
+    struct SRenderCallbacks
+    {
+        void (*pfnSetMaterialColor)(CScriptEntity* pEntity, Color color) = nullptr;
+        Color (*pfnGetMaterialColor)(CScriptEntity* pEntity) = nullptr;
+        void (*pfnSetMaterialTexture)(CScriptEntity* pEntity, const char* pTexturePath) = nullptr;
+        const char* (*pfnGetMaterialTexture)(CScriptEntity* pEntity) = nullptr;
+        void (*pfnSetMaterialUVScale)(CScriptEntity* pEntity, Vec2 uvScale) = nullptr;
+        Vec2 (*pfnGetMaterialUVScale)(CScriptEntity* pEntity) = nullptr;
+
+        void (*pfnSetLightEnabled)(CScriptEntity* pEntity, bool enabled) = nullptr;
+        bool (*pfnIsLightEnabled)(CScriptEntity* pEntity) = nullptr;
+        void (*pfnSetLightColor)(CScriptEntity* pEntity, Color color) = nullptr;
+        Color (*pfnGetLightColor)(CScriptEntity* pEntity) = nullptr;
+        void (*pfnSetLightIntensity)(CScriptEntity* pEntity, float intensity) = nullptr;
+        float (*pfnGetLightIntensity)(CScriptEntity* pEntity) = nullptr;
+        void (*pfnSetLightRange)(CScriptEntity* pEntity, float range) = nullptr;
+        float (*pfnGetLightRange)(CScriptEntity* pEntity) = nullptr;
+        void (*pfnSetLightSpotAngle)(CScriptEntity* pEntity, float spotAngle) = nullptr;
+        float (*pfnGetLightSpotAngle)(CScriptEntity* pEntity) = nullptr;
+        void (*pfnSetLightType)(CScriptEntity* pEntity, int lightType) = nullptr;
+        int (*pfnGetLightType)(CScriptEntity* pEntity) = nullptr;
+    };
+
+    extern SRenderCallbacks g_RenderCallbacks;
+
+    class MaterialAPI
+    {
+    public:
+        static void SetColor(CScriptEntity* pEntity, const Color& color)
+        {
+            if (g_RenderCallbacks.pfnSetMaterialColor && pEntity)
+            {
+                g_RenderCallbacks.pfnSetMaterialColor(pEntity, color);
+            }
+        }
+
+        static Color GetColor(CScriptEntity* pEntity)
+        {
+            if (g_RenderCallbacks.pfnGetMaterialColor && pEntity)
+            {
+                return g_RenderCallbacks.pfnGetMaterialColor(pEntity);
+            }
+            return WHITE;
+        }
+
+        static void SetTexture(CScriptEntity* pEntity, const std::string& texturePath)
+        {
+            if (g_RenderCallbacks.pfnSetMaterialTexture && pEntity)
+            {
+                g_RenderCallbacks.pfnSetMaterialTexture(pEntity, texturePath.c_str());
+            }
+        }
+
+        static std::string GetTexture(CScriptEntity* pEntity)
+        {
+            if (g_RenderCallbacks.pfnGetMaterialTexture && pEntity)
+            {
+                const char* pName = g_RenderCallbacks.pfnGetMaterialTexture(pEntity);
+                return pName ? std::string(pName) : std::string();
+            }
+            return {};
+        }
+
+        static void SetUVScale(CScriptEntity* pEntity, const Vec2& uvScale)
+        {
+            if (g_RenderCallbacks.pfnSetMaterialUVScale && pEntity)
+            {
+                g_RenderCallbacks.pfnSetMaterialUVScale(pEntity, uvScale);
+            }
+        }
+
+        static Vec2 GetUVScale(CScriptEntity* pEntity)
+        {
+            if (g_RenderCallbacks.pfnGetMaterialUVScale && pEntity)
+            {
+                return g_RenderCallbacks.pfnGetMaterialUVScale(pEntity);
+            }
+            return { 1.0f, 1.0f };
+        }
+    };
+
+    class LightAPI
+    {
+    public:
+        static void SetEnabled(CScriptEntity* pEntity, bool enabled)
+        {
+            if (g_RenderCallbacks.pfnSetLightEnabled && pEntity)
+            {
+                g_RenderCallbacks.pfnSetLightEnabled(pEntity, enabled);
+            }
+        }
+
+        static bool IsEnabled(CScriptEntity* pEntity)
+        {
+            if (g_RenderCallbacks.pfnIsLightEnabled && pEntity)
+            {
+                return g_RenderCallbacks.pfnIsLightEnabled(pEntity);
+            }
+            return false;
+        }
+
+        static void SetColor(CScriptEntity* pEntity, const Color& color)
+        {
+            if (g_RenderCallbacks.pfnSetLightColor && pEntity)
+            {
+                g_RenderCallbacks.pfnSetLightColor(pEntity, color);
+            }
+        }
+
+        static Color GetColor(CScriptEntity* pEntity)
+        {
+            if (g_RenderCallbacks.pfnGetLightColor && pEntity)
+            {
+                return g_RenderCallbacks.pfnGetLightColor(pEntity);
+            }
+            return WHITE;
+        }
+
+        static void SetIntensity(CScriptEntity* pEntity, float intensity)
+        {
+            if (g_RenderCallbacks.pfnSetLightIntensity && pEntity)
+            {
+                g_RenderCallbacks.pfnSetLightIntensity(pEntity, intensity);
+            }
+        }
+
+        static float GetIntensity(CScriptEntity* pEntity)
+        {
+            if (g_RenderCallbacks.pfnGetLightIntensity && pEntity)
+            {
+                return g_RenderCallbacks.pfnGetLightIntensity(pEntity);
+            }
+            return 1.0f;
+        }
+
+        static void SetRange(CScriptEntity* pEntity, float range)
+        {
+            if (g_RenderCallbacks.pfnSetLightRange && pEntity)
+            {
+                g_RenderCallbacks.pfnSetLightRange(pEntity, range);
+            }
+        }
+
+        static float GetRange(CScriptEntity* pEntity)
+        {
+            if (g_RenderCallbacks.pfnGetLightRange && pEntity)
+            {
+                return g_RenderCallbacks.pfnGetLightRange(pEntity);
+            }
+            return 10.0f;
+        }
+
+        static void SetSpotAngle(CScriptEntity* pEntity, float spotAngle)
+        {
+            if (g_RenderCallbacks.pfnSetLightSpotAngle && pEntity)
+            {
+                g_RenderCallbacks.pfnSetLightSpotAngle(pEntity, spotAngle);
+            }
+        }
+
+        static float GetSpotAngle(CScriptEntity* pEntity)
+        {
+            if (g_RenderCallbacks.pfnGetLightSpotAngle && pEntity)
+            {
+                return g_RenderCallbacks.pfnGetLightSpotAngle(pEntity);
+            }
+            return 45.0f;
+        }
+
+        static void SetType(CScriptEntity* pEntity, EScriptLightType type)
+        {
+            if (g_RenderCallbacks.pfnSetLightType && pEntity)
+            {
+                g_RenderCallbacks.pfnSetLightType(pEntity, static_cast<int>(type));
+            }
+        }
+
+        static EScriptLightType GetType(CScriptEntity* pEntity)
+        {
+            if (g_RenderCallbacks.pfnGetLightType && pEntity)
+            {
+                return static_cast<EScriptLightType>(g_RenderCallbacks.pfnGetLightType(pEntity));
+            }
+            return EScriptLightType::POINT;
         }
     };
 
@@ -1098,6 +1523,12 @@ using SEntityRef = ::quark::script::SEntityRef;
 using SAssetRef = ::quark::script::SAssetRef;
 using EntityRef = ::quark::script::SEntityRef;
 using AssetRef = ::quark::script::SAssetRef;
+using MaterialAPI = ::quark::script::MaterialAPI;
+using LightAPI = ::quark::script::LightAPI;
+using EScriptPrimitiveType = ::quark::script::EScriptPrimitiveType;
+using PrimitiveType = ::quark::script::EScriptPrimitiveType;
+using EScriptLightType = ::quark::script::EScriptLightType;
+using ScriptLightType = ::quark::script::EScriptLightType;
 
 #define REGISTER_SCRIPT(ScriptClass)                                              \
     extern "C" QUARK_SCRIPT_API IScript* Create_##ScriptClass()                   \

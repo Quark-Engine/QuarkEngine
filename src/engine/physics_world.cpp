@@ -2206,7 +2206,7 @@ namespace quark::physics
 
                     const bool isTriggerPair = colA.m_IsTrigger || colB.m_IsTrigger;
                     const bool hasAnyBody = (pBodyA && pBodyA->m_Enabled) || (pBodyB && pBodyB->m_Enabled);
-                    if (!hasAnyBody && !isTriggerPair)
+                    if (!hasAnyBody)
                     {
                         continue;
                     }

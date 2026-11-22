@@ -3,6 +3,7 @@
 #include "editor/editor_hierarchy_utils.h"
 #include "engine/component_factory_registry.h"
 #include "engine/scene_document.h"
+#include "engine/transform.h"
 #include "entity.h"
 #include "project.h"
 
@@ -630,6 +631,7 @@ namespace quark::script
     STimeCallbacks g_TimeCallbacks;
     SSceneCallbacks g_SceneCallbacks;
     SPhysicsCallbacks g_PhysicsCallbacks;
+    SRenderCallbacks g_RenderCallbacks;
     SDebugCallbacks g_DebugCallbacks;
 
     static float s_ScriptTimeScale = 1.0f;
@@ -641,6 +643,65 @@ namespace quark::script
 
     namespace
     {
+
+        void EnsureRuntimeEntityModel(CEntity& entity)
+        {
+            CMeshComponent* pMesh = entity.GetMeshComponent();
+            if (!pMesh || (pMesh->m_Model.meshCount > 0 && pMesh->m_Model.meshes != nullptr))
+            {
+                return;
+            }
+
+            if (pMesh->m_pAsset && pMesh->m_pAsset->m_IsProcedural && pMesh->m_pAsset->pfnGenerator)
+            {
+                if (::IsWindowReady())
+                {
+                    pMesh->m_Model = pMesh->m_pAsset->pfnGenerator(std::max(3, pMesh->m_Segments));
+                    pMesh->m_OwnsModelInstance = true;
+                    pMesh->m_BoundsDirty = true;
+                    pMesh->m_ShaderAssigned = false;
+                }
+                return;
+            }
+
+            if (!::IsWindowReady())
+            {
+                return;
+            }
+
+            const int seg = std::clamp(pMesh->m_Segments, 3, 64);
+            switch (pMesh->m_Type)
+            {
+                case OBJECT_SPHERE:
+                    pMesh->m_Model = ::LoadModelFromMesh(::GenMeshSphere(1.0f, seg, seg));
+                    pMesh->m_OwnsModelInstance = true;
+                    break;
+                case OBJECT_CONE:
+                    pMesh->m_Model = ::LoadModelFromMesh(::GenMeshCone(1.0f, 1.0f, seg));
+                    pMesh->m_OwnsModelInstance = true;
+                    break;
+                case OBJECT_CYLINDER:
+                    pMesh->m_Model = ::LoadModelFromMesh(::GenMeshCylinder(1.0f, 1.0f, seg));
+                    pMesh->m_OwnsModelInstance = true;
+                    break;
+                case OBJECT_TORUS:
+                    pMesh->m_Model = ::LoadModelFromMesh(::GenMeshTorus(1.0f, 1.0f, seg, seg));
+                    pMesh->m_OwnsModelInstance = true;
+                    break;
+                case OBJECT_HEMISPHERE:
+                    pMesh->m_Model = ::LoadModelFromMesh(::GenMeshHemiSphere(1.0f, seg, seg));
+                    pMesh->m_OwnsModelInstance = true;
+                    break;
+                case OBJECT_CUBE:
+                case OBJECT_CAPSULE:
+                default:
+                    pMesh->m_Model = ::LoadModelFromMesh(::GenMeshCube(1.0f, 1.0f, 1.0f));
+                    pMesh->m_OwnsModelInstance = true;
+                    break;
+            }
+            pMesh->m_BoundsDirty = true;
+            pMesh->m_ShaderAssigned = false;
+        }
 
         CScriptEntity* GetOrCreateScriptEntityWrapper(CEntity& entity)
         {
@@ -665,6 +726,33 @@ namespace quark::script
             auto& pWrapper = s_EntityWrappers[entity.m_Id];
             pWrapper = std::make_unique<CScriptEntity>(&entity, pPos, pRot, pScale, pHasOverride);
             return pWrapper.get();
+        }
+
+        std::string MakeUniqueEntityNameInScene(const CScene& scene, const std::string& baseName)
+        {
+            auto isNameTaken = [&scene](const std::string& candidate)
+            {
+                for (const auto& entity : scene.m_vEntities)
+                {
+                    if (entity.m_Name == candidate)
+                    {
+                        return true;
+                    }
+                }
+                return false;
+            };
+            if (!isNameTaken(baseName))
+            {
+                return baseName;
+            }
+            for (int suffix = 1;; ++suffix)
+            {
+                const std::string candidate = baseName + " (" + std::to_string(suffix) + ")";
+                if (!isNameTaken(candidate))
+                {
+                    return candidate;
+                }
+            }
         }
 
         void RefreshSceneScriptEntityPointers(CScene& scene)
@@ -949,6 +1037,7 @@ namespace quark::script
             RefreshSceneScriptEntityPointers(*pScene);
 
             CEntity& spawned = pScene->m_vEntities.back();
+            EnsureRuntimeEntityModel(spawned);
             if (CScriptComponent* pScriptComp = spawned.GetScriptComponent())
             {
                 if (!pScriptComp->m_ScriptName.empty())
@@ -1029,6 +1118,7 @@ namespace quark::script
                     continue;
                 }
                 CEntity& spawned = pScene->m_vEntities[createdIdx];
+                EnsureRuntimeEntityModel(spawned);
                 if (CScriptComponent* pScriptComp = spawned.GetScriptComponent())
                 {
                     if (!pScriptComp->m_ScriptName.empty())
@@ -1057,6 +1147,104 @@ namespace quark::script
             }
 
             return GetOrCreateScriptEntityWrapper(pScene->m_vEntities[vCreatedIndices.front()]);
+        };
+
+        g_SceneCallbacks.pfnCreateEntity = [](const char* pName, Vec3 position) -> CScriptEntity*
+        {
+            CScene* pScene = CScriptEngine::Get().GetActiveScene();
+            if (!pScene)
+            {
+                return nullptr;
+            }
+
+            const int newId = static_cast<int>(pScene->m_vEntities.size());
+            CEntity entity(newId);
+            const std::string baseName = (pName && pName[0] != '\0') ? pName : "Entity";
+            entity.m_Name = MakeUniqueEntityNameInScene(*pScene, baseName);
+            if (CTransformComponent* pTransform = entity.GetTransformComponent())
+            {
+                pTransform->m_Position = position;
+                pTransform->ClearLocalMatrixOverride();
+            }
+            if (CMeshComponent* pMesh = entity.GetMeshComponent())
+            {
+                pMesh->m_Enabled = false;
+            }
+            pScene->m_vEntities.push_back(std::move(entity));
+            RefreshSceneScriptEntityPointers(*pScene);
+            pScene->BumpTransformRevision();
+            return GetOrCreateScriptEntityWrapper(pScene->m_vEntities.back());
+        };
+
+        g_SceneCallbacks.pfnCreatePrimitive = [](int primitiveType, const char* pName, Vec3 position, Vec3 scale) -> CScriptEntity*
+        {
+            CScene* pScene = CScriptEngine::Get().GetActiveScene();
+            if (!pScene)
+            {
+                return nullptr;
+            }
+
+            const int newId = static_cast<int>(pScene->m_vEntities.size());
+            CEntity entity(newId);
+            const EObjectType objType = static_cast<EObjectType>(std::clamp(primitiveType, 0, 6));
+            const std::string defaultName = ObjectTypeName(objType);
+            const std::string baseName = (pName && pName[0] != '\0') ? pName : defaultName;
+            entity.m_Name = MakeUniqueEntityNameInScene(*pScene, baseName);
+
+            if (CTransformComponent* pTransform = entity.GetTransformComponent())
+            {
+                pTransform->m_Position = position;
+                pTransform->m_Scale = scale;
+                pTransform->ClearLocalMatrixOverride();
+            }
+            if (CMeshComponent* pMesh = entity.GetMeshComponent())
+            {
+                pMesh->m_Enabled = true;
+                pMesh->m_Type = objType;
+                pMesh->m_AssetName = defaultName;
+                pMesh->m_Segments = 16;
+                for (const auto& existing : pScene->m_vEntities)
+                {
+                    if (const CMeshComponent* pExistingMesh = existing.GetMeshComponent())
+                    {
+                        if (pExistingMesh->m_pAsset && pExistingMesh->m_AssetName == defaultName)
+                        {
+                            pMesh->m_pAsset = pExistingMesh->m_pAsset;
+                            break;
+                        }
+                    }
+                }
+            }
+
+            if (!entity.GetMaterialComponent())
+            {
+                entity.GetComponents()->AddComponent(std::make_shared<CMaterialComponent>());
+            }
+
+            auto pCollider = std::make_shared<CCollisionComponent>();
+            if (objType == OBJECT_SPHERE)
+            {
+                pCollider->m_ColliderType = COLLIDER_SPHERE;
+                pCollider->m_Radius = 0.5f;
+            }
+            else if (objType == OBJECT_CAPSULE)
+            {
+                pCollider->m_ColliderType = COLLIDER_CAPSULE;
+                pCollider->m_Radius = 0.5f;
+                pCollider->m_Height = 2.0f;
+            }
+            else
+            {
+                pCollider->m_ColliderType = COLLIDER_BOX;
+                pCollider->m_Size = { 1.0f, 1.0f, 1.0f };
+            }
+            entity.GetComponents()->AddComponent(pCollider);
+
+            EnsureRuntimeEntityModel(entity);
+            pScene->m_vEntities.push_back(std::move(entity));
+            RefreshSceneScriptEntityPointers(*pScene);
+            pScene->BumpTransformRevision();
+            return GetOrCreateScriptEntityWrapper(pScene->m_vEntities.back());
         };
 
         g_SceneCallbacks.pfnDestroyEntity = [](CScriptEntity* pEntity)
@@ -1297,6 +1485,184 @@ namespace quark::script
             }
             return true;
         };
+        g_PhysicsCallbacks.pfnRaycastAll = [](Vec3 origin, Vec3 direction, float maxDistance,
+                                              bool includeTriggers, int ignoreEntityId,
+                                              SRaycastHit* pOutHits, int maxHits) -> int
+        {
+            CScene* pScene = CScriptEngine::Get().GetActiveScene();
+            if (!pScene || maxDistance <= 0.0f || direction.lengthSquared() <= 1e-12f)
+            {
+                return 0;
+            }
+            const Vec3 normDir = direction.normalized();
+            std::vector<SRaycastHit> vHits;
+            float currentDist = 0.0f;
+            Vec3 currentOrigin = origin;
+            int lastHitId = ignoreEntityId;
+            for (int iter = 0; iter < 64 && currentDist < maxDistance; ++iter)
+            {
+                quark::physics::SPhysicsRaycastHit rawHit;
+                if (!CScriptEngine::Get().GetPhysicsWorld().Raycast(
+                        *pScene, currentOrigin, normDir, maxDistance - currentDist, rawHit, includeTriggers, lastHitId))
+                {
+                    break;
+                }
+                SRaycastHit hit{};
+                hit.m_Hit = true;
+                hit.m_EntityId = rawHit.m_EntityId;
+                hit.m_Point = rawHit.m_Point;
+                hit.m_Normal = rawHit.m_Normal;
+                hit.m_Distance = currentDist + rawHit.m_Distance;
+                const int hitIndex = pScene->FindEntityIndexById(rawHit.m_EntityId);
+                if (hitIndex >= 0 && hitIndex < static_cast<int>(pScene->m_vEntities.size()))
+                {
+                    hit.m_pEntity = GetOrCreateScriptEntityWrapper(pScene->m_vEntities[static_cast<size_t>(hitIndex)]);
+                }
+                vHits.push_back(hit);
+                lastHitId = rawHit.m_EntityId;
+                const float advance = std::max(rawHit.m_Distance + 0.005f, 0.005f);
+                currentDist += advance;
+                currentOrigin = origin + normDir * currentDist;
+            }
+            if (pOutHits && maxHits > 0)
+            {
+                const int toWrite = std::min(static_cast<int>(vHits.size()), maxHits);
+                for (int i = 0; i < toWrite; ++i)
+                {
+                    pOutHits[i] = vHits[static_cast<size_t>(i)];
+                }
+                return toWrite;
+            }
+            return static_cast<int>(vHits.size());
+        };
+        g_PhysicsCallbacks.pfnOverlapSphere = [](Vec3 center, float radius,
+                                                 bool includeTriggers, int ignoreEntityId,
+                                                 CScriptEntity** ppOutEntities, int maxCount) -> int
+        {
+            CScene* pScene = CScriptEngine::Get().GetActiveScene();
+            if (!pScene || radius < 0.0f)
+            {
+                return 0;
+            }
+            int foundCount = 0;
+            const int entityCount = static_cast<int>(pScene->m_vEntities.size());
+            for (int i = 0; i < entityCount; ++i)
+            {
+                CEntity& entity = pScene->m_vEntities[static_cast<size_t>(i)];
+                if (entity.m_Id == ignoreEntityId)
+                {
+                    continue;
+                }
+                const CCollisionComponent* pCol = entity.GetCollisionComponent();
+                const CTransformComponent* pTr = entity.GetTransformComponent();
+                if (!pCol || !pCol->m_Enabled || !pTr || (!includeTriggers && pCol->m_IsTrigger))
+                {
+                    continue;
+                }
+                const Mat4 worldMat = quark::ComposeWorld(*pScene, i);
+                const Vec3 colCenter = Vec3(worldMat * pCol->m_Center);
+                const Vec3 s = pTr->m_Scale;
+                float colRadius = 0.5f;
+                if (pCol->m_ColliderType == COLLIDER_SPHERE)
+                {
+                    colRadius = pCol->m_Radius * std::max({ std::fabs(s.x), std::fabs(s.y), std::fabs(s.z) });
+                }
+                else if (pCol->m_ColliderType == COLLIDER_CAPSULE)
+                {
+                    colRadius = std::max(pCol->m_Radius, pCol->m_Height * 0.5f) *
+                        std::max({ std::fabs(s.x), std::fabs(s.y), std::fabs(s.z) });
+                }
+                else
+                {
+                    const Vec3 half = {
+                        std::fabs(pCol->m_Size.x * s.x) * 0.5f,
+                        std::fabs(pCol->m_Size.y * s.y) * 0.5f,
+                        std::fabs(pCol->m_Size.z * s.z) * 0.5f
+                    };
+                    const Vec3 clamped = {
+                        std::clamp(center.x, colCenter.x - half.x, colCenter.x + half.x),
+                        std::clamp(center.y, colCenter.y - half.y, colCenter.y + half.y),
+                        std::clamp(center.z, colCenter.z - half.z, colCenter.z + half.z)
+                    };
+                    if ((clamped - center).lengthSquared() <= radius * radius)
+                    {
+                        if (ppOutEntities && foundCount < maxCount)
+                        {
+                            ppOutEntities[foundCount] = GetOrCreateScriptEntityWrapper(entity);
+                        }
+                        ++foundCount;
+                    }
+                    continue;
+                }
+                const float totalR = radius + colRadius;
+                if ((colCenter - center).lengthSquared() <= totalR * totalR)
+                {
+                    if (ppOutEntities && foundCount < maxCount)
+                    {
+                        ppOutEntities[foundCount] = GetOrCreateScriptEntityWrapper(entity);
+                    }
+                    ++foundCount;
+                }
+            }
+            return foundCount;
+        };
+        g_PhysicsCallbacks.pfnOverlapBox = [](Vec3 center, Vec3 halfExtents,
+                                              bool includeTriggers, int ignoreEntityId,
+                                              CScriptEntity** ppOutEntities, int maxCount) -> int
+        {
+            CScene* pScene = CScriptEngine::Get().GetActiveScene();
+            if (!pScene)
+            {
+                return 0;
+            }
+            const Vec3 qHalf = { std::fabs(halfExtents.x), std::fabs(halfExtents.y), std::fabs(halfExtents.z) };
+            int foundCount = 0;
+            const int entityCount = static_cast<int>(pScene->m_vEntities.size());
+            for (int i = 0; i < entityCount; ++i)
+            {
+                CEntity& entity = pScene->m_vEntities[static_cast<size_t>(i)];
+                if (entity.m_Id == ignoreEntityId)
+                {
+                    continue;
+                }
+                const CCollisionComponent* pCol = entity.GetCollisionComponent();
+                const CTransformComponent* pTr = entity.GetTransformComponent();
+                if (!pCol || !pCol->m_Enabled || !pTr || (!includeTriggers && pCol->m_IsTrigger))
+                {
+                    continue;
+                }
+                const Mat4 worldMat = quark::ComposeWorld(*pScene, i);
+                const Vec3 colCenter = Vec3(worldMat * pCol->m_Center);
+                const Vec3 s = pTr->m_Scale;
+                Vec3 cHalf = {
+                    std::fabs(pCol->m_Size.x * s.x) * 0.5f,
+                    std::fabs(pCol->m_Size.y * s.y) * 0.5f,
+                    std::fabs(pCol->m_Size.z * s.z) * 0.5f
+                };
+                if (pCol->m_ColliderType == COLLIDER_SPHERE)
+                {
+                    const float r = pCol->m_Radius * std::max({ std::fabs(s.x), std::fabs(s.y), std::fabs(s.z) });
+                    cHalf = { r, r, r };
+                }
+                else if (pCol->m_ColliderType == COLLIDER_CAPSULE)
+                {
+                    const float r = pCol->m_Radius * std::max(std::fabs(s.x), std::fabs(s.z));
+                    const float h = pCol->m_Height * std::fabs(s.y) * 0.5f;
+                    cHalf = { r, std::max(r, h), r };
+                }
+                if (std::fabs(colCenter.x - center.x) <= (qHalf.x + cHalf.x) &&
+                    std::fabs(colCenter.y - center.y) <= (qHalf.y + cHalf.y) &&
+                    std::fabs(colCenter.z - center.z) <= (qHalf.z + cHalf.z))
+                {
+                    if (ppOutEntities && foundCount < maxCount)
+                    {
+                        ppOutEntities[foundCount] = GetOrCreateScriptEntityWrapper(entity);
+                    }
+                    ++foundCount;
+                }
+            }
+            return foundCount;
+        };
         g_PhysicsCallbacks.pfnAddForce = [](CScriptEntity* pEntity, Vec3 force)
         {
             if (!pEntity || !pEntity->GetRawEntity())
@@ -1317,6 +1683,17 @@ namespace quark::script
             if (CRigidbodyComponent* pBody = pEntity->GetRawEntity()->GetRigidbodyComponent())
             {
                 pBody->AddImpulse(impulse);
+            }
+        };
+        g_PhysicsCallbacks.pfnAddTorque = [](CScriptEntity* pEntity, Vec3 torque)
+        {
+            if (!pEntity || !pEntity->GetRawEntity())
+            {
+                return;
+            }
+            if (CRigidbodyComponent* pBody = pEntity->GetRawEntity()->GetRigidbodyComponent())
+            {
+                pBody->AddTorque(torque);
             }
         };
         g_PhysicsCallbacks.pfnSetVelocity = [](CScriptEntity* pEntity, Vec3 velocity)
@@ -1342,6 +1719,29 @@ namespace quark::script
             }
             return { 0.0f, 0.0f, 0.0f };
         };
+        g_PhysicsCallbacks.pfnSetAngularVelocity = [](CScriptEntity* pEntity, Vec3 angularVelocity)
+        {
+            if (!pEntity || !pEntity->GetRawEntity())
+            {
+                return;
+            }
+            if (CRigidbodyComponent* pBody = pEntity->GetRawEntity()->GetRigidbodyComponent())
+            {
+                pBody->SetAngularVelocity(angularVelocity);
+            }
+        };
+        g_PhysicsCallbacks.pfnGetAngularVelocity = [](CScriptEntity* pEntity) -> Vec3
+        {
+            if (!pEntity || !pEntity->GetRawEntity())
+            {
+                return { 0.0f, 0.0f, 0.0f };
+            }
+            if (const CRigidbodyComponent* pBody = pEntity->GetRawEntity()->GetRigidbodyComponent())
+            {
+                return pBody->m_AngularVelocity;
+            }
+            return { 0.0f, 0.0f, 0.0f };
+        };
         g_PhysicsCallbacks.pfnIsGrounded = [](CScriptEntity* pEntity) -> bool
         {
             if (!pEntity || !pEntity->GetRawEntity())
@@ -1354,6 +1754,29 @@ namespace quark::script
             }
             return false;
         };
+        g_PhysicsCallbacks.pfnSetTrigger = [](CScriptEntity* pEntity, bool isTrigger)
+        {
+            if (!pEntity || !pEntity->GetRawEntity())
+            {
+                return;
+            }
+            if (CCollisionComponent* pCol = pEntity->GetRawEntity()->GetCollisionComponent())
+            {
+                pCol->m_IsTrigger = isTrigger;
+            }
+        };
+        g_PhysicsCallbacks.pfnIsTrigger = [](CScriptEntity* pEntity) -> bool
+        {
+            if (!pEntity || !pEntity->GetRawEntity())
+            {
+                return false;
+            }
+            if (const CCollisionComponent* pCol = pEntity->GetRawEntity()->GetCollisionComponent())
+            {
+                return pCol->m_IsTrigger;
+            }
+            return false;
+        };
         g_PhysicsCallbacks.pfnSetGravity = [](Vec3 gravity)
         {
             CScriptEngine::Get().GetPhysicsWorld().SetGravity(gravity);
@@ -1361,6 +1784,156 @@ namespace quark::script
         g_PhysicsCallbacks.pfnGetGravity = []() -> Vec3
         {
             return CScriptEngine::Get().GetPhysicsWorld().GetGravity();
+        };
+
+        g_RenderCallbacks.pfnSetMaterialColor = [](CScriptEntity* pEntity, Color color)
+        {
+            if (pEntity)
+            {
+                pEntity->SetMaterialColor(color);
+            }
+        };
+        g_RenderCallbacks.pfnGetMaterialColor = [](CScriptEntity* pEntity) -> Color
+        {
+            return pEntity ? pEntity->GetMaterialColor() : WHITE;
+        };
+        g_RenderCallbacks.pfnSetMaterialTexture = [](CScriptEntity* pEntity, const char* pTexturePath)
+        {
+            if (!pEntity || !pEntity->GetRawEntity())
+            {
+                return;
+            }
+            if (CMaterialComponent* pMat = pEntity->GetRawEntity()->GetMaterialComponent())
+            {
+                pMat->m_TextureName = pTexturePath ? pTexturePath : "";
+                pMat->m_AlbedoTextureName = pMat->m_TextureName;
+                pMat->m_TextureSource = pMat->m_TextureName.empty() ? TEXTURE_NONE : TEXTURE_EXTERNAL;
+            }
+        };
+        g_RenderCallbacks.pfnGetMaterialTexture = [](CScriptEntity* pEntity) -> const char*
+        {
+            if (!pEntity || !pEntity->GetRawEntity())
+            {
+                return "";
+            }
+            if (const CMaterialComponent* pMat = pEntity->GetRawEntity()->GetMaterialComponent())
+            {
+                return pMat->m_TextureName.c_str();
+            }
+            return "";
+        };
+        g_RenderCallbacks.pfnSetMaterialUVScale = [](CScriptEntity* pEntity, Vec2 uvScale)
+        {
+            if (!pEntity || !pEntity->GetRawEntity())
+            {
+                return;
+            }
+            if (CMaterialComponent* pMat = pEntity->GetRawEntity()->GetMaterialComponent())
+            {
+                pMat->m_UvScale = uvScale;
+            }
+        };
+        g_RenderCallbacks.pfnGetMaterialUVScale = [](CScriptEntity* pEntity) -> Vec2
+        {
+            if (!pEntity || !pEntity->GetRawEntity())
+            {
+                return { 1.0f, 1.0f };
+            }
+            if (const CMaterialComponent* pMat = pEntity->GetRawEntity()->GetMaterialComponent())
+            {
+                return pMat->m_UvScale;
+            }
+            return { 1.0f, 1.0f };
+        };
+        g_RenderCallbacks.pfnSetLightEnabled = [](CScriptEntity* pEntity, bool enabled)
+        {
+            if (pEntity)
+            {
+                pEntity->SetLightEnabled(enabled);
+            }
+        };
+        g_RenderCallbacks.pfnIsLightEnabled = [](CScriptEntity* pEntity) -> bool
+        {
+            return pEntity ? pEntity->IsLightEnabled() : false;
+        };
+        g_RenderCallbacks.pfnSetLightColor = [](CScriptEntity* pEntity, Color color)
+        {
+            if (pEntity)
+            {
+                pEntity->SetLightColor(color);
+            }
+        };
+        g_RenderCallbacks.pfnGetLightColor = [](CScriptEntity* pEntity) -> Color
+        {
+            return pEntity ? pEntity->GetLightColor() : WHITE;
+        };
+        g_RenderCallbacks.pfnSetLightIntensity = [](CScriptEntity* pEntity, float intensity)
+        {
+            if (pEntity)
+            {
+                pEntity->SetLightIntensity(intensity);
+            }
+        };
+        g_RenderCallbacks.pfnGetLightIntensity = [](CScriptEntity* pEntity) -> float
+        {
+            return pEntity ? pEntity->GetLightIntensity() : 1.0f;
+        };
+        g_RenderCallbacks.pfnSetLightRange = [](CScriptEntity* pEntity, float range)
+        {
+            if (pEntity)
+            {
+                pEntity->SetLightRange(range);
+            }
+        };
+        g_RenderCallbacks.pfnGetLightRange = [](CScriptEntity* pEntity) -> float
+        {
+            return pEntity ? pEntity->GetLightRange() : 10.0f;
+        };
+        g_RenderCallbacks.pfnSetLightSpotAngle = [](CScriptEntity* pEntity, float spotAngle)
+        {
+            if (!pEntity || !pEntity->GetRawEntity())
+            {
+                return;
+            }
+            if (CLightComponent* pLight = pEntity->GetRawEntity()->GetLightComponent())
+            {
+                pLight->m_Light.m_SpotAngle = spotAngle;
+            }
+        };
+        g_RenderCallbacks.pfnGetLightSpotAngle = [](CScriptEntity* pEntity) -> float
+        {
+            if (!pEntity || !pEntity->GetRawEntity())
+            {
+                return 45.0f;
+            }
+            if (const CLightComponent* pLight = pEntity->GetRawEntity()->GetLightComponent())
+            {
+                return pLight->m_Light.m_SpotAngle;
+            }
+            return 45.0f;
+        };
+        g_RenderCallbacks.pfnSetLightType = [](CScriptEntity* pEntity, int lightType)
+        {
+            if (!pEntity || !pEntity->GetRawEntity())
+            {
+                return;
+            }
+            if (CLightComponent* pLight = pEntity->GetRawEntity()->GetLightComponent())
+            {
+                pLight->m_Light.m_Light.type = std::clamp(lightType, 0, 3);
+            }
+        };
+        g_RenderCallbacks.pfnGetLightType = [](CScriptEntity* pEntity) -> int
+        {
+            if (!pEntity || !pEntity->GetRawEntity())
+            {
+                return 1;
+            }
+            if (const CLightComponent* pLight = pEntity->GetRawEntity()->GetLightComponent())
+            {
+                return pLight->m_Light.m_Light.type;
+            }
+            return 1;
         };
 
         g_DebugCallbacks.pfnLog = [](int level, const char* pMessage)
@@ -1502,6 +2075,7 @@ namespace quark::script
             bridgeOut << "    STimeCallbacks g_TimeCallbacks;\n";
             bridgeOut << "    SSceneCallbacks g_SceneCallbacks;\n";
             bridgeOut << "    SPhysicsCallbacks g_PhysicsCallbacks;\n";
+            bridgeOut << "    SRenderCallbacks g_RenderCallbacks;\n";
             bridgeOut << "    SDebugCallbacks g_DebugCallbacks;\n";
             bridgeOut << "}\n\n";
             bridgeOut << "extern \"C\" QUARK_SCRIPT_API void SetScriptInputCallbacks(const ::quark::script::SInputCallbacks* pCallbacks)\n";
@@ -1530,6 +2104,13 @@ namespace quark::script
             bridgeOut << "    if (pCallbacks)\n";
             bridgeOut << "    {\n";
             bridgeOut << "        ::quark::script::g_PhysicsCallbacks = *pCallbacks;\n";
+            bridgeOut << "    }\n";
+            bridgeOut << "}\n\n";
+            bridgeOut << "extern \"C\" QUARK_SCRIPT_API void SetScriptRenderCallbacks(const ::quark::script::SRenderCallbacks* pCallbacks)\n";
+            bridgeOut << "{\n";
+            bridgeOut << "    if (pCallbacks)\n";
+            bridgeOut << "    {\n";
+            bridgeOut << "        ::quark::script::g_RenderCallbacks = *pCallbacks;\n";
             bridgeOut << "    }\n";
             bridgeOut << "}\n\n";
             bridgeOut << "extern \"C\" QUARK_SCRIPT_API void SetScriptDebugCallbacks(const ::quark::script::SDebugCallbacks* pCallbacks)\n";
@@ -1776,6 +2357,14 @@ namespace quark::script
             TraceLog(LogLevel::Info, "SCRIPT", "Configured script physics callbacks bridge");
         }
 
+        using FSetScriptRenderCallbacks = void (*)(const SRenderCallbacks*);
+        auto pfnSetRender = reinterpret_cast<FSetScriptRenderCallbacks>(m_Dll.GetSymbol("SetScriptRenderCallbacks"));
+        if (pfnSetRender)
+        {
+            pfnSetRender(&g_RenderCallbacks);
+            TraceLog(LogLevel::Info, "SCRIPT", "Configured script render callbacks bridge");
+        }
+
         using FSetScriptDebugCallbacks = void (*)(const SDebugCallbacks*);
         auto pfnSetDebug = reinterpret_cast<FSetScriptDebugCallbacks>(m_Dll.GetSymbol("SetScriptDebugCallbacks"));
         if (pfnSetDebug)
@@ -1901,6 +2490,12 @@ namespace quark::script
             {
                 pfnSetPhysics(&g_PhysicsCallbacks);
             }
+            using FSetScriptRenderCallbacks = void (*)(const SRenderCallbacks*);
+            auto pfnSetRender = reinterpret_cast<FSetScriptRenderCallbacks>(m_pActiveDll->GetSymbol("SetScriptRenderCallbacks"));
+            if (pfnSetRender)
+            {
+                pfnSetRender(&g_RenderCallbacks);
+            }
             using FSetScriptDebugCallbacks = void (*)(const SDebugCallbacks*);
             auto pfnSetDebug = reinterpret_cast<FSetScriptDebugCallbacks>(m_pActiveDll->GetSymbol("SetScriptDebugCallbacks"));
             if (pfnSetDebug)
@@ -2005,7 +2600,8 @@ namespace quark::script
             {
                 if (LoadScriptDll(activeDllPath.string()))
                 {
-                    if (m_Dll.GetSymbol("SetScriptInputCallbacks"))
+                    if (m_Dll.GetSymbol("SetScriptInputCallbacks") &&
+                        m_Dll.GetSymbol("SetScriptRenderCallbacks"))
                     {
                         loaded = true;
                     }

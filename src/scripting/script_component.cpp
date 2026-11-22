@@ -32,6 +32,173 @@ namespace quark::script
         return m_pEntity ? m_pEntity->m_Name : "";
     }
 
+    void CScriptEntity::SetName(const std::string& name)
+    {
+        if (m_pEntity)
+        {
+            m_pEntity->m_Name = name;
+        }
+    }
+
+    bool CScriptEntity::HasTag(const std::string& tag) const
+    {
+        if (!m_pEntity)
+        {
+            return false;
+        }
+        for (const std::string& existing : m_pEntity->m_vTags)
+        {
+            if (existing == tag)
+            {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    void CScriptEntity::AddTag(const std::string& tag)
+    {
+        if (m_pEntity && !tag.empty() && !HasTag(tag))
+        {
+            m_pEntity->m_vTags.push_back(tag);
+        }
+    }
+
+    Color CScriptEntity::GetMaterialColor() const
+    {
+        if (m_pEntity)
+        {
+            if (const CMaterialComponent* pMat = m_pEntity->GetMaterialComponent())
+            {
+                return pMat->m_Color;
+            }
+        }
+        return WHITE;
+    }
+
+    void CScriptEntity::SetMaterialColor(const Color& color)
+    {
+        if (!m_pEntity)
+        {
+            return;
+        }
+        CMaterialComponent* pMat = m_pEntity->GetMaterialComponent();
+        if (!pMat && m_pEntity->GetComponents())
+        {
+            m_pEntity->GetComponents()->AddComponent(std::make_shared<CMaterialComponent>());
+            pMat = m_pEntity->GetMaterialComponent();
+        }
+        if (pMat)
+        {
+            pMat->m_Color = color;
+        }
+        if (CMeshComponent* pMesh = m_pEntity->GetMeshComponent())
+        {
+            for (int i = 0; i < pMesh->m_Model.materialCount; ++i)
+            {
+                if (pMesh->m_Model.materials && pMesh->m_Model.materials[i].maps)
+                {
+                    pMesh->m_Model.materials[i].maps[MATERIAL_MAP_DIFFUSE].color = color;
+                }
+            }
+        }
+    }
+
+    Color CScriptEntity::GetLightColor() const
+    {
+        if (m_pEntity)
+        {
+            if (const CLightComponent* pLight = m_pEntity->GetLightComponent())
+            {
+                return pLight->m_Light.m_Color;
+            }
+        }
+        return WHITE;
+    }
+
+    void CScriptEntity::SetLightColor(const Color& color)
+    {
+        if (m_pEntity)
+        {
+            if (CLightComponent* pLight = m_pEntity->GetLightComponent())
+            {
+                pLight->m_Light.m_Color = color;
+                pLight->m_Light.m_Light.color = color;
+            }
+        }
+    }
+
+    float CScriptEntity::GetLightIntensity() const
+    {
+        if (m_pEntity)
+        {
+            if (const CLightComponent* pLight = m_pEntity->GetLightComponent())
+            {
+                return pLight->m_Light.m_Intensity;
+            }
+        }
+        return 1.0f;
+    }
+
+    void CScriptEntity::SetLightIntensity(float intensity)
+    {
+        if (m_pEntity)
+        {
+            if (CLightComponent* pLight = m_pEntity->GetLightComponent())
+            {
+                pLight->m_Light.m_Intensity = intensity;
+            }
+        }
+    }
+
+    float CScriptEntity::GetLightRange() const
+    {
+        if (m_pEntity)
+        {
+            if (const CLightComponent* pLight = m_pEntity->GetLightComponent())
+            {
+                return pLight->m_Light.m_Range;
+            }
+        }
+        return 10.0f;
+    }
+
+    void CScriptEntity::SetLightRange(float range)
+    {
+        if (m_pEntity)
+        {
+            if (CLightComponent* pLight = m_pEntity->GetLightComponent())
+            {
+                pLight->m_Light.m_Range = range;
+            }
+        }
+    }
+
+    bool CScriptEntity::IsLightEnabled() const
+    {
+        if (m_pEntity)
+        {
+            if (const CLightComponent* pLight = m_pEntity->GetLightComponent())
+            {
+                return pLight->m_Enabled && pLight->m_Light.m_Enabled;
+            }
+        }
+        return false;
+    }
+
+    void CScriptEntity::SetLightEnabled(bool enabled)
+    {
+        if (m_pEntity)
+        {
+            if (CLightComponent* pLight = m_pEntity->GetLightComponent())
+            {
+                pLight->m_Enabled = enabled;
+                pLight->m_Light.m_Enabled = enabled;
+                pLight->m_Light.m_Light.enabled = enabled ? 1 : 0;
+            }
+        }
+    }
+
     CTransformComponent* CScriptEntity::GetTransformComponent()
     {
         return m_pEntity ? m_pEntity->GetTransformComponent() : nullptr;
@@ -416,6 +583,8 @@ namespace quark::script
                 case EScriptFieldType::STRING:
                 {
                     currentOffset = (currentOffset + alignof(std::string) - 1) & ~(alignof(std::string) - 1);
+                    auto* pDst = reinterpret_cast<std::string*>(reinterpret_cast<char*>(m_pInstance) + currentOffset);
+                    *pDst = field.m_StringValue;
                     m_pInstance->SetPropertyString(field.m_Name, field.m_StringValue);
                     currentOffset += sizeof(std::string);
                     break;
@@ -442,8 +611,9 @@ namespace quark::script
                 case EScriptFieldType::ASSET_REF:
                 {
                     currentOffset = (currentOffset + alignof(SAssetRef) - 1) & ~(alignof(SAssetRef) - 1);
-                    SAssetRef assetRef(field.m_AssetPathValue);
-                    m_pInstance->SetPropertyAssetRef(field.m_Name, assetRef);
+                    auto* pDst = reinterpret_cast<SAssetRef*>(reinterpret_cast<char*>(m_pInstance) + currentOffset);
+                    pDst->m_Path = field.m_AssetPathValue;
+                    m_pInstance->SetPropertyAssetRef(field.m_Name, *pDst);
                     currentOffset += sizeof(SAssetRef);
                     break;
                 }
@@ -535,6 +705,11 @@ namespace quark::script
                     {
                         field.m_StringValue = val;
                     }
+                    else
+                    {
+                        auto* pSrc = reinterpret_cast<const std::string*>(reinterpret_cast<const char*>(m_pInstance) + currentOffset);
+                        field.m_StringValue = *pSrc;
+                    }
                     currentOffset += sizeof(std::string);
                     break;
                 }
@@ -577,6 +752,11 @@ namespace quark::script
                     if (m_pInstance->GetPropertyAssetRef(field.m_Name, val))
                     {
                         field.m_AssetPathValue = val.m_Path;
+                    }
+                    else
+                    {
+                        auto* pSrc = reinterpret_cast<const SAssetRef*>(reinterpret_cast<const char*>(m_pInstance) + currentOffset);
+                        field.m_AssetPathValue = pSrc->m_Path;
                     }
                     currentOffset += sizeof(SAssetRef);
                     break;

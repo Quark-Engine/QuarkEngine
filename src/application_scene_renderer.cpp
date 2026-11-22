@@ -424,32 +424,52 @@ namespace
             return;
         }
 
+        std::vector<Vec3> vUnitDirs;
+        vUnitDirs.reserve(vFocusPoints.size());
         Vec3 dirSum = { 0.0f, 0.0f, 0.0f };
-        Vec3 pointSum = { 0.0f, 0.0f, 0.0f };
-        int validCount = 0;
+        float distSum = 0.0f;
         for (const Vec3& pt : vFocusPoints)
         {
             const Vec3 toPt = pt - lightPosition;
             const float dist = toPt.length();
             if (dist > 0.001f)
             {
-                dirSum = dirSum + (toPt / dist);
-                pointSum = pointSum + pt;
-                ++validCount;
+                const Vec3 unitDir = toPt * (1.0f / dist);
+                vUnitDirs.push_back(unitDir);
+                dirSum = dirSum + unitDir;
+                distSum += dist;
             }
         }
 
-        Vec3 forward = (validCount > 0 && dirSum.length() > 0.001f)
+        Vec3 forward = (!vUnitDirs.empty() && dirSum.length() > 0.001f)
             ? dirSum.normalized()
             : Vec3{ 0.0f, -1.0f, 0.0f };
-        shadowCamera.target = (validCount > 0)
-            ? (pointSum * (1.0f / static_cast<float>(validCount)))
-            : (lightPosition + forward);
-        if ((shadowCamera.target - lightPosition).length() <= 0.001f)
+
+        for (int iter = 0; iter < 12 && !vUnitDirs.empty(); ++iter)
         {
-            shadowCamera.target = lightPosition + forward;
+            Vec3 worstDir = forward;
+            float minDot = 1.0f;
+            for (const Vec3& d : vUnitDirs)
+            {
+                const float c = forward.dot(d);
+                if (c < minDot)
+                {
+                    minDot = c;
+                    worstDir = d;
+                }
+            }
+            const float step = 0.35f / static_cast<float>(iter + 1);
+            const Vec3 blended = forward * (1.0f - step) + worstDir * step;
+            if (blended.length() > 0.001f)
+            {
+                forward = blended.normalized();
+            }
         }
-        forward = (shadowCamera.target - lightPosition).normalized();
+
+        const float avgDist = !vUnitDirs.empty()
+            ? std::max(distSum / static_cast<float>(vUnitDirs.size()), 1.0f)
+            : 4.0f;
+        shadowCamera.target = lightPosition + forward * avgDist;
 
         shadowCamera.up = (std::fabs(forward.y) > 0.98f)
             ? Vec3{ 0.0f, 0.0f, -1.0f }
@@ -472,7 +492,7 @@ namespace
         }
 
         const float requiredFovDeg = 2.0f * std::atan(maxTanHalfAngle * 1.18f) * RAD2DEG;
-        shadowCamera.fovy = std::clamp(requiredFovDeg, 55.0f, 92.0f);
+        shadowCamera.fovy = std::clamp(requiredFovDeg, 55.0f, 125.0f);
     }
 
     void RenderSceneShadowMaps(CScene& scene, Shader shadowShader,
@@ -532,10 +552,6 @@ namespace
                 }
 
                 const Mat4& entityTransform = vFrameData[sourceIndex].m_MeshWorldTransform;
-                if (!IsBoundsVisible(vFrameData[sourceIndex].m_WorldBounds, aShadowCameras[slot], 1.0f))
-                {
-                    continue;
-                }
                 const bool mirroredTransform = quark::HasNegativeDeterminant(entityTransform);
                 if (mirroredTransform)
                 {

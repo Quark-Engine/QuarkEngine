@@ -609,3 +609,93 @@ TEST(Physics, TiltedCubeFallsOffEdgeOntoFlatFace)
     });
     CHECK(maxUpAlign > 0.999f);
 }
+
+namespace
+{
+    class CTestTriggerLoggerScript : public IScript
+    {
+    public:
+        std::string m_TriggerMessage = "Trigger activated!";
+
+        void OnTriggerEnter(ScriptEntity* pOther) override
+        {
+            const std::string otherName = pOther ? pOther->GetName() : "Unknown";
+            Debug::Log("TRIGGER_ENTER:" + m_TriggerMessage + ":" + otherName);
+        }
+    };
+} // anonymous
+
+REGISTER_SCRIPT(CTestTriggerLoggerScript)
+
+TEST(Physics, ScriptApiTriggerLoggingRaycastOverlapAndSpawn)
+{
+    auto& engine = quark::script::CScriptEngine::Get();
+    engine.ClearLogs();
+
+    CScene scene;
+    AddBoxEntity(scene, "Floor", { 0.0f, -0.5f, 0.0f }, { 20.0f, 1.0f, 20.0f }, false);
+
+    CEntity& triggerCube = AddBoxEntity(scene, "TriggerCube", { 0.0f, 0.0f, 0.0f }, { 1.0f, 1.0f, 1.0f }, true);
+    auto pScriptComp = std::make_shared<quark::script::CScriptComponent>();
+    pScriptComp->m_ScriptName = "CTestTriggerLoggerScript";
+    quark::script::SScriptField msgField;
+    msgField.m_Name = "m_TriggerMessage";
+    msgField.m_Type = quark::script::EScriptFieldType::STRING;
+    msgField.m_StringValue = "Custom trigger log";
+    pScriptComp->m_vFields.push_back(msgField);
+    triggerCube.GetComponents()->AddComponent(pScriptComp);
+
+    CEntity& player = AddCapsuleEntity(scene, "Player", { -2.0f, 1.0f, 0.0f }, 0.5f, 2.0f);
+    auto pPlayerBody = std::make_shared<CRigidbodyComponent>();
+    pPlayerBody->m_UseGravity = false;
+    pPlayerBody->m_LinearDrag = 0.0f;
+    pPlayerBody->m_Velocity = { 5.0f, 0.0f, 0.0f };
+    player.GetComponents()->AddComponent(pPlayerBody);
+
+    CEntity& lightEnt = AddPhysicsEntity(scene, 3, "SceneLight", { 0.0f, 4.0f, 0.0f });
+    lightEnt.GetComponents()->AddComponent(std::make_shared<CLightComponent>());
+
+    engine.StartPlay(scene, "");
+    Physics::SetVelocity(Scene::FindEntityByName("Player"), { 5.0f, 0.0f, 0.0f });
+    for (int i = 0; i < 30; ++i)
+    {
+        engine.UpdatePlay(scene, 0.02f);
+    }
+
+    bool sawPlayerTriggerLog = false;
+    bool sawFloorTriggerLog = false;
+    for (const auto& entry : engine.GetLogs())
+    {
+        if (entry.m_Message == "TRIGGER_ENTER:Custom trigger log:Player")
+        {
+            sawPlayerTriggerLog = true;
+        }
+        if (entry.m_Message.find(":Floor") != std::string::npos)
+        {
+            sawFloorTriggerLog = true;
+        }
+    }
+    CHECK(sawPlayerTriggerLog);
+    CHECK(!sawFloorTriggerLog);
+
+    ScriptEntity* pSpawned = Scene::CreatePrimitive(
+        EScriptPrimitiveType::CUBE, "SpawnedCube", { 0.0f, 0.0f, -5.0f }, { 1.0f, 1.0f, 1.0f });
+    CHECK(pSpawned != nullptr);
+    MaterialAPI::SetColor(pSpawned, { 255, 64, 32, 255 });
+    CHECK(MaterialAPI::GetColor(pSpawned).r == 255);
+    CHECK(MaterialAPI::GetColor(pSpawned).g == 64);
+
+    ScriptEntity* pLightWrapper = Scene::FindEntityByName("SceneLight");
+    CHECK(pLightWrapper != nullptr);
+    LightAPI::SetIntensity(pLightWrapper, 3.25f);
+    LightAPI::SetRange(pLightWrapper, 24.0f);
+    CHECK_NEAR(LightAPI::GetIntensity(pLightWrapper), 3.25f, 0.001f);
+    CHECK_NEAR(LightAPI::GetRange(pLightWrapper), 24.0f, 0.001f);
+
+    const auto vHits = Physics::RaycastAll({ 0.0f, 0.0f, 2.0f }, { 0.0f, 0.0f, -1.0f }, 20.0f, true);
+    CHECK(vHits.size() >= 2);
+    const auto vOverlaps = Physics::OverlapSphere({ 0.0f, 0.0f, -5.0f }, 1.0f, false);
+    CHECK(!vOverlaps.empty());
+
+    engine.StopPlay(scene);
+}

@@ -93,12 +93,14 @@ float shadow_factor(int index, float3 fragPosition, float3 normal, float3 lightD
     }
 
     float NdotL = saturate(dot(normal, lightDir));
-    float sinTheta = sqrt(max(1.0 - NdotL * NdotL, 0.0));
+    if (NdotL <= 0.0001)
+    {
+        return 1.0;
+    }
     float2 texelSize = GetShadowTexelSize(index);
     float baseBias = max(shadowBias, 0.0005);
-    float3 shadowWorldPos = fragPosition + normal * (baseBias * 14.0 * sinTheta);
 
-    float4 lightClip = mul(lightProjections[index], mul(lightViews[index], float4(shadowWorldPos, 1.0)));
+    float4 lightClip = mul(lightProjections[index], mul(lightViews[index], float4(fragPosition, 1.0)));
     if (lightClip.w <= 0.0)
     {
         return 0.0;
@@ -114,7 +116,9 @@ float shadow_factor(int index, float3 fragPosition, float3 normal, float3 lightD
     }
 
     float currentDepth = lightClip.w;
-    float bias = currentDepth * baseBias * (1.0 + 3.0 * (1.0 - NdotL)) + 0.012;
+    float slopeFactor = 1.0 - NdotL;
+    float baseDepthBias = currentDepth * baseBias * (1.2 + 3.5 * slopeFactor) + 0.012;
+    float tapSlopeBias = currentDepth * baseBias * (1.0 + 3.0 * slopeFactor) + 0.006;
     int2 mapSize = int2(round(1.0 / texelSize));
     float2 texelCoord = projected.xy * float2(mapSize) - 0.5;
     int2 baseTexel = int2(floor(texelCoord));
@@ -134,6 +138,8 @@ float shadow_factor(int index, float3 fragPosition, float3 normal, float3 lightD
             float wy = (y == -radius) ? (1.0 - fracCoord.y) : ((y == radius + 1) ? fracCoord.y : 1.0);
             int2 texel = clamp(baseTexel + int2(x, y), int2(0, 0), mapSize - 1);
             float closestDepth = SampleShadowDepth(index, texel);
+            float tapDist = abs(float(x) - fracCoord.x) + abs(float(y) - fracCoord.y);
+            float bias = baseDepthBias + tapSlopeBias * tapDist;
             shadow += ((currentDepth - bias > closestDepth) ? 1.0 : 0.0) * (wx * wy);
         }
     }
@@ -229,12 +235,16 @@ float4 main(PSInput input) : SV_TARGET
             }
 
             float directLight = max(dot(normal, lightDir), 0.0);
-            float shadow = (shadowsEnabled == 1) ? shadow_factor(i, input.fragPosition, normal, lightDir) : 0.0;
-            float wrappedLight = clamp((dot(normal, lightDir) + 0.28) / 1.28, 0.0, 1.0);
-            float diffuse = max(directLight, wrappedLight * 0.25);
+            float shadow = (shadowsEnabled == 1 && directLight > 0.0001)
+                ? shadow_factor(i, input.fragPosition, normal, lightDir)
+                : 0.0;
+            float wrappedLight = clamp((dot(normal, lightDir) + 0.50) / 1.50, 0.0, 1.0);
+            float directTerm = directLight * (1.0 - shadow);
+            float wrapTerm = wrappedLight * 0.30 * (1.0 - shadow * clamp(directLight * 4.0, 0.0, 1.0));
+            float diffuse = max(directTerm, wrapTerm);
 
             float3 bounce = lightColor * attenuation * 0.08;
-            lightAccum += (lightColor * diffuse * attenuation) * (1.0 - shadow) + bounce;
+            lightAccum += (lightColor * diffuse * attenuation) + bounce;
 
             if (directLight > 0.0)
             {
