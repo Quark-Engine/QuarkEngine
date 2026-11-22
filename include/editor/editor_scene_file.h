@@ -9,8 +9,6 @@ class CSceneFileService
 {
 public:
     static void SaveAs(CEditor& editor);
-
-private:
     static std::string BrowseSceneSavePath(const std::string& defaultName);
 };
 

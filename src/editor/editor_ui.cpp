@@ -269,11 +269,61 @@ void CEditor::DrawMainMenuBar(SPluginContext* pPluginCtx, ImGuiID dockspaceId,
         {
             m_pPluginManager->DrawUiRegion(UI_MENU_FILE, *pPluginCtx);
 
+            if (ImGui::MenuItem("New Scene..."))
+            {
+                camera.ReleaseCapture();
+                const std::string selectedFile = CSceneFileService::BrowseSceneSavePath("new_scene.json");
+                if (!selectedFile.empty())
+                {
+                    CreateNewScene(std::filesystem::path(selectedFile), true);
+                }
+            }
+
+            if (ImGui::BeginMenu("Open Scene"))
+            {
+                const std::vector<std::string> vSceneFiles = CProjectService::GetSceneFiles(m_ProjectPath);
+                std::error_code activeEc;
+                const std::filesystem::path normalizedActive = m_ActiveScenePath.empty()
+                    ? std::filesystem::path()
+                    : std::filesystem::weakly_canonical(m_ActiveScenePath, activeEc);
+
+                for (const std::string& sceneRelPath : vSceneFiles)
+                {
+                    const std::filesystem::path fullScenePath = std::filesystem::path(m_ProjectPath) / sceneRelPath;
+                    std::error_code candEc;
+                    const std::filesystem::path normalizedCandidate = std::filesystem::weakly_canonical(fullScenePath, candEc);
+                    const bool isCurrent = !normalizedActive.empty() && !candEc && normalizedCandidate == normalizedActive;
+                    if (ImGui::MenuItem(sceneRelPath.c_str(), nullptr, isCurrent))
+                    {
+                        OpenScene(fullScenePath);
+                    }
+                }
+
+                if (!vSceneFiles.empty())
+                {
+                    ImGui::Separator();
+                }
+
+                if (ImGui::MenuItem("Browse..."))
+                {
+                    camera.ReleaseCapture();
+                    const std::string selectedFile = CDesktopIntegration::OpenFileDialog(
+                        "Scene JSON",
+                        "Scene JSON (*.json)\0*.json\0All Files (*.*)\0*.*\0");
+                    if (!selectedFile.empty())
+                    {
+                        OpenScene(std::filesystem::path(selectedFile));
+                    }
+                }
+
+                ImGui::EndMenu();
+            }
+
+            ImGui::Separator();
+
             if (ImGui::MenuItem(lang.Word("save"), "Ctrl+S"))
             {
-                CProjectService::Save(m_ProjectPath, m_Scene);
-                DispatchPluginEvent(PLUGIN_EVENT_SCENE_SAVED);
-                m_SceneDirty = false;
+                SaveActiveScene();
             }
             if (ImGui::MenuItem(lang.Word("save_as"), "Ctrl+Shift+S"))
             {

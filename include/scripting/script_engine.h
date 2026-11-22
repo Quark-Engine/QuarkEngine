@@ -8,6 +8,8 @@
 #include <functional>
 #include <memory>
 #include <string>
+#include <unordered_map>
+#include <unordered_set>
 #include <vector>
 
 namespace quark::script
@@ -45,6 +47,7 @@ namespace quark::script
     {
     public:
         using FProgressCallback = std::function<void(const std::string&)>;
+        using FSceneLoadedCallback = std::function<void(CScene&)>;
 
         static CScriptEngine& Get();
 
@@ -60,9 +63,39 @@ namespace quark::script
         void DestroyScript(const std::string& scriptName, IScript* pScript);
 
         void StartPlay(CScene& scene, const std::string& projectPath,
-                       CDynamicLibrary* pExternalDll = nullptr);
+                       CDynamicLibrary* pExternalDll = nullptr,
+                       const std::string& activeScenePath = "",
+                       FSceneLoadedCallback onSceneLoaded = nullptr);
         void UpdatePlay(CScene& scene, float deltaTime);
         void StopPlay(CScene& scene);
+
+        bool RequestLoadScene(const std::string& scenePath);
+        bool ReloadActiveScene();
+        bool FlushPendingSceneLoad(CScene& scene);
+        const std::string& GetActiveScenePath() const
+        {
+            return m_ActiveScenePath;
+        }
+        const std::string& GetActiveSceneName() const
+        {
+            return m_ActiveSceneName;
+        }
+        const std::string& GetActiveProjectPath() const
+        {
+            return m_ActiveProjectPath;
+        }
+        void MarkDontDestroyOnLoad(int entityId);
+        void ClearPersistentData();
+        void SetPersistentString(const std::string& key, const std::string& value);
+        bool GetPersistentString(const std::string& key, std::string& outValue) const;
+        void SetPersistentInt(const std::string& key, int value);
+        int GetPersistentInt(const std::string& key, int defaultValue) const;
+        void SetPersistentFloat(const std::string& key, float value);
+        float GetPersistentFloat(const std::string& key, float defaultValue) const;
+        void SetPersistentBool(const std::string& key, bool value);
+        bool GetPersistentBool(const std::string& key, bool defaultValue) const;
+        bool HasPersistentKey(const std::string& key) const;
+        void RemovePersistentKey(const std::string& key);
 
         bool IsPlaying() const
         {
@@ -116,19 +149,33 @@ namespace quark::script
         CScriptEngine(const CScriptEngine&) = delete;
         CScriptEngine& operator=(const CScriptEngine&) = delete;
 
+        bool ExecuteLoadScene(CScene& scene, const std::string& resolvedScenePath);
+        std::string ResolveSceneFilePath(const std::string& scenePath) const;
+        void UpdateActiveSceneIdentity(const std::string& resolvedScenePath);
+
         CDynamicLibrary m_Dll;
         CDynamicLibrary* m_pActiveDll = nullptr;
         CScene* m_pActiveScene = nullptr;
+        FSceneLoadedCallback m_OnSceneLoaded;
         quark::physics::CPhysicsWorld m_PhysicsWorld;
         std::string m_ActiveProjectPath;
+        std::string m_ActiveScenePath;
+        std::string m_ActiveSceneName;
         float m_FixedAccumulator = 0.0f;
         bool m_IsPlaying = false;
+        bool m_InUpdatePlay = false;
         bool m_ViewportHovered = true;
         bool m_CursorLocked = false;
         std::string m_LoadedDllPath;
         std::vector<SParsedScriptInfo> m_vAvailableScripts;
         std::vector<int> m_vPendingDestroyIds;
         std::string m_PendingLoadScenePath;
+        std::vector<std::string> m_vCachedSceneList;
+        std::unordered_set<int> m_DontDestroyEntityIds;
+        std::unordered_map<std::string, std::string> m_PersistentStrings;
+        std::unordered_map<std::string, int> m_PersistentInts;
+        std::unordered_map<std::string, float> m_PersistentFloats;
+        std::unordered_map<std::string, bool> m_PersistentBools;
         std::vector<SScriptLogEntry> m_vLogs;
     };
 

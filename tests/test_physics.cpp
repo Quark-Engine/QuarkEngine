@@ -2,10 +2,13 @@
 
 #include "QuarkEngine/SDK.h"
 #include "engine/physics_world.h"
+#include "engine/scene_document.h"
 #include "scene.h"
 #include "scripting/script_engine.h"
 
 #include <cmath>
+#include <filesystem>
+#include <fstream>
 
 namespace
 {
@@ -698,4 +701,156 @@ TEST(Physics, ScriptApiTriggerLoggingRaycastOverlapAndSpawn)
     CHECK(!vOverlaps.empty());
 
     engine.StopPlay(scene);
+}
+
+namespace
+{
+    class CPersistentTrackerScript final : public quark::script::IScript
+    {
+    public:
+        static inline int ms_StartCount = 0;
+        static inline int ms_DestroyCount = 0;
+        static inline bool ms_RequestLoadOnUpdate = false;
+        static inline std::string ms_TargetScene;
+
+        void OnStart() override
+        {
+            ++ms_StartCount;
+            quark::script::SceneManager::DontDestroyOnLoad(m_Entity);
+        }
+
+        void OnUpdate(float) override
+        {
+            if (ms_RequestLoadOnUpdate)
+            {
+                ms_RequestLoadOnUpdate = false;
+                quark::script::SceneManager::LoadScene(ms_TargetScene);
+            }
+        }
+
+        void OnDestroy() override
+        {
+            ++ms_DestroyCount;
+        }
+    };
+
+} // anonymous
+
+REGISTER_SCRIPT(CPersistentTrackerScript)
+
+TEST(SceneManager, DeferredLoadDontDestroyAndPersistentData)
+{
+    using namespace quark::script;
+    namespace fs = std::filesystem;
+
+    CPersistentTrackerScript::ms_StartCount = 0;
+    CPersistentTrackerScript::ms_DestroyCount = 0;
+    CPersistentTrackerScript::ms_RequestLoadOnUpdate = false;
+    CPersistentTrackerScript::ms_TargetScene.clear();
+
+    const fs::path tempRoot = fs::temp_directory_path() / "quark_scene_manager_test";
+    std::error_code ec;
+    fs::remove_all(tempRoot, ec);
+    fs::create_directories(tempRoot / "resources", ec);
+
+    CScene level1;
+    CEntity persistentParent;
+    persistentParent.m_Id = 0;
+    persistentParent.m_Name = "PersistentManager";
+    auto pScriptComp = std::make_shared<CScriptComponent>();
+    pScriptComp->m_ScriptName = "CPersistentTrackerScript";
+    persistentParent.GetComponents()->AddComponent(pScriptComp);
+    level1.m_vEntities.push_back(std::move(persistentParent));
+
+    CEntity persistentChild;
+    persistentChild.m_Id = 1;
+    persistentChild.m_ParentId = 0;
+    persistentChild.m_Name = "PersistentChild";
+    level1.m_vEntities.push_back(std::move(persistentChild));
+
+    CEntity transientObj;
+    transientObj.m_Id = 2;
+    transientObj.m_Name = "Level1Only";
+    level1.m_vEntities.push_back(std::move(transientObj));
+
+    const fs::path level1Path = tempRoot / "level1.json";
+    {
+        std::ofstream out(level1Path);
+        out << quark::CSceneDocument::Serialize(level1);
+    }
+
+    CScene level2;
+    CEntity level2Obj;
+    level2Obj.m_Id = 0;
+    level2Obj.m_Name = "Level2Only";
+    level2.m_vEntities.push_back(std::move(level2Obj));
+
+    const fs::path level2Path = tempRoot / "resources" / "level2.json";
+    {
+        std::ofstream out(level2Path);
+        out << quark::CSceneDocument::Serialize(level2);
+    }
+
+    CScriptEngine& engine = CScriptEngine::Get();
+    int hostLoadedCount = 0;
+    engine.StartPlay(
+        level1,
+        tempRoot.string(),
+        nullptr,
+        level1Path.string(),
+        [&hostLoadedCount](CScene&)
+        {
+            ++hostLoadedCount;
+        });
+
+    CHECK(SceneManager::GetActiveSceneName() == "level1");
+    CHECK(SceneManager::GetSceneCount() == 2);
+    CHECK(CPersistentTrackerScript::ms_StartCount == 1);
+
+    SceneManager::SetString("player_name", "Hero");
+    SceneManager::SetInt("score", 420);
+    SceneManager::SetFloat("health", 87.5f);
+    SceneManager::SetBool("has_key", true);
+    SceneManager::SetInt("temp_key", 99);
+    CHECK(SceneManager::HasKey("temp_key"));
+    SceneManager::RemoveKey("temp_key");
+    CHECK(!SceneManager::HasKey("temp_key"));
+
+    CPersistentTrackerScript::ms_TargetScene = "level2";
+    CPersistentTrackerScript::ms_RequestLoadOnUpdate = true;
+    engine.UpdatePlay(level1, 0.016f);
+
+    CHECK(hostLoadedCount == 1);
+    CHECK(SceneManager::GetActiveSceneName() == "level2");
+    CHECK(Scene::FindEntityByName("Level2Only") != nullptr);
+    CHECK(Scene::FindEntityByName("Level1Only") == nullptr);
+    CHECK(Scene::FindEntityByName("PersistentManager") != nullptr);
+    CHECK(Scene::FindEntityByName("PersistentChild") != nullptr);
+    CHECK(CPersistentTrackerScript::ms_StartCount == 1);
+    CHECK(CPersistentTrackerScript::ms_DestroyCount == 0);
+
+    CScriptEntity* pSurvivingParent = Scene::FindEntityByName("PersistentManager");
+    CScriptEntity* pSurvivingChild = Scene::FindEntityByName("PersistentChild");
+    CHECK(pSurvivingParent != nullptr);
+    CHECK(pSurvivingChild != nullptr);
+    const int childIdx = level1.FindEntityIndexById(pSurvivingChild->GetId());
+    CHECK(childIdx >= 0);
+    CHECK(level1.m_vEntities[static_cast<size_t>(childIdx)].m_ParentId == pSurvivingParent->GetId());
+
+    CHECK(SceneManager::GetString("player_name") == "Hero");
+    CHECK(SceneManager::GetInt("score") == 420);
+    CHECK_NEAR(SceneManager::GetFloat("health"), 87.5f, 0.001f);
+    CHECK(SceneManager::GetBool("has_key") == true);
+
+    CHECK(SceneManager::ReloadScene());
+    CHECK(hostLoadedCount == 2);
+    CHECK(SceneManager::GetActiveSceneName() == "level2");
+    CHECK(Scene::FindEntityByName("PersistentManager") != nullptr);
+    CHECK(CPersistentTrackerScript::ms_DestroyCount == 0);
+
+    engine.StopPlay(level1);
+    CHECK(!SceneManager::HasKey("player_name"));
+    CHECK(CPersistentTrackerScript::ms_DestroyCount == 1);
+
+    fs::remove_all(tempRoot, ec);
 }

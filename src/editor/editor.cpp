@@ -12,8 +12,10 @@
 #include "tex.h"
 #include "imgui.h"
 #include "editor/editor_preferences.h"
+#include "application_plugin_bridge.h"
 #include "engine/scene_document.h"
 #include "engine/scene_runtime.h"
+#include "plugins/plugin_manager.h"
 
 #include <chrono>
 #include <exception>
@@ -171,8 +173,130 @@ bool CEditor::BeginPlayMode()
     m_GameViewActive = true;
     m_ShowGameView = true;
     m_SelectGameTab = true;
-    quark::script::CScriptEngine::Get().StartPlay(m_Scene, m_ProjectPath);
+    const std::string activeScenePath = m_ActiveScenePath.empty()
+        ? CProjectService::GetActiveScenePath(m_ProjectPath)
+        : m_ActiveScenePath.string();
+    quark::script::CScriptEngine::Get().StartPlay(
+        m_Scene,
+        m_ProjectPath,
+        nullptr,
+        activeScenePath,
+        [this](CScene& loadedScene)
+        {
+            quark::CSceneRuntime::RestoreSceneEntityModels(loadedScene, m_Assets);
+            quark::CSceneRuntime::ResetSceneLightRuntime(loadedScene, m_Lights);
+            quark::script::CScriptEngine::Get().SetCursorLocked(!quark::gui::SceneHasActiveUiWidgets(loadedScene));
+            RequestSceneRedraw();
+        });
     quark::script::CScriptEngine::Get().SetCursorLocked(!quark::gui::SceneHasActiveUiWidgets(m_Scene));
+    return true;
+}
+
+bool CEditor::OpenScene(const std::filesystem::path& scenePath)
+{
+    if (scenePath.empty() || IsHistoryRestorePending())
+    {
+        return false;
+    }
+
+    if (m_IsPlaying)
+    {
+        m_IsPlaying = false;
+        quark::script::CScriptEngine::Get().StopPlay(m_Scene);
+        m_GameViewActive = false;
+        m_PlayModeSnapshot.reset();
+    }
+
+    std::filesystem::path resolvedPath = scenePath;
+    if (resolvedPath.is_relative() && !m_ProjectPath.empty())
+    {
+        resolvedPath = std::filesystem::path(m_ProjectPath) / resolvedPath;
+    }
+
+    if (!CProjectService::LoadSceneFile(
+            m_ProjectPath, resolvedPath.string(), m_Scene, m_Assets, m_Lights, m_ComponentFactories))
+    {
+        SetStatusMessage("Failed to open scene");
+        return false;
+    }
+
+    while (!m_UndoStack.empty())
+    {
+        m_UndoStack.pop();
+    }
+    while (!m_RedoStack.empty())
+    {
+        m_RedoStack.pop();
+    }
+
+    m_ActiveScenePath = std::filesystem::absolute(resolvedPath);
+    m_SceneDirty = false;
+    RequestSceneRedraw();
+    DispatchPluginEvent(PLUGIN_EVENT_SCENE_LOADED);
+    SetStatusMessage(TextFormat("Opened scene: %s", m_ActiveScenePath.filename().string().c_str()));
+    return true;
+}
+
+bool CEditor::CreateNewScene(const std::filesystem::path& scenePath, bool openAfterCreate)
+{
+    if (scenePath.empty())
+    {
+        return false;
+    }
+
+    std::filesystem::path targetPath = scenePath;
+    if (targetPath.is_relative() && !m_ProjectPath.empty())
+    {
+        targetPath = std::filesystem::path(m_ProjectPath) / targetPath;
+    }
+    if (targetPath.extension() != ".json")
+    {
+        targetPath.replace_extension(".json");
+    }
+
+    if (!CProjectService::CreateEmptySceneFile(targetPath.string()))
+    {
+        SetStatusMessage("Failed to create scene");
+        return false;
+    }
+
+    m_Assets.RequestRefresh(m_ProjectPath);
+    m_Ui.m_AssetBrowser.m_AssetListCacheDirty = true;
+
+    if (openAfterCreate)
+    {
+        return OpenScene(targetPath);
+    }
+
+    SetStatusMessage(TextFormat("Created scene: %s", targetPath.filename().string().c_str()));
+    return true;
+}
+
+bool CEditor::SaveActiveScene()
+{
+    std::filesystem::path savePath = m_ActiveScenePath;
+    if (savePath.empty())
+    {
+        savePath = std::filesystem::path(CProjectService::GetActiveScenePath(m_ProjectPath));
+    }
+    if (savePath.empty())
+    {
+        CProjectService::Save(m_ProjectPath, m_Scene);
+        m_SceneDirty = false;
+        DispatchPluginEvent(PLUGIN_EVENT_SCENE_SAVED);
+        return true;
+    }
+
+    if (!CProjectService::SaveSceneDocument(savePath.string(), m_Scene))
+    {
+        SetStatusMessage("Failed to save scene");
+        return false;
+    }
+
+    m_ActiveScenePath = std::filesystem::absolute(savePath);
+    m_SceneDirty = false;
+    DispatchPluginEvent(PLUGIN_EVENT_SCENE_SAVED);
+    SetStatusMessage(TextFormat("Saved scene: %s", m_ActiveScenePath.filename().string().c_str()));
     return true;
 }
 
@@ -480,8 +604,7 @@ void CEditor::HandleInput()
     }
     else if (ctrl && IsKeyPressed(KEY_S))
     {
-        CProjectService::Save(m_ProjectPath, m_Scene);
-        m_SceneDirty = false;
+        SaveActiveScene();
     }
 
     const float now = static_cast<float>(GetTime());

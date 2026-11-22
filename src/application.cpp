@@ -310,6 +310,8 @@ void CApplication::Initialize()
         quark::CSceneRuntime::RestoreSceneEntityModels(m_Editor.m_Scene, m_Editor.m_Assets);
         quark::CSceneRuntime::ResetSceneLightRuntime(m_Editor.m_Scene, m_Editor.m_Lights);
     }
+    m_Editor.m_ActiveScenePath = std::filesystem::absolute(
+        std::filesystem::path(CProjectService::GetActiveScenePath(m_ProjectPath)));
 
     if (m_Headless)
     {
@@ -467,14 +469,16 @@ void CApplication::UpdateFrame()
         if (m_Editor.m_Preferences.m_AutosaveBackupEnabled)
         {
             std::error_code backupError;
+            const fs::path activePath = m_Editor.m_ActiveScenePath.empty()
+                ? (fs::path(m_Editor.m_ProjectPath) / "scene.json")
+                : m_Editor.m_ActiveScenePath;
             fs::copy_file(
-                fs::path(m_Editor.m_ProjectPath) / "scene.json",
-                fs::path(m_Editor.m_ProjectPath) / "scene.json.bak",
+                activePath,
+                fs::path(activePath.string() + ".bak"),
                 fs::copy_options::overwrite_existing,
                 backupError);
         }
-        CProjectService::Save(m_Editor.m_ProjectPath, m_Editor.m_Scene);
-        DispatchPluginEvent(PLUGIN_EVENT_SCENE_SAVED);
+        m_Editor.SaveActiveScene();
         m_LastAutosaveTime = GetTime();
     }
 

@@ -402,6 +402,43 @@ void CProjectService::CreateNew(const std::string& folderPath, CScene& scene)
     WriteProjectManifest(rootPath);
 }
 
+bool CProjectService::CreateEmptySceneFile(const std::string& sceneFilePath)
+{
+    if (sceneFilePath.empty())
+    {
+        return false;
+    }
+
+    const fs::path targetPath = fs::absolute(fs::path(sceneFilePath));
+    std::error_code ec;
+    if (!targetPath.parent_path().empty())
+    {
+        fs::create_directories(targetPath.parent_path(), ec);
+    }
+
+    CScene defaultScene;
+
+    CEntity light;
+    light.m_Id = 0;
+    light.m_Name = "Light";
+    light.GetComponents()->RemoveComponent(1);
+    light.GetTransformComponent()->m_Position = { -3.0f, 4.0f, 2.0f };
+    light.GetComponents()->AddComponent(std::make_shared<CLightComponent>());
+    defaultScene.m_vEntities.push_back(std::move(light));
+
+    CEntity camera;
+    camera.m_Id = 1;
+    camera.m_Name = "Camera";
+    camera.GetComponents()->RemoveComponent(1);
+    camera.GetTransformComponent()->m_Position = { 0.0f, 1.5f, 6.0f };
+    camera.GetTransformComponent()->m_Rotation = { -12.0f, 0.0f, 0.0f };
+    camera.GetComponents()->AddComponent(std::make_shared<CCameraComponent>());
+    defaultScene.m_vEntities.push_back(std::move(camera));
+    defaultScene.m_Selected = -1;
+
+    return SaveSceneDocument(targetPath.string(), defaultScene);
+}
+
 void CProjectService::Save(const std::string& folderPath, const CScene& scene)
 {
     const fs::path rootPath = ResolveProjectRootPath(fs::path(folderPath));
@@ -544,6 +581,80 @@ bool CProjectService::Load(const std::string& folderPath, CScene& scene, CAssetL
     quark::CSceneRuntime::RestoreSceneEntityModels(scene, assets);
     quark::CSceneRuntime::ResetSceneLightRuntime(scene, lights);
 
+    return true;
+}
+
+bool CProjectService::LoadSceneFile(const std::string& projectPath, const std::string& sceneFilePath,
+                                    CScene& scene, CAssetLibrary& assets,
+                                    CLightRegistry& lights, const CComponentFactoryRegistry& factories)
+{
+    const fs::path rootPath = ResolveProjectRootPath(fs::path(projectPath));
+    const fs::path jsonPath = fs::path(sceneFilePath);
+    if (!fs::is_regular_file(jsonPath))
+    {
+        TraceLog(LogLevel::Error, "PROJECT", TextFormat("Scene file not found: %s", sceneFilePath.c_str()));
+        return false;
+    }
+
+    std::ifstream file(jsonPath);
+    if (!file.is_open())
+    {
+        TraceLog(LogLevel::Error, "PROJECT", TextFormat("Failed to open scene file: %s", sceneFilePath.c_str()));
+        return false;
+    }
+
+    std::stringstream document;
+    document << file.rdbuf();
+
+    CScene loadedScene;
+    loadedScene.m_pComponentRegistry = scene.m_pComponentRegistry;
+    if (!quark::CSceneDocument::Deserialize(document.str(), loadedScene, factories))
+    {
+        TraceLog(LogLevel::Error, "PROJECT", TextFormat("Malformed scene file: %s", jsonPath.string().c_str()));
+        return false;
+    }
+
+    scene.ReleaseResources();
+    lights.Reset();
+    scene.m_vEntities = std::move(loadedScene.m_vEntities);
+    scene.m_Selected = -1;
+    scene.m_vSelectedEntities.clear();
+    if (!rootPath.empty())
+    {
+        assets.Refresh(rootPath.string(), &scene);
+    }
+
+    for (auto& entity : scene.m_vEntities)
+    {
+        if (entity.HasUiComponent())
+        {
+            const bool isCanvas = entity.GetCanvasComponent() != nullptr;
+            entity.GetComponents()->RemoveMeshAndMaterialForUi(isCanvas);
+            continue;
+        }
+        if (!entity.GetTransformComponent())
+        {
+            entity.GetComponents()->AddComponent(std::make_shared<CTransformComponent>());
+        }
+        if (entity.GetLightComponent() || entity.GetCameraComponent())
+        {
+            continue;
+        }
+        if (!entity.GetMeshComponent())
+        {
+            entity.GetComponents()->AddComponent(std::make_shared<CMeshComponent>());
+        }
+        if (!entity.GetMaterialComponent())
+        {
+            entity.GetComponents()->AddComponent(std::make_shared<CMaterialComponent>());
+        }
+    }
+
+    quark::CSceneRuntime::RestoreSceneEntityModels(scene, assets);
+    quark::CSceneRuntime::ResetSceneLightRuntime(scene, lights);
+    scene.BumpTransformRevision();
+
+    TraceLog(LogLevel::Info, "PROJECT", TextFormat("Loaded scene: %s", jsonPath.string().c_str()));
     return true;
 }
 

@@ -39,4 +39,10 @@ void CSceneFileService::SaveAs(CEditor& editor)
         editor.SetStatusMessage("Failed to save scene");
         return;
     }
+
+    editor.m_ActiveScenePath = std::filesystem::absolute(savePath);
+    editor.m_SceneDirty = false;
+    editor.m_Assets.RequestRefresh(editor.m_ProjectPath);
+    editor.m_Ui.m_AssetBrowser.m_AssetListCacheDirty = true;
+    editor.SetStatusMessage(TextFormat("Saved scene: %s", editor.m_ActiveScenePath.filename().string().c_str()));
 }

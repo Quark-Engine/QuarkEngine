@@ -34,9 +34,13 @@ public:
     static bool SaveBuildSettings(const std::string& projectPath,
                                   const SProjectBuildSettings& settings);
     static void CreateNew(const std::string& folderPath, CScene& scene);
+    static bool CreateEmptySceneFile(const std::string& sceneFilePath);
     static void Save(const std::string& folderPath, const CScene& scene);
     static bool SaveSceneDocument(const std::string& sceneFilePath, const CScene& scene);
     static void SaveScene(const std::string& sceneFilePath, const CScene& scene);
+    static bool LoadSceneFile(const std::string& projectPath, const std::string& sceneFilePath,
+                              CScene& scene, CAssetLibrary& assets,
+                              CLightRegistry& lights, const CComponentFactoryRegistry& factories);
     static bool Load(const std::string& folderPath, CScene& scene, CAssetLibrary& assets,
                      CLightRegistry& lights, const CComponentFactoryRegistry& factories);
 };

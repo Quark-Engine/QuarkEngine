@@ -1374,6 +1374,17 @@ void DrawAssetsUi(CEditor& editor)
             if (ImGui::MenuItem(TextFormat("%s##empty_new_file", lang.Word("new_file"))))
             {
                 create.m_CreatingFolder = false;
+                create.m_CreatingScript = false;
+                create.m_CreatingScene = false;
+                create.m_aNewItemName[0] = '\0';
+                create.m_Open = true;
+            }
+
+            if (ImGui::MenuItem("New Scene##empty_new_scene"))
+            {
+                create.m_CreatingFolder = false;
+                create.m_CreatingScript = false;
+                create.m_CreatingScene = true;
                 create.m_aNewItemName[0] = '\0';
                 create.m_Open = true;
             }
@@ -1382,6 +1393,7 @@ void DrawAssetsUi(CEditor& editor)
             {
                 create.m_CreatingFolder = false;
                 create.m_CreatingScript = true;
+                create.m_CreatingScene = false;
                 create.m_aNewItemName[0] = '\0';
                 create.m_Open = true;
             }
@@ -1389,6 +1401,8 @@ void DrawAssetsUi(CEditor& editor)
             if (ImGui::MenuItem(TextFormat("%s##empty_new_folder", lang.Word("new_folder"))))
             {
                 create.m_CreatingFolder = true;
+                create.m_CreatingScript = false;
+                create.m_CreatingScene = false;
                 create.m_aNewItemName[0] = '\0';
                 create.m_Open = true;
             }
@@ -1539,6 +1553,10 @@ void DrawAssetsUi(CEditor& editor)
                     {
                         SpawnPrefabInScene(editor, entryFullPath);
                     }
+                    else if (entry.m_IsScene)
+                    {
+                        editor.OpenScene(entryFullPath);
+                    }
                     else
                     {
 #ifdef _WIN32
@@ -1563,6 +1581,15 @@ void DrawAssetsUi(CEditor& editor)
 
                 if (ImGui::BeginPopupContextItem("AssetContext"))
                 {
+                    if (entry.m_IsScene)
+                    {
+                        if (ImGui::MenuItem("Open Scene"))
+                        {
+                            editor.OpenScene(entryFullPath);
+                        }
+                        ImGui::Separator();
+                    }
+
                     if (entry.m_IsPrefab)
                     {
                         if (ImGui::MenuItem(TextFormat(lang.Word("spawn"), entry.m_FileName.c_str())))
@@ -1626,6 +1653,17 @@ void DrawAssetsUi(CEditor& editor)
                     if (ImGui::MenuItem(TextFormat("%s##empty_new_file", lang.Word("new_file"))))
                     {
                         create.m_CreatingFolder = false;
+                        create.m_CreatingScript = false;
+                        create.m_CreatingScene = false;
+                        create.m_aNewItemName[0] = '\0';
+                        create.m_Open = true;
+                    }
+
+                    if (ImGui::MenuItem("New Scene##item_new_scene"))
+                    {
+                        create.m_CreatingFolder = false;
+                        create.m_CreatingScript = false;
+                        create.m_CreatingScene = true;
                         create.m_aNewItemName[0] = '\0';
                         create.m_Open = true;
                     }
@@ -1634,6 +1672,7 @@ void DrawAssetsUi(CEditor& editor)
                     {
                         create.m_CreatingFolder = false;
                         create.m_CreatingScript = true;
+                        create.m_CreatingScene = false;
                         create.m_aNewItemName[0] = '\0';
                         create.m_Open = true;
                     }
@@ -1641,6 +1680,8 @@ void DrawAssetsUi(CEditor& editor)
                     if (ImGui::MenuItem(TextFormat("%s##empty_new_folder", lang.Word("new_folder"))))
                     {
                         create.m_CreatingFolder = true;
+                        create.m_CreatingScript = false;
+                        create.m_CreatingScene = false;
                         create.m_aNewItemName[0] = '\0';
                         create.m_Open = true;
                     }
@@ -2142,6 +2183,17 @@ void DrawAssetsUi(CEditor& editor)
             if (ImGui::MenuItem(TextFormat("%s##bg_new_file", lang.Word("new_file"))))
             {
                 create.m_CreatingFolder = false;
+                create.m_CreatingScript = false;
+                create.m_CreatingScene = false;
+                create.m_aNewItemName[0] = '\0';
+                create.m_Open = true;
+            }
+
+            if (ImGui::MenuItem("New Scene##bg_new_scene"))
+            {
+                create.m_CreatingFolder = false;
+                create.m_CreatingScript = false;
+                create.m_CreatingScene = true;
                 create.m_aNewItemName[0] = '\0';
                 create.m_Open = true;
             }
@@ -2150,6 +2202,7 @@ void DrawAssetsUi(CEditor& editor)
             {
                 create.m_CreatingFolder = false;
                 create.m_CreatingScript = true;
+                create.m_CreatingScene = false;
                 create.m_aNewItemName[0] = '\0';
                 create.m_Open = true;
             }
@@ -2157,6 +2210,8 @@ void DrawAssetsUi(CEditor& editor)
             if (ImGui::MenuItem(TextFormat("%s##bg_new_folder", lang.Word("new_folder"))))
             {
                 create.m_CreatingFolder = true;
+                create.m_CreatingScript = false;
+                create.m_CreatingScene = false;
                 create.m_aNewItemName[0] = '\0';
                 create.m_Open = true;
             }
@@ -2209,7 +2264,11 @@ void DrawAssetsUi(CEditor& editor)
 
     if (ImGui::BeginPopupModal(popupName.c_str(), nullptr, ImGuiWindowFlags_AlwaysAutoResize))
     {
-        const char* pModalTitle = create.m_CreatingScript ? lang.Word("new_script") : (create.m_CreatingFolder ? lang.Word("new_folder") : lang.Word("new_file"));
+        const char* pModalTitle = create.m_CreatingScene
+            ? "New Scene"
+            : (create.m_CreatingScript
+                ? lang.Word("new_script")
+                : (create.m_CreatingFolder ? lang.Word("new_folder") : lang.Word("new_file")));
         ImGui::TextUnformatted(pModalTitle);
         const char* pFieldLabel = create.m_CreatingScript ? lang.Word("script_name") : lang.Word("name");
         ImGui::InputText(pFieldLabel, create.m_aNewItemName, IM_ARRAYSIZE(create.m_aNewItemName));
@@ -2221,7 +2280,24 @@ void DrawAssetsUi(CEditor& editor)
             {
                 fs::path path;
 
-                if (create.m_CreatingScript)
+                if (create.m_CreatingScene)
+                {
+                    std::string sceneName = create.m_aNewItemName;
+                    if (sceneName.size() <= 5 || sceneName.substr(sceneName.size() - 5) != ".json")
+                    {
+                        sceneName += ".json";
+                    }
+                    path = editor.m_CurrentAssetPath / sceneName;
+                    int suffix = 1;
+                    const std::string baseStem = path.stem().string();
+                    while (fs::exists(path))
+                    {
+                        path = editor.m_CurrentAssetPath / (baseStem + "_" + std::to_string(suffix++) + ".json");
+                    }
+                    editor.CreateNewScene(path, false);
+                    create.m_CreatingScene = false;
+                }
+                else if (create.m_CreatingScript)
                 {
                     std::string scriptName = create.m_aNewItemName;
                     if (scriptName.size() > 4 && scriptName.substr(scriptName.size() - 4) == ".hpp")

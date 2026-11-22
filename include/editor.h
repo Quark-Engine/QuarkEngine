@@ -89,6 +89,9 @@ public:
     bool IsHistoryRestorePending() const;
     bool BeginPlayMode();
     bool StopPlayMode();
+    bool OpenScene(const std::filesystem::path& scenePath);
+    bool CreateNewScene(const std::filesystem::path& scenePath, bool openAfterCreate = true);
+    bool SaveActiveScene();
     void Undo();
     void Redo();
     int GetOrCreateCanvasForUi(int contextParentIndex = -1);
@@ -110,6 +113,7 @@ public:
 
     CScene m_Scene;
     std::string m_ProjectPath = "projects/TestProject";
+    std::filesystem::path m_ActiveScenePath;
 
     CEditorUiState m_Ui;
 

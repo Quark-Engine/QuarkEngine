@@ -4,6 +4,7 @@
 #include "assets/asset_library.h"
 #include "editor/editor_preferences.h"
 #include "engine/scene_package.h"
+#include "engine/scene_runtime.h"
 #include "engine/cpu_task_pool.h"
 #include "engine/transform.h"
 #include "engine/canvas_system.h"
@@ -374,7 +375,18 @@ extern "C"
             quark::script::CScriptEngine::Get().LoadScriptDll(foundDllPath.string());
         }
 
-        quark::script::CScriptEngine::Get().StartPlay(scene, projectPath.string());
+        quark::script::CScriptEngine::Get().StartPlay(
+            scene,
+            projectPath.string(),
+            nullptr,
+            startScenePath.string(),
+            [&assets, &lights](CScene& loadedScene)
+            {
+                quark::CSceneRuntime::RestoreSceneEntityModels(loadedScene, assets);
+                quark::CSceneRuntime::ResetSceneLightRuntime(loadedScene, lights);
+                quark::script::CScriptEngine::Get().SetCursorLocked(
+                    !quark::gui::SceneHasActiveUiWidgets(loadedScene));
+            });
         quark::script::CScriptEngine::Get().SetCursorLocked(!quark::gui::SceneHasActiveUiWidgets(scene));
 
         while (!WindowShouldClose())

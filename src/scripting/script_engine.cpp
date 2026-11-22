@@ -1339,121 +1339,222 @@ namespace quark::script
 
         g_SceneCallbacks.pfnLoadScene = [](const char* pScenePath) -> bool
         {
-            CScene* pScene = CScriptEngine::Get().GetActiveScene();
-            if (!pScene || !pScenePath || pScenePath[0] == '\0')
+            if (!pScenePath || pScenePath[0] == '\0')
             {
                 return false;
             }
+            return CScriptEngine::Get().RequestLoadScene(pScenePath);
+        };
 
-            fs::path resolvedPath(pScenePath);
+        g_SceneCallbacks.pfnReloadScene = []() -> bool
+        {
+            return CScriptEngine::Get().ReloadActiveScene();
+        };
+
+        g_SceneCallbacks.pfnGetActiveSceneName = []() -> const char*
+        {
+            return CScriptEngine::Get().GetActiveSceneName().c_str();
+        };
+
+        g_SceneCallbacks.pfnGetActiveScenePath = []() -> const char*
+        {
+            return CScriptEngine::Get().GetActiveScenePath().c_str();
+        };
+
+        g_SceneCallbacks.pfnGetSceneCount = []() -> int
+        {
+            CScriptEngine& engine = CScriptEngine::Get();
+            const std::string& projectPath = engine.GetActiveProjectPath();
+            if (projectPath.empty())
+            {
+                return 0;
+            }
             std::error_code ec;
-            if (!fs::is_regular_file(resolvedPath, ec))
+            const fs::path rootPath = fs::path(projectPath);
+            if (!fs::exists(rootPath, ec))
             {
-                for (const auto& candidate : {
-                         fs::path(pScenePath),
-                         fs::current_path() / pScenePath,
-                         fs::current_path() / "resources" / pScenePath })
-                {
-                    if (fs::is_regular_file(candidate, ec))
-                    {
-                        resolvedPath = candidate;
-                        break;
-                    }
-                }
+                return 0;
             }
-
-            std::ifstream sceneFile(resolvedPath);
-            if (!sceneFile.is_open())
+            std::vector<std::string> vScenes;
+            for (const auto& dirEntry : fs::recursive_directory_iterator(
+                     rootPath, fs::directory_options::skip_permission_denied, ec))
             {
-                return false;
-            }
-            std::stringstream buffer;
-            buffer << sceneFile.rdbuf();
-
-            CComponentFactoryRegistry defaultFactories;
-            const CComponentFactoryRegistry* pFactories = pScene->m_pComponentRegistry
-                ? pScene->m_pComponentRegistry
-                : &defaultFactories;
-
-            CScene loadedScene;
-            loadedScene.m_pComponentRegistry = pScene->m_pComponentRegistry;
-            if (!quark::CSceneDocument::Deserialize(buffer.str(), loadedScene, *pFactories))
-            {
-                return false;
-            }
-
-            for (auto& existing : pScene->m_vEntities)
-            {
-                if (CScriptComponent* pScriptComp = existing.GetScriptComponent())
-                {
-                    if (pScriptComp->m_pInstance)
-                    {
-                        pScriptComp->m_pInstance->OnDestroy();
-                        CScriptEngine::Get().DestroyScript(pScriptComp->m_ScriptName, pScriptComp->m_pInstance);
-                        pScriptComp->m_pInstance = nullptr;
-                        pScriptComp->m_pScriptEntity.reset();
-                    }
-                }
-            }
-
-            for (auto& existing : pScene->m_vEntities)
-            {
-                if (CMeshComponent* pMesh = existing.GetMeshComponent())
-                {
-                    pMesh->ReleaseOwnedResources();
-                }
-                if (CCanvasComponent* pCanvas = existing.GetCanvasComponent())
-                {
-                    pCanvas->ReleaseOwnedResources();
-                }
-                if (CImageComponent* pImage = existing.GetImageComponent())
-                {
-                    pImage->ReleaseOwnedResources();
-                }
-                if (CPanelComponent* pPanel = existing.GetPanelComponent())
-                {
-                    pPanel->ReleaseOwnedResources();
-                }
-            }
-            pScene->m_vEntities = std::move(loadedScene.m_vEntities);
-            pScene->m_Selected = -1;
-            pScene->m_vSelectedEntities.clear();
-            s_EntityWrappers.clear();
-
-            for (auto& entity : pScene->m_vEntities)
-            {
-                CScriptComponent* pScriptComp = entity.GetScriptComponent();
-                if (!pScriptComp || pScriptComp->m_ScriptName.empty())
+                if (ec || !dirEntry.is_regular_file(ec))
                 {
                     continue;
                 }
-                IScript* pInstance = CScriptEngine::Get().CreateScript(pScriptComp->m_ScriptName);
-                if (!pInstance)
+                const fs::path p = dirEntry.path();
+                if (p.extension() != ".json")
                 {
                     continue;
                 }
-                pScriptComp->m_pInstance = pInstance;
-                CTransformComponent* pTransform = entity.GetTransformComponent();
-                Vec3* pPos = pTransform ? &pTransform->m_Position : nullptr;
-                Vec3* pRot = pTransform ? &pTransform->m_Rotation : nullptr;
-                Vec3* pScale = pTransform ? &pTransform->m_Scale : nullptr;
-                bool* pHasOverride = pTransform ? &pTransform->m_HasLocalMatrixOverride : nullptr;
-                pScriptComp->m_pScriptEntity = std::make_unique<CScriptEntity>(
-                    &entity, pPos, pRot, pScale, pHasOverride);
-                pInstance->m_Entity = pScriptComp->m_pScriptEntity.get();
-                pScriptComp->ApplyFieldsToInstance();
-                pInstance->OnCreate();
-            }
-
-            for (auto& entity : pScene->m_vEntities)
-            {
-                CScriptComponent* pScriptComp = entity.GetScriptComponent();
-                if (pScriptComp && pScriptComp->m_pInstance && pScriptComp->m_Enabled)
+                const std::string fileName = p.filename().string();
+                if (fileName == "project.json" || fileName == "quark_project.json")
                 {
-                    pScriptComp->m_pInstance->OnStart();
+                    continue;
+                }
+                const fs::path rel = fs::relative(p, rootPath, ec);
+                if (!ec && !rel.empty())
+                {
+                    vScenes.push_back(rel.generic_string());
                 }
             }
+            std::sort(vScenes.begin(), vScenes.end());
+            static thread_local std::vector<std::string> s_vLastSceneList;
+            s_vLastSceneList = std::move(vScenes);
+            return static_cast<int>(s_vLastSceneList.size());
+        };
+
+        g_SceneCallbacks.pfnGetScenePath = [](int index) -> const char*
+        {
+            CScriptEngine& engine = CScriptEngine::Get();
+            const std::string& projectPath = engine.GetActiveProjectPath();
+            if (projectPath.empty() || index < 0)
+            {
+                return nullptr;
+            }
+            std::error_code ec;
+            const fs::path rootPath = fs::path(projectPath);
+            if (!fs::exists(rootPath, ec))
+            {
+                return nullptr;
+            }
+            std::vector<std::string> vScenes;
+            for (const auto& dirEntry : fs::recursive_directory_iterator(
+                     rootPath, fs::directory_options::skip_permission_denied, ec))
+            {
+                if (ec || !dirEntry.is_regular_file(ec))
+                {
+                    continue;
+                }
+                const fs::path p = dirEntry.path();
+                if (p.extension() != ".json")
+                {
+                    continue;
+                }
+                const std::string fileName = p.filename().string();
+                if (fileName == "project.json" || fileName == "quark_project.json")
+                {
+                    continue;
+                }
+                const fs::path rel = fs::relative(p, rootPath, ec);
+                if (!ec && !rel.empty())
+                {
+                    vScenes.push_back(rel.generic_string());
+                }
+            }
+            std::sort(vScenes.begin(), vScenes.end());
+            if (index >= static_cast<int>(vScenes.size()))
+            {
+                return nullptr;
+            }
+            static thread_local std::string s_LastScenePath;
+            s_LastScenePath = vScenes[static_cast<size_t>(index)];
+            return s_LastScenePath.c_str();
+        };
+
+        g_SceneCallbacks.pfnDontDestroyOnLoad = [](CScriptEntity* pEntity)
+        {
+            if (pEntity && pEntity->GetId() >= 0)
+            {
+                CScriptEngine::Get().MarkDontDestroyOnLoad(pEntity->GetId());
+            }
+        };
+
+        g_SceneCallbacks.pfnSetPersistentString = [](const char* pKey, const char* pValue)
+        {
+            if (pKey && pKey[0] != '\0')
+            {
+                CScriptEngine::Get().SetPersistentString(pKey, pValue ? pValue : "");
+            }
+        };
+
+        g_SceneCallbacks.pfnGetPersistentString = [](const char* pKey, char* pOutBuffer, int bufferSize) -> bool
+        {
+            if (!pKey || !pOutBuffer || bufferSize <= 0)
+            {
+                return false;
+            }
+            std::string value;
+            if (!CScriptEngine::Get().GetPersistentString(pKey, value))
+            {
+                return false;
+            }
+            std::snprintf(pOutBuffer, static_cast<size_t>(bufferSize), "%s", value.c_str());
             return true;
+        };
+
+        g_SceneCallbacks.pfnSetPersistentInt = [](const char* pKey, int value)
+        {
+            if (pKey && pKey[0] != '\0')
+            {
+                CScriptEngine::Get().SetPersistentInt(pKey, value);
+            }
+        };
+
+        g_SceneCallbacks.pfnGetPersistentInt = [](const char* pKey, int defaultValue) -> int
+        {
+            if (!pKey || pKey[0] == '\0')
+            {
+                return defaultValue;
+            }
+            return CScriptEngine::Get().GetPersistentInt(pKey, defaultValue);
+        };
+
+        g_SceneCallbacks.pfnSetPersistentFloat = [](const char* pKey, float value)
+        {
+            if (pKey && pKey[0] != '\0')
+            {
+                CScriptEngine::Get().SetPersistentFloat(pKey, value);
+            }
+        };
+
+        g_SceneCallbacks.pfnGetPersistentFloat = [](const char* pKey, float defaultValue) -> float
+        {
+            if (!pKey || pKey[0] == '\0')
+            {
+                return defaultValue;
+            }
+            return CScriptEngine::Get().GetPersistentFloat(pKey, defaultValue);
+        };
+
+        g_SceneCallbacks.pfnSetPersistentBool = [](const char* pKey, bool value)
+        {
+            if (pKey && pKey[0] != '\0')
+            {
+                CScriptEngine::Get().SetPersistentBool(pKey, value);
+            }
+        };
+
+        g_SceneCallbacks.pfnGetPersistentBool = [](const char* pKey, bool defaultValue) -> bool
+        {
+            if (!pKey || pKey[0] == '\0')
+            {
+                return defaultValue;
+            }
+            return CScriptEngine::Get().GetPersistentBool(pKey, defaultValue);
+        };
+
+        g_SceneCallbacks.pfnHasPersistentKey = [](const char* pKey) -> bool
+        {
+            if (!pKey || pKey[0] == '\0')
+            {
+                return false;
+            }
+            return CScriptEngine::Get().HasPersistentKey(pKey);
+        };
+
+        g_SceneCallbacks.pfnRemovePersistentKey = [](const char* pKey)
+        {
+            if (pKey && pKey[0] != '\0')
+            {
+                CScriptEngine::Get().RemovePersistentKey(pKey);
+            }
+        };
+
+        g_SceneCallbacks.pfnClearPersistentData = []()
+        {
+            CScriptEngine::Get().ClearPersistentData();
         };
 
         g_PhysicsCallbacks.pfnRaycast = [](Vec3 origin, Vec3 direction, float maxDistance,
@@ -2430,7 +2531,9 @@ namespace quark::script
     }
 
     void CScriptEngine::StartPlay(CScene& scene, const std::string& projectPath,
-                                  CDynamicLibrary* pExternalDll)
+                                  CDynamicLibrary* pExternalDll,
+                                  const std::string& activeScenePath,
+                                  FSceneLoadedCallback onSceneLoaded)
     {
         if (m_IsPlaying)
         {
@@ -2451,6 +2554,10 @@ namespace quark::script
         s_ScriptAccumulatedTime = 0.0;
         s_DiscardMouseDeltaFrames = 2;
         s_EntityWrappers.clear();
+        m_PendingLoadScenePath.clear();
+        m_DontDestroyEntityIds.clear();
+        ClearPersistentData();
+        m_OnSceneLoaded = std::move(onSceneLoaded);
         m_PhysicsWorld.Reset();
         for (auto& entity : scene.m_vEntities)
         {
@@ -2461,7 +2568,22 @@ namespace quark::script
         }
         m_pActiveScene = &scene;
         m_ActiveProjectPath = projectPath;
+        if (!activeScenePath.empty())
+        {
+            UpdateActiveSceneIdentity(activeScenePath);
+        }
+        else if (!projectPath.empty())
+        {
+            const std::string defaultScene = ResolveSceneFilePath("scene.json");
+            UpdateActiveSceneIdentity(defaultScene.empty() ? "scene.json" : defaultScene);
+        }
+        else
+        {
+            m_ActiveScenePath.clear();
+            m_ActiveSceneName.clear();
+        }
         m_FixedAccumulator = 0.0f;
+        m_InUpdatePlay = false;
 
         if (pExternalDll && pExternalDll->IsOpen())
         {
@@ -2729,6 +2851,7 @@ namespace quark::script
         }
 
         m_pActiveScene = &scene;
+        m_InUpdatePlay = true;
         s_ScriptDeltaTime = deltaTime;
         const float scaledDelta = deltaTime * s_ScriptTimeScale;
         s_ScriptAccumulatedTime += static_cast<double>(scaledDelta);
@@ -2829,6 +2952,8 @@ namespace quark::script
             }
         }
 
+        m_InUpdatePlay = false;
+        FlushPendingSceneLoad(scene);
         scene.BumpTransformRevision();
     }
 
@@ -2863,6 +2988,11 @@ namespace quark::script
         s_ScriptTimeScale = 1.0f;
         s_DiscardMouseDeltaFrames = 0;
         s_EntityWrappers.clear();
+        m_PendingLoadScenePath.clear();
+        m_DontDestroyEntityIds.clear();
+        ClearPersistentData();
+        m_OnSceneLoaded = nullptr;
+        m_InUpdatePlay = false;
         m_pActiveScene = nullptr;
         m_FixedAccumulator = 0.0f;
 
@@ -2932,6 +3062,412 @@ namespace quark::script
             }
         }
         return "";
+    }
+
+    std::string CScriptEngine::ResolveSceneFilePath(const std::string& scenePath) const
+    {
+        if (scenePath.empty())
+        {
+            return "";
+        }
+
+        std::error_code ec;
+        auto tryCandidate = [&](const fs::path& candidate) -> std::string
+        {
+            if (fs::is_regular_file(candidate, ec))
+            {
+                return candidate.string();
+            }
+            if (!candidate.has_extension())
+            {
+                fs::path withJson = candidate;
+                withJson.replace_extension(".json");
+                if (fs::is_regular_file(withJson, ec))
+                {
+                    return withJson.string();
+                }
+            }
+            return "";
+        };
+
+        if (std::string direct = tryCandidate(fs::path(scenePath)); !direct.empty())
+        {
+            return direct;
+        }
+
+        if (!m_ActiveProjectPath.empty())
+        {
+            const fs::path projectRoot(m_ActiveProjectPath);
+            for (const fs::path& candidate : {
+                     projectRoot / scenePath,
+                     projectRoot / "resources" / scenePath,
+                     projectRoot / "scenes" / scenePath })
+            {
+                if (std::string found = tryCandidate(candidate); !found.empty())
+                {
+                    return found;
+                }
+            }
+        }
+
+        for (const fs::path& candidate : {
+                 fs::current_path() / scenePath,
+                 fs::current_path() / "resources" / scenePath })
+        {
+            if (std::string found = tryCandidate(candidate); !found.empty())
+            {
+                return found;
+            }
+        }
+
+        return "";
+    }
+
+    void CScriptEngine::UpdateActiveSceneIdentity(const std::string& resolvedScenePath)
+    {
+        if (resolvedScenePath.empty())
+        {
+            m_ActiveScenePath.clear();
+            m_ActiveSceneName.clear();
+            return;
+        }
+
+        const fs::path sceneFsPath(resolvedScenePath);
+        m_ActiveSceneName = sceneFsPath.stem().string();
+        if (!m_ActiveProjectPath.empty())
+        {
+            std::error_code ec;
+            const fs::path rel = fs::relative(sceneFsPath, fs::path(m_ActiveProjectPath), ec);
+            if (!ec && !rel.empty() && rel.string().rfind("..", 0) != 0)
+            {
+                m_ActiveScenePath = rel.generic_string();
+                return;
+            }
+        }
+        m_ActiveScenePath = sceneFsPath.generic_string();
+    }
+
+    bool CScriptEngine::RequestLoadScene(const std::string& scenePath)
+    {
+        if (!m_pActiveScene || scenePath.empty())
+        {
+            return false;
+        }
+
+        const std::string resolved = ResolveSceneFilePath(scenePath);
+        if (resolved.empty())
+        {
+            LogMessage(EScriptLogLevel::ERR, "SceneManager::LoadScene failed: scene not found '" + scenePath + "'");
+            return false;
+        }
+
+        if (m_InUpdatePlay)
+        {
+            m_PendingLoadScenePath = resolved;
+            return true;
+        }
+
+        return ExecuteLoadScene(*m_pActiveScene, resolved);
+    }
+
+    bool CScriptEngine::ReloadActiveScene()
+    {
+        if (m_ActiveScenePath.empty())
+        {
+            return false;
+        }
+        return RequestLoadScene(m_ActiveScenePath);
+    }
+
+    bool CScriptEngine::FlushPendingSceneLoad(CScene& scene)
+    {
+        if (m_PendingLoadScenePath.empty())
+        {
+            return false;
+        }
+        const std::string pendingPath = std::move(m_PendingLoadScenePath);
+        m_PendingLoadScenePath.clear();
+        return ExecuteLoadScene(scene, pendingPath);
+    }
+
+    bool CScriptEngine::ExecuteLoadScene(CScene& scene, const std::string& resolvedScenePath)
+    {
+        std::ifstream sceneFile(resolvedScenePath);
+        if (!sceneFile.is_open())
+        {
+            LogMessage(EScriptLogLevel::ERR, "SceneManager::LoadScene failed to open: " + resolvedScenePath);
+            return false;
+        }
+        std::stringstream buffer;
+        buffer << sceneFile.rdbuf();
+
+        CComponentFactoryRegistry defaultFactories;
+        const CComponentFactoryRegistry* pFactories = scene.m_pComponentRegistry
+            ? scene.m_pComponentRegistry
+            : &defaultFactories;
+
+        CScene loadedScene;
+        loadedScene.m_pComponentRegistry = scene.m_pComponentRegistry;
+        if (!quark::CSceneDocument::Deserialize(buffer.str(), loadedScene, *pFactories))
+        {
+            LogMessage(EScriptLogLevel::ERR, "SceneManager::LoadScene failed to parse: " + resolvedScenePath);
+            return false;
+        }
+
+        std::unordered_set<int> survivingIndices;
+        std::vector<int> vQueue;
+        for (size_t i = 0; i < scene.m_vEntities.size(); ++i)
+        {
+            if (m_DontDestroyEntityIds.count(scene.m_vEntities[i].m_Id) > 0)
+            {
+                const int idx = static_cast<int>(i);
+                if (survivingIndices.insert(idx).second)
+                {
+                    vQueue.push_back(idx);
+                }
+            }
+        }
+        for (size_t q = 0; q < vQueue.size(); ++q)
+        {
+            const int parentIdx = vQueue[q];
+            const int parentId = scene.m_vEntities[static_cast<size_t>(parentIdx)].m_Id;
+            for (size_t i = 0; i < scene.m_vEntities.size(); ++i)
+            {
+                const int childIdx = static_cast<int>(i);
+                if (scene.m_vEntities[i].m_ParentId == parentIdx || scene.m_vEntities[i].m_ParentId == parentId)
+                {
+                    if (survivingIndices.insert(childIdx).second)
+                    {
+                        vQueue.push_back(childIdx);
+                    }
+                }
+            }
+        }
+
+        for (size_t i = 0; i < scene.m_vEntities.size(); ++i)
+        {
+            if (survivingIndices.count(static_cast<int>(i)) > 0)
+            {
+                continue;
+            }
+            if (CScriptComponent* pScriptComp = scene.m_vEntities[i].GetScriptComponent())
+            {
+                if (pScriptComp->m_pInstance)
+                {
+                    pScriptComp->m_pInstance->OnDestroy();
+                    DestroyScript(pScriptComp->m_ScriptName, pScriptComp->m_pInstance);
+                    pScriptComp->m_pInstance = nullptr;
+                    pScriptComp->m_pScriptEntity.reset();
+                }
+            }
+        }
+
+        std::vector<CEntity> vSurvivingEntities;
+        std::vector<int> vSurvivingOldIndices;
+        std::vector<int> vSurvivingOldIds;
+        std::vector<int> vSurvivingOldParents;
+        vSurvivingEntities.reserve(survivingIndices.size());
+
+        for (size_t i = 0; i < scene.m_vEntities.size(); ++i)
+        {
+            if (survivingIndices.count(static_cast<int>(i)) > 0)
+            {
+                vSurvivingOldIndices.push_back(static_cast<int>(i));
+                vSurvivingOldIds.push_back(scene.m_vEntities[i].m_Id);
+                vSurvivingOldParents.push_back(scene.m_vEntities[i].m_ParentId);
+                vSurvivingEntities.push_back(std::move(scene.m_vEntities[i]));
+                continue;
+            }
+            if (CMeshComponent* pMesh = scene.m_vEntities[i].GetMeshComponent())
+            {
+                pMesh->ReleaseOwnedResources();
+            }
+            if (CCanvasComponent* pCanvas = scene.m_vEntities[i].GetCanvasComponent())
+            {
+                pCanvas->ReleaseOwnedResources();
+            }
+            if (CImageComponent* pImage = scene.m_vEntities[i].GetImageComponent())
+            {
+                pImage->ReleaseOwnedResources();
+            }
+            if (CPanelComponent* pPanel = scene.m_vEntities[i].GetPanelComponent())
+            {
+                pPanel->ReleaseOwnedResources();
+            }
+        }
+
+        const size_t newSceneEntityCount = loadedScene.m_vEntities.size();
+        scene.m_vEntities = std::move(loadedScene.m_vEntities);
+        scene.m_Selected = -1;
+        scene.m_vSelectedEntities.clear();
+        s_EntityWrappers.clear();
+        m_PhysicsWorld.Reset();
+
+        for (size_t i = 0; i < scene.m_vEntities.size(); ++i)
+        {
+            scene.m_vEntities[i].m_Id = static_cast<int>(i);
+            if (CRigidbodyComponent* pBody = scene.m_vEntities[i].GetRigidbodyComponent())
+            {
+                pBody->ResetRuntimeState();
+            }
+        }
+
+        if (m_OnSceneLoaded)
+        {
+            m_OnSceneLoaded(scene);
+        }
+
+        std::unordered_map<int, int> oldIndexToNewIndex;
+        std::unordered_set<int> newDontDestroyIds;
+        for (size_t k = 0; k < vSurvivingEntities.size(); ++k)
+        {
+            const int newIdx = static_cast<int>(scene.m_vEntities.size());
+            oldIndexToNewIndex[vSurvivingOldIndices[k]] = newIdx;
+            if (m_DontDestroyEntityIds.count(vSurvivingOldIds[k]) > 0)
+            {
+                newDontDestroyIds.insert(newIdx);
+            }
+            vSurvivingEntities[k].m_Id = newIdx;
+            if (CRigidbodyComponent* pBody = vSurvivingEntities[k].GetRigidbodyComponent())
+            {
+                pBody->ResetRuntimeState();
+            }
+            scene.m_vEntities.push_back(std::move(vSurvivingEntities[k]));
+        }
+
+        for (size_t k = 0; k < vSurvivingOldIndices.size(); ++k)
+        {
+            const int newIdx = oldIndexToNewIndex[vSurvivingOldIndices[k]];
+            const int oldParent = vSurvivingOldParents[k];
+            auto it = oldIndexToNewIndex.find(oldParent);
+            scene.m_vEntities[static_cast<size_t>(newIdx)].m_ParentId =
+                (it != oldIndexToNewIndex.end()) ? it->second : -1;
+        }
+        m_DontDestroyEntityIds = std::move(newDontDestroyIds);
+
+        RefreshSceneScriptEntityPointers(scene);
+
+        for (size_t i = 0; i < newSceneEntityCount; ++i)
+        {
+            CEntity& entity = scene.m_vEntities[i];
+            CScriptComponent* pScriptComp = entity.GetScriptComponent();
+            if (!pScriptComp || pScriptComp->m_ScriptName.empty())
+            {
+                continue;
+            }
+            IScript* pInstance = CreateScript(pScriptComp->m_ScriptName);
+            if (!pInstance)
+            {
+                continue;
+            }
+            pScriptComp->m_pInstance = pInstance;
+            CTransformComponent* pTransform = entity.GetTransformComponent();
+            Vec3* pPos = pTransform ? &pTransform->m_Position : nullptr;
+            Vec3* pRot = pTransform ? &pTransform->m_Rotation : nullptr;
+            Vec3* pScale = pTransform ? &pTransform->m_Scale : nullptr;
+            bool* pHasOverride = pTransform ? &pTransform->m_HasLocalMatrixOverride : nullptr;
+            pScriptComp->m_pScriptEntity = std::make_unique<CScriptEntity>(
+                &entity, pPos, pRot, pScale, pHasOverride);
+            pInstance->m_Entity = pScriptComp->m_pScriptEntity.get();
+            pScriptComp->ApplyFieldsToInstance();
+            pInstance->OnCreate();
+        }
+
+        for (size_t i = 0; i < newSceneEntityCount; ++i)
+        {
+            CScriptComponent* pScriptComp = scene.m_vEntities[i].GetScriptComponent();
+            if (pScriptComp && pScriptComp->m_pInstance && pScriptComp->m_Enabled)
+            {
+                pScriptComp->m_pInstance->OnStart();
+            }
+        }
+
+        UpdateActiveSceneIdentity(resolvedScenePath);
+        m_FixedAccumulator = 0.0f;
+        scene.BumpTransformRevision();
+        LogMessage(EScriptLogLevel::INFO, "Loaded scene: " + m_ActiveScenePath);
+        return true;
+    }
+
+    void CScriptEngine::MarkDontDestroyOnLoad(int entityId)
+    {
+        if (entityId >= 0)
+        {
+            m_DontDestroyEntityIds.insert(entityId);
+        }
+    }
+
+    void CScriptEngine::ClearPersistentData()
+    {
+        m_PersistentStrings.clear();
+        m_PersistentInts.clear();
+        m_PersistentFloats.clear();
+        m_PersistentBools.clear();
+    }
+
+    void CScriptEngine::SetPersistentString(const std::string& key, const std::string& value)
+    {
+        m_PersistentStrings[key] = value;
+    }
+
+    bool CScriptEngine::GetPersistentString(const std::string& key, std::string& outValue) const
+    {
+        auto it = m_PersistentStrings.find(key);
+        if (it == m_PersistentStrings.end())
+        {
+            return false;
+        }
+        outValue = it->second;
+        return true;
+    }
+
+    void CScriptEngine::SetPersistentInt(const std::string& key, int value)
+    {
+        m_PersistentInts[key] = value;
+    }
+
+    int CScriptEngine::GetPersistentInt(const std::string& key, int defaultValue) const
+    {
+        auto it = m_PersistentInts.find(key);
+        return it != m_PersistentInts.end() ? it->second : defaultValue;
+    }
+
+    void CScriptEngine::SetPersistentFloat(const std::string& key, float value)
+    {
+        m_PersistentFloats[key] = value;
+    }
+
+    float CScriptEngine::GetPersistentFloat(const std::string& key, float defaultValue) const
+    {
+        auto it = m_PersistentFloats.find(key);
+        return it != m_PersistentFloats.end() ? it->second : defaultValue;
+    }
+
+    void CScriptEngine::SetPersistentBool(const std::string& key, bool value)
+    {
+        m_PersistentBools[key] = value;
+    }
+
+    bool CScriptEngine::GetPersistentBool(const std::string& key, bool defaultValue) const
+    {
+        auto it = m_PersistentBools.find(key);
+        return it != m_PersistentBools.end() ? it->second : defaultValue;
+    }
+
+    bool CScriptEngine::HasPersistentKey(const std::string& key) const
+    {
+        return m_PersistentStrings.count(key) > 0 ||
+            m_PersistentInts.count(key) > 0 ||
+            m_PersistentFloats.count(key) > 0 ||
+            m_PersistentBools.count(key) > 0;
+    }
+
+    void CScriptEngine::RemovePersistentKey(const std::string& key)
+    {
+        m_PersistentStrings.erase(key);
+        m_PersistentInts.erase(key);
+        m_PersistentFloats.erase(key);
+        m_PersistentBools.erase(key);
     }
 
 } // quark::script

@@ -780,6 +780,23 @@ namespace quark::script
         void (*pfnDestroyEntity)(CScriptEntity* pEntity) = nullptr;
         void (*pfnDestroyEntityById)(int entityId) = nullptr;
         bool (*pfnLoadScene)(const char* pScenePath) = nullptr;
+        bool (*pfnReloadScene)() = nullptr;
+        const char* (*pfnGetActiveSceneName)() = nullptr;
+        const char* (*pfnGetActiveScenePath)() = nullptr;
+        int (*pfnGetSceneCount)() = nullptr;
+        const char* (*pfnGetScenePath)(int index) = nullptr;
+        void (*pfnDontDestroyOnLoad)(CScriptEntity* pEntity) = nullptr;
+        void (*pfnSetPersistentString)(const char* pKey, const char* pValue) = nullptr;
+        bool (*pfnGetPersistentString)(const char* pKey, char* pOutBuffer, int bufferSize) = nullptr;
+        void (*pfnSetPersistentInt)(const char* pKey, int value) = nullptr;
+        int (*pfnGetPersistentInt)(const char* pKey, int defaultValue) = nullptr;
+        void (*pfnSetPersistentFloat)(const char* pKey, float value) = nullptr;
+        float (*pfnGetPersistentFloat)(const char* pKey, float defaultValue) = nullptr;
+        void (*pfnSetPersistentBool)(const char* pKey, bool value) = nullptr;
+        bool (*pfnGetPersistentBool)(const char* pKey, bool defaultValue) = nullptr;
+        bool (*pfnHasPersistentKey)(const char* pKey) = nullptr;
+        void (*pfnRemovePersistentKey)(const char* pKey) = nullptr;
+        void (*pfnClearPersistentData)() = nullptr;
     };
 
     extern SSceneCallbacks g_SceneCallbacks;
@@ -932,6 +949,188 @@ namespace quark::script
                 return g_SceneCallbacks.pfnLoadScene(scenePath.c_str());
             }
             return false;
+        }
+    };
+
+    class SceneManager
+    {
+    public:
+        static bool LoadScene(const std::string& scenePath)
+        {
+            if (g_SceneCallbacks.pfnLoadScene && !scenePath.empty())
+            {
+                return g_SceneCallbacks.pfnLoadScene(scenePath.c_str());
+            }
+            return false;
+        }
+
+        static bool ReloadScene()
+        {
+            if (g_SceneCallbacks.pfnReloadScene)
+            {
+                return g_SceneCallbacks.pfnReloadScene();
+            }
+            return false;
+        }
+
+        static std::string GetActiveSceneName()
+        {
+            if (g_SceneCallbacks.pfnGetActiveSceneName)
+            {
+                const char* pName = g_SceneCallbacks.pfnGetActiveSceneName();
+                return pName ? std::string(pName) : std::string();
+            }
+            return {};
+        }
+
+        static std::string GetActiveScenePath()
+        {
+            if (g_SceneCallbacks.pfnGetActiveScenePath)
+            {
+                const char* pPath = g_SceneCallbacks.pfnGetActiveScenePath();
+                return pPath ? std::string(pPath) : std::string();
+            }
+            return {};
+        }
+
+        static int GetSceneCount()
+        {
+            if (g_SceneCallbacks.pfnGetSceneCount)
+            {
+                return g_SceneCallbacks.pfnGetSceneCount();
+            }
+            return 0;
+        }
+
+        static std::string GetScenePath(int index)
+        {
+            if (g_SceneCallbacks.pfnGetScenePath && index >= 0)
+            {
+                const char* pPath = g_SceneCallbacks.pfnGetScenePath(index);
+                return pPath ? std::string(pPath) : std::string();
+            }
+            return {};
+        }
+
+        static std::vector<std::string> GetSceneList()
+        {
+            std::vector<std::string> vScenes;
+            const int count = GetSceneCount();
+            vScenes.reserve(static_cast<size_t>(std::max(0, count)));
+            for (int i = 0; i < count; ++i)
+            {
+                std::string path = GetScenePath(i);
+                if (!path.empty())
+                {
+                    vScenes.push_back(std::move(path));
+                }
+            }
+            return vScenes;
+        }
+
+        static void DontDestroyOnLoad(CScriptEntity* pEntity)
+        {
+            if (g_SceneCallbacks.pfnDontDestroyOnLoad && pEntity)
+            {
+                g_SceneCallbacks.pfnDontDestroyOnLoad(pEntity);
+            }
+        }
+
+        static void SetString(const std::string& key, const std::string& value)
+        {
+            if (g_SceneCallbacks.pfnSetPersistentString && !key.empty())
+            {
+                g_SceneCallbacks.pfnSetPersistentString(key.c_str(), value.c_str());
+            }
+        }
+
+        static std::string GetString(const std::string& key, const std::string& defaultValue = "")
+        {
+            if (g_SceneCallbacks.pfnGetPersistentString && !key.empty())
+            {
+                char aBuffer[1024] = {};
+                if (g_SceneCallbacks.pfnGetPersistentString(key.c_str(), aBuffer, static_cast<int>(sizeof(aBuffer))))
+                {
+                    return std::string(aBuffer);
+                }
+            }
+            return defaultValue;
+        }
+
+        static void SetInt(const std::string& key, int value)
+        {
+            if (g_SceneCallbacks.pfnSetPersistentInt && !key.empty())
+            {
+                g_SceneCallbacks.pfnSetPersistentInt(key.c_str(), value);
+            }
+        }
+
+        static int GetInt(const std::string& key, int defaultValue = 0)
+        {
+            if (g_SceneCallbacks.pfnGetPersistentInt && !key.empty())
+            {
+                return g_SceneCallbacks.pfnGetPersistentInt(key.c_str(), defaultValue);
+            }
+            return defaultValue;
+        }
+
+        static void SetFloat(const std::string& key, float value)
+        {
+            if (g_SceneCallbacks.pfnSetPersistentFloat && !key.empty())
+            {
+                g_SceneCallbacks.pfnSetPersistentFloat(key.c_str(), value);
+            }
+        }
+
+        static float GetFloat(const std::string& key, float defaultValue = 0.0f)
+        {
+            if (g_SceneCallbacks.pfnGetPersistentFloat && !key.empty())
+            {
+                return g_SceneCallbacks.pfnGetPersistentFloat(key.c_str(), defaultValue);
+            }
+            return defaultValue;
+        }
+
+        static void SetBool(const std::string& key, bool value)
+        {
+            if (g_SceneCallbacks.pfnSetPersistentBool && !key.empty())
+            {
+                g_SceneCallbacks.pfnSetPersistentBool(key.c_str(), value);
+            }
+        }
+
+        static bool GetBool(const std::string& key, bool defaultValue = false)
+        {
+            if (g_SceneCallbacks.pfnGetPersistentBool && !key.empty())
+            {
+                return g_SceneCallbacks.pfnGetPersistentBool(key.c_str(), defaultValue);
+            }
+            return defaultValue;
+        }
+
+        static bool HasKey(const std::string& key)
+        {
+            if (g_SceneCallbacks.pfnHasPersistentKey && !key.empty())
+            {
+                return g_SceneCallbacks.pfnHasPersistentKey(key.c_str());
+            }
+            return false;
+        }
+
+        static void RemoveKey(const std::string& key)
+        {
+            if (g_SceneCallbacks.pfnRemovePersistentKey && !key.empty())
+            {
+                g_SceneCallbacks.pfnRemovePersistentKey(key.c_str());
+            }
+        }
+
+        static void ClearPersistentData()
+        {
+            if (g_SceneCallbacks.pfnClearPersistentData)
+            {
+                g_SceneCallbacks.pfnClearPersistentData();
+            }
         }
     };
 
@@ -1512,12 +1711,14 @@ using MouseBtn = ::quark::script::Mouse;
 using Time = ::quark::script::Time;
 using Math = ::quark::script::Math;
 using Scene = ::quark::script::Scene;
+using SceneManager = ::quark::script::SceneManager;
 using Physics = ::quark::script::Physics;
 using Debug = ::quark::script::Debug;
 using SCollisionInfo = ::quark::script::SCollisionInfo;
 using CollisionInfo = ::quark::script::SCollisionInfo;
 using SRaycastHit = ::quark::script::SRaycastHit;
 using RaycastHit = ::quark::script::SRaycastHit;
+using CScriptEntity = ::quark::script::CScriptEntity;
 using ScriptEntity = ::quark::script::CScriptEntity;
 using SEntityRef = ::quark::script::SEntityRef;
 using SAssetRef = ::quark::script::SAssetRef;

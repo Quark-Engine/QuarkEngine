@@ -176,6 +176,7 @@ struct SAssetBrowserCreatePopup
     bool m_Open = false;
     bool m_CreatingFolder = false;
     bool m_CreatingScript = false;
+    bool m_CreatingScene = false;
     char m_aNewItemName[128] = "";
 };
 
