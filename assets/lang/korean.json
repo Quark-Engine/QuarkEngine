@@ -352,5 +352,20 @@
     "all_models":  "All Models",
     "all_prefabs":  "All Prefabs",
     "all_scripts":  "All Scripts",
-    "all_scenes":  "All Scenes"
+    "all_scenes":  "All Scenes",
+    "pause":  "Pause",
+    "step_frame":  "Step Frame",
+    "memory_and_gpu":  "Memory \u0026 GPU",
+    "renderer_backend":  "Backend",
+    "gpu_adapter":  "GPU",
+    "process_ram":  "Process RAM",
+    "peak_ram":  "Peak RAM",
+    "private_memory":  "Private Commit",
+    "gpu_vram":  "GPU VRAM",
+    "ram_history_mb":  "RAM Usage (MB)",
+    "vram_history_mb":  "VRAM Usage (MB)",
+    "stage_gpu_present":  "GPU Submit \u0026 Present",
+    "entities":  "Entities",
+    "meshes":  "Meshes",
+    "lights":  "Lights"
 }

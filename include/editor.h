@@ -49,11 +49,19 @@ struct SProfilerFrameStats
     float m_ShadowPassMs = 0.0f;
     float m_Main3dPassMs = 0.0f;
     float m_ImguiEditorMs = 0.0f;
+    float m_EndDrawingMs = 0.0f;
+    float m_RamUsedMb = 0.0f;
+    float m_RamPeakMb = 0.0f;
+    float m_RamPrivateMb = 0.0f;
+    float m_VramUsedMb = 0.0f;
+    float m_VramBudgetMb = 0.0f;
     int m_DrawCalls = 0;
     int m_TriangleCount = 0;
     int m_EntityCount = 0;
     int m_VisibleMeshCount = 0;
     int m_ActiveLightCount = 0;
+    std::string m_BackendName;
+    std::string m_GpuName;
 };
 
 struct SBuildTaskResult
@@ -123,6 +131,8 @@ public:
     bool m_PluginCommandActive = false;
     bool m_SceneRedrawRequested = false;
     bool m_IsPlaying = false;
+    bool m_IsPaused = false;
+    bool m_StepFrameRequested = false;
     bool m_PendingPlayRestore = false;
     bool m_GameViewActive = false;
     bool m_SelectGameTab = false;
@@ -175,6 +185,8 @@ public:
     std::array<float, 120> m_aProfilerFpsHistory{};
     std::array<float, 120> m_aProfilerFrameTimeHistory{};
     std::array<float, 120> m_aProfilerDrawCallHistory{};
+    std::array<float, 120> m_aProfilerRamHistory{};
+    std::array<float, 120> m_aProfilerVramHistory{};
     int m_ProfilerHistoryCursor = 0;
 
 private:

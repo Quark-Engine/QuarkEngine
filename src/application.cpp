@@ -26,10 +26,132 @@
 #include <iostream>
 #include <mutex>
 #include <SDL3/SDL_video.h>
+#ifdef _WIN32
+#ifndef WIN32_LEAN_AND_MEAN
+#define WIN32_LEAN_AND_MEAN
+#endif
+#ifndef NOMINMAX
+#define NOMINMAX
+#endif
+#include <windows.h>
+#include <psapi.h>
+#include <dxgi1_4.h>
+#undef CloseWindow
+#undef ShowCursor
+#undef DrawText
+#undef LoadImage
+#undef PlaySound
+#endif
 namespace fs = std::filesystem;
 
 namespace
 {
+    struct SSystemMemoryGpuSample
+    {
+        float m_RamUsedMb = 0.0f;
+        float m_RamPeakMb = 0.0f;
+        float m_RamPrivateMb = 0.0f;
+        float m_VramUsedMb = 0.0f;
+        float m_VramBudgetMb = 0.0f;
+        std::string m_GpuName;
+    };
+
+    const char* BackendDisplayName(RendererType backend)
+    {
+        switch (backend)
+        {
+        case RendererType::OpenGL:
+            return "OpenGL";
+        case RendererType::D3D11:
+            return "Direct3D 11";
+        case RendererType::Vulkan:
+            return "Vulkan";
+        default:
+            return "Unknown";
+        }
+    }
+
+    SSystemMemoryGpuSample SampleSystemMemoryAndGpu()
+    {
+        static SSystemMemoryGpuSample s_CachedSample{};
+        static auto s_LastSampleTime = std::chrono::steady_clock::time_point{};
+        const auto now = std::chrono::steady_clock::now();
+        if (s_LastSampleTime.time_since_epoch().count() != 0 &&
+            std::chrono::duration_cast<std::chrono::milliseconds>(now - s_LastSampleTime).count() < 250)
+        {
+            return s_CachedSample;
+        }
+        s_LastSampleTime = now;
+
+        constexpr float BYTES_TO_MB = 1.0f / (1024.0f * 1024.0f);
+#ifdef _WIN32
+        PROCESS_MEMORY_COUNTERS_EX pmc{};
+        pmc.cb = sizeof(pmc);
+        if (K32GetProcessMemoryInfo(GetCurrentProcess(),
+                                    reinterpret_cast<PROCESS_MEMORY_COUNTERS*>(&pmc),
+                                    sizeof(pmc)))
+        {
+            s_CachedSample.m_RamUsedMb = static_cast<float>(pmc.WorkingSetSize) * BYTES_TO_MB;
+            s_CachedSample.m_RamPeakMb = static_cast<float>(pmc.PeakWorkingSetSize) * BYTES_TO_MB;
+            s_CachedSample.m_RamPrivateMb = static_cast<float>(pmc.PrivateUsage) * BYTES_TO_MB;
+        }
+
+        using FCreateDxgiFactory1 = HRESULT(WINAPI*)(REFIID, void**);
+        static HMODULE s_pDxgiModule = LoadLibraryA("dxgi.dll");
+        static auto s_pfnCreateFactory1 = s_pDxgiModule
+            ? reinterpret_cast<FCreateDxgiFactory1>(GetProcAddress(s_pDxgiModule, "CreateDXGIFactory1"))
+            : nullptr;
+        static IDXGIAdapter3* s_pPrimaryAdapter = nullptr;
+        static bool s_AdapterProbed = false;
+
+        if (!s_AdapterProbed)
+        {
+            s_AdapterProbed = true;
+            if (s_pfnCreateFactory1 != nullptr)
+            {
+                IDXGIFactory4* pFactory = nullptr;
+                if (SUCCEEDED(s_pfnCreateFactory1(__uuidof(IDXGIFactory4), reinterpret_cast<void**>(&pFactory))) &&
+                    pFactory != nullptr)
+                {
+                    IDXGIAdapter1* pAdapter1 = nullptr;
+                    for (UINT idx = 0; pFactory->EnumAdapters1(idx, &pAdapter1) != DXGI_ERROR_NOT_FOUND; ++idx)
+                    {
+                        DXGI_ADAPTER_DESC1 desc{};
+                        if (SUCCEEDED(pAdapter1->GetDesc1(&desc)) && (desc.Flags & DXGI_ADAPTER_FLAG_SOFTWARE) == 0)
+                        {
+                            IDXGIAdapter3* pAdapter3 = nullptr;
+                            if (SUCCEEDED(pAdapter1->QueryInterface(__uuidof(IDXGIAdapter3),
+                                                                    reinterpret_cast<void**>(&pAdapter3))) &&
+                                pAdapter3 != nullptr)
+                            {
+                                s_pPrimaryAdapter = pAdapter3;
+                                char aUtf8Name[256] = {};
+                                WideCharToMultiByte(CP_UTF8, 0, desc.Description, -1,
+                                                    aUtf8Name, sizeof(aUtf8Name), nullptr, nullptr);
+                                s_CachedSample.m_GpuName = aUtf8Name;
+                                pAdapter1->Release();
+                                break;
+                            }
+                        }
+                        pAdapter1->Release();
+                    }
+                    pFactory->Release();
+                }
+            }
+        }
+
+        if (s_pPrimaryAdapter != nullptr)
+        {
+            DXGI_QUERY_VIDEO_MEMORY_INFO memInfo{};
+            if (SUCCEEDED(s_pPrimaryAdapter->QueryVideoMemoryInfo(0, DXGI_MEMORY_SEGMENT_GROUP_LOCAL, &memInfo)))
+            {
+                s_CachedSample.m_VramUsedMb = static_cast<float>(memInfo.CurrentUsage) * BYTES_TO_MB;
+                s_CachedSample.m_VramBudgetMb = static_cast<float>(memInfo.Budget) * BYTES_TO_MB;
+            }
+        }
+#endif
+        return s_CachedSample;
+    }
     static std::ofstream s_EngineLogFile;
     static std::mutex s_EngineLogMutex;
 
@@ -396,9 +518,16 @@ void CApplication::UpdateFrame()
 
     if (m_Editor.m_IsPlaying)
     {
-        const float deltaTime = static_cast<float>(GetFrameTime());
-        quark::script::CScriptEngine::Get().UpdatePlay(m_Editor.m_Scene, deltaTime);
-        m_SceneRenderer.PrepareFrameCache(m_Editor.m_Scene);
+        const bool shouldAdvance = !m_Editor.m_IsPaused || m_Editor.m_StepFrameRequested;
+        if (shouldAdvance)
+        {
+            const float deltaTime = m_Editor.m_StepFrameRequested
+                ? std::clamp(m_Editor.m_BuildSettings.m_FixedTimestep, 0.002f, 0.1f)
+                : static_cast<float>(GetFrameTime());
+            m_Editor.m_StepFrameRequested = false;
+            quark::script::CScriptEngine::Get().UpdatePlay(m_Editor.m_Scene, deltaTime);
+            m_SceneRenderer.PrepareFrameCache(m_Editor.m_Scene);
+        }
     }
 
     if (m_Editor.m_Scene2DMode)
@@ -808,13 +937,14 @@ void CApplication::RenderFrame()
             mousePos.y <= gameViewport.m_WindowPos.y + gameViewport.m_WindowSize.y;
 
         const bool hasSceneUi = quark::gui::SceneHasActiveUiWidgets(m_Editor.m_Scene);
-        if ((!gameViewport.m_Visible || m_Camera.m_Active || IsKeyPressed(KEY_ESCAPE)) &&
+        if ((!gameViewport.m_Visible || m_Camera.m_Active || m_Editor.m_IsPaused || IsKeyPressed(KEY_ESCAPE)) &&
             quark::script::CScriptEngine::Get().IsCursorLocked())
         {
             quark::script::CScriptEngine::Get().SetCursorLocked(false);
         }
         else if (!hasSceneUi &&
                  !m_Camera.m_Active &&
+                 !m_Editor.m_IsPaused &&
                  !quark::gui::CGuiSystem::Get().WantsMouseCapture() &&
                  !quark::script::CScriptEngine::Get().IsCursorLocked() &&
                  mouseOverGameViewport && IsMouseButtonPressed(MOUSE_BUTTON_LEFT))
@@ -952,6 +1082,15 @@ void CApplication::RenderFrame()
     profilerStats.m_ShadowPassMs = m_FrameTimings.m_ShadowPassMs;
     profilerStats.m_Main3dPassMs = m_FrameTimings.m_Main3dPassMs;
     profilerStats.m_ImguiEditorMs = m_FrameTimings.m_ImguiEditorMs;
+    profilerStats.m_EndDrawingMs = m_FrameTimings.m_EndDrawingMs;
+    const SSystemMemoryGpuSample memSample = SampleSystemMemoryAndGpu();
+    profilerStats.m_RamUsedMb = memSample.m_RamUsedMb;
+    profilerStats.m_RamPeakMb = memSample.m_RamPeakMb;
+    profilerStats.m_RamPrivateMb = memSample.m_RamPrivateMb;
+    profilerStats.m_VramUsedMb = memSample.m_VramUsedMb;
+    profilerStats.m_VramBudgetMb = memSample.m_VramBudgetMb;
+    profilerStats.m_GpuName = memSample.m_GpuName;
+    profilerStats.m_BackendName = BackendDisplayName(GetCurrentBackend());
     profilerStats.m_EntityCount = static_cast<int>(m_Editor.m_Scene.m_vEntities.size());
 
     const SRenderBatchStats batchStats = m_SceneRenderer.GetLastBatchStats();

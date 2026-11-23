@@ -79,6 +79,8 @@ void CEditor::Unload()
     if (m_IsPlaying)
     {
         m_IsPlaying = false;
+        m_IsPaused = false;
+        m_StepFrameRequested = false;
         quark::script::CScriptEngine::Get().StopPlay(m_Scene);
     }
 
@@ -170,6 +172,7 @@ bool CEditor::BeginPlayMode()
 
     m_PlayModeSnapshot = quark::CSceneDocument::CaptureSnapshot(m_Scene);
     m_IsPlaying = true;
+    m_StepFrameRequested = false;
     m_GameViewActive = true;
     m_ShowGameView = true;
     m_SelectGameTab = true;
@@ -205,6 +208,8 @@ bool CEditor::OpenScene(const std::filesystem::path& scenePath)
     if (m_IsPlaying)
     {
         m_IsPlaying = false;
+        m_IsPaused = false;
+        m_StepFrameRequested = false;
         quark::script::CScriptEngine::Get().StopPlay(m_Scene);
         m_GameViewActive = false;
         m_PlayModeSnapshot.reset();
@@ -313,6 +318,8 @@ bool CEditor::StopPlayMode()
     if (m_IsPlaying)
     {
         m_IsPlaying = false;
+        m_IsPaused = false;
+        m_StepFrameRequested = false;
         quark::script::CScriptEngine::Get().StopPlay(m_Scene);
         m_GameViewActive = false;
     }

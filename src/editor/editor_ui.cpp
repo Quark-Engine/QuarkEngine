@@ -739,10 +739,10 @@ void CEditor::DrawTopToolbar(CFlyCamera& camera)
         ImGui::SameLine();
         drawGizmoButton("##gizmo_scale", lang.Word("scale"), ImGuizmo::SCALE, 2);
 
-        const float playBtnWidth = 38.0f;
+        const float transportBtnWidth = 34.0f;
         const bool showRestore = !m_IsPlaying && m_PlayModeSnapshot.has_value();
         const float restoreWidth = showRestore ? (ImGui::CalcTextSize(lang.Word("restore")).x + 16.0f) : 0.0f;
-        const float centerGroupWidth = playBtnWidth + (showRestore ? (restoreWidth + 6.0f) : 0.0f);
+        const float centerGroupWidth = transportBtnWidth * 3.0f + 6.0f + (showRestore ? (restoreWidth + 6.0f) : 0.0f);
         const float centerX = (ImGui::GetWindowWidth() - centerGroupWidth) * 0.5f;
         if (centerX > ImGui::GetCursorPosX() + 12.0f)
         {
@@ -759,7 +759,7 @@ void CEditor::DrawTopToolbar(CFlyCamera& camera)
             ImGui::PushStyleColor(ImGuiCol_Button, activeBg);
             ImGui::PushStyleColor(ImGuiCol_ButtonHovered, activeHovered);
             ImGui::PushStyleColor(ImGuiCol_ButtonActive, activePressed);
-            if (ImGui::Button("##toolbar_stop", ImVec2(playBtnWidth, 24.0f)))
+            if (ImGui::Button("##toolbar_stop", ImVec2(transportBtnWidth, 24.0f)))
             {
                 camera.ReleaseCapture();
                 SetScene2DMode(camera, false);
@@ -769,10 +769,11 @@ void CEditor::DrawTopToolbar(CFlyCamera& camera)
 
             const ImVec2 pMin = ImGui::GetItemRectMin();
             const ImVec2 pMax = ImGui::GetItemRectMax();
-            const ImVec2 c((pMin.x + pMax.x) * 0.5f, (pMin.y + pMax.y) * 0.5f);
+            const float cx = std::floor((pMin.x + pMax.x) * 0.5f);
+            const float cy = std::floor((pMin.y + pMax.y) * 0.5f);
             ImGui::GetWindowDrawList()->AddRectFilled(
-                ImVec2(c.x - 5.0f, c.y - 5.0f),
-                ImVec2(c.x + 5.0f, c.y + 5.0f),
+                ImVec2(cx - 5.0f, cy - 5.0f),
+                ImVec2(cx + 5.0f, cy + 5.0f),
                 ImGui::GetColorU32(ImGuiCol_Text));
             if (ImGui::IsItemHovered())
             {
@@ -781,7 +782,7 @@ void CEditor::DrawTopToolbar(CFlyCamera& camera)
         }
         else
         {
-            if (ImGui::Button("##toolbar_play", ImVec2(playBtnWidth, 24.0f)))
+            if (ImGui::Button("##toolbar_play", ImVec2(transportBtnWidth, 24.0f)))
             {
                 if (camera.m_Active)
                 {
@@ -793,17 +794,81 @@ void CEditor::DrawTopToolbar(CFlyCamera& camera)
 
             const ImVec2 pMin = ImGui::GetItemRectMin();
             const ImVec2 pMax = ImGui::GetItemRectMax();
-            const ImVec2 c((pMin.x + pMax.x) * 0.5f, (pMin.y + pMax.y) * 0.5f);
+            const float cx = std::floor((pMin.x + pMax.x) * 0.5f);
+            const float cy = std::floor((pMin.y + pMax.y) * 0.5f);
             ImGui::GetWindowDrawList()->AddTriangleFilled(
-                ImVec2(c.x - 4.0f, c.y - 6.0f),
-                ImVec2(c.x - 4.0f, c.y + 6.0f),
-                ImVec2(c.x + 6.0f, c.y),
+                ImVec2(cx - 4.0f, cy - 5.5f),
+                ImVec2(cx + 6.0f, cy),
+                ImVec2(cx - 4.0f, cy + 5.5f),
                 ImGui::GetColorU32(ImGuiCol_Text));
             if (ImGui::IsItemHovered())
             {
                 ImGui::SetTooltip("%s", lang.Word("play"));
             }
         }
+
+        ImGui::SameLine();
+        const bool wasPaused = m_IsPaused;
+        if (wasPaused)
+        {
+            ImGui::PushStyleColor(ImGuiCol_Button, activeBg);
+            ImGui::PushStyleColor(ImGuiCol_ButtonHovered, activeHovered);
+            ImGui::PushStyleColor(ImGuiCol_ButtonActive, activePressed);
+        }
+        if (ImGui::Button("##toolbar_pause", ImVec2(transportBtnWidth, 24.0f)))
+        {
+            m_IsPaused = !m_IsPaused;
+            if (m_IsPaused && m_IsPlaying)
+            {
+                quark::script::CScriptEngine::Get().SetCursorLocked(false);
+            }
+        }
+        if (wasPaused)
+        {
+            ImGui::PopStyleColor(3);
+        }
+        {
+            const ImVec2 pMin = ImGui::GetItemRectMin();
+            const ImVec2 pMax = ImGui::GetItemRectMax();
+            const float cx = std::floor((pMin.x + pMax.x) * 0.5f);
+            const float cy = std::floor((pMin.y + pMax.y) * 0.5f);
+            const ImU32 iconCol = ImGui::GetColorU32(ImGuiCol_Text);
+            ImDrawList* pDraw = ImGui::GetWindowDrawList();
+            pDraw->AddRectFilled(ImVec2(cx - 4.0f, cy - 5.0f), ImVec2(cx - 1.0f, cy + 5.0f), iconCol);
+            pDraw->AddRectFilled(ImVec2(cx + 1.0f, cy - 5.0f), ImVec2(cx + 4.0f, cy + 5.0f), iconCol);
+        }
+        if (ImGui::IsItemHovered())
+        {
+            ImGui::SetTooltip("%s", lang.Word("pause"));
+        }
+
+        ImGui::SameLine();
+        ImGui::BeginDisabled(!m_IsPlaying);
+        if (ImGui::Button("##toolbar_step", ImVec2(transportBtnWidth, 24.0f)))
+        {
+            m_IsPaused = true;
+            m_StepFrameRequested = true;
+            quark::script::CScriptEngine::Get().SetCursorLocked(false);
+        }
+        {
+            const ImVec2 pMin = ImGui::GetItemRectMin();
+            const ImVec2 pMax = ImGui::GetItemRectMax();
+            const float cx = std::floor((pMin.x + pMax.x) * 0.5f);
+            const float cy = std::floor((pMin.y + pMax.y) * 0.5f);
+            const ImU32 iconCol = ImGui::GetColorU32(m_IsPlaying ? ImGuiCol_Text : ImGuiCol_TextDisabled);
+            ImDrawList* pDraw = ImGui::GetWindowDrawList();
+            pDraw->AddTriangleFilled(
+                ImVec2(cx - 5.0f, cy - 5.0f),
+                ImVec2(cx + 2.0f, cy),
+                ImVec2(cx - 5.0f, cy + 5.0f),
+                iconCol);
+            pDraw->AddRectFilled(ImVec2(cx + 3.0f, cy - 5.0f), ImVec2(cx + 5.0f, cy + 5.0f), iconCol);
+        }
+        if (ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenDisabled))
+        {
+            ImGui::SetTooltip("%s", lang.Word("step_frame"));
+        }
+        ImGui::EndDisabled();
 
         if (showRestore)
         {
@@ -2832,6 +2897,8 @@ void CEditor::RecordProfilerSample(const SProfilerFrameStats& stats)
     m_aProfilerFpsHistory[static_cast<size_t>(m_ProfilerHistoryCursor)] = stats.m_Fps;
     m_aProfilerFrameTimeHistory[static_cast<size_t>(m_ProfilerHistoryCursor)] = stats.m_FrameTimeMs;
     m_aProfilerDrawCallHistory[static_cast<size_t>(m_ProfilerHistoryCursor)] = static_cast<float>(stats.m_DrawCalls);
+    m_aProfilerRamHistory[static_cast<size_t>(m_ProfilerHistoryCursor)] = stats.m_RamUsedMb;
+    m_aProfilerVramHistory[static_cast<size_t>(m_ProfilerHistoryCursor)] = stats.m_VramUsedMb;
     m_ProfilerHistoryCursor = (m_ProfilerHistoryCursor + 1) % static_cast<int>(m_aProfilerFpsHistory.size());
 }
 
@@ -2966,12 +3033,16 @@ void CEditor::DrawProfilerWindow()
     {
         ImGui::Text("FPS: %.1f   |   %s: %.2f ms",
                     m_LastProfilerStats.m_Fps, lang.Word("frame_time_ms"), m_LastProfilerStats.m_FrameTimeMs);
-        ImGui::Text("%s: %d   |   Triangles: %d   |   Entities: %d (Meshes: %d, Lights: %d)",
+        ImGui::Text("%s: %d   |   %s: %d   |   %s: %d (%s: %d, %s: %d)",
                     lang.Word("draw_calls"),
                     m_LastProfilerStats.m_DrawCalls,
+                    lang.Word("triangles"),
                     m_LastProfilerStats.m_TriangleCount,
+                    lang.Word("entities"),
                     m_LastProfilerStats.m_EntityCount,
+                    lang.Word("meshes"),
                     m_LastProfilerStats.m_VisibleMeshCount,
+                    lang.Word("lights"),
                     m_LastProfilerStats.m_ActiveLightCount);
 
         ImGui::Spacing();
@@ -2980,19 +3051,61 @@ void CEditor::DrawProfilerWindow()
                          static_cast<int>(m_aProfilerFpsHistory.size()),
                          m_ProfilerHistoryCursor,
                          TextFormat("%.1f FPS", m_LastProfilerStats.m_Fps),
-                         0.0f, 240.0f, ImVec2(0.0f, 65.0f));
+                         0.0f, 240.0f, ImVec2(0.0f, 60.0f));
         ImGui::PlotLines(lang.Word("frame_time_ms"),
                          m_aProfilerFrameTimeHistory.data(),
                          static_cast<int>(m_aProfilerFrameTimeHistory.size()),
                          m_ProfilerHistoryCursor,
                          TextFormat("%.2f ms", m_LastProfilerStats.m_FrameTimeMs),
-                         0.0f, 50.0f, ImVec2(0.0f, 65.0f));
+                         0.0f, 50.0f, ImVec2(0.0f, 60.0f));
         ImGui::PlotLines(lang.Word("draw_calls"),
                          m_aProfilerDrawCallHistory.data(),
                          static_cast<int>(m_aProfilerDrawCallHistory.size()),
                          m_ProfilerHistoryCursor,
                          TextFormat("%d", m_LastProfilerStats.m_DrawCalls),
-                         0.0f, 500.0f, ImVec2(0.0f, 55.0f));
+                         0.0f, 500.0f, ImVec2(0.0f, 50.0f));
+
+        ImGui::Spacing();
+        ImGui::Separator();
+        ImGui::TextUnformatted(lang.Word("memory_and_gpu"));
+        ImGui::Text("%s: %s   |   %s: %s",
+                    lang.Word("renderer_backend"),
+                    m_LastProfilerStats.m_BackendName.empty() ? "-" : m_LastProfilerStats.m_BackendName.c_str(),
+                    lang.Word("gpu_adapter"),
+                    m_LastProfilerStats.m_GpuName.empty() ? "-" : m_LastProfilerStats.m_GpuName.c_str());
+        ImGui::Text("%s: %.1f MB   |   %s: %.1f MB   |   %s: %.1f MB",
+                    lang.Word("process_ram"),
+                    m_LastProfilerStats.m_RamUsedMb,
+                    lang.Word("peak_ram"),
+                    m_LastProfilerStats.m_RamPeakMb,
+                    lang.Word("private_memory"),
+                    m_LastProfilerStats.m_RamPrivateMb);
+        if (m_LastProfilerStats.m_VramBudgetMb > 0.0f)
+        {
+            ImGui::Text("%s: %.1f / %.0f MB (%.1f%%)",
+                        lang.Word("gpu_vram"),
+                        m_LastProfilerStats.m_VramUsedMb,
+                        m_LastProfilerStats.m_VramBudgetMb,
+                        (m_LastProfilerStats.m_VramUsedMb / m_LastProfilerStats.m_VramBudgetMb) * 100.0f);
+        }
+
+        const float ramScaleMax = std::max(256.0f, m_LastProfilerStats.m_RamPeakMb * 1.25f);
+        ImGui::PlotLines(lang.Word("ram_history_mb"),
+                         m_aProfilerRamHistory.data(),
+                         static_cast<int>(m_aProfilerRamHistory.size()),
+                         m_ProfilerHistoryCursor,
+                         TextFormat("%.1f MB", m_LastProfilerStats.m_RamUsedMb),
+                         0.0f, ramScaleMax, ImVec2(0.0f, 50.0f));
+        if (m_LastProfilerStats.m_VramBudgetMb > 0.0f)
+        {
+            const float vramScaleMax = std::max(256.0f, m_LastProfilerStats.m_VramUsedMb * 1.5f);
+            ImGui::PlotLines(lang.Word("vram_history_mb"),
+                             m_aProfilerVramHistory.data(),
+                             static_cast<int>(m_aProfilerVramHistory.size()),
+                             m_ProfilerHistoryCursor,
+                             TextFormat("%.1f MB", m_LastProfilerStats.m_VramUsedMb),
+                             0.0f, vramScaleMax, ImVec2(0.0f, 50.0f));
+        }
 
         ImGui::Spacing();
         ImGui::Separator();
@@ -3017,6 +3130,7 @@ void CEditor::DrawProfilerWindow()
             addTimingRow(lang.Word("stage_shadow_pass"), m_LastProfilerStats.m_ShadowPassMs);
             addTimingRow(lang.Word("stage_main_3d_pass"), m_LastProfilerStats.m_Main3dPassMs);
             addTimingRow(lang.Word("stage_imgui_editor_pass"), m_LastProfilerStats.m_ImguiEditorMs);
+            addTimingRow(lang.Word("stage_gpu_present"), m_LastProfilerStats.m_EndDrawingMs);
             addTimingRow(lang.Word("stage_hierarchy_panel"), m_UiTimings.m_HierarchyMs);
             addTimingRow(lang.Word("stage_inspector_panel"), m_UiTimings.m_InspectorMs);
             addTimingRow(lang.Word("stage_scene_game_viewport"), m_UiTimings.m_ScenePanelMs);
