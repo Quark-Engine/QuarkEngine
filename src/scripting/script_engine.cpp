@@ -705,26 +705,30 @@ namespace quark::script
 
         CScriptEntity* GetOrCreateScriptEntityWrapper(CEntity& entity)
         {
-            CScriptComponent* pScriptComp = entity.GetScriptComponent();
-            if (pScriptComp && pScriptComp->m_pScriptEntity)
-            {
-                CTransformComponent* pTransform = entity.GetTransformComponent();
-                Vec3* pPos = pTransform ? &pTransform->m_Position : nullptr;
-                Vec3* pRot = pTransform ? &pTransform->m_Rotation : nullptr;
-                Vec3* pScale = pTransform ? &pTransform->m_Scale : nullptr;
-                bool* pHasOverride = pTransform ? &pTransform->m_HasLocalMatrixOverride : nullptr;
-                pScriptComp->m_pScriptEntity->SetTransformPointers(pPos, pRot, pScale, pHasOverride);
-                return pScriptComp->m_pScriptEntity.get();
-            }
-
             CTransformComponent* pTransform = entity.GetTransformComponent();
             Vec3* pPos = pTransform ? &pTransform->m_Position : nullptr;
             Vec3* pRot = pTransform ? &pTransform->m_Rotation : nullptr;
             Vec3* pScale = pTransform ? &pTransform->m_Scale : nullptr;
             bool* pHasOverride = pTransform ? &pTransform->m_HasLocalMatrixOverride : nullptr;
 
+            CScriptComponent* pScriptComp = entity.GetScriptComponent();
+            if (pScriptComp && pScriptComp->m_pScriptEntity)
+            {
+                pScriptComp->m_pScriptEntity->SetRawEntity(&entity);
+                pScriptComp->m_pScriptEntity->SetTransformPointers(pPos, pRot, pScale, pHasOverride);
+                return pScriptComp->m_pScriptEntity.get();
+            }
+
             auto& pWrapper = s_EntityWrappers[entity.m_Id];
-            pWrapper = std::make_unique<CScriptEntity>(&entity, pPos, pRot, pScale, pHasOverride);
+            if (!pWrapper)
+            {
+                pWrapper = std::make_unique<CScriptEntity>(&entity, pPos, pRot, pScale, pHasOverride);
+            }
+            else
+            {
+                pWrapper->SetRawEntity(&entity);
+                pWrapper->SetTransformPointers(pPos, pRot, pScale, pHasOverride);
+            }
             return pWrapper.get();
         }
 
@@ -2071,6 +2075,551 @@ namespace quark::script
             CScriptEngine::Get().LogMessage(logLevel, pMessage);
         };
 
+        g_DebugCallbacks.pfnDrawLine = [](Vec3 start, Vec3 end, Color color, float duration)
+        {
+            SScriptDebugDrawCommand cmd{};
+            cmd.m_Type = EScriptDebugDrawType::LINE;
+            cmd.m_A = start;
+            cmd.m_B = end;
+            cmd.m_Color = color;
+            cmd.m_RemainingSeconds = std::max(0.0f, duration);
+            CScriptEngine::Get().AddDebugDrawCommand(cmd);
+        };
+        g_DebugCallbacks.pfnDrawRay = [](Vec3 origin, Vec3 direction, Color color, float duration)
+        {
+            SScriptDebugDrawCommand cmd{};
+            cmd.m_Type = EScriptDebugDrawType::LINE;
+            cmd.m_A = origin;
+            cmd.m_B = origin + direction;
+            cmd.m_Color = color;
+            cmd.m_RemainingSeconds = std::max(0.0f, duration);
+            CScriptEngine::Get().AddDebugDrawCommand(cmd);
+        };
+        g_DebugCallbacks.pfnDrawWireBox = [](Vec3 center, Vec3 size, Color color, float duration)
+        {
+            SScriptDebugDrawCommand cmd{};
+            cmd.m_Type = EScriptDebugDrawType::WIRE_BOX;
+            cmd.m_A = center;
+            cmd.m_B = size;
+            cmd.m_Color = color;
+            cmd.m_RemainingSeconds = std::max(0.0f, duration);
+            CScriptEngine::Get().AddDebugDrawCommand(cmd);
+        };
+        g_DebugCallbacks.pfnDrawWireSphere = [](Vec3 center, float radius, Color color, float duration)
+        {
+            SScriptDebugDrawCommand cmd{};
+            cmd.m_Type = EScriptDebugDrawType::WIRE_SPHERE;
+            cmd.m_A = center;
+            cmd.m_Radius = std::max(0.01f, radius);
+            cmd.m_Color = color;
+            cmd.m_RemainingSeconds = std::max(0.0f, duration);
+            CScriptEngine::Get().AddDebugDrawCommand(cmd);
+        };
+
+        g_SceneCallbacks.pfnGetEntityScript = [](CScriptEntity* pEntity) -> IScript*
+        {
+            if (!pEntity || !pEntity->GetRawEntity())
+            {
+                return nullptr;
+            }
+            CScriptComponent* pComp = pEntity->GetRawEntity()->GetScriptComponent();
+            return pComp ? pComp->m_pInstance : nullptr;
+        };
+
+        g_SceneCallbacks.pfnGetWorldPosition = [](CScriptEntity* pEntity) -> Vec3
+        {
+            CScene* pScene = CScriptEngine::Get().GetActiveScene();
+            if (!pScene || !pEntity || !pEntity->GetRawEntity())
+            {
+                return Vec3{ 0.0f, 0.0f, 0.0f };
+            }
+            const int entityIdx = quark::IndexOfEntity(*pScene, *pEntity->GetRawEntity());
+            if (entityIdx < 0)
+            {
+                CTransformComponent* pTr = pEntity->GetRawEntity()->GetTransformComponent();
+                return pTr ? pTr->m_Position : Vec3{ 0.0f, 0.0f, 0.0f };
+            }
+            const Mat4 world = quark::ComposeWorld(*pScene, entityIdx);
+            return Vec3{ world.m[12], world.m[13], world.m[14] };
+        };
+
+        g_SceneCallbacks.pfnSetParent = [](CScriptEntity* pEntity, CScriptEntity* pParent, bool keepWorldTransform)
+        {
+            CScene* pScene = CScriptEngine::Get().GetActiveScene();
+            if (!pScene || !pEntity || !pEntity->GetRawEntity())
+            {
+                return;
+            }
+            const int childIdx = quark::IndexOfEntity(*pScene, *pEntity->GetRawEntity());
+            if (childIdx < 0)
+            {
+                return;
+            }
+            CEntity& childEntity = pScene->m_vEntities[static_cast<size_t>(childIdx)];
+            const int newParentId = (pParent && pParent->GetRawEntity()) ? pParent->GetRawEntity()->m_Id : -1;
+            if (newParentId == childEntity.m_Id)
+            {
+                return;
+            }
+            if (keepWorldTransform)
+            {
+                const Mat4 childWorld = quark::ComposeWorld(*pScene, childIdx);
+                childEntity.m_ParentId = newParentId;
+                const Mat4 parentWorld = quark::ParentWorld(*pScene, childEntity);
+                if (CTransformComponent* pTr = childEntity.GetTransformComponent())
+                {
+                    quark::DecomposeLocal(parentWorld, childWorld, *pTr);
+                    pTr->m_HasLocalMatrixOverride = false;
+                }
+            }
+            else
+            {
+                childEntity.m_ParentId = newParentId;
+            }
+            pScene->BumpTransformRevision();
+        };
+
+        g_SceneCallbacks.pfnGetParent = [](CScriptEntity* pEntity) -> CScriptEntity*
+        {
+            CScene* pScene = CScriptEngine::Get().GetActiveScene();
+            if (!pScene || !pEntity || !pEntity->GetRawEntity())
+            {
+                return nullptr;
+            }
+            const int parentId = pEntity->GetRawEntity()->m_ParentId;
+            if (parentId < 0)
+            {
+                return nullptr;
+            }
+            const int parentIdx = pScene->FindEntityIndexById(parentId);
+            if (parentIdx < 0)
+            {
+                return nullptr;
+            }
+            return GetOrCreateScriptEntityWrapper(pScene->m_vEntities[static_cast<size_t>(parentIdx)]);
+        };
+
+        g_SceneCallbacks.pfnGetChildren = [](CScriptEntity* pEntity, CScriptEntity** ppOutChildren, int maxCount) -> int
+        {
+            CScene* pScene = CScriptEngine::Get().GetActiveScene();
+            if (!pScene || !pEntity || !pEntity->GetRawEntity())
+            {
+                return 0;
+            }
+            const int myId = pEntity->GetRawEntity()->m_Id;
+            int count = 0;
+            for (auto& candidate : pScene->m_vEntities)
+            {
+                if (candidate.m_ParentId == myId)
+                {
+                    if (ppOutChildren && count < maxCount)
+                    {
+                        ppOutChildren[count] = GetOrCreateScriptEntityWrapper(candidate);
+                    }
+                    ++count;
+                }
+            }
+            return count;
+        };
+
+        g_SceneCallbacks.pfnSetEntityActive = [](CScriptEntity* pEntity, bool active)
+        {
+            if (!pEntity || !pEntity->GetRawEntity())
+            {
+                return;
+            }
+            CEntity* pRaw = pEntity->GetRawEntity();
+            if (CMeshComponent* pMesh = pRaw->GetMeshComponent())
+            {
+                pMesh->m_Enabled = active;
+            }
+            if (CLightComponent* pLight = pRaw->GetLightComponent())
+            {
+                pLight->m_Enabled = active;
+            }
+            if (CCollisionComponent* pCol = pRaw->GetCollisionComponent())
+            {
+                pCol->m_Enabled = active;
+            }
+            if (CRigidbodyComponent* pRb = pRaw->GetRigidbodyComponent())
+            {
+                pRb->m_Enabled = active;
+            }
+            if (CScriptComponent* pSc = pRaw->GetScriptComponent())
+            {
+                pSc->m_Enabled = active;
+            }
+            if (CCanvasComponent* pCanvas = pRaw->GetCanvasComponent())
+            {
+                pCanvas->m_Enabled = active;
+            }
+            if (CUiComponent* pUi = pRaw->GetUiComponent())
+            {
+                pUi->m_Enabled = active;
+            }
+            if (CTextComponent* pText = pRaw->GetTextComponent())
+            {
+                pText->m_Enabled = active;
+            }
+            if (CImageComponent* pImg = pRaw->GetImageComponent())
+            {
+                pImg->m_Enabled = active;
+            }
+            if (CPanelComponent* pPanel = pRaw->GetPanelComponent())
+            {
+                pPanel->m_Enabled = active;
+            }
+            if (CButtonComponent* pBtn = pRaw->GetButtonComponent())
+            {
+                pBtn->m_Enabled = active;
+            }
+            if (CSliderComponent* pSlider = pRaw->GetSliderComponent())
+            {
+                pSlider->m_Enabled = active;
+            }
+            if (CToggleComponent* pToggle = pRaw->GetToggleComponent())
+            {
+                pToggle->m_Enabled = active;
+            }
+            if (CProgressBarComponent* pProg = pRaw->GetProgressBarComponent())
+            {
+                pProg->m_Enabled = active;
+            }
+        };
+
+        g_SceneCallbacks.pfnIsEntityActive = [](CScriptEntity* pEntity) -> bool
+        {
+            if (!pEntity || !pEntity->GetRawEntity())
+            {
+                return false;
+            }
+            CEntity* pRaw = pEntity->GetRawEntity();
+            if (CMeshComponent* pMesh = pRaw->GetMeshComponent())
+            {
+                return pMesh->m_Enabled;
+            }
+            if (CScriptComponent* pSc = pRaw->GetScriptComponent())
+            {
+                return pSc->m_Enabled;
+            }
+            if (CLightComponent* pLight = pRaw->GetLightComponent())
+            {
+                return pLight->m_Enabled;
+            }
+            if (CTextComponent* pText = pRaw->GetTextComponent())
+            {
+                return pText->m_Enabled;
+            }
+            if (CPanelComponent* pPanel = pRaw->GetPanelComponent())
+            {
+                return pPanel->m_Enabled;
+            }
+            if (CCanvasComponent* pCanvas = pRaw->GetCanvasComponent())
+            {
+                return pCanvas->m_Enabled;
+            }
+            return true;
+        };
+
+        g_SceneCallbacks.pfnInvokeTimer = [](IScript* pOwner, float delay, float repeatInterval,
+                                             void (*pfnInvoke)(void*), void (*pfnDestroy)(void*),
+                                             void* pUserData) -> std::uint64_t
+        {
+            return CScriptEngine::Get().AddTimer(pOwner, delay, repeatInterval, pfnInvoke, pfnDestroy, pUserData);
+        };
+        g_SceneCallbacks.pfnCancelTimer = [](std::uint64_t timerId)
+        {
+            CScriptEngine::Get().CancelTimer(timerId);
+        };
+        g_SceneCallbacks.pfnCancelOwnerTimers = [](IScript* pOwner)
+        {
+            CScriptEngine::Get().CancelOwnerTimers(pOwner);
+        };
+
+        g_SceneCallbacks.pfnSubscribeEvent = [](const char* pEventName,
+                                                void (*pfnInvoke)(const char*, void*),
+                                                void (*pfnDestroy)(void*),
+                                                void* pUserData) -> std::uint64_t
+        {
+            return CScriptEngine::Get().SubscribeEvent(pEventName, pfnInvoke, pfnDestroy, pUserData);
+        };
+        g_SceneCallbacks.pfnUnsubscribeEvent = [](std::uint64_t subscriptionId)
+        {
+            CScriptEngine::Get().UnsubscribeEvent(subscriptionId);
+        };
+        g_SceneCallbacks.pfnEmitEvent = [](const char* pEventName, const char* pPayload)
+        {
+            CScriptEngine::Get().EmitEvent(pEventName, pPayload);
+        };
+        g_SceneCallbacks.pfnClearEvents = []()
+        {
+            CScriptEngine::Get().ClearEvents();
+        };
+
+        g_SceneCallbacks.pfnGetMainCamera = []() -> CScriptEntity*
+        {
+            CScene* pScene = CScriptEngine::Get().GetActiveScene();
+            if (!pScene)
+            {
+                return nullptr;
+            }
+            for (auto& entity : pScene->m_vEntities)
+            {
+                if (CCameraComponent* pCam = entity.GetCameraComponent())
+                {
+                    if (pCam->m_Enabled)
+                    {
+                        return GetOrCreateScriptEntityWrapper(entity);
+                    }
+                }
+            }
+            return nullptr;
+        };
+
+        g_SceneCallbacks.pfnScreenPointToRay = [](Vec2 screenPos) -> SRay
+        {
+            SRay ray{};
+            CScene* pScene = CScriptEngine::Get().GetActiveScene();
+            if (!pScene)
+            {
+                return ray;
+            }
+            int camIdx = -1;
+            float fovDeg = 60.0f;
+            for (int i = 0; i < static_cast<int>(pScene->m_vEntities.size()); ++i)
+            {
+                if (CCameraComponent* pCam = pScene->m_vEntities[static_cast<size_t>(i)].GetCameraComponent())
+                {
+                    if (pCam->m_Enabled)
+                    {
+                        camIdx = i;
+                        fovDeg = std::clamp(pCam->m_FieldOfView, 1.0f, 179.0f);
+                        break;
+                    }
+                }
+            }
+            if (camIdx < 0)
+            {
+                return ray;
+            }
+
+            const Mat4 world = quark::ComposeWorld(*pScene, camIdx);
+            const Vec3 camPos = { world.m[12], world.m[13], world.m[14] };
+            const Vec3 right = Vec3{ world.m[0], world.m[1], world.m[2] }.normalized();
+            const Vec3 up = Vec3{ world.m[4], world.m[5], world.m[6] }.normalized();
+            const Vec3 forward = Vec3{ -world.m[8], -world.m[9], -world.m[10] }.normalized();
+
+            const Vec2 vpPos = CScriptEngine::Get().GetActiveViewportPos();
+            const Vec2 vpSize = CScriptEngine::Get().GetActiveViewportSize();
+            const float width = std::max(1.0f, vpSize.x);
+            const float height = std::max(1.0f, vpSize.y);
+            const float aspect = width / height;
+
+            const float localX = screenPos.x - vpPos.x;
+            const float localY = screenPos.y - vpPos.y;
+            const float ndcX = (localX / width) * 2.0f - 1.0f;
+            const float ndcY = 1.0f - (localY / height) * 2.0f;
+            const float tanHalfFov = std::tan(fovDeg * DEG2RAD * 0.5f);
+
+            ray.m_Origin = camPos;
+            ray.m_Direction = (forward + right * (ndcX * aspect * tanHalfFov) + up * (ndcY * tanHalfFov)).normalized();
+            return ray;
+        };
+
+        g_SceneCallbacks.pfnGetCameraFov = [](CScriptEntity* pCamera) -> float
+        {
+            if (pCamera && pCamera->GetRawEntity())
+            {
+                if (CCameraComponent* pCam = pCamera->GetRawEntity()->GetCameraComponent())
+                {
+                    return pCam->m_FieldOfView;
+                }
+            }
+            return 60.0f;
+        };
+
+        g_SceneCallbacks.pfnSetCameraFov = [](CScriptEntity* pCamera, float fov)
+        {
+            if (pCamera && pCamera->GetRawEntity())
+            {
+                if (CCameraComponent* pCam = pCamera->GetRawEntity()->GetCameraComponent())
+                {
+                    pCam->m_FieldOfView = std::clamp(fov, 1.0f, 179.0f);
+                }
+            }
+        };
+
+        g_SceneCallbacks.pfnApplicationQuit = []()
+        {
+            CScriptEngine::Get().RequestApplicationQuit();
+        };
+
+        g_SceneCallbacks.pfnUiSetText = [](CScriptEntity* pEntity, const char* pText)
+        {
+            if (!pEntity || !pEntity->GetRawEntity() || !pText)
+            {
+                return;
+            }
+            CEntity* pRaw = pEntity->GetRawEntity();
+            if (CTextComponent* pTextComp = pRaw->GetTextComponent())
+            {
+                pTextComp->m_Text = pText;
+                return;
+            }
+            if (CUiComponent* pUi = pRaw->GetUiComponent())
+            {
+                pUi->m_Placeholder = pText;
+            }
+        };
+
+        g_SceneCallbacks.pfnUiGetText = [](CScriptEntity* pEntity, char* pOutBuffer, int bufferSize) -> bool
+        {
+            if (!pEntity || !pEntity->GetRawEntity() || !pOutBuffer || bufferSize <= 0)
+            {
+                return false;
+            }
+            CEntity* pRaw = pEntity->GetRawEntity();
+            if (CTextComponent* pTextComp = pRaw->GetTextComponent())
+            {
+                std::snprintf(pOutBuffer, static_cast<size_t>(bufferSize), "%s", pTextComp->m_Text.c_str());
+                return true;
+            }
+            if (CUiComponent* pUi = pRaw->GetUiComponent())
+            {
+                std::snprintf(pOutBuffer, static_cast<size_t>(bufferSize), "%s", pUi->m_Placeholder.c_str());
+                return true;
+            }
+            return false;
+        };
+
+        g_SceneCallbacks.pfnUiSetProgress = [](CScriptEntity* pEntity, float value)
+        {
+            if (!pEntity || !pEntity->GetRawEntity())
+            {
+                return;
+            }
+            CEntity* pRaw = pEntity->GetRawEntity();
+            if (CProgressBarComponent* pProg = pRaw->GetProgressBarComponent())
+            {
+                pProg->m_Value = std::clamp(value, pProg->m_MinValue, pProg->m_MaxValue);
+                return;
+            }
+            if (CSliderComponent* pSlider = pRaw->GetSliderComponent())
+            {
+                pSlider->m_Value = std::clamp(value, pSlider->m_MinValue, pSlider->m_MaxValue);
+            }
+        };
+
+        g_SceneCallbacks.pfnUiGetProgress = [](CScriptEntity* pEntity) -> float
+        {
+            if (!pEntity || !pEntity->GetRawEntity())
+            {
+                return 0.0f;
+            }
+            CEntity* pRaw = pEntity->GetRawEntity();
+            if (CProgressBarComponent* pProg = pRaw->GetProgressBarComponent())
+            {
+                return pProg->m_Value;
+            }
+            if (CSliderComponent* pSlider = pRaw->GetSliderComponent())
+            {
+                return pSlider->m_Value;
+            }
+            return 0.0f;
+        };
+
+        g_SceneCallbacks.pfnUiSetSliderValue = [](CScriptEntity* pEntity, float value)
+        {
+            if (!pEntity || !pEntity->GetRawEntity())
+            {
+                return;
+            }
+            if (CSliderComponent* pSlider = pEntity->GetRawEntity()->GetSliderComponent())
+            {
+                pSlider->m_Value = std::clamp(value, pSlider->m_MinValue, pSlider->m_MaxValue);
+            }
+        };
+
+        g_SceneCallbacks.pfnUiGetSliderValue = [](CScriptEntity* pEntity) -> float
+        {
+            if (!pEntity || !pEntity->GetRawEntity())
+            {
+                return 0.0f;
+            }
+            if (CSliderComponent* pSlider = pEntity->GetRawEntity()->GetSliderComponent())
+            {
+                return pSlider->m_Value;
+            }
+            return 0.0f;
+        };
+
+        g_SceneCallbacks.pfnUiSetToggleValue = [](CScriptEntity* pEntity, bool checked)
+        {
+            if (!pEntity || !pEntity->GetRawEntity())
+            {
+                return;
+            }
+            if (CToggleComponent* pToggle = pEntity->GetRawEntity()->GetToggleComponent())
+            {
+                pToggle->m_IsOn = checked;
+            }
+        };
+
+        g_SceneCallbacks.pfnUiGetToggleValue = [](CScriptEntity* pEntity) -> bool
+        {
+            if (!pEntity || !pEntity->GetRawEntity())
+            {
+                return false;
+            }
+            if (CToggleComponent* pToggle = pEntity->GetRawEntity()->GetToggleComponent())
+            {
+                return pToggle->m_IsOn;
+            }
+            return false;
+        };
+
+        g_SceneCallbacks.pfnUiSetVisible = [](CScriptEntity* pEntity, bool visible)
+        {
+            if (g_SceneCallbacks.pfnSetEntityActive)
+            {
+                g_SceneCallbacks.pfnSetEntityActive(pEntity, visible);
+            }
+        };
+
+        g_SceneCallbacks.pfnUiIsVisible = [](CScriptEntity* pEntity) -> bool
+        {
+            return g_SceneCallbacks.pfnIsEntityActive ? g_SceneCallbacks.pfnIsEntityActive(pEntity) : false;
+        };
+
+        g_SceneCallbacks.pfnUiSetColor = [](CScriptEntity* pEntity, Color color)
+        {
+            if (!pEntity || !pEntity->GetRawEntity())
+            {
+                return;
+            }
+            CEntity* pRaw = pEntity->GetRawEntity();
+            if (CTextComponent* pText = pRaw->GetTextComponent())
+            {
+                pText->m_Color = color;
+            }
+            if (CImageComponent* pImg = pRaw->GetImageComponent())
+            {
+                pImg->m_Color = color;
+            }
+            if (CPanelComponent* pPanel = pRaw->GetPanelComponent())
+            {
+                pPanel->m_BackgroundColor = color;
+            }
+            if (CButtonComponent* pBtn = pRaw->GetButtonComponent())
+            {
+                pBtn->m_NormalColor = color;
+            }
+            if (CProgressBarComponent* pProg = pRaw->GetProgressBarComponent())
+            {
+                pProg->m_FillColor = color;
+            }
+        };
+
         m_pActiveDll = &m_Dll;
     }
 
@@ -2553,6 +3102,7 @@ namespace quark::script
         {
             return;
         }
+        CancelOwnerTimers(pScript);
 
         CDynamicLibrary* pDll = m_pActiveDll ? m_pActiveDll : &m_Dll;
         if (pDll->IsOpen())
@@ -2597,6 +3147,10 @@ namespace quark::script
         s_ScriptAccumulatedTime = 0.0;
         s_DiscardMouseDeltaFrames = 2;
         s_EntityWrappers.clear();
+        ClearAllTimers();
+        ClearEvents();
+        ClearDebugDraw();
+        m_QuitRequested = false;
         m_PendingLoadScenePath.clear();
         m_DontDestroyEntityIds.clear();
         ClearPersistentData();
@@ -2986,6 +3540,9 @@ namespace quark::script
             }
         }
 
+        UpdateTimers(scaledDelta);
+        UpdateDebugDraw(deltaTime);
+
         for (size_t i = 0; i < scene.m_vEntities.size(); ++i)
         {
             CScriptComponent* pScriptComp = scene.m_vEntities[i].GetScriptComponent();
@@ -3031,6 +3588,10 @@ namespace quark::script
         s_ScriptTimeScale = 1.0f;
         s_DiscardMouseDeltaFrames = 0;
         s_EntityWrappers.clear();
+        ClearAllTimers();
+        ClearEvents();
+        ClearDebugDraw();
+        m_QuitRequested = false;
         m_PendingLoadScenePath.clear();
         m_DontDestroyEntityIds.clear();
         ClearPersistentData();
@@ -3518,6 +4079,232 @@ namespace quark::script
         m_PersistentInts.erase(key);
         m_PersistentFloats.erase(key);
         m_PersistentBools.erase(key);
+    }
+
+    void CScriptEngine::AddDebugDrawCommand(const SScriptDebugDrawCommand& command)
+    {
+        constexpr size_t MAX_DEBUG_DRAW_COMMANDS = 2048;
+        if (m_vDebugDrawCommands.size() < MAX_DEBUG_DRAW_COMMANDS)
+        {
+            m_vDebugDrawCommands.push_back(command);
+        }
+    }
+
+    void CScriptEngine::ClearDebugDraw()
+    {
+        m_vDebugDrawCommands.clear();
+    }
+
+    void CScriptEngine::UpdateDebugDraw(float deltaTime)
+    {
+        for (size_t i = 0; i < m_vDebugDrawCommands.size();)
+        {
+            m_vDebugDrawCommands[i].m_RemainingSeconds -= deltaTime;
+            if (m_vDebugDrawCommands[i].m_RemainingSeconds < 0.0f)
+            {
+                m_vDebugDrawCommands.erase(m_vDebugDrawCommands.begin() + static_cast<std::ptrdiff_t>(i));
+            }
+            else
+            {
+                ++i;
+            }
+        }
+    }
+
+    void CScriptEngine::RenderDebugDraw() const
+    {
+        for (const SScriptDebugDrawCommand& cmd : m_vDebugDrawCommands)
+        {
+            if (cmd.m_Type == EScriptDebugDrawType::LINE)
+            {
+                DrawLine3D(cmd.m_A, cmd.m_B, cmd.m_Color);
+            }
+            else if (cmd.m_Type == EScriptDebugDrawType::WIRE_BOX)
+            {
+                DrawCubeWires(cmd.m_A, cmd.m_B.x, cmd.m_B.y, cmd.m_B.z, cmd.m_Color);
+            }
+            else if (cmd.m_Type == EScriptDebugDrawType::WIRE_SPHERE)
+            {
+                DrawSphereWires(cmd.m_A, cmd.m_Radius, 12, 12, cmd.m_Color);
+            }
+        }
+    }
+
+    std::uint64_t CScriptEngine::AddTimer(IScript* pOwner, float delay, float repeatInterval,
+                                          void (*pfnInvoke)(void*), void (*pfnDestroy)(void*), void* pUserData)
+    {
+        if (!pfnInvoke)
+        {
+            if (pfnDestroy && pUserData)
+            {
+                pfnDestroy(pUserData);
+            }
+            return 0;
+        }
+        SScriptTimerEntry entry{};
+        entry.m_Id = m_NextTimerId++;
+        entry.m_pOwner = pOwner;
+        entry.m_Remaining = std::max(0.0f, delay);
+        entry.m_RepeatInterval = std::max(0.0f, repeatInterval);
+        entry.m_pfnInvoke = pfnInvoke;
+        entry.m_pfnDestroy = pfnDestroy;
+        entry.m_pUserData = pUserData;
+        entry.m_Cancelled = false;
+        m_vTimers.push_back(entry);
+        return entry.m_Id;
+    }
+
+    void CScriptEngine::CancelTimer(std::uint64_t timerId)
+    {
+        for (SScriptTimerEntry& entry : m_vTimers)
+        {
+            if (entry.m_Id == timerId)
+            {
+                entry.m_Cancelled = true;
+            }
+        }
+    }
+
+    void CScriptEngine::CancelOwnerTimers(IScript* pOwner)
+    {
+        for (SScriptTimerEntry& entry : m_vTimers)
+        {
+            if (entry.m_pOwner == pOwner)
+            {
+                entry.m_Cancelled = true;
+            }
+        }
+    }
+
+    void CScriptEngine::ClearAllTimers()
+    {
+        for (SScriptTimerEntry& entry : m_vTimers)
+        {
+            if (entry.m_pfnDestroy && entry.m_pUserData)
+            {
+                entry.m_pfnDestroy(entry.m_pUserData);
+                entry.m_pUserData = nullptr;
+            }
+        }
+        m_vTimers.clear();
+    }
+
+    void CScriptEngine::UpdateTimers(float deltaTime)
+    {
+        for (size_t i = 0; i < m_vTimers.size(); ++i)
+        {
+            if (m_vTimers[i].m_Cancelled)
+            {
+                continue;
+            }
+            m_vTimers[i].m_Remaining -= deltaTime;
+            if (m_vTimers[i].m_Remaining <= 0.0f)
+            {
+                auto pfnInvoke = m_vTimers[i].m_pfnInvoke;
+                void* pUserData = m_vTimers[i].m_pUserData;
+                if (m_vTimers[i].m_RepeatInterval > 0.0f)
+                {
+                    m_vTimers[i].m_Remaining += m_vTimers[i].m_RepeatInterval;
+                }
+                else
+                {
+                    m_vTimers[i].m_Cancelled = true;
+                }
+                if (pfnInvoke)
+                {
+                    pfnInvoke(pUserData);
+                }
+            }
+        }
+
+        for (size_t i = 0; i < m_vTimers.size();)
+        {
+            if (m_vTimers[i].m_Cancelled)
+            {
+                if (m_vTimers[i].m_pfnDestroy && m_vTimers[i].m_pUserData)
+                {
+                    m_vTimers[i].m_pfnDestroy(m_vTimers[i].m_pUserData);
+                }
+                m_vTimers.erase(m_vTimers.begin() + static_cast<std::ptrdiff_t>(i));
+            }
+            else
+            {
+                ++i;
+            }
+        }
+    }
+
+    std::uint64_t CScriptEngine::SubscribeEvent(const char* pEventName,
+                                                void (*pfnInvoke)(const char*, void*),
+                                                void (*pfnDestroy)(void*),
+                                                void* pUserData)
+    {
+        if (!pEventName || pEventName[0] == '\0' || !pfnInvoke)
+        {
+            if (pfnDestroy && pUserData)
+            {
+                pfnDestroy(pUserData);
+            }
+            return 0;
+        }
+        SScriptEventSubscription sub{};
+        sub.m_Id = m_NextEventId++;
+        sub.m_EventName = pEventName;
+        sub.m_pfnInvoke = pfnInvoke;
+        sub.m_pfnDestroy = pfnDestroy;
+        sub.m_pUserData = pUserData;
+        m_vEventSubscriptions.push_back(std::move(sub));
+        return m_vEventSubscriptions.back().m_Id;
+    }
+
+    void CScriptEngine::UnsubscribeEvent(std::uint64_t subscriptionId)
+    {
+        for (size_t i = 0; i < m_vEventSubscriptions.size(); ++i)
+        {
+            if (m_vEventSubscriptions[i].m_Id == subscriptionId)
+            {
+                if (m_vEventSubscriptions[i].m_pfnDestroy && m_vEventSubscriptions[i].m_pUserData)
+                {
+                    m_vEventSubscriptions[i].m_pfnDestroy(m_vEventSubscriptions[i].m_pUserData);
+                }
+                m_vEventSubscriptions.erase(m_vEventSubscriptions.begin() + static_cast<std::ptrdiff_t>(i));
+                return;
+            }
+        }
+    }
+
+    void CScriptEngine::EmitEvent(const char* pEventName, const char* pPayload)
+    {
+        if (!pEventName || pEventName[0] == '\0')
+        {
+            return;
+        }
+        std::vector<std::pair<void (*)(const char*, void*), void*>> vMatches;
+        for (const SScriptEventSubscription& sub : m_vEventSubscriptions)
+        {
+            if (sub.m_EventName == pEventName && sub.m_pfnInvoke)
+            {
+                vMatches.emplace_back(sub.m_pfnInvoke, sub.m_pUserData);
+            }
+        }
+        const char* pSafePayload = pPayload ? pPayload : "";
+        for (const auto& match : vMatches)
+        {
+            match.first(pSafePayload, match.second);
+        }
+    }
+
+    void CScriptEngine::ClearEvents()
+    {
+        for (SScriptEventSubscription& sub : m_vEventSubscriptions)
+        {
+            if (sub.m_pfnDestroy && sub.m_pUserData)
+            {
+                sub.m_pfnDestroy(sub.m_pUserData);
+                sub.m_pUserData = nullptr;
+            }
+        }
+        m_vEventSubscriptions.clear();
     }
 
 } // quark::script

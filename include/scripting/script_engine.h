@@ -29,6 +29,44 @@ namespace quark::script
         double m_Timestamp = 0.0;
     };
 
+    enum class EScriptDebugDrawType
+    {
+        LINE = 0,
+        WIRE_BOX = 1,
+        WIRE_SPHERE = 2
+    };
+
+    struct SScriptDebugDrawCommand
+    {
+        EScriptDebugDrawType m_Type = EScriptDebugDrawType::LINE;
+        Vec3 m_A = { 0.0f, 0.0f, 0.0f };
+        Vec3 m_B = { 0.0f, 0.0f, 0.0f };
+        float m_Radius = 0.5f;
+        Color m_Color = GREEN;
+        float m_RemainingSeconds = 0.0f;
+    };
+
+    struct SScriptTimerEntry
+    {
+        std::uint64_t m_Id = 0;
+        IScript* m_pOwner = nullptr;
+        float m_Remaining = 0.0f;
+        float m_RepeatInterval = 0.0f;
+        void (*m_pfnInvoke)(void*) = nullptr;
+        void (*m_pfnDestroy)(void*) = nullptr;
+        void* m_pUserData = nullptr;
+        bool m_Cancelled = false;
+    };
+
+    struct SScriptEventSubscription
+    {
+        std::uint64_t m_Id = 0;
+        std::string m_EventName;
+        void (*m_pfnInvoke)(const char*, void*) = nullptr;
+        void (*m_pfnDestroy)(void*) = nullptr;
+        void* m_pUserData = nullptr;
+    };
+
     struct SParsedScriptInfo
     {
         std::string m_ClassName;
@@ -145,7 +183,56 @@ namespace quark::script
 
         void SetPhysicsSettings(const Vec3& gravity, float fixedTimestep);
 
+        void SetActiveViewportRect(const Vec2& pos, const Vec2& size)
+        {
+            m_ViewportPos = pos;
+            m_ViewportSize = size;
+        }
+        Vec2 GetActiveViewportPos() const
+        {
+            return m_ViewportPos;
+        }
+        Vec2 GetActiveViewportSize() const
+        {
+            return m_ViewportSize;
+        }
+
+        void RenderDebugDraw() const;
+        void AddDebugDrawCommand(const SScriptDebugDrawCommand& command);
+        void ClearDebugDraw();
+        size_t GetDebugDrawCount() const
+        {
+            return m_vDebugDrawCommands.size();
+        }
+
+        std::uint64_t AddTimer(IScript* pOwner, float delay, float repeatInterval,
+                               void (*pfnInvoke)(void*), void (*pfnDestroy)(void*), void* pUserData);
+        void CancelTimer(std::uint64_t timerId);
+        void CancelOwnerTimers(IScript* pOwner);
+        void ClearAllTimers();
+
+        std::uint64_t SubscribeEvent(const char* pEventName,
+                                     void (*pfnInvoke)(const char*, void*),
+                                     void (*pfnDestroy)(void*),
+                                     void* pUserData);
+        void UnsubscribeEvent(std::uint64_t subscriptionId);
+        void EmitEvent(const char* pEventName, const char* pPayload);
+        void ClearEvents();
+
+        void RequestApplicationQuit()
+        {
+            m_QuitRequested = true;
+        }
+        bool ConsumeQuitRequested()
+        {
+            const bool requested = m_QuitRequested;
+            m_QuitRequested = false;
+            return requested;
+        }
+
     private:
+        void UpdateTimers(float deltaTime);
+        void UpdateDebugDraw(float deltaTime);
         CScriptEngine();
         ~CScriptEngine();
 
@@ -181,6 +268,14 @@ namespace quark::script
         std::unordered_map<std::string, float> m_PersistentFloats;
         std::unordered_map<std::string, bool> m_PersistentBools;
         std::vector<SScriptLogEntry> m_vLogs;
+        std::vector<SScriptTimerEntry> m_vTimers;
+        std::vector<SScriptEventSubscription> m_vEventSubscriptions;
+        std::vector<SScriptDebugDrawCommand> m_vDebugDrawCommands;
+        std::uint64_t m_NextTimerId = 1;
+        std::uint64_t m_NextEventId = 1;
+        Vec2 m_ViewportPos = { 0.0f, 0.0f };
+        Vec2 m_ViewportSize = { 1280.0f, 720.0f };
+        bool m_QuitRequested = false;
     };
 
 } // quark::script

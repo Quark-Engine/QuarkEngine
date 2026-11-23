@@ -2,7 +2,9 @@
 #define __QUARK_ENGINE_SDK_H__
 
 #include "QuarkCore/QuarkCore.hpp"
+#include <cstdint>
 #include <string>
+#include <type_traits>
 #include <vector>
 #include <functional>
 #include <unordered_map>
@@ -30,6 +32,13 @@ namespace quark::script
 {
 
     class CScriptEntity;
+    class IScript;
+
+    struct SRay
+    {
+        Vec3 m_Origin = { 0.0f, 0.0f, 0.0f };
+        Vec3 m_Direction = { 0.0f, 0.0f, -1.0f };
+    };
 
     struct SEntityRef
     {
@@ -137,6 +146,11 @@ namespace quark::script
             return m_pEntity;
         }
 
+        void SetRawEntity(CEntity* pEntity)
+        {
+            m_pEntity = pEntity;
+        }
+
         SScriptTransform GetTransform()
         {
             if (m_pHasLocalMatrixOverride)
@@ -183,6 +197,20 @@ namespace quark::script
         void SetName(const std::string& name);
         bool HasTag(const std::string& tag) const;
         void AddTag(const std::string& tag);
+
+        Vec3 GetWorldPosition() const;
+        void SetParent(CScriptEntity* pParent, bool keepWorldTransform = true);
+        CScriptEntity* GetParent() const;
+        std::vector<CScriptEntity*> GetChildren() const;
+        void SetActive(bool active);
+        bool IsActive() const;
+
+        IScript* GetScriptRaw() const;
+        template <typename T>
+        T* GetScript() const
+        {
+            return dynamic_cast<T*>(GetScriptRaw());
+        }
 
         Color GetMaterialColor() const;
         void SetMaterialColor(const Color& color);
@@ -362,6 +390,11 @@ namespace quark::script
         virtual void OnTriggerExit(CScriptEntity* pOther)
         {
         }
+
+        std::uint64_t Invoke(float delaySeconds, std::function<void()> callback);
+        std::uint64_t InvokeRepeating(float delaySeconds, float repeatRateSeconds, std::function<void()> callback);
+        void CancelInvoke(std::uint64_t timerId);
+        void CancelAllInvokes();
     };
 
     enum class Key
@@ -669,6 +702,49 @@ namespace quark::script
             }
             return true;
         }
+
+        static float GetAxis(const std::string& axisName)
+        {
+            if (axisName == "Horizontal")
+            {
+                float value = 0.0f;
+                if (IsKeyDown(Key::D) || IsKeyDown(Key::Right))
+                {
+                    value += 1.0f;
+                }
+                if (IsKeyDown(Key::A) || IsKeyDown(Key::Left))
+                {
+                    value -= 1.0f;
+                }
+                return value;
+            }
+            if (axisName == "Vertical")
+            {
+                float value = 0.0f;
+                if (IsKeyDown(Key::W) || IsKeyDown(Key::Up))
+                {
+                    value += 1.0f;
+                }
+                if (IsKeyDown(Key::S) || IsKeyDown(Key::Down))
+                {
+                    value -= 1.0f;
+                }
+                return value;
+            }
+            if (axisName == "Mouse X")
+            {
+                return GetMouseDelta().x;
+            }
+            if (axisName == "Mouse Y")
+            {
+                return GetMouseDelta().y;
+            }
+            if (axisName == "Mouse ScrollWheel")
+            {
+                return GetMouseWheelMove();
+            }
+            return 0.0f;
+        }
     };
 
     struct STimeCallbacks
@@ -797,6 +873,41 @@ namespace quark::script
         bool (*pfnHasPersistentKey)(const char* pKey) = nullptr;
         void (*pfnRemovePersistentKey)(const char* pKey) = nullptr;
         void (*pfnClearPersistentData)() = nullptr;
+        IScript* (*pfnGetEntityScript)(CScriptEntity* pEntity) = nullptr;
+        Vec3 (*pfnGetWorldPosition)(CScriptEntity* pEntity) = nullptr;
+        void (*pfnSetParent)(CScriptEntity* pEntity, CScriptEntity* pParent, bool keepWorldTransform) = nullptr;
+        CScriptEntity* (*pfnGetParent)(CScriptEntity* pEntity) = nullptr;
+        int (*pfnGetChildren)(CScriptEntity* pEntity, CScriptEntity** ppOutChildren, int maxCount) = nullptr;
+        void (*pfnSetEntityActive)(CScriptEntity* pEntity, bool active) = nullptr;
+        bool (*pfnIsEntityActive)(CScriptEntity* pEntity) = nullptr;
+        std::uint64_t (*pfnInvokeTimer)(IScript* pOwner, float delay, float repeatInterval,
+                                        void (*pfnInvoke)(void*), void (*pfnDestroy)(void*),
+                                        void* pUserData) = nullptr;
+        void (*pfnCancelTimer)(std::uint64_t timerId) = nullptr;
+        void (*pfnCancelOwnerTimers)(IScript* pOwner) = nullptr;
+        std::uint64_t (*pfnSubscribeEvent)(const char* pEventName,
+                                           void (*pfnInvoke)(const char*, void*),
+                                           void (*pfnDestroy)(void*),
+                                           void* pUserData) = nullptr;
+        void (*pfnUnsubscribeEvent)(std::uint64_t subscriptionId) = nullptr;
+        void (*pfnEmitEvent)(const char* pEventName, const char* pPayload) = nullptr;
+        void (*pfnClearEvents)() = nullptr;
+        CScriptEntity* (*pfnGetMainCamera)() = nullptr;
+        SRay (*pfnScreenPointToRay)(Vec2 screenPos) = nullptr;
+        float (*pfnGetCameraFov)(CScriptEntity* pCamera) = nullptr;
+        void (*pfnSetCameraFov)(CScriptEntity* pCamera, float fov) = nullptr;
+        void (*pfnApplicationQuit)() = nullptr;
+        void (*pfnUiSetText)(CScriptEntity* pEntity, const char* pText) = nullptr;
+        bool (*pfnUiGetText)(CScriptEntity* pEntity, char* pOutBuffer, int bufferSize) = nullptr;
+        void (*pfnUiSetProgress)(CScriptEntity* pEntity, float value) = nullptr;
+        float (*pfnUiGetProgress)(CScriptEntity* pEntity) = nullptr;
+        void (*pfnUiSetSliderValue)(CScriptEntity* pEntity, float value) = nullptr;
+        float (*pfnUiGetSliderValue)(CScriptEntity* pEntity) = nullptr;
+        void (*pfnUiSetToggleValue)(CScriptEntity* pEntity, bool checked) = nullptr;
+        bool (*pfnUiGetToggleValue)(CScriptEntity* pEntity) = nullptr;
+        void (*pfnUiSetVisible)(CScriptEntity* pEntity, bool visible) = nullptr;
+        bool (*pfnUiIsVisible)(CScriptEntity* pEntity) = nullptr;
+        void (*pfnUiSetColor)(CScriptEntity* pEntity, Color color) = nullptr;
     };
 
     extern SSceneCallbacks g_SceneCallbacks;
@@ -1564,6 +1675,10 @@ namespace quark::script
     struct SDebugCallbacks
     {
         void (*pfnLog)(int level, const char* pMessage) = nullptr;
+        void (*pfnDrawLine)(Vec3 start, Vec3 end, Color color, float duration) = nullptr;
+        void (*pfnDrawRay)(Vec3 origin, Vec3 direction, Color color, float duration) = nullptr;
+        void (*pfnDrawWireBox)(Vec3 center, Vec3 size, Color color, float duration) = nullptr;
+        void (*pfnDrawWireSphere)(Vec3 center, float radius, Color color, float duration) = nullptr;
     };
 
     extern SDebugCallbacks g_DebugCallbacks;
@@ -1594,7 +1709,448 @@ namespace quark::script
                 g_DebugCallbacks.pfnLog(2, message.c_str());
             }
         }
+
+        static void DrawLine(const Vec3& start, const Vec3& end, const Color& color = GREEN, float duration = 0.0f)
+        {
+            if (g_DebugCallbacks.pfnDrawLine)
+            {
+                g_DebugCallbacks.pfnDrawLine(start, end, color, duration);
+            }
+        }
+
+        static void DrawRay(const Vec3& origin, const Vec3& direction, const Color& color = RED, float duration = 0.0f)
+        {
+            if (g_DebugCallbacks.pfnDrawRay)
+            {
+                g_DebugCallbacks.pfnDrawRay(origin, direction, color, duration);
+            }
+        }
+
+        static void DrawWireBox(const Vec3& center, const Vec3& size, const Color& color = YELLOW, float duration = 0.0f)
+        {
+            if (g_DebugCallbacks.pfnDrawWireBox)
+            {
+                g_DebugCallbacks.pfnDrawWireBox(center, size, color, duration);
+            }
+        }
+
+        static void DrawWireSphere(const Vec3& center, float radius, const Color& color = SKYBLUE, float duration = 0.0f)
+        {
+            if (g_DebugCallbacks.pfnDrawWireSphere)
+            {
+                g_DebugCallbacks.pfnDrawWireSphere(center, radius, color, duration);
+            }
+        }
     };
+
+    class EventBus
+    {
+    public:
+        static std::uint64_t Subscribe(const std::string& eventName, std::function<void(const std::string&)> callback)
+        {
+            if (!g_SceneCallbacks.pfnSubscribeEvent || !callback)
+            {
+                return 0;
+            }
+            auto* pFn = new std::function<void(const std::string&)>(std::move(callback));
+            return g_SceneCallbacks.pfnSubscribeEvent(
+                eventName.c_str(),
+                [](const char* pPayload, void* pData)
+                {
+                    auto* pCallback = static_cast<std::function<void(const std::string&)>*>(pData);
+                    if (pCallback && *pCallback)
+                    {
+                        (*pCallback)(pPayload ? std::string(pPayload) : std::string());
+                    }
+                },
+                [](void* pData)
+                {
+                    delete static_cast<std::function<void(const std::string&)>*>(pData);
+                },
+                pFn);
+        }
+
+        static void Unsubscribe(std::uint64_t subscriptionId)
+        {
+            if (g_SceneCallbacks.pfnUnsubscribeEvent && subscriptionId != 0)
+            {
+                g_SceneCallbacks.pfnUnsubscribeEvent(subscriptionId);
+            }
+        }
+
+        static void Emit(const std::string& eventName, const std::string& payload = "")
+        {
+            if (g_SceneCallbacks.pfnEmitEvent)
+            {
+                g_SceneCallbacks.pfnEmitEvent(eventName.c_str(), payload.c_str());
+            }
+        }
+
+        static void Clear()
+        {
+            if (g_SceneCallbacks.pfnClearEvents)
+            {
+                g_SceneCallbacks.pfnClearEvents();
+            }
+        }
+    };
+
+    class UI
+    {
+    public:
+        static void SetText(CScriptEntity* pEntity, const std::string& text)
+        {
+            if (g_SceneCallbacks.pfnUiSetText && pEntity)
+            {
+                g_SceneCallbacks.pfnUiSetText(pEntity, text.c_str());
+            }
+        }
+
+        static void SetText(const std::string& entityName, const std::string& text)
+        {
+            SetText(Scene::FindEntityByName(entityName), text);
+        }
+
+        static std::string GetText(CScriptEntity* pEntity)
+        {
+            if (g_SceneCallbacks.pfnUiGetText && pEntity)
+            {
+                char aBuffer[1024] = {};
+                if (g_SceneCallbacks.pfnUiGetText(pEntity, aBuffer, static_cast<int>(sizeof(aBuffer))))
+                {
+                    return std::string(aBuffer);
+                }
+            }
+            return "";
+        }
+
+        static void SetProgress(CScriptEntity* pEntity, float value)
+        {
+            if (g_SceneCallbacks.pfnUiSetProgress && pEntity)
+            {
+                g_SceneCallbacks.pfnUiSetProgress(pEntity, value);
+            }
+        }
+
+        static void SetProgress(const std::string& entityName, float value)
+        {
+            SetProgress(Scene::FindEntityByName(entityName), value);
+        }
+
+        static float GetProgress(CScriptEntity* pEntity)
+        {
+            if (g_SceneCallbacks.pfnUiGetProgress && pEntity)
+            {
+                return g_SceneCallbacks.pfnUiGetProgress(pEntity);
+            }
+            return 0.0f;
+        }
+
+        static void SetSliderValue(CScriptEntity* pEntity, float value)
+        {
+            if (g_SceneCallbacks.pfnUiSetSliderValue && pEntity)
+            {
+                g_SceneCallbacks.pfnUiSetSliderValue(pEntity, value);
+            }
+        }
+
+        static float GetSliderValue(CScriptEntity* pEntity)
+        {
+            if (g_SceneCallbacks.pfnUiGetSliderValue && pEntity)
+            {
+                return g_SceneCallbacks.pfnUiGetSliderValue(pEntity);
+            }
+            return 0.0f;
+        }
+
+        static void SetToggleValue(CScriptEntity* pEntity, bool checked)
+        {
+            if (g_SceneCallbacks.pfnUiSetToggleValue && pEntity)
+            {
+                g_SceneCallbacks.pfnUiSetToggleValue(pEntity, checked);
+            }
+        }
+
+        static bool GetToggleValue(CScriptEntity* pEntity)
+        {
+            if (g_SceneCallbacks.pfnUiGetToggleValue && pEntity)
+            {
+                return g_SceneCallbacks.pfnUiGetToggleValue(pEntity);
+            }
+            return false;
+        }
+
+        static void SetVisible(CScriptEntity* pEntity, bool visible)
+        {
+            if (g_SceneCallbacks.pfnUiSetVisible && pEntity)
+            {
+                g_SceneCallbacks.pfnUiSetVisible(pEntity, visible);
+            }
+        }
+
+        static void SetVisible(const std::string& entityName, bool visible)
+        {
+            SetVisible(Scene::FindEntityByName(entityName), visible);
+        }
+
+        static bool IsVisible(CScriptEntity* pEntity)
+        {
+            if (g_SceneCallbacks.pfnUiIsVisible && pEntity)
+            {
+                return g_SceneCallbacks.pfnUiIsVisible(pEntity);
+            }
+            return false;
+        }
+
+        static void SetColor(CScriptEntity* pEntity, const Color& color)
+        {
+            if (g_SceneCallbacks.pfnUiSetColor && pEntity)
+            {
+                g_SceneCallbacks.pfnUiSetColor(pEntity, color);
+            }
+        }
+
+        static void SetColor(const std::string& entityName, const Color& color)
+        {
+            SetColor(Scene::FindEntityByName(entityName), color);
+        }
+    };
+
+    class CameraAPI
+    {
+    public:
+        static CScriptEntity* GetMainCamera()
+        {
+            if (g_SceneCallbacks.pfnGetMainCamera)
+            {
+                return g_SceneCallbacks.pfnGetMainCamera();
+            }
+            return nullptr;
+        }
+
+        static SRay ScreenPointToRay(const Vec2& screenPos)
+        {
+            if (g_SceneCallbacks.pfnScreenPointToRay)
+            {
+                return g_SceneCallbacks.pfnScreenPointToRay(screenPos);
+            }
+            return SRay{};
+        }
+
+        static float GetFov(CScriptEntity* pCamera)
+        {
+            if (g_SceneCallbacks.pfnGetCameraFov && pCamera)
+            {
+                return g_SceneCallbacks.pfnGetCameraFov(pCamera);
+            }
+            return 60.0f;
+        }
+
+        static void SetFov(CScriptEntity* pCamera, float fov)
+        {
+            if (g_SceneCallbacks.pfnSetCameraFov && pCamera)
+            {
+                g_SceneCallbacks.pfnSetCameraFov(pCamera, fov);
+            }
+        }
+    };
+
+    class Application
+    {
+    public:
+        static void Quit()
+        {
+            if (g_SceneCallbacks.pfnApplicationQuit)
+            {
+                g_SceneCallbacks.pfnApplicationQuit();
+            }
+        }
+    };
+
+    inline Vec3 CScriptEntity::GetWorldPosition() const
+    {
+        if (g_SceneCallbacks.pfnGetWorldPosition)
+        {
+            return g_SceneCallbacks.pfnGetWorldPosition(const_cast<CScriptEntity*>(this));
+        }
+        return m_pPosition ? *m_pPosition : Vec3{ 0.0f, 0.0f, 0.0f };
+    }
+
+    inline void CScriptEntity::SetParent(CScriptEntity* pParent, bool keepWorldTransform)
+    {
+        if (g_SceneCallbacks.pfnSetParent)
+        {
+            g_SceneCallbacks.pfnSetParent(this, pParent, keepWorldTransform);
+        }
+    }
+
+    inline CScriptEntity* CScriptEntity::GetParent() const
+    {
+        if (g_SceneCallbacks.pfnGetParent)
+        {
+            return g_SceneCallbacks.pfnGetParent(const_cast<CScriptEntity*>(this));
+        }
+        return nullptr;
+    }
+
+    inline std::vector<CScriptEntity*> CScriptEntity::GetChildren() const
+    {
+        std::vector<CScriptEntity*> vResult;
+        if (!g_SceneCallbacks.pfnGetChildren)
+        {
+            return vResult;
+        }
+        const int total = g_SceneCallbacks.pfnGetChildren(const_cast<CScriptEntity*>(this), nullptr, 0);
+        if (total <= 0)
+        {
+            return vResult;
+        }
+        vResult.resize(static_cast<size_t>(total), nullptr);
+        const int written = g_SceneCallbacks.pfnGetChildren(
+            const_cast<CScriptEntity*>(this), vResult.data(), total);
+        vResult.resize(static_cast<size_t>(written > 0 ? written : 0));
+        return vResult;
+    }
+
+    inline void CScriptEntity::SetActive(bool active)
+    {
+        if (g_SceneCallbacks.pfnSetEntityActive)
+        {
+            g_SceneCallbacks.pfnSetEntityActive(this, active);
+        }
+    }
+
+    inline bool CScriptEntity::IsActive() const
+    {
+        if (g_SceneCallbacks.pfnIsEntityActive)
+        {
+            return g_SceneCallbacks.pfnIsEntityActive(const_cast<CScriptEntity*>(this));
+        }
+        return true;
+    }
+
+    inline IScript* CScriptEntity::GetScriptRaw() const
+    {
+        if (g_SceneCallbacks.pfnGetEntityScript)
+        {
+            return g_SceneCallbacks.pfnGetEntityScript(const_cast<CScriptEntity*>(this));
+        }
+        return nullptr;
+    }
+
+    inline std::uint64_t IScript::Invoke(float delaySeconds, std::function<void()> callback)
+    {
+        if (!g_SceneCallbacks.pfnInvokeTimer || !callback)
+        {
+            return 0;
+        }
+        auto* pFn = new std::function<void()>(std::move(callback));
+        return g_SceneCallbacks.pfnInvokeTimer(
+            this,
+            delaySeconds,
+            0.0f,
+            [](void* pData)
+            {
+                auto* pCallback = static_cast<std::function<void()>*>(pData);
+                if (pCallback && *pCallback)
+                {
+                    (*pCallback)();
+                }
+            },
+            [](void* pData)
+            {
+                delete static_cast<std::function<void()>*>(pData);
+            },
+            pFn);
+    }
+
+    inline std::uint64_t IScript::InvokeRepeating(float delaySeconds, float repeatRateSeconds, std::function<void()> callback)
+    {
+        if (!g_SceneCallbacks.pfnInvokeTimer || !callback)
+        {
+            return 0;
+        }
+        auto* pFn = new std::function<void()>(std::move(callback));
+        return g_SceneCallbacks.pfnInvokeTimer(
+            this,
+            delaySeconds,
+            repeatRateSeconds > 0.0001f ? repeatRateSeconds : 0.0001f,
+            [](void* pData)
+            {
+                auto* pCallback = static_cast<std::function<void()>*>(pData);
+                if (pCallback && *pCallback)
+                {
+                    (*pCallback)();
+                }
+            },
+            [](void* pData)
+            {
+                delete static_cast<std::function<void()>*>(pData);
+            },
+            pFn);
+    }
+
+    inline void IScript::CancelInvoke(std::uint64_t timerId)
+    {
+        if (g_SceneCallbacks.pfnCancelTimer && timerId != 0)
+        {
+            g_SceneCallbacks.pfnCancelTimer(timerId);
+        }
+    }
+
+    inline void IScript::CancelAllInvokes()
+    {
+        if (g_SceneCallbacks.pfnCancelOwnerTimers)
+        {
+            g_SceneCallbacks.pfnCancelOwnerTimers(this);
+        }
+    }
+
+    namespace detail
+    {
+        inline bool PropertyNameMatches(const std::string& requestedName, const char* pFieldName)
+        {
+            if (!pFieldName)
+            {
+                return false;
+            }
+            if (requestedName == pFieldName)
+            {
+                return true;
+            }
+            if (pFieldName[0] == 'm' && pFieldName[1] == '_' && requestedName == (pFieldName + 2))
+            {
+                return true;
+            }
+            return false;
+        }
+
+        template <typename TField, typename TValue>
+        inline void TrySetField(const std::string& name, const char* pFieldName, TField& field, const TValue& value)
+        {
+            if constexpr (std::is_same_v<std::decay_t<TField>, std::decay_t<TValue>>)
+            {
+                if (PropertyNameMatches(name, pFieldName))
+                {
+                    field = value;
+                }
+            }
+        }
+
+        template <typename TField, typename TValue>
+        inline void TryGetField(const std::string& name, const char* pFieldName, const TField& field,
+                                TValue& outValue, bool& found)
+        {
+            if constexpr (std::is_same_v<std::decay_t<TField>, std::decay_t<TValue>>)
+            {
+                if (!found && PropertyNameMatches(name, pFieldName))
+                {
+                    outValue = field;
+                    found = true;
+                }
+            }
+        }
+    } // detail
 
     class Math
     {
@@ -1714,6 +2270,12 @@ using Scene = ::quark::script::Scene;
 using SceneManager = ::quark::script::SceneManager;
 using Physics = ::quark::script::Physics;
 using Debug = ::quark::script::Debug;
+using EventBus = ::quark::script::EventBus;
+using UI = ::quark::script::UI;
+using CameraAPI = ::quark::script::CameraAPI;
+using Application = ::quark::script::Application;
+using SRay = ::quark::script::SRay;
+using ScriptRay = ::quark::script::SRay;
 using SCollisionInfo = ::quark::script::SCollisionInfo;
 using CollisionInfo = ::quark::script::SCollisionInfo;
 using SRaycastHit = ::quark::script::SRaycastHit;
@@ -1730,6 +2292,116 @@ using EScriptPrimitiveType = ::quark::script::EScriptPrimitiveType;
 using PrimitiveType = ::quark::script::EScriptPrimitiveType;
 using EScriptLightType = ::quark::script::EScriptLightType;
 using ScriptLightType = ::quark::script::EScriptLightType;
+
+#define QUARK_FIELD(member) visitor(#member, member)
+
+#define QUARK_PROPERTIES(...)                                                                            \
+    template <typename FVisitor>                                                                         \
+    void VisitQuarkProperties(FVisitor&& visitor)                                                        \
+    {                                                                                                    \
+        __VA_ARGS__;                                                                                     \
+    }                                                                                                    \
+    template <typename FVisitor>                                                                         \
+    void VisitQuarkProperties(FVisitor&& visitor) const                                                  \
+    {                                                                                                    \
+        __VA_ARGS__;                                                                                     \
+    }                                                                                                    \
+    void SetPropertyFloat(const std::string& name, float value) override                                 \
+    {                                                                                                    \
+        VisitQuarkProperties([&](const char* pFieldName, auto& field)                                    \
+                             { ::quark::script::detail::TrySetField(name, pFieldName, field, value); }); \
+    }                                                                                                    \
+    void SetPropertyInt(const std::string& name, int value) override                                     \
+    {                                                                                                    \
+        VisitQuarkProperties([&](const char* pFieldName, auto& field)                                    \
+                             { ::quark::script::detail::TrySetField(name, pFieldName, field, value); }); \
+    }                                                                                                    \
+    void SetPropertyBool(const std::string& name, bool value) override                                   \
+    {                                                                                                    \
+        VisitQuarkProperties([&](const char* pFieldName, auto& field)                                    \
+                             { ::quark::script::detail::TrySetField(name, pFieldName, field, value); }); \
+    }                                                                                                    \
+    void SetPropertyString(const std::string& name, const std::string& value) override                   \
+    {                                                                                                    \
+        VisitQuarkProperties([&](const char* pFieldName, auto& field)                                    \
+                             { ::quark::script::detail::TrySetField(name, pFieldName, field, value); }); \
+    }                                                                                                    \
+    void SetPropertyVec3(const std::string& name, const Vec3& value) override                            \
+    {                                                                                                    \
+        VisitQuarkProperties([&](const char* pFieldName, auto& field)                                    \
+                             { ::quark::script::detail::TrySetField(name, pFieldName, field, value); }); \
+    }                                                                                                    \
+    void SetPropertyColor(const std::string& name, const Color& value) override                          \
+    {                                                                                                    \
+        VisitQuarkProperties([&](const char* pFieldName, auto& field)                                    \
+                             { ::quark::script::detail::TrySetField(name, pFieldName, field, value); }); \
+    }                                                                                                    \
+    void SetPropertyEntityRef(const std::string& name, const ::quark::script::SEntityRef& value) override \
+    {                                                                                                    \
+        VisitQuarkProperties([&](const char* pFieldName, auto& field)                                    \
+                             { ::quark::script::detail::TrySetField(name, pFieldName, field, value); }); \
+    }                                                                                                    \
+    void SetPropertyAssetRef(const std::string& name, const ::quark::script::SAssetRef& value) override  \
+    {                                                                                                    \
+        VisitQuarkProperties([&](const char* pFieldName, auto& field)                                    \
+                             { ::quark::script::detail::TrySetField(name, pFieldName, field, value); }); \
+    }                                                                                                    \
+    bool GetPropertyFloat(const std::string& name, float& outValue) const override                       \
+    {                                                                                                    \
+        bool found = false;                                                                              \
+        VisitQuarkProperties([&](const char* pFieldName, const auto& field)                              \
+                             { ::quark::script::detail::TryGetField(name, pFieldName, field, outValue, found); }); \
+        return found;                                                                                    \
+    }                                                                                                    \
+    bool GetPropertyInt(const std::string& name, int& outValue) const override                           \
+    {                                                                                                    \
+        bool found = false;                                                                              \
+        VisitQuarkProperties([&](const char* pFieldName, const auto& field)                              \
+                             { ::quark::script::detail::TryGetField(name, pFieldName, field, outValue, found); }); \
+        return found;                                                                                    \
+    }                                                                                                    \
+    bool GetPropertyBool(const std::string& name, bool& outValue) const override                         \
+    {                                                                                                    \
+        bool found = false;                                                                              \
+        VisitQuarkProperties([&](const char* pFieldName, const auto& field)                              \
+                             { ::quark::script::detail::TryGetField(name, pFieldName, field, outValue, found); }); \
+        return found;                                                                                    \
+    }                                                                                                    \
+    bool GetPropertyString(const std::string& name, std::string& outValue) const override                \
+    {                                                                                                    \
+        bool found = false;                                                                              \
+        VisitQuarkProperties([&](const char* pFieldName, const auto& field)                              \
+                             { ::quark::script::detail::TryGetField(name, pFieldName, field, outValue, found); }); \
+        return found;                                                                                    \
+    }                                                                                                    \
+    bool GetPropertyVec3(const std::string& name, Vec3& outValue) const override                         \
+    {                                                                                                    \
+        bool found = false;                                                                              \
+        VisitQuarkProperties([&](const char* pFieldName, const auto& field)                              \
+                             { ::quark::script::detail::TryGetField(name, pFieldName, field, outValue, found); }); \
+        return found;                                                                                    \
+    }                                                                                                    \
+    bool GetPropertyColor(const std::string& name, Color& outValue) const override                       \
+    {                                                                                                    \
+        bool found = false;                                                                              \
+        VisitQuarkProperties([&](const char* pFieldName, const auto& field)                              \
+                             { ::quark::script::detail::TryGetField(name, pFieldName, field, outValue, found); }); \
+        return found;                                                                                    \
+    }                                                                                                    \
+    bool GetPropertyEntityRef(const std::string& name, ::quark::script::SEntityRef& outValue) const override \
+    {                                                                                                    \
+        bool found = false;                                                                              \
+        VisitQuarkProperties([&](const char* pFieldName, const auto& field)                              \
+                             { ::quark::script::detail::TryGetField(name, pFieldName, field, outValue, found); }); \
+        return found;                                                                                    \
+    }                                                                                                    \
+    bool GetPropertyAssetRef(const std::string& name, ::quark::script::SAssetRef& outValue) const override \
+    {                                                                                                    \
+        bool found = false;                                                                              \
+        VisitQuarkProperties([&](const char* pFieldName, const auto& field)                              \
+                             { ::quark::script::detail::TryGetField(name, pFieldName, field, outValue, found); }); \
+        return found;                                                                                    \
+    }
 
 #define REGISTER_SCRIPT(ScriptClass)                                              \
     extern "C" QUARK_SCRIPT_API IScript* Create_##ScriptClass()                   \

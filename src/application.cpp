@@ -515,6 +515,13 @@ void CApplication::UpdateFrame()
          (m_Editor.m_Ui.m_GameViewport.m_Visible && m_Editor.m_Ui.m_GameViewport.m_Hovered)) &&
         !m_Camera.m_Active;
     quark::script::CScriptEngine::Get().SetViewportHovered(gameViewportInteractive);
+    if (m_Editor.m_Ui.m_GameViewport.m_WindowSize.x > 0.0f &&
+        m_Editor.m_Ui.m_GameViewport.m_WindowSize.y > 0.0f)
+    {
+        quark::script::CScriptEngine::Get().SetActiveViewportRect(
+            Vec2{ m_Editor.m_Ui.m_GameViewport.m_WindowPos.x, m_Editor.m_Ui.m_GameViewport.m_WindowPos.y },
+            Vec2{ m_Editor.m_Ui.m_GameViewport.m_WindowSize.x, m_Editor.m_Ui.m_GameViewport.m_WindowSize.y });
+    }
 
     if (m_Editor.m_IsPlaying)
     {
@@ -527,6 +534,11 @@ void CApplication::UpdateFrame()
             m_Editor.m_StepFrameRequested = false;
             quark::script::CScriptEngine::Get().UpdatePlay(m_Editor.m_Scene, deltaTime);
             m_SceneRenderer.PrepareFrameCache(m_Editor.m_Scene);
+            if (quark::script::CScriptEngine::Get().ConsumeQuitRequested())
+            {
+                m_Camera.ReleaseCapture();
+                m_Editor.StopPlayMode();
+            }
         }
     }
 
@@ -746,6 +758,10 @@ void CApplication::RenderFrame()
             }
             quark::ui::CCanvasSystem::Get().RenderWorldSpaceCanvases(m_Editor.m_Scene, renderCamera);
             quark::ui::CCanvasSystem::Get().DrawCanvasGizmos(m_Editor.m_Scene, m_Editor.m_Scene.m_Selected, renderCamera);
+            if (m_Editor.m_IsPlaying)
+            {
+                quark::script::CScriptEngine::Get().RenderDebugDraw();
+            }
             EndMode3D();
             m_FrameTimings.m_Main3dPassMs = ElapsedMilliseconds(main3dStart);
 
@@ -880,6 +896,10 @@ void CApplication::RenderFrame()
             m_SceneRenderer.RenderSceneMeshes(m_Editor.m_Scene, gameCamera, aspectRatio,
                                               &m_Editor.m_Preferences, false);
             quark::ui::CCanvasSystem::Get().RenderWorldSpaceCanvases(m_Editor.m_Scene, gameCamera);
+            if (m_Editor.m_IsPlaying)
+            {
+                quark::script::CScriptEngine::Get().RenderDebugDraw();
+            }
             EndMode3D();
         }
         {

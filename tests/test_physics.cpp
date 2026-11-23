@@ -854,3 +854,215 @@ TEST(SceneManager, DeferredLoadDontDestroyAndPersistentData)
 
     fs::remove_all(tempRoot, ec);
 }
+
+namespace
+{
+    class CHealthDemoScript : public IScript
+    {
+    public:
+        float m_Speed = 5.0f;
+        int m_Health = 100;
+        bool m_Invulnerable = false;
+        std::string m_Title = "Default";
+        Vec3 m_Offset = { 1.0f, 2.0f, 3.0f };
+        Color m_Tint = WHITE;
+        EntityRef m_Target;
+        AssetRef m_Asset;
+        int m_InvokeHits = 0;
+        int m_RepeatHits = 0;
+        std::string m_LastEventPayload;
+        std::uint64_t m_RepeatTimerId = 0;
+        std::uint64_t m_SubId = 0;
+
+        QUARK_PROPERTIES(
+            QUARK_FIELD(m_Speed),
+            QUARK_FIELD(m_Health),
+            QUARK_FIELD(m_Invulnerable),
+            QUARK_FIELD(m_Title),
+            QUARK_FIELD(m_Offset),
+            QUARK_FIELD(m_Tint),
+            QUARK_FIELD(m_Target),
+            QUARK_FIELD(m_Asset)
+        )
+
+        void TakeDamage(int amount)
+        {
+            m_Health -= amount;
+        }
+
+        void OnStart() override
+        {
+            m_SubId = EventBus::Subscribe("OnHeal", [this](const std::string& payload)
+            {
+                m_LastEventPayload = payload;
+                m_Health += 25;
+            });
+            Invoke(0.05f, [this]()
+            {
+                ++m_InvokeHits;
+            });
+            m_RepeatTimerId = InvokeRepeating(0.04f, 0.04f, [this]()
+            {
+                ++m_RepeatHits;
+            });
+        }
+    };
+} // anonymous
+
+TEST(ScriptSDK, PropertiesEventBusTimersUiCameraDebugAndHierarchy)
+{
+    CHealthDemoScript propTest;
+    propTest.SetPropertyFloat("m_Speed", 12.5f);
+    propTest.SetPropertyInt("Health", 75);
+    propTest.SetPropertyBool("m_Invulnerable", true);
+    propTest.SetPropertyString("Title", "Boss");
+    propTest.SetPropertyVec3("m_Offset", { 4.0f, 5.0f, 6.0f });
+    propTest.SetPropertyColor("Tint", RED);
+    propTest.SetPropertyEntityRef("m_Target", EntityRef(42));
+    propTest.SetPropertyAssetRef("Asset", AssetRef("models/hero.glb"));
+
+    float outSpeed = 0.0f;
+    int outHealth = 0;
+    bool outInvuln = false;
+    std::string outTitle;
+    Vec3 outOffset{};
+    Color outTint{};
+    EntityRef outTarget;
+    AssetRef outAsset;
+    CHECK(propTest.GetPropertyFloat("Speed", outSpeed) && std::fabs(outSpeed - 12.5f) < 0.001f);
+    CHECK(propTest.GetPropertyInt("m_Health", outHealth) && outHealth == 75);
+    CHECK(propTest.GetPropertyBool("Invulnerable", outInvuln) && outInvuln);
+    CHECK(propTest.GetPropertyString("m_Title", outTitle) && outTitle == "Boss");
+    CHECK(propTest.GetPropertyVec3("Offset", outOffset) && std::fabs(outOffset.y - 5.0f) < 0.001f);
+    CHECK(propTest.GetPropertyColor("m_Tint", outTint) && outTint.r == RED.r);
+    CHECK(propTest.GetPropertyEntityRef("Target", outTarget) && outTarget.m_EntityId == 42);
+    CHECK(propTest.GetPropertyAssetRef("m_Asset", outAsset) && outAsset.m_Path == "models/hero.glb");
+
+    auto& registry = quark::script::CScriptRegistry::Get();
+    registry.Register("CHealthDemoScript",
+                      []() -> IScript* { return new CHealthDemoScript(); },
+                      [](IScript* p) { delete p; });
+
+    CScene scene;
+    CEntity parent;
+    parent.m_Id = 0;
+    parent.m_Name = "ParentRig";
+    parent.GetTransformComponent()->m_Position = { 10.0f, 2.0f, 0.0f };
+    auto pScriptComp = std::make_shared<CScriptComponent>();
+    pScriptComp->m_ScriptName = "CHealthDemoScript";
+    parent.GetComponents()->AddComponent(pScriptComp);
+    scene.m_vEntities.push_back(std::move(parent));
+
+    CEntity child;
+    child.m_Id = 1;
+    child.m_Name = "ChildNode";
+    child.m_ParentId = -1;
+    child.GetTransformComponent()->m_Position = { 3.0f, 0.0f, 0.0f };
+    child.GetComponents()->AddComponent(std::make_shared<CMeshComponent>());
+    scene.m_vEntities.push_back(std::move(child));
+
+    CEntity camEnt;
+    camEnt.m_Id = 2;
+    camEnt.m_Name = "MainCamera";
+    camEnt.GetTransformComponent()->m_Position = { 0.0f, 1.0f, 5.0f };
+    auto pCamComp = std::make_shared<CCameraComponent>();
+    pCamComp->m_FieldOfView = 60.0f;
+    camEnt.GetComponents()->AddComponent(pCamComp);
+    scene.m_vEntities.push_back(std::move(camEnt));
+
+    CEntity uiEnt;
+    uiEnt.m_Id = 3;
+    uiEnt.m_Name = "HudLabel";
+    auto pTextComp = std::make_shared<CTextComponent>();
+    pTextComp->m_Text = "HP: 100";
+    auto pProgComp = std::make_shared<CProgressBarComponent>();
+    pProgComp->m_Value = 1.0f;
+    auto pSliderComp = std::make_shared<CSliderComponent>();
+    pSliderComp->m_Value = 0.5f;
+    auto pToggleComp = std::make_shared<CToggleComponent>();
+    pToggleComp->m_IsOn = false;
+    uiEnt.GetComponents()->AddComponent(pTextComp);
+    uiEnt.GetComponents()->AddComponent(pProgComp);
+    uiEnt.GetComponents()->AddComponent(pSliderComp);
+    uiEnt.GetComponents()->AddComponent(pToggleComp);
+    scene.m_vEntities.push_back(std::move(uiEnt));
+
+    auto& engine = quark::script::CScriptEngine::Get();
+    engine.SetActiveViewportRect({ 0.0f, 0.0f }, { 800.0f, 600.0f });
+    engine.StartPlay(scene, "");
+
+    CScriptEntity* pParent = Scene::FindEntityByName("ParentRig");
+    CScriptEntity* pChild = Scene::FindEntityByName("ChildNode");
+    CHECK(pParent != nullptr && pChild != nullptr);
+
+    CHealthDemoScript* pDemo = pParent->GetScript<CHealthDemoScript>();
+    CHECK(pDemo != nullptr);
+    pDemo->TakeDamage(20);
+    CHECK(pDemo->m_Health == 80);
+
+    EventBus::Emit("OnHeal", "medkit");
+    CHECK(pDemo->m_Health == 105);
+    CHECK(pDemo->m_LastEventPayload == "medkit");
+    EventBus::Unsubscribe(pDemo->m_SubId);
+    EventBus::Emit("OnHeal", "ignored");
+    CHECK(pDemo->m_Health == 105);
+
+    engine.UpdatePlay(scene, 0.06f);
+    CHECK(pDemo->m_InvokeHits == 1);
+    CHECK(pDemo->m_RepeatHits == 1);
+    engine.UpdatePlay(scene, 0.05f);
+    CHECK(pDemo->m_InvokeHits == 1);
+    CHECK(pDemo->m_RepeatHits == 2);
+    pDemo->CancelInvoke(pDemo->m_RepeatTimerId);
+    engine.UpdatePlay(scene, 0.1f);
+    CHECK(pDemo->m_RepeatHits == 2);
+
+    pChild->SetParent(pParent, false);
+    CHECK(pChild->GetParent() == pParent);
+    const std::vector<CScriptEntity*> vChildren = pParent->GetChildren();
+    CHECK(vChildren.size() == 1 && vChildren[0] == pChild);
+    const Vec3 childWorld = pChild->GetWorldPosition();
+    CHECK_NEAR(childWorld.x, 13.0f, 0.01f);
+    CHECK_NEAR(childWorld.y, 2.0f, 0.01f);
+    pChild->SetActive(false);
+    CHECK(!pChild->IsActive());
+    pChild->SetActive(true);
+    CHECK(pChild->IsActive());
+
+    CScriptEntity* pHud = Scene::FindEntityByName("HudLabel");
+    CHECK(pHud != nullptr);
+    UI::SetText("HudLabel", "HP: 80");
+    CHECK(UI::GetText(pHud) == "HP: 80");
+    UI::SetProgress("HudLabel", 0.42f);
+    CHECK_NEAR(UI::GetProgress(pHud), 0.42f, 0.001f);
+    UI::SetSliderValue(pHud, 0.75f);
+    CHECK_NEAR(UI::GetSliderValue(pHud), 0.75f, 0.001f);
+    UI::SetToggleValue(pHud, true);
+    CHECK(UI::GetToggleValue(pHud) == true);
+    UI::SetColor(pHud, GREEN);
+    UI::SetVisible("HudLabel", false);
+    CHECK(!UI::IsVisible(pHud));
+
+    CScriptEntity* pCam = CameraAPI::GetMainCamera();
+    CHECK(pCam != nullptr && pCam->GetName() == "MainCamera");
+    CameraAPI::SetFov(pCam, 75.0f);
+    CHECK_NEAR(CameraAPI::GetFov(pCam), 75.0f, 0.001f);
+    const SRay centerRay = CameraAPI::ScreenPointToRay({ 400.0f, 300.0f });
+    CHECK_NEAR(centerRay.m_Origin.z, 5.0f, 0.01f);
+    CHECK_NEAR(centerRay.m_Direction.z, -1.0f, 0.01f);
+
+    Debug::DrawLine({ 0, 0, 0 }, { 1, 0, 0 }, RED, 0.5f);
+    Debug::DrawRay({ 0, 0, 0 }, { 0, 1, 0 }, GREEN, 0.0f);
+    Debug::DrawWireBox({ 0, 1, 0 }, { 2, 2, 2 }, YELLOW, 0.5f);
+    Debug::DrawWireSphere({ 0, 0, 0 }, 1.0f, SKYBLUE, 0.5f);
+    CHECK(engine.GetDebugDrawCount() == 4);
+    engine.UpdatePlay(scene, 0.1f);
+    CHECK(engine.GetDebugDrawCount() == 3);
+
+    Application::Quit();
+    CHECK(engine.ConsumeQuitRequested() == true);
+    CHECK(engine.ConsumeQuitRequested() == false);
+
+    engine.StopPlay(scene);
+    CHECK(engine.GetDebugDrawCount() == 0);
+}

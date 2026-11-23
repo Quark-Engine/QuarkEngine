@@ -470,7 +470,15 @@ extern "C"
             }
 
             const float deltaTime = static_cast<float>(GetFrameTime());
+            quark::script::CScriptEngine::Get().SetActiveViewportRect(
+                { 0.0f, 0.0f },
+                { static_cast<float>(std::max(1, GetScreenWidth())),
+                  static_cast<float>(std::max(1, GetScreenHeight())) });
             quark::script::CScriptEngine::Get().UpdatePlay(scene, deltaTime);
+            if (quark::script::CScriptEngine::Get().ConsumeQuitRequested())
+            {
+                RequestWindowClose();
+            }
 
             FindSceneCamera(scene, camera);
             renderer.PrepareFrameCache(scene);
@@ -510,6 +518,7 @@ extern "C"
                 BeginMode3D(camera);
                 renderer.RenderSceneMeshes(scene, camera, runtimeAspect, &preferences, false);
                 quark::ui::CCanvasSystem::Get().RenderWorldSpaceCanvases(scene, camera);
+                quark::script::CScriptEngine::Get().RenderDebugDraw();
                 EndMode3D();
                 EndTextureMode();
 
@@ -532,6 +541,7 @@ extern "C"
                 BeginMode3D(camera);
                 renderer.RenderSceneMeshes(scene, camera, runtimeAspect, &preferences, false);
                 quark::ui::CCanvasSystem::Get().RenderWorldSpaceCanvases(scene, camera);
+                quark::script::CScriptEngine::Get().RenderDebugDraw();
                 EndMode3D();
             }
 
