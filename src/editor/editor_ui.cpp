@@ -476,7 +476,7 @@ void CEditor::DrawMainMenuBar(SPluginContext* pPluginCtx, ImGuiID dockspaceId,
                 }
             }
             ImGui::Separator();
-            if (ImGui::MenuItem(lang.Word("light")))
+            if (ImGui::MenuItem("Light"))
             {
                 SaveState();
                 CEntity created = CEntityFactory::Light(m_Scene, -1);
@@ -485,7 +485,7 @@ void CEditor::DrawMainMenuBar(SPluginContext* pPluginCtx, ImGuiID dockspaceId,
                 DispatchPluginEvent(PLUGIN_EVENT_ENTITY_CREATED, entityIndex);
                 m_Scene.SelectEntity(entityIndex, false);
             }
-            if (ImGui::MenuItem(lang.Word("camera")))
+            if (ImGui::MenuItem("Camera"))
             {
                 SaveState();
                 CEntity created = CEntityFactory::Camera(m_Scene, -1);
@@ -495,9 +495,9 @@ void CEditor::DrawMainMenuBar(SPluginContext* pPluginCtx, ImGuiID dockspaceId,
                 m_Scene.SelectEntity(entityIndex, false);
             }
             ImGui::Separator();
-            if (ImGui::BeginMenu(lang.Word("ui")))
+            if (ImGui::BeginMenu("UI"))
             {
-                if (ImGui::MenuItem(lang.Word("canvas")))
+                if (ImGui::MenuItem("Canvas"))
                 {
                     SaveState();
                     CEntity entity = CEntityFactory::Canvas(m_Scene, ECanvasRenderMode::WORLD_SPACE, -1);
@@ -506,7 +506,7 @@ void CEditor::DrawMainMenuBar(SPluginContext* pPluginCtx, ImGuiID dockspaceId,
                     DispatchPluginEvent(PLUGIN_EVENT_ENTITY_CREATED, entityIndex);
                     m_Scene.SelectEntity(entityIndex, false);
                 }
-                if (ImGui::MenuItem(lang.Word("panel")))
+                if (ImGui::MenuItem("Panel"))
                 {
                     SaveState();
                     const int parentId = GetOrCreateCanvasForUi(m_Scene.m_Selected);
@@ -516,7 +516,7 @@ void CEditor::DrawMainMenuBar(SPluginContext* pPluginCtx, ImGuiID dockspaceId,
                     DispatchPluginEvent(PLUGIN_EVENT_ENTITY_CREATED, entityIndex);
                     m_Scene.SelectEntity(entityIndex, false);
                 }
-                if (ImGui::MenuItem(lang.Word("button")))
+                if (ImGui::MenuItem("Button"))
                 {
                     SaveState();
                     const int parentId = GetOrCreateCanvasForUi(m_Scene.m_Selected);
@@ -526,7 +526,7 @@ void CEditor::DrawMainMenuBar(SPluginContext* pPluginCtx, ImGuiID dockspaceId,
                     DispatchPluginEvent(PLUGIN_EVENT_ENTITY_CREATED, entityIndex);
                     m_Scene.SelectEntity(entityIndex, false);
                 }
-                if (ImGui::MenuItem(lang.Word("text")))
+                if (ImGui::MenuItem("Text"))
                 {
                     SaveState();
                     const int parentId = GetOrCreateCanvasForUi(m_Scene.m_Selected);
@@ -536,7 +536,7 @@ void CEditor::DrawMainMenuBar(SPluginContext* pPluginCtx, ImGuiID dockspaceId,
                     DispatchPluginEvent(PLUGIN_EVENT_ENTITY_CREATED, entityIndex);
                     m_Scene.SelectEntity(entityIndex, false);
                 }
-                if (ImGui::MenuItem(lang.Word("image")))
+                if (ImGui::MenuItem("Image"))
                 {
                     SaveState();
                     const int parentId = GetOrCreateCanvasForUi(m_Scene.m_Selected);
@@ -546,7 +546,7 @@ void CEditor::DrawMainMenuBar(SPluginContext* pPluginCtx, ImGuiID dockspaceId,
                     DispatchPluginEvent(PLUGIN_EVENT_ENTITY_CREATED, entityIndex);
                     m_Scene.SelectEntity(entityIndex, false);
                 }
-                if (ImGui::MenuItem(lang.Word("slider")))
+                if (ImGui::MenuItem("Slider"))
                 {
                     SaveState();
                     const int parentId = GetOrCreateCanvasForUi(m_Scene.m_Selected);
@@ -556,7 +556,7 @@ void CEditor::DrawMainMenuBar(SPluginContext* pPluginCtx, ImGuiID dockspaceId,
                     DispatchPluginEvent(PLUGIN_EVENT_ENTITY_CREATED, entityIndex);
                     m_Scene.SelectEntity(entityIndex, false);
                 }
-                if (ImGui::MenuItem(lang.Word("toggle")))
+                if (ImGui::MenuItem("Toggle"))
                 {
                     SaveState();
                     const int parentId = GetOrCreateCanvasForUi(m_Scene.m_Selected);
@@ -566,7 +566,7 @@ void CEditor::DrawMainMenuBar(SPluginContext* pPluginCtx, ImGuiID dockspaceId,
                     DispatchPluginEvent(PLUGIN_EVENT_ENTITY_CREATED, entityIndex);
                     m_Scene.SelectEntity(entityIndex, false);
                 }
-                if (ImGui::MenuItem(lang.Word("progress_bar")))
+                if (ImGui::MenuItem("Progress Bar"))
                 {
                     SaveState();
                     const int parentId = GetOrCreateCanvasForUi(m_Scene.m_Selected);
@@ -576,7 +576,7 @@ void CEditor::DrawMainMenuBar(SPluginContext* pPluginCtx, ImGuiID dockspaceId,
                     DispatchPluginEvent(PLUGIN_EVENT_ENTITY_CREATED, entityIndex);
                     m_Scene.SelectEntity(entityIndex, false);
                 }
-                if (ImGui::MenuItem(lang.Word("scroll_view")))
+                if (ImGui::MenuItem("Scroll View"))
                 {
                     SaveState();
                     const int parentId = GetOrCreateCanvasForUi(m_Scene.m_Selected);
@@ -597,11 +597,11 @@ void CEditor::DrawMainMenuBar(SPluginContext* pPluginCtx, ImGuiID dockspaceId,
                     DispatchPluginEvent(PLUGIN_EVENT_ENTITY_CREATED, entityIndex);
                     m_Scene.SelectEntity(entityIndex, false);
                 };
-                if (ImGui::MenuItem(lang.Word("input_field")))
+                if (ImGui::MenuItem("Input Field"))
                 {
                     createUiEntity(EGuiWidgetType::INPUT_FIELD);
                 }
-                if (ImGui::MenuItem(lang.Word("combo")))
+                if (ImGui::MenuItem("Dropdown"))
                 {
                     createUiEntity(EGuiWidgetType::COMBO);
                 }
@@ -1123,7 +1123,7 @@ void CEditor::HierarchyDrawCreateMenu(int parentIndex)
             }
         }
         ImGui::Separator();
-        if (ImGui::MenuItem(lang.Word("light")))
+        if (ImGui::MenuItem("Light"))
         {
             SaveState();
             CEntity entity = CEntityFactory::Light(m_Scene, parentIndex);
@@ -1132,7 +1132,7 @@ void CEditor::HierarchyDrawCreateMenu(int parentIndex)
             DispatchPluginEvent(PLUGIN_EVENT_ENTITY_CREATED, entityIndex);
             m_Scene.SelectEntity(entityIndex, false);
         }
-        if (ImGui::MenuItem(lang.Word("camera")))
+        if (ImGui::MenuItem("Camera"))
         {
             SaveState();
             CEntity entity = CEntityFactory::Camera(m_Scene, parentIndex);
@@ -1142,9 +1142,9 @@ void CEditor::HierarchyDrawCreateMenu(int parentIndex)
             m_Scene.SelectEntity(entityIndex, false);
         }
         ImGui::Separator();
-        if (ImGui::BeginMenu(lang.Word("ui")))
+        if (ImGui::BeginMenu("UI"))
         {
-            if (ImGui::MenuItem(lang.Word("canvas")))
+            if (ImGui::MenuItem("Canvas"))
             {
                 SaveState();
                 CEntity entity = CEntityFactory::Canvas(m_Scene, ECanvasRenderMode::WORLD_SPACE, parentIndex);
@@ -1153,7 +1153,7 @@ void CEditor::HierarchyDrawCreateMenu(int parentIndex)
                 DispatchPluginEvent(PLUGIN_EVENT_ENTITY_CREATED, entityIndex);
                 m_Scene.SelectEntity(entityIndex, false);
             }
-            if (ImGui::MenuItem(lang.Word("panel")))
+            if (ImGui::MenuItem("Panel"))
             {
                 SaveState();
                 const int parentId = GetOrCreateCanvasForUi(parentIndex);
@@ -1163,7 +1163,7 @@ void CEditor::HierarchyDrawCreateMenu(int parentIndex)
                 DispatchPluginEvent(PLUGIN_EVENT_ENTITY_CREATED, entityIndex);
                 m_Scene.SelectEntity(entityIndex, false);
             }
-            if (ImGui::MenuItem(lang.Word("button")))
+            if (ImGui::MenuItem("Button"))
             {
                 SaveState();
                 const int parentId = GetOrCreateCanvasForUi(parentIndex);
@@ -1173,7 +1173,7 @@ void CEditor::HierarchyDrawCreateMenu(int parentIndex)
                 DispatchPluginEvent(PLUGIN_EVENT_ENTITY_CREATED, entityIndex);
                 m_Scene.SelectEntity(entityIndex, false);
             }
-            if (ImGui::MenuItem(lang.Word("text")))
+            if (ImGui::MenuItem("Text"))
             {
                 SaveState();
                 const int parentId = GetOrCreateCanvasForUi(parentIndex);
@@ -1183,7 +1183,7 @@ void CEditor::HierarchyDrawCreateMenu(int parentIndex)
                 DispatchPluginEvent(PLUGIN_EVENT_ENTITY_CREATED, entityIndex);
                 m_Scene.SelectEntity(entityIndex, false);
             }
-            if (ImGui::MenuItem(lang.Word("image")))
+            if (ImGui::MenuItem("Image"))
             {
                 SaveState();
                 const int parentId = GetOrCreateCanvasForUi(parentIndex);
@@ -1193,7 +1193,7 @@ void CEditor::HierarchyDrawCreateMenu(int parentIndex)
                 DispatchPluginEvent(PLUGIN_EVENT_ENTITY_CREATED, entityIndex);
                 m_Scene.SelectEntity(entityIndex, false);
             }
-            if (ImGui::MenuItem(lang.Word("slider")))
+            if (ImGui::MenuItem("Slider"))
             {
                 SaveState();
                 const int parentId = GetOrCreateCanvasForUi(parentIndex);
@@ -1203,7 +1203,7 @@ void CEditor::HierarchyDrawCreateMenu(int parentIndex)
                 DispatchPluginEvent(PLUGIN_EVENT_ENTITY_CREATED, entityIndex);
                 m_Scene.SelectEntity(entityIndex, false);
             }
-            if (ImGui::MenuItem(lang.Word("toggle")))
+            if (ImGui::MenuItem("Toggle"))
             {
                 SaveState();
                 const int parentId = GetOrCreateCanvasForUi(parentIndex);
@@ -1213,7 +1213,7 @@ void CEditor::HierarchyDrawCreateMenu(int parentIndex)
                 DispatchPluginEvent(PLUGIN_EVENT_ENTITY_CREATED, entityIndex);
                 m_Scene.SelectEntity(entityIndex, false);
             }
-            if (ImGui::MenuItem(lang.Word("progress_bar")))
+            if (ImGui::MenuItem("Progress Bar"))
             {
                 SaveState();
                 const int parentId = GetOrCreateCanvasForUi(parentIndex);
@@ -1223,7 +1223,7 @@ void CEditor::HierarchyDrawCreateMenu(int parentIndex)
                 DispatchPluginEvent(PLUGIN_EVENT_ENTITY_CREATED, entityIndex);
                 m_Scene.SelectEntity(entityIndex, false);
             }
-            if (ImGui::MenuItem(lang.Word("scroll_view")))
+            if (ImGui::MenuItem("Scroll View"))
             {
                 SaveState();
                 const int parentId = GetOrCreateCanvasForUi(parentIndex);
@@ -1244,11 +1244,11 @@ void CEditor::HierarchyDrawCreateMenu(int parentIndex)
                 DispatchPluginEvent(PLUGIN_EVENT_ENTITY_CREATED, entityIndex);
                 m_Scene.SelectEntity(entityIndex, false);
             };
-            if (ImGui::MenuItem(lang.Word("input_field")))
+            if (ImGui::MenuItem("Input Field"))
             {
                 createUiEntity(EGuiWidgetType::INPUT_FIELD);
             }
-            if (ImGui::MenuItem(lang.Word("combo")))
+            if (ImGui::MenuItem("Dropdown"))
             {
                 createUiEntity(EGuiWidgetType::COMBO);
             }
