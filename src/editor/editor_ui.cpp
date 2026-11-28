@@ -398,16 +398,22 @@ void CEditor::DrawMainMenuBar(SPluginContext* pPluginCtx, ImGuiID dockspaceId,
                 CEntityClipboard::Paste(*this);
             }
 
-            if (ImGui::MenuItem(lang.Word("dublicate"), "Ctrl+D", false, pEntity != nullptr))
+            const bool hasSelection = pEntity != nullptr || !m_Scene.m_vSelectedEntities.empty();
+            if (ImGui::MenuItem(lang.Word("dublicate"), "Ctrl+D", false, hasSelection))
             {
-                CSceneEntityCommands::Duplicate(*this, pEntity);
+                CSceneEntityCommands::DuplicateSelection(*this);
+            }
+
+            if (ImGui::MenuItem(lang.Word("group_selected"), "Ctrl+G", false, hasSelection))
+            {
+                CSceneEntityCommands::GroupSelection(*this);
             }
 
             ImGui::Separator();
 
-            if (ImGui::MenuItem(lang.Word("delete"), "Del", false, pEntity != nullptr))
+            if (ImGui::MenuItem(lang.Word("delete"), "Del", false, hasSelection))
             {
-                CSceneEntityCommands::Delete(*this, pEntity);
+                CSceneEntityCommands::DeleteSelection(*this);
             }
 
             ImGui::Separator();
@@ -887,6 +893,7 @@ void CEditor::DrawTopToolbar(CFlyCamera& camera)
 void CEditor::DrawHierarchyPanel(SPluginContext* pPluginCtx)
 {
     SModalState& modal = m_Ui.m_Modal;
+    SHierarchyUiState& hierarchy = m_Ui.m_Hierarchy;
 
     ImGui::Begin(lang.Word("hierarchy"), &m_Preferences.m_ShowHierarchy);
     m_pPluginManager->DrawUiRegion(UI_HIERARCHY, *pPluginCtx);
@@ -896,6 +903,27 @@ void CEditor::DrawHierarchyPanel(SPluginContext* pPluginCtx)
         m_Scene.SelectEntity(m_Scene.m_Selected, false);
     }
 
+    const bool hasSearch = hierarchy.m_aSearchBuffer[0] != '\0';
+    const float clearBtnWidth = hasSearch ? (ImGui::CalcTextSize("X").x + ImGui::GetStyle().FramePadding.x * 2.0f + ImGui::GetStyle().ItemSpacing.x) : 0.0f;
+    ImGui::SetNextItemWidth(std::max(60.0f, ImGui::GetContentRegionAvail().x - clearBtnWidth));
+    ImGui::InputTextWithHint("##HierarchySearch", lang.Word("hierarchy_search_hint"),
+                             hierarchy.m_aSearchBuffer, IM_ARRAYSIZE(hierarchy.m_aSearchBuffer));
+    if (hasSearch)
+    {
+        ImGui::SameLine();
+        if (ImGui::Button("X##ClearHierarchySearch"))
+        {
+            hierarchy.m_aSearchBuffer[0] = '\0';
+        }
+    }
+
+    if (m_Scene.m_vSelectedEntities.size() > 1)
+    {
+        ImGui::TextDisabled("%d %s", static_cast<int>(m_Scene.m_vSelectedEntities.size()), lang.Word("selected_count"));
+    }
+    ImGui::Separator();
+
+    hierarchy.m_vVisibleOrder.clear();
     HierarchyDrawEntityTree(-1);
 
     const ImVec2 hierarchySpace = ImGui::GetContentRegionAvail();
@@ -910,12 +938,7 @@ void CEditor::DrawHierarchyPanel(SPluginContext* pPluginCtx)
                 if (pPayload->IsDelivery() && pPayload->DataSize == sizeof(int))
                 {
                     const int droppedIndex = *static_cast<const int*>(pPayload->Data);
-                    if (droppedIndex >= 0 && droppedIndex < static_cast<int>(m_Scene.m_vEntities.size()) &&
-                        m_Scene.m_vEntities[droppedIndex].m_ParentId != -1)
-                    {
-                        SaveState();
-                        MoveEntityToParent(m_Scene, droppedIndex, -1);
-                    }
+                    HierarchyReparentPayload(droppedIndex, -1);
                 }
             }
 
@@ -962,12 +985,21 @@ void CEditor::DrawHierarchyPanel(SPluginContext* pPluginCtx)
                 }
                 m_Ui.m_Layout.m_SceneAssetDragging = false;
                 m_Ui.m_Layout.m_DraggedSceneAssetName.clear();
+                m_Ui.m_Layout.m_DraggedSceneAssetPath.clear();
             }
         }
     }
 
     if (ImGui::BeginPopupContextWindow("HierarchyContext", ImGuiPopupFlags_NoOpenOverItems))
     {
+        if (!m_Scene.m_vSelectedEntities.empty())
+        {
+            if (ImGui::MenuItem(lang.Word("group_selected"), "Ctrl+G"))
+            {
+                CSceneEntityCommands::GroupSelection(*this);
+            }
+            ImGui::Separator();
+        }
         HierarchyDrawCreateMenu(-1);
 
         ImGui::EndPopup();
@@ -977,19 +1009,28 @@ void CEditor::DrawHierarchyPanel(SPluginContext* pPluginCtx)
     {
         if (const ImGuiPayload* pPayload = ImGui::AcceptDragDropPayload("ENTITY_INDEX"))
         {
-            int droppedIndex = *(const int*)pPayload->Data;
-            SaveState();
-            MoveEntityToParent(m_Scene, droppedIndex, -1);
+            const int droppedIndex = *static_cast<const int*>(pPayload->Data);
+            HierarchyReparentPayload(droppedIndex, -1);
         }
         ImGui::EndDragDropTarget();
     }
 
-    if (modal.m_DeferredHierarchyDelete.m_pEditor == this && modal.m_DeferredHierarchyDelete.m_Index >= 0)
+    if (modal.m_DeferredHierarchyDelete.m_pEditor == this &&
+        (modal.m_DeferredHierarchyDelete.m_DeleteSelection || modal.m_DeferredHierarchyDelete.m_Index >= 0))
     {
         const int index = modal.m_DeferredHierarchyDelete.m_Index;
+        const bool deleteSelection = modal.m_DeferredHierarchyDelete.m_DeleteSelection;
         modal.m_DeferredHierarchyDelete.m_pEditor = nullptr;
         modal.m_DeferredHierarchyDelete.m_Index = -1;
-        CSceneEntityCommands::Erase(*this, index);
+        modal.m_DeferredHierarchyDelete.m_DeleteSelection = false;
+        if (deleteSelection)
+        {
+            CSceneEntityCommands::EraseSelection(*this);
+        }
+        else
+        {
+            CSceneEntityCommands::Erase(*this, index);
+        }
     }
     ImGui::End();
 }
@@ -1039,11 +1080,7 @@ void CEditor::HierarchyAcceptEntityDrop(int targetIndex)
         if (pPayload->IsDelivery() && pPayload->DataSize == sizeof(int))
         {
             const int droppedIndex = *static_cast<const int*>(pPayload->Data);
-            if (droppedIndex != targetIndex)
-            {
-                SaveState();
-                MoveEntityToParent(m_Scene, droppedIndex, targetIndex);
-            }
+            HierarchyReparentPayload(droppedIndex, targetIndex);
         }
     }
 
@@ -1226,23 +1263,248 @@ void CEditor::HierarchyDrawCreateMenu(int parentIndex)
     }
 }
 
-void CEditor::HierarchyDrawEntityItem(int entityIndex)
+void CEditor::HierarchySelectRange(int targetIndex, bool additive)
+{
+    const auto& vOrder = m_Ui.m_Hierarchy.m_vVisibleOrder;
+    const int anchor = m_Ui.m_Hierarchy.m_SelectionAnchorIndex;
+
+    auto itAnchor = std::find(vOrder.begin(), vOrder.end(), anchor);
+    auto itTarget = std::find(vOrder.begin(), vOrder.end(), targetIndex);
+
+    if (itAnchor == vOrder.end() || itTarget == vOrder.end())
+    {
+        m_Scene.SelectEntity(targetIndex, additive);
+        m_Ui.m_Hierarchy.m_SelectionAnchorIndex = targetIndex;
+        return;
+    }
+
+    if (itAnchor > itTarget)
+    {
+        std::swap(itAnchor, itTarget);
+    }
+
+    if (!additive)
+    {
+        m_Scene.m_vSelectedEntities.clear();
+    }
+
+    for (auto it = itAnchor; it <= itTarget; ++it)
+    {
+        const int idx = *it;
+        if (!m_Scene.IsSelected(idx))
+        {
+            m_Scene.m_vSelectedEntities.push_back(idx);
+        }
+    }
+    m_Scene.m_Selected = targetIndex;
+}
+
+void CEditor::HierarchyHandleItemClick(int entityIndex)
+{
+    const ImGuiIO& io = ImGui::GetIO();
+    if (io.KeyShift && m_Ui.m_Hierarchy.m_SelectionAnchorIndex >= 0)
+    {
+        HierarchySelectRange(entityIndex, io.KeyCtrl);
+    }
+    else
+    {
+        m_Scene.SelectEntity(entityIndex, io.KeyCtrl);
+        m_Ui.m_Hierarchy.m_SelectionAnchorIndex = entityIndex;
+    }
+}
+
+bool CEditor::HierarchyEntityMatchesFilter(int entityIndex) const
+{
+    const char* pRaw = m_Ui.m_Hierarchy.m_aSearchBuffer;
+    if (!pRaw || pRaw[0] == '\0')
+    {
+        return true;
+    }
+    if (entityIndex < 0 || entityIndex >= static_cast<int>(m_Scene.m_vEntities.size()))
+    {
+        return false;
+    }
+
+    auto toLowerCopy = [](const std::string& input) -> std::string
+    {
+        std::string out = input;
+        std::transform(out.begin(), out.end(), out.begin(),
+                       [](unsigned char c) { return static_cast<char>(std::tolower(c)); });
+        return out;
+    };
+
+    std::string query = toLowerCopy(pRaw);
+    while (!query.empty() && std::isspace(static_cast<unsigned char>(query.front())))
+    {
+        query.erase(query.begin());
+    }
+    while (!query.empty() && std::isspace(static_cast<unsigned char>(query.back())))
+    {
+        query.pop_back();
+    }
+    if (query.empty())
+    {
+        return true;
+    }
+
+    bool tagOnly = false;
+    if (query.rfind("tag:", 0) == 0)
+    {
+        tagOnly = true;
+        query = query.substr(4);
+    }
+    else if (query.rfind("t:", 0) == 0)
+    {
+        tagOnly = true;
+        query = query.substr(2);
+    }
+
+    while (!query.empty() && std::isspace(static_cast<unsigned char>(query.front())))
+    {
+        query.erase(query.begin());
+    }
+    if (query.empty())
+    {
+        return true;
+    }
+
+    const CEntity& entity = m_Scene.m_vEntities[entityIndex];
+    if (!tagOnly)
+    {
+        if (toLowerCopy(entity.m_Name).find(query) != std::string::npos)
+        {
+            return true;
+        }
+    }
+
+    for (const std::string& tag : entity.m_vTags)
+    {
+        if (toLowerCopy(tag).find(query) != std::string::npos)
+        {
+            return true;
+        }
+    }
+
+    return false;
+}
+
+bool CEditor::HierarchySubtreeMatchesFilter(int entityIndex) const
+{
+    if (HierarchyEntityMatchesFilter(entityIndex))
+    {
+        return true;
+    }
+
+    const auto vChildren = GetEntityChildren(m_Scene, entityIndex);
+    for (int childIndex : vChildren)
+    {
+        if (HierarchySubtreeMatchesFilter(childIndex))
+        {
+            return true;
+        }
+    }
+    return false;
+}
+
+void CEditor::HierarchyReparentPayload(int droppedIndex, int targetParentIndex)
+{
+    if (droppedIndex < 0 || droppedIndex >= static_cast<int>(m_Scene.m_vEntities.size()))
+    {
+        return;
+    }
+
+    std::vector<int> vToMove;
+    if (m_Scene.IsSelected(droppedIndex) && m_Scene.m_vSelectedEntities.size() > 1)
+    {
+        vToMove = CSceneEntityCommands::GetRootSelectedIndices(m_Scene);
+    }
+    else
+    {
+        vToMove.push_back(droppedIndex);
+    }
+
+    auto isDescendantOf = [this](int candidate, int ancestor) -> bool
+    {
+        int cursor = candidate;
+        int guard = 0;
+        while (cursor >= 0 && cursor < static_cast<int>(m_Scene.m_vEntities.size()) && guard++ < 128)
+        {
+            if (cursor == ancestor)
+            {
+                return true;
+            }
+            cursor = m_Scene.m_vEntities[cursor].m_ParentId;
+        }
+        return false;
+    };
+
+    std::vector<int> vValidMoves;
+    for (int idx : vToMove)
+    {
+        if (idx == targetParentIndex || m_Scene.m_vEntities[idx].m_ParentId == targetParentIndex)
+        {
+            continue;
+        }
+        if (targetParentIndex >= 0 && isDescendantOf(targetParentIndex, idx))
+        {
+            continue;
+        }
+        vValidMoves.push_back(idx);
+    }
+
+    if (vValidMoves.empty())
+    {
+        return;
+    }
+
+    SaveState();
+    for (int idx : vValidMoves)
+    {
+        MoveEntityToParent(m_Scene, idx, targetParentIndex);
+    }
+    m_SceneDirty = true;
+    RequestSceneRedraw();
+}
+
+void CEditor::HierarchyDrawEntityItem(int entityIndex, bool dimText)
 {
     CEntity& entity = m_Scene.m_vEntities[entityIndex];
     const bool selected = m_Scene.IsSelected(entityIndex);
 
     ImGui::PushID(entityIndex);
+    if (dimText)
+    {
+        ImGui::PushStyleColor(ImGuiCol_Text, ImGui::GetStyleColorVec4(ImGuiCol_TextDisabled));
+    }
 
     if (ImGui::Selectable(entity.m_Name.c_str(), selected))
     {
-        const bool ctrl = ImGui::GetIO().KeyCtrl;
-        m_Scene.SelectEntity(entityIndex, ctrl);
+        HierarchyHandleItemClick(entityIndex);
+    }
+
+    if (dimText)
+    {
+        ImGui::PopStyleColor();
+    }
+
+    if (ImGui::IsItemClicked(ImGuiMouseButton_Right) && !selected)
+    {
+        m_Scene.SelectEntity(entityIndex, false);
+        m_Ui.m_Hierarchy.m_SelectionAnchorIndex = entityIndex;
     }
 
     if (ImGui::BeginDragDropSource(ImGuiDragDropFlags_None))
     {
         ImGui::SetDragDropPayload("ENTITY_INDEX", &entityIndex, sizeof(int));
-        ImGui::Text("%s", entity.m_Name.c_str());
+        if (selected && m_Scene.m_vSelectedEntities.size() > 1)
+        {
+            ImGui::Text("%s (+%d)", entity.m_Name.c_str(),
+                        static_cast<int>(m_Scene.m_vSelectedEntities.size()) - 1);
+        }
+        else
+        {
+            ImGui::Text("%s", entity.m_Name.c_str());
+        }
         ImGui::EndDragDropSource();
     }
 
@@ -1250,19 +1512,21 @@ void CEditor::HierarchyDrawEntityItem(int entityIndex)
 
     if (ImGui::BeginPopupContextItem(TextFormat("context_%d", entity.m_Id)))
     {
+        const bool multiSelected = m_Scene.IsSelected(entityIndex) && m_Scene.m_vSelectedEntities.size() > 1;
         if (ImGui::MenuItem(lang.Word("delete")))
         {
             SaveState();
 
             m_Ui.m_Modal.m_DeferredHierarchyDelete.m_pEditor = this;
             m_Ui.m_Modal.m_DeferredHierarchyDelete.m_Index = entityIndex;
+            m_Ui.m_Modal.m_DeferredHierarchyDelete.m_DeleteSelection = multiSelected;
 
             ImGui::EndPopup();
             ImGui::PopID();
             return;
         }
 
-        if (ImGui::MenuItem(lang.Word("rename")))
+        if (!multiSelected && ImGui::MenuItem(lang.Word("rename")))
         {
             SaveState();
             m_Ui.m_MeshEdit.m_RenamingIndex = entityIndex;
@@ -1272,14 +1536,26 @@ void CEditor::HierarchyDrawEntityItem(int entityIndex)
 
         if (ImGui::MenuItem(lang.Word("dublicate")))
         {
-            SaveState();
-            CEntity copy = CSceneEntityCommands::CloneInstance(entity, m_Scene);
-            m_Scene.m_vEntities.push_back(std::move(copy));
-            DispatchPluginEvent(PLUGIN_EVENT_ENTITY_CREATED,
-                                static_cast<int>(m_Scene.m_vEntities.size()) - 1);
+            if (multiSelected)
+            {
+                CSceneEntityCommands::DuplicateSelection(*this);
+            }
+            else
+            {
+                CSceneEntityCommands::Duplicate(*this, &entity);
+            }
         }
 
-        if (ImGui::MenuItem(lang.Word("save_prefab")))
+        if (ImGui::MenuItem(lang.Word("group_selected"), "Ctrl+G"))
+        {
+            if (!m_Scene.IsSelected(entityIndex))
+            {
+                m_Scene.SelectEntity(entityIndex, false);
+            }
+            CSceneEntityCommands::GroupSelection(*this);
+        }
+
+        if (!multiSelected && ImGui::MenuItem(lang.Word("save_prefab")))
         {
             const std::filesystem::path targetDir = !m_CurrentAssetPath.empty()
                 ? m_CurrentAssetPath
@@ -1305,25 +1581,60 @@ void CEditor::HierarchyDrawEntityItem(int entityIndex)
 
 void CEditor::HierarchyDrawEntityTree(int parentId)
 {
+    const bool filterActive = m_Ui.m_Hierarchy.m_aSearchBuffer[0] != '\0';
     const auto vChildren = GetEntityChildren(m_Scene, parentId);
     for (int childIndex : vChildren)
     {
+        if (filterActive && !HierarchySubtreeMatchesFilter(childIndex))
+        {
+            continue;
+        }
+
+        const bool directMatch = !filterActive || HierarchyEntityMatchesFilter(childIndex);
+        m_Ui.m_Hierarchy.m_vVisibleOrder.push_back(childIndex);
+
         CEntity& child = m_Scene.m_vEntities[childIndex];
 
         if (child.m_IsGroup)
         {
-            ImGuiTreeNodeFlags flags = ImGuiTreeNodeFlags_DefaultOpen | ImGuiTreeNodeFlags_SpanAvailWidth;
+            ImGuiTreeNodeFlags flags = ImGuiTreeNodeFlags_DefaultOpen | ImGuiTreeNodeFlags_SpanAvailWidth | ImGuiTreeNodeFlags_OpenOnArrow;
             if (m_Scene.IsSelected(childIndex))
             {
                 flags |= ImGuiTreeNodeFlags_Selected;
             }
+            if (filterActive)
+            {
+                ImGui::SetNextItemOpen(true, ImGuiCond_Always);
+            }
 
+            if (!directMatch)
+            {
+                ImGui::PushStyleColor(ImGuiCol_Text, ImGui::GetStyleColorVec4(ImGuiCol_TextDisabled));
+            }
             const bool open = ImGui::TreeNodeEx(child.m_Name.c_str(), flags);
+            if (!directMatch)
+            {
+                ImGui::PopStyleColor();
+            }
+
+            if (ImGui::IsItemClicked(ImGuiMouseButton_Right) && !m_Scene.IsSelected(childIndex))
+            {
+                m_Scene.SelectEntity(childIndex, false);
+                m_Ui.m_Hierarchy.m_SelectionAnchorIndex = childIndex;
+            }
 
             if (ImGui::BeginDragDropSource(ImGuiDragDropFlags_None))
             {
                 ImGui::SetDragDropPayload("ENTITY_INDEX", &childIndex, sizeof(int));
-                ImGui::Text("%s", child.m_Name.c_str());
+                if (m_Scene.IsSelected(childIndex) && m_Scene.m_vSelectedEntities.size() > 1)
+                {
+                    ImGui::Text("%s (+%d)", child.m_Name.c_str(),
+                                static_cast<int>(m_Scene.m_vSelectedEntities.size()) - 1);
+                }
+                else
+                {
+                    ImGui::Text("%s", child.m_Name.c_str());
+                }
                 ImGui::EndDragDropSource();
             }
 
@@ -1331,11 +1642,13 @@ void CEditor::HierarchyDrawEntityTree(int parentId)
 
             if (ImGui::BeginPopupContextItem(TextFormat("group_context_%d", child.m_Id)))
             {
+                const bool multiSelected = m_Scene.IsSelected(childIndex) && m_Scene.m_vSelectedEntities.size() > 1;
                 if (ImGui::MenuItem(lang.Word("delete")))
                 {
                     SaveState();
                     m_Ui.m_Modal.m_DeferredHierarchyDelete.m_pEditor = this;
                     m_Ui.m_Modal.m_DeferredHierarchyDelete.m_Index = childIndex;
+                    m_Ui.m_Modal.m_DeferredHierarchyDelete.m_DeleteSelection = multiSelected;
                     ImGui::EndPopup();
                     if (open)
                     {
@@ -1344,7 +1657,7 @@ void CEditor::HierarchyDrawEntityTree(int parentId)
                     return;
                 }
 
-                if (ImGui::MenuItem(lang.Word("rename")))
+                if (!multiSelected && ImGui::MenuItem(lang.Word("rename")))
                 {
                     SaveState();
                     m_Ui.m_MeshEdit.m_RenamingIndex = childIndex;
@@ -1354,14 +1667,26 @@ void CEditor::HierarchyDrawEntityTree(int parentId)
 
                 if (ImGui::MenuItem(lang.Word("dublicate")))
                 {
-                    SaveState();
-                    CEntity copy = CSceneEntityCommands::CloneInstance(child, m_Scene);
-                    m_Scene.m_vEntities.push_back(std::move(copy));
-                    DispatchPluginEvent(PLUGIN_EVENT_ENTITY_CREATED,
-                                        static_cast<int>(m_Scene.m_vEntities.size()) - 1);
+                    if (multiSelected)
+                    {
+                        CSceneEntityCommands::DuplicateSelection(*this);
+                    }
+                    else
+                    {
+                        CSceneEntityCommands::Duplicate(*this, &child);
+                    }
                 }
 
-                if (ImGui::MenuItem(lang.Word("save_prefab")))
+                if (ImGui::MenuItem(lang.Word("group_selected"), "Ctrl+G"))
+                {
+                    if (!m_Scene.IsSelected(childIndex))
+                    {
+                        m_Scene.SelectEntity(childIndex, false);
+                    }
+                    CSceneEntityCommands::GroupSelection(*this);
+                }
+
+                if (!multiSelected && ImGui::MenuItem(lang.Word("save_prefab")))
                 {
                     const std::filesystem::path targetDir = !m_CurrentAssetPath.empty()
                         ? m_CurrentAssetPath
@@ -1383,10 +1708,9 @@ void CEditor::HierarchyDrawEntityTree(int parentId)
             }
 
             ImGui::PushID(childIndex);
-            if (ImGui::IsItemClicked())
+            if (ImGui::IsItemClicked() && !ImGui::IsItemToggledOpen())
             {
-                const bool ctrl = ImGui::GetIO().KeyCtrl;
-                m_Scene.SelectEntity(childIndex, ctrl);
+                HierarchyHandleItemClick(childIndex);
             }
             ImGui::PopID();
 
@@ -1398,7 +1722,7 @@ void CEditor::HierarchyDrawEntityTree(int parentId)
         }
         else
         {
-            HierarchyDrawEntityItem(childIndex);
+            HierarchyDrawEntityItem(childIndex, !directMatch);
             const auto vNestedChildren = GetEntityChildren(m_Scene, childIndex);
             if (!vNestedChildren.empty())
             {
@@ -1572,6 +1896,46 @@ void CEditor::DrawInspectorPanel(Shader shader, SPluginContext* pPluginCtx)
 
         ImGui::Spacing();
         CComponentUIHelper::DrawEntityInspector(*this, *pEntity, shader);
+
+        if (m_Ui.m_Layout.m_SceneAssetDragging)
+        {
+            const std::filesystem::path draggedPath = !m_Ui.m_Layout.m_DraggedSceneAssetPath.empty()
+                ? std::filesystem::path(m_Ui.m_Layout.m_DraggedSceneAssetPath)
+                : std::filesystem::path(m_Ui.m_Layout.m_DraggedSceneAssetName);
+            const bool canApply =
+                CSceneAssetDrop::IsMaterialExtension(draggedPath) ||
+                CSceneAssetDrop::IsTextureExtension(draggedPath) ||
+                CSceneAssetDrop::IsScriptExtension(draggedPath) ||
+                CSceneAssetDrop::IsModelPath(*this, m_Ui.m_Layout.m_DraggedSceneAssetName, draggedPath);
+
+            if (canApply && ImGui::IsWindowHovered(ImGuiHoveredFlags_AllowWhenBlockedByActiveItem))
+            {
+                const ImVec2 winMin = ImGui::GetWindowPos();
+                const ImVec2 winSize = ImGui::GetWindowSize();
+                ImGui::GetWindowDrawList()->AddRect(
+                    winMin,
+                    ImVec2(winMin.x + winSize.x, winMin.y + winSize.y),
+                    IM_COL32(80, 180, 255, 220),
+                    4.0f,
+                    0,
+                    2.5f);
+
+                if (ImGui::IsMouseReleased(ImGuiMouseButton_Left))
+                {
+                    if (CSceneAssetDrop::ApplyAssetToEntity(
+                            *this, *pEntity,
+                            m_Ui.m_Layout.m_DraggedSceneAssetName,
+                            m_Ui.m_Layout.m_DraggedSceneAssetPath))
+                    {
+                        const std::string msg = std::string(lang.Word("applied_asset")) + ": " + draggedPath.filename().string();
+                        SetStatusMessage(msg.c_str());
+                    }
+                    m_Ui.m_Layout.m_SceneAssetDragging = false;
+                    m_Ui.m_Layout.m_DraggedSceneAssetName.clear();
+                    m_Ui.m_Layout.m_DraggedSceneAssetPath.clear();
+                }
+            }
+        }
     }
     else
     {
@@ -2429,11 +2793,21 @@ void CEditor::DrawConfirmationModals()
             {
                 CEditor* pEditorToDelete = modal.m_PendingDelete.m_pEditor;
                 CEntity* pEntityToDelete = modal.m_PendingDelete.m_pEntity;
+                const bool deleteSelection = modal.m_PendingDelete.m_DeleteSelection;
                 modal.m_PendingDelete.m_pEditor = nullptr;
                 modal.m_PendingDelete.m_pEntity = nullptr;
+                modal.m_PendingDelete.m_DeleteSelection = false;
                 const bool previousConfirm = m_Preferences.m_ConfirmDelete;
                 m_Preferences.m_ConfirmDelete = false;
-                CSceneEntityCommands::Delete(*pEditorToDelete, pEntityToDelete);
+                if (deleteSelection)
+                {
+                    pEditorToDelete->SaveState();
+                    CSceneEntityCommands::EraseSelection(*pEditorToDelete);
+                }
+                else
+                {
+                    CSceneEntityCommands::Delete(*pEditorToDelete, pEntityToDelete);
+                }
                 m_Preferences.m_ConfirmDelete = previousConfirm;
                 ImGui::CloseCurrentPopup();
             }
@@ -2442,6 +2816,7 @@ void CEditor::DrawConfirmationModals()
             {
                 modal.m_PendingDelete.m_pEditor = nullptr;
                 modal.m_PendingDelete.m_pEntity = nullptr;
+                modal.m_PendingDelete.m_DeleteSelection = false;
                 ImGui::CloseCurrentPopup();
             }
             ImGui::EndPopup();

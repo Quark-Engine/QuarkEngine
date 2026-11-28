@@ -1931,23 +1931,24 @@ void DrawAssetsUi(CEditor& editor)
                         editor.m_Ui.m_Layout.m_FileDragging = true;
                         editor.m_Ui.m_Layout.m_DraggedFileIndex = i;
 
-                        if (entry.m_IsModel)
-                        {
-                            editor.m_Ui.m_Layout.m_SceneAssetDragging = true;
-                            editor.m_Ui.m_Layout.m_DraggedSceneAssetName = entryFullPath.string();
-                        }
-
-                        if (entry.m_Extension == "prefab")
-                        {
-                            editor.m_Ui.m_Layout.m_SceneAssetDragging = true;
-                            editor.m_Ui.m_Layout.m_DraggedSceneAssetName = entryFullPath.string();
-                        }
-
-                        if (CModelService::IsModelFile(fs::path(entry.m_FileName)))
+                        if (entry.m_IsModel || CModelService::IsModelFile(fs::path(entry.m_FileName)))
                         {
                             const std::string assetName = CAssetLibrary::AssetNameForPath(fs::path(editor.m_ProjectPath), entryFullPath);
                             editor.m_Ui.m_Layout.m_SceneAssetDragging = true;
                             editor.m_Ui.m_Layout.m_DraggedSceneAssetName = assetName;
+                            editor.m_Ui.m_Layout.m_DraggedSceneAssetPath = entryFullPath.string();
+                        }
+                        else if (entry.m_IsPrefab || entry.m_Extension == "prefab")
+                        {
+                            editor.m_Ui.m_Layout.m_SceneAssetDragging = true;
+                            editor.m_Ui.m_Layout.m_DraggedSceneAssetName = entryFullPath.string();
+                            editor.m_Ui.m_Layout.m_DraggedSceneAssetPath = entryFullPath.string();
+                        }
+                        else if (entry.m_IsMaterial || entry.m_IsImage || entry.m_IsScript)
+                        {
+                            editor.m_Ui.m_Layout.m_SceneAssetDragging = true;
+                            editor.m_Ui.m_Layout.m_DraggedSceneAssetName = entry.m_FileName;
+                            editor.m_Ui.m_Layout.m_DraggedSceneAssetPath = entryFullPath.string();
                         }
                     }
                 }
@@ -1969,27 +1970,16 @@ void DrawAssetsUi(CEditor& editor)
                 }
 
                 if (editor.m_Ui.m_Layout.m_SceneAssetDragging &&
-                    !entry.m_IsDirectory && (entry.m_IsModel || entry.m_IsMaterial || entry.m_IsPrefab))
+                    !entry.m_IsDirectory &&
+                    editor.m_Ui.m_Layout.m_DraggedSceneAssetPath == entryFullPath.string())
                 {
-                    if (entry.m_IsPrefab)
+                    if (entry.m_IsPrefab || entry.m_IsModel)
                     {
-                        const std::string fullPrefabPath = entryFullPath.string();
-                        if (editor.m_Ui.m_Layout.m_DraggedSceneAssetName == fullPrefabPath)
-                        {
-                            ImGui::SetTooltip(lang.Word("spawn"), entry.m_FileName.c_str());
-                        }
+                        ImGui::SetTooltip(lang.Word("spawn"), entry.m_FileName.c_str());
                     }
-                    else
+                    else if (entry.m_IsMaterial || entry.m_IsImage || entry.m_IsScript)
                     {
-                        const std::string assetName = CAssetLibrary::AssetNameForPath(fs::path(editor.m_ProjectPath), entryFullPath);
-
-                        if (editor.m_Ui.m_Layout.m_SceneAssetDragging && editor.m_Ui.m_Layout.m_DraggedSceneAssetName == assetName)
-                        {
-                            if (entry.m_IsModel)
-                            {
-                                ImGui::SetTooltip(lang.Word("spawn"), editor.m_Ui.m_Layout.m_DraggedSceneAssetName.c_str());
-                            }
-                        }
+                        ImGui::SetTooltip("%s: %s", lang.Word("apply_asset_tooltip"), entry.m_FileName.c_str());
                     }
                 }
 
@@ -2233,6 +2223,8 @@ void DrawAssetsUi(CEditor& editor)
         {
             editor.m_Ui.m_Layout.m_FileDragging = false;
             editor.m_Ui.m_Layout.m_SceneAssetDragging = false;
+            editor.m_Ui.m_Layout.m_DraggedSceneAssetName.clear();
+            editor.m_Ui.m_Layout.m_DraggedSceneAssetPath.clear();
             editor.m_Ui.m_Layout.m_DraggedFileIndex = -1;
             editor.m_Ui.m_Layout.m_DraggedTargetFolderIndex = -1;
             drag.m_FileName.clear();

@@ -105,12 +105,14 @@ struct SPendingEntityDelete
 {
     CEditor* m_pEditor = nullptr;
     CEntity* m_pEntity = nullptr;
+    bool m_DeleteSelection = false;
 };
 
 struct SDeferredHierarchyDelete
 {
     CEditor* m_pEditor = nullptr;
     int m_Index = -1;
+    bool m_DeleteSelection = false;
 };
 
 struct SModalState
@@ -126,6 +128,13 @@ struct SGizmoState
     bool m_WasUsingTransform = false;
     bool m_WasUsingMeshEdit = false;
     bool m_WasUsingPolygon = false;
+};
+
+struct SHierarchyUiState
+{
+    char m_aSearchBuffer[128] = {};
+    int m_SelectionAnchorIndex = -1;
+    std::vector<int> m_vVisibleOrder;
 };
 
 struct SInspectorUiState
@@ -148,6 +157,7 @@ struct SLayoutState
 
     bool m_SceneAssetDragging = false;
     std::string m_DraggedSceneAssetName;
+    std::string m_DraggedSceneAssetPath;
 
     bool m_FileDragging = false;
     int m_DraggedFileIndex = -1;
@@ -361,6 +371,7 @@ public:
     SAssetBrowserState m_AssetBrowser;
     SMaterialPickerState m_MaterialPicker;
     SFontPickerState m_FontPicker;
+    SHierarchyUiState m_Hierarchy;
     SInspectorUiState m_Inspector;
     SEntityRenameState m_EntityRename;
     SPreferencesUiState m_Preferences;

@@ -13,6 +13,9 @@ std::vector<int> GetRootEntities(const CScene& scene);
 void EraseEntityAndDescendants(
     CScene& scene, int entityIndex,
     const std::function<void(CEntity&, int)>& beforeErase = {});
+void EraseEntitiesAndDescendants(
+    CScene& scene, const std::vector<int>& vEntityIndices,
+    const std::function<void(CEntity&, int)>& beforeErase = {});
 
 void MoveEntityToParent(CScene& scene, int entityId, int newParentId);
 int CreateGroup(CScene& scene, const std::string& name, int parentId = -1);

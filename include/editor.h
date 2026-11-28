@@ -215,8 +215,13 @@ private:
 
     void HierarchyAcceptEntityDrop(int targetIndex);
     void HierarchyDrawCreateMenu(int parentIndex);
-    void HierarchyDrawEntityItem(int entityIndex);
+    void HierarchyDrawEntityItem(int entityIndex, bool dimText);
     void HierarchyDrawEntityTree(int parentId);
+    void HierarchySelectRange(int targetIndex, bool additive);
+    void HierarchyHandleItemClick(int entityIndex);
+    bool HierarchyEntityMatchesFilter(int entityIndex) const;
+    bool HierarchySubtreeMatchesFilter(int entityIndex) const;
+    void HierarchyReparentPayload(int droppedIndex, int targetParentIndex);
 
     bool DrawPreferencesGeneralTab();
     bool DrawPreferencesRenderingTab(CFlyCamera& camera);

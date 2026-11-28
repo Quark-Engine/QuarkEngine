@@ -59,8 +59,42 @@ void EraseEntityAndDescendants(
         return;
     }
 
-    std::vector<int> vIndices = GetEntityDescendants(scene, entityIndex);
-    vIndices.push_back(entityIndex);
+    EraseEntitiesAndDescendants(scene, { entityIndex }, beforeErase);
+}
+
+void EraseEntitiesAndDescendants(
+    CScene& scene, const std::vector<int>& vEntityIndices,
+    const std::function<void(CEntity&, int)>& beforeErase)
+{
+    std::vector<int> vIndices;
+    std::vector<bool> vMarked(scene.m_vEntities.size(), false);
+    for (int rootIndex : vEntityIndices)
+    {
+        if (rootIndex < 0 || rootIndex >= static_cast<int>(scene.m_vEntities.size()))
+        {
+            continue;
+        }
+        if (!vMarked[rootIndex])
+        {
+            vMarked[rootIndex] = true;
+            vIndices.push_back(rootIndex);
+        }
+        const std::vector<int> vDescendants = GetEntityDescendants(scene, rootIndex);
+        for (int desc : vDescendants)
+        {
+            if (desc >= 0 && desc < static_cast<int>(scene.m_vEntities.size()) && !vMarked[desc])
+            {
+                vMarked[desc] = true;
+                vIndices.push_back(desc);
+            }
+        }
+    }
+
+    if (vIndices.empty())
+    {
+        return;
+    }
+
     std::sort(vIndices.begin(), vIndices.end(), std::greater<int>());
 
     for (int index : vIndices)
@@ -93,6 +127,7 @@ void EraseEntityAndDescendants(
 
     scene.m_Selected = -1;
     scene.m_vSelectedEntities.clear();
+    scene.MarkHierarchyDirty();
 }
 
 void MoveEntityToParent(CScene& scene, int entityId, int newParentId)

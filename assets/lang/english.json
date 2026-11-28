@@ -401,5 +401,10 @@
     "triangles": "Triangles",
     "entities": "Entities",
     "meshes": "Meshes",
-    "lights": "Lights"
+    "lights": "Lights",
+    "hierarchy_search_hint": "Search name or tag:...",
+    "selected_count": "selected",
+    "group_selected": "Group Selected",
+    "apply_asset_tooltip": "Apply",
+    "applied_asset": "Applied"
 }

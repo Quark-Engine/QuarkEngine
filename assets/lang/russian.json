@@ -363,5 +363,10 @@
     "stage_gpu_present":  "Отправка на GPU и Present",
     "entities":  "Объекты",
     "meshes":  "Меши",
-    "lights":  "Источники света"
+    "lights":  "Источники света",
+    "hierarchy_search_hint":  "Поиск по имени или tag:...",
+    "selected_count":  "выбрано",
+    "group_selected":  "Сгруппировать выбранные",
+    "apply_asset_tooltip":  "Применить",
+    "applied_asset":  "Применено"
 }

@@ -1155,82 +1155,115 @@ void CGizmoController::Draw(CEditor& editor, CFlyCamera& camera)
         {
             Mat4 worldTransform = Mat4::identity();
             memcpy(&worldTransform, aTransformMat4, sizeof(aTransformMat4));
-            const Mat4 parentWorld = quark::ParentWorld(editor.m_Scene, *pEntity);
-            Mat4 inverseParent = Mat4::identity();
-            const bool hasInverseParent = quark::TryInvertAffine(parentWorld, inverseParent);
 
-            if (editor.m_Ui.m_MeshEdit.m_GizmoMode == ImGuizmo::TRANSLATE)
+            const Vec3 prevWorldPos = { gizmoTransform.m[12], gizmoTransform.m[13], gizmoTransform.m[14] };
+            const Vec3 newWorldPos = { worldTransform.m[12], worldTransform.m[13], worldTransform.m[14] };
+            const Vec3 worldDelta = newWorldPos - prevWorldPos;
+
+            auto hasSelectedAncestor = [&editor](int entityIdx) -> bool
             {
-                const Vec3 worldPos = { worldTransform.m[12], worldTransform.m[13], worldTransform.m[14] };
-                const Vec3 localPos = hasInverseParent ? Vec3(inverseParent * worldPos) : worldPos;
-                pTransform->m_Position = localPos;
-                if (pTransform->m_HasLocalMatrixOverride)
+                int parentIdx = editor.m_Scene.m_vEntities[entityIdx].m_ParentId;
+                int guard = 0;
+                while (parentIdx >= 0 && parentIdx < static_cast<int>(editor.m_Scene.m_vEntities.size()) && guard++ < 128)
                 {
-                    pTransform->m_LocalMatrixOverride.m[12] = localPos.x;
-                    pTransform->m_LocalMatrixOverride.m[13] = localPos.y;
-                    pTransform->m_LocalMatrixOverride.m[14] = localPos.z;
+                    if (editor.m_Scene.IsSelected(parentIdx))
+                    {
+                        return true;
+                    }
+                    parentIdx = editor.m_Scene.m_vEntities[parentIdx].m_ParentId;
                 }
+                return false;
+            };
+
+            if (editor.m_Ui.m_MeshEdit.m_GizmoMode == ImGuizmo::TRANSLATE &&
+                editor.m_Scene.m_vSelectedEntities.size() > 1)
+            {
+                for (int selectedIndex : editor.m_Scene.m_vSelectedEntities)
+                {
+                    if (selectedIndex < 0 || selectedIndex >= static_cast<int>(editor.m_Scene.m_vEntities.size()))
+                    {
+                        continue;
+                    }
+                    if (hasSelectedAncestor(selectedIndex))
+                    {
+                        continue;
+                    }
+                    CEntity& selectedEntity = editor.m_Scene.m_vEntities[selectedIndex];
+                    CTransformComponent* pSelectedTransform = selectedEntity.GetTransformComponent();
+                    if (!pSelectedTransform)
+                    {
+                        continue;
+                    }
+                    const Mat4 selParentWorld = quark::ParentWorld(editor.m_Scene, selectedEntity);
+                    Mat4 selInverseParent = Mat4::identity();
+                    const bool hasSelInverseParent = quark::TryInvertAffine(selParentWorld, selInverseParent);
+                    const Mat4 selWorld = quark::ComposeWorld(editor.m_Scene, selectedEntity);
+                    const Vec3 selNextWorldPos = Vec3{ selWorld.m[12], selWorld.m[13], selWorld.m[14] } + worldDelta;
+                    const Vec3 selNextLocalPos = hasSelInverseParent ? Vec3(selInverseParent * selNextWorldPos) : selNextWorldPos;
+
+                    pSelectedTransform->m_Position = selNextLocalPos;
+                    if (pSelectedTransform->m_HasLocalMatrixOverride)
+                    {
+                        pSelectedTransform->m_LocalMatrixOverride.m[12] = selNextLocalPos.x;
+                        pSelectedTransform->m_LocalMatrixOverride.m[13] = selNextLocalPos.y;
+                        pSelectedTransform->m_LocalMatrixOverride.m[14] = selNextLocalPos.z;
+                    }
+                    DispatchPluginEvent(PLUGIN_EVENT_TRANSFORM_CHANGED, selectedIndex);
+                    CEntityTextureService::MarkEntityBoundsDirty(&selectedEntity);
+                    if (CMaterialComponent* pSelectedMaterial = selectedEntity.GetMaterialComponent();
+                        pSelectedMaterial && !pSelectedMaterial->m_TextureStretch)
+                    {
+                        CEntityTextureService::MarkEntityUVDirty(&selectedEntity);
+                    }
+                }
+                editor.m_Scene.BumpTransformRevision();
+                editor.RequestSceneRedraw();
             }
             else
             {
-                quark::DecomposeLocal(parentWorld, worldTransform, *pTransform);
-                constexpr float MIN_SCALE_COMPONENT = 0.001f;
-                auto clampNonZeroScale = [MIN_SCALE_COMPONENT](float s) -> float
+                const Mat4 parentWorld = quark::ParentWorld(editor.m_Scene, *pEntity);
+                Mat4 inverseParent = Mat4::identity();
+                const bool hasInverseParent = quark::TryInvertAffine(parentWorld, inverseParent);
+
+                if (editor.m_Ui.m_MeshEdit.m_GizmoMode == ImGuizmo::TRANSLATE)
                 {
-                    if (!std::isfinite(s) || std::fabs(s) < MIN_SCALE_COMPONENT)
+                    const Vec3 localPos = hasInverseParent ? Vec3(inverseParent * newWorldPos) : newWorldPos;
+                    pTransform->m_Position = localPos;
+                    if (pTransform->m_HasLocalMatrixOverride)
                     {
-                        return (s < 0.0f) ? -MIN_SCALE_COMPONENT : MIN_SCALE_COMPONENT;
+                        pTransform->m_LocalMatrixOverride.m[12] = localPos.x;
+                        pTransform->m_LocalMatrixOverride.m[13] = localPos.y;
+                        pTransform->m_LocalMatrixOverride.m[14] = localPos.z;
                     }
-                    return s;
-                };
-                pTransform->m_Scale.x = clampNonZeroScale(pTransform->m_Scale.x);
-                pTransform->m_Scale.y = clampNonZeroScale(pTransform->m_Scale.y);
-                pTransform->m_Scale.z = clampNonZeroScale(pTransform->m_Scale.z);
-                pTransform->ClearLocalMatrixOverride();
-                pTransform->SetLocalMatrixOverride(quark::ComposeLocal(*pTransform));
-            }
-        }
+                }
+                else
+                {
+                    quark::DecomposeLocal(parentWorld, worldTransform, *pTransform);
+                    constexpr float MIN_SCALE_COMPONENT = 0.001f;
+                    auto clampNonZeroScale = [MIN_SCALE_COMPONENT](float s) -> float
+                    {
+                        if (!std::isfinite(s) || std::fabs(s) < MIN_SCALE_COMPONENT)
+                        {
+                            return (s < 0.0f) ? -MIN_SCALE_COMPONENT : MIN_SCALE_COMPONENT;
+                        }
+                        return s;
+                    };
+                    pTransform->m_Scale.x = clampNonZeroScale(pTransform->m_Scale.x);
+                    pTransform->m_Scale.y = clampNonZeroScale(pTransform->m_Scale.y);
+                    pTransform->m_Scale.z = clampNonZeroScale(pTransform->m_Scale.z);
+                    pTransform->ClearLocalMatrixOverride();
+                    pTransform->SetLocalMatrixOverride(quark::ComposeLocal(*pTransform));
+                }
 
-        const Vec3 positionDelta = pTransform->m_Position - Vec3{ aTranslation[0], aTranslation[1], aTranslation[2] };
-        if (editor.m_Scene.m_vSelectedEntities.size() > 1)
-        {
-            for (int selectedIndex : editor.m_Scene.m_vSelectedEntities)
-            {
-                if (selectedIndex == editor.m_Scene.m_Selected ||
-                    selectedIndex < 0 || selectedIndex >= static_cast<int>(editor.m_Scene.m_vEntities.size()))
+                DispatchPluginEvent(PLUGIN_EVENT_TRANSFORM_CHANGED,
+                                    static_cast<int>(pEntity - editor.m_Scene.m_vEntities.data()));
+
+                CMaterialComponent* pMaterial = pEntity->GetMaterialComponent();
+                if (pMaterial && !pMaterial->m_TextureStretch)
                 {
-                    continue;
-                }
-                CEntity& selectedEntity = editor.m_Scene.m_vEntities[selectedIndex];
-                CTransformComponent* pSelectedTransform = selectedEntity.GetTransformComponent();
-                if (!pSelectedTransform)
-                {
-                    continue;
-                }
-                pSelectedTransform->m_Position = pSelectedTransform->m_Position + positionDelta;
-                if (pSelectedTransform->m_HasLocalMatrixOverride)
-                {
-                    pSelectedTransform->m_LocalMatrixOverride.m[12] += positionDelta.x;
-                    pSelectedTransform->m_LocalMatrixOverride.m[13] += positionDelta.y;
-                    pSelectedTransform->m_LocalMatrixOverride.m[14] += positionDelta.z;
-                }
-                DispatchPluginEvent(PLUGIN_EVENT_TRANSFORM_CHANGED, selectedIndex);
-                CEntityTextureService::MarkEntityBoundsDirty(&selectedEntity);
-                if (CMaterialComponent* pSelectedMaterial = selectedEntity.GetMaterialComponent();
-                    pSelectedMaterial && !pSelectedMaterial->m_TextureStretch)
-                {
-                    CEntityTextureService::MarkEntityUVDirty(&selectedEntity);
+                    CEntityTextureService::MarkEntityUVDirty(pEntity);
                 }
             }
-        }
-
-        DispatchPluginEvent(PLUGIN_EVENT_TRANSFORM_CHANGED,
-                            static_cast<int>(pEntity - editor.m_Scene.m_vEntities.data()));
-
-        CMaterialComponent* pMaterial = pEntity->GetMaterialComponent();
-        if (pMaterial && !pMaterial->m_TextureStretch)
-        {
-            CEntityTextureService::MarkEntityUVDirty(pEntity);
         }
     }
 

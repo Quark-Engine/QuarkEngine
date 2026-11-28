@@ -676,7 +676,7 @@ void CEditor::HandleInput()
     {
         if (m_Ui.m_MeshEdit.m_Duplicate.ShouldFire(now))
         {
-            CSceneEntityCommands::Duplicate(*this, pEntity);
+            CSceneEntityCommands::DuplicateSelection(*this);
         }
     }
     else
@@ -684,9 +684,14 @@ void CEditor::HandleInput()
         m_Ui.m_MeshEdit.m_Duplicate.Release();
     }
 
+    if (keyboardAvailable && ctrl && IsKeyPressed(KEY_G))
+    {
+        CSceneEntityCommands::GroupSelection(*this);
+    }
+
     if (keyboardAvailable && IsKeyPressed(KEY_DELETE))
     {
-        CSceneEntityCommands::Delete(*this, pEntity);
+        CSceneEntityCommands::DeleteSelection(*this);
     }
 
     if (m_Assets.PollResources(m_ProjectPath, m_Scene, GetTime()))

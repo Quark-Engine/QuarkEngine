@@ -3,6 +3,7 @@
 #include "scripting/script_component.h"
 #include "scripting/script_engine.h"
 #include "editor/editor_utils.h"
+#include "editor/editor_scene_drop.h"
 #include "editor/editor_viewers.h"
 #include "editor/editor_desktop.h"
 #include "imgui.h"
@@ -949,6 +950,26 @@ void CComponentUIHelper::DrawMaterialComponent(CEditor& editor, CEntity& entity,
                     pMat->m_vMaterialSlotSources[slot] = picker.m_vMaterialPaths[slotMaterialIndex];
                 }
             }
+            if (editor.m_Ui.m_Layout.m_SceneAssetDragging &&
+                ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenBlockedByActiveItem))
+            {
+                const std::filesystem::path draggedPath = !editor.m_Ui.m_Layout.m_DraggedSceneAssetPath.empty()
+                    ? std::filesystem::path(editor.m_Ui.m_Layout.m_DraggedSceneAssetPath)
+                    : std::filesystem::path(editor.m_Ui.m_Layout.m_DraggedSceneAssetName);
+                if (CSceneAssetDrop::IsMaterialExtension(draggedPath))
+                {
+                    ImGui::GetWindowDrawList()->AddRect(
+                        ImGui::GetItemRectMin(), ImGui::GetItemRectMax(),
+                        IM_COL32(80, 180, 255, 255), 3.0f, 0, 2.0f);
+                    if (ImGui::IsMouseReleased(ImGuiMouseButton_Left))
+                    {
+                        CSceneAssetDrop::ApplyMaterialToEntity(editor, entity, draggedPath, slot);
+                        editor.m_Ui.m_Layout.m_SceneAssetDragging = false;
+                        editor.m_Ui.m_Layout.m_DraggedSceneAssetName.clear();
+                        editor.m_Ui.m_Layout.m_DraggedSceneAssetPath.clear();
+                    }
+                }
+            }
             ImGui::PopID();
         }
     }
@@ -1084,6 +1105,26 @@ void CComponentUIHelper::DrawMaterialComponent(CEditor& editor, CEntity& entity,
                 {
                     pMesh->m_Model.materials[m].maps[MATERIAL_MAP_NORMAL].texture = normalTexture;
                 }
+            }
+        }
+    }
+    if (editor.m_Ui.m_Layout.m_SceneAssetDragging &&
+        ImGui::IsItemHovered(ImGuiHoveredFlags_AllowWhenBlockedByActiveItem))
+    {
+        const std::filesystem::path draggedPath = !editor.m_Ui.m_Layout.m_DraggedSceneAssetPath.empty()
+            ? std::filesystem::path(editor.m_Ui.m_Layout.m_DraggedSceneAssetPath)
+            : std::filesystem::path(editor.m_Ui.m_Layout.m_DraggedSceneAssetName);
+        if (CSceneAssetDrop::IsTextureExtension(draggedPath))
+        {
+            ImGui::GetWindowDrawList()->AddRect(
+                ImGui::GetItemRectMin(), ImGui::GetItemRectMax(),
+                IM_COL32(80, 180, 255, 255), 3.0f, 0, 2.0f);
+            if (ImGui::IsMouseReleased(ImGuiMouseButton_Left))
+            {
+                CSceneAssetDrop::ApplyTextureToEntity(editor, entity, draggedPath, true);
+                editor.m_Ui.m_Layout.m_SceneAssetDragging = false;
+                editor.m_Ui.m_Layout.m_DraggedSceneAssetName.clear();
+                editor.m_Ui.m_Layout.m_DraggedSceneAssetPath.clear();
             }
         }
     }
